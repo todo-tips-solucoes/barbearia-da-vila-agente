@@ -5,9 +5,10 @@ Fonte versionada dos workflows. Os JSON usam placeholders `{{BV:...}}` (config d
 | Workflow | Arquivo | TESTE (id) | PROD |
 |----------|---------|------------|------|
 | bv-recepcao | `bv-recepcao.json` | `iaUbATlT7xkZArVd` | nao criado (config vazio) |
-| entregar-rajada (stub) | `sub/entregar-rajada.json` | `ilzXqBWGtcczlGEu` | nao criado |
+| entregar-rajada (agente) | `sub/entregar-rajada.json` | `ilzXqBWGtcczlGEu` | nao criado |
 | bv-captura | `bv-captura.json` | `wXcRwAdqRnGgRzA9` | nunca (deploy recusa) |
 | bv-verificacao | `bv-verificacao.json` | `uoDF0RFEgzAtKUay` | nao criado |
+| bv-graces | `sub/bv-graces.json` | `mjhd7O0AzrqNVrf0` | nao criado (recusa `teste.*`) |
 | bv-vigia | `bv-vigia.json` | `fzJA2yWESqiPXyib` | nao criado (config vazio) |
 
 ## bv-recepcao
@@ -28,3 +29,11 @@ Robustez da recepcao (feature `recepcao-robustez`, so TESTE): o `200` de aceita 
 ## bv-vigia
 
 Agendado a cada 5 min (TESTE). Apaga de `tentativas_recepcao` as linhas mais velhas que `execucao.timeout_s` + 30 s e registra cada uma em `falhas_recepcao` (`redis_indisponivel|tempo_esgotado`, so `contato_id`, sem PII). Cobre o no Redis pendurado, que o `executionTimeout` cancela sem disparar error workflow. A mensagem segue pendente (`processada_em` nulo) e e entregue no turno seguinte do contato. Criacao: `scripts/deploy-n8n.sh integracao --criar bv-vigia`.
+
+## bv-graces
+
+Sub-workflow das 10 ferramentas do agente (`contracts/ferramentas-graces.md`). Logica pura em `shared/graces.js` (testes: `node tests/graces.test.js`, `tests/test_workflows_agente.py`). Fluxo: `Normalizar` (recusa campo desconhecido) -> `Contexto` (SQL com a reivindicacao atomica da proposta na fase 2) -> `Planejar` -> HTTP Graces (ate 3 estagios: leitura/revalidacao, escrita, 2a escrita do `trocar_servico`) -> `Efeitos` -> `Persistir` (conversa, proposta, `falhas_agente`). Escrita so em TESTE e sempre redirecionada ao barbeiro de teste; so em barbeiro de teste se mexe em agendamentos existentes. `cadastrar_cliente` fica travado (`cadastroLiberado:false`) ate o P1. Limite conhecido: `listar_servicos` nao filtra servico "sem barbeiro real" (exigiria uma chamada por servico); `listar_barbeiros` devolve vazio com orientacao.
+
+## entregar-rajada (agente)
+
+Substitui o stub (mesmo id e contrato de turno). Fluxo: `Registrar turno` (idempotente por `turno_id`) -> `Ler contexto` -> `Preparar` (recencia, historico, prompt) -> `Sessao` -> so midia (`textos.midia`) / limite por hora (`textos.humano`) / `Agente` (AI Agent 3, `lmChatOpenAi` 1.3, 10 `toolWorkflow` para `bv-graces`, sem memoria) -> `Compor` -> `Saidas` -> posicoes 1..4 (`Gravar saida` -> `Simulado?` -> digitando -> `Espera` -> envio -> `Enviado?`) -> `Concluir turno`. Erro do agente: `falhas_agente` + `textos.contingencia`. Envio real so para `teste.contatos_escrita` (vazio ate o P2): os demais contatos sao simulados. O smoke da recepcao (`smoke-recepcao.py`) dependia dos marcadores `__lento__`/`__falha__` do stub e nao se aplica mais a este workflow. Executado no TESTE por `scripts/smoke-agente.py` (OpenAI e Graces reais, contatos simulados `+5500000000xxx`, nenhum envio ao Chat Master; politica: ver docs/infra.md "Agente: ids, ordem do fluxo e politica de teste"). Smoke achou e corrigiu o no `Sessao` (`''::jsonb` num ramo de `CASE` e avaliado no planejamento do Postgres: usar `NULLIF($3::text,'')::jsonb`).

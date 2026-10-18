@@ -11,6 +11,7 @@ cc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cc)
 
 SEGREDO_PG, SEGREDO_RD, SEGREDO_TK = "pgSEGREDO123", "rdSEGREDO456", "tkSEGREDO789"
+SEGREDO_OA, SEGREDO_GR, SEGREDO_CM = "oaSEGREDO1", "grSEGREDO2", "cmSEGREDO3"
 
 
 class Http:
@@ -31,7 +32,8 @@ def rodar(argv, http, env_antes=None):
     out, err = io.StringIO(), io.StringIO()
     try:
         with redirect_stdout(out), redirect_stderr(err):
-            rc = cc.main(argv, http, lambda alvo: (SEGREDO_PG, SEGREDO_RD, SEGREDO_TK))
+            rc = cc.main(argv, http, lambda alvo: (SEGREDO_PG, SEGREDO_RD, SEGREDO_TK),
+                         lambda: (SEGREDO_OA, SEGREDO_GR, SEGREDO_CM))
     finally:
         os.unlink(f.name)
         os.environ.pop("BV_ENV_N8N", None)
@@ -46,8 +48,11 @@ class T(unittest.TestCase):
         h = Http()
         rc, out, err = rodar(["--alvo", "teste"], h)
         self.assertEqual(rc, 0)
-        self.assertEqual(len(h.posts), 3)
-        for s in (SEGREDO_PG, SEGREDO_RD, SEGREDO_TK):
+        self.assertEqual(len(h.posts), 6)
+        tipos = {p["name"]: p["type"] for p in h.posts}
+        self.assertEqual(tipos["Barbearia Vila OpenAI"], "openAiApi")
+        self.assertEqual(tipos["Barbearia Vila Graces"], "httpHeaderAuth")
+        for s in (SEGREDO_PG, SEGREDO_RD, SEGREDO_TK, SEGREDO_OA, SEGREDO_GR, SEGREDO_CM):
             self.assertNotIn(s, out + err)
         self.assertIn("Barbearia Vila Postgres TESTE -> id1", out)
 
@@ -55,7 +60,8 @@ class T(unittest.TestCase):
         h = Http(["Barbearia Vila Postgres TESTE"])
         rc, out, _ = rodar(["--alvo", "teste"], h)
         self.assertEqual(rc, 0)
-        self.assertEqual([p["name"] for p in h.posts], ["Barbearia Vila Redis", "Barbearia Vila Verificacao"])
+        self.assertEqual([p["name"] for p in h.posts], ["Barbearia Vila Redis", "Barbearia Vila Verificacao",
+                          "Barbearia Vila OpenAI", "Barbearia Vila Graces", "Barbearia Vila Chat Master"])
         self.assertIn("pulada", out)
 
     def test_producao_sem_trava_recusada(self):

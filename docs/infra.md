@@ -26,6 +26,9 @@ Credenciais da instancia (47) listadas por `GET /api/v1/credentials`: **nenhuma*
 | `Barbearia Vila Redis` (DB 2) | redis | `chtScO4j08LclN89` |
 | `Barbearia Vila Postgres PROD` | postgres | nao criada (PROD exige a trava) |
 | `Barbearia Vila Verificacao` (header `X-BV-Token`; token so em `infra.env` na VPS) | httpHeaderAuth | `i7qS8QNvswOIbepF` |
+| `Barbearia Vila OpenAI` | openAiApi | `3e2ki13KTZskEv7O` |
+| `Barbearia Vila Graces` (header `X-Api-Key`) | httpHeaderAuth | `NCWLnCOpE4DgIUVU` |
+| `Barbearia Vila Chat Master` (header `Authorization`) | httpHeaderAuth | `FKqysWSzX8p4X1re` |
 
 Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
@@ -71,7 +74,7 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
 - CHK010: isolamento Redis so por prefixo (risco aceito, dec-030; ver secao Redis).
 - CHK020/P3: frequencia e retencao de backup (owner decide; sem cron instalado).
-- P7: retencao do historico de mensagens (LGPD) `[PENDENTE-OWNER]`, fora desta feature.
+- P7: retencao do historico de mensagens e base legal/aviso de tratamento (LGPD; CHK008/CHK009) `[PENDENTE-OWNER]`: o owner decidiu em 2026-10-18 que esta fora do escopo por agora; o historico fica "apagado junto com o contato", sem expurgo e sem job de limpeza, e nenhuma base legal e afirmada ate nova decisao.
 - `CONNECT` no database `n8n`: fechado em 2026-10-18 (REVOKE FROM PUBLIC, dec-025); nada aberto.
 - PROD: `preparar-bancos`, `migrar`, `criar-credenciais-n8n` e backup com `--alvo producao` sao do owner (trava `BV_DEPLOY_PRODUCAO_AUTORIZADO`).
 - Checar o cron do Gold (~03:00 de 19/10) apos o REVOKE no database `n8n`.
@@ -98,3 +101,14 @@ Feita pela sessão coordenadora com `get_workflow_details`:
 |---|---|---|---|---|---|
 | Barbearia Vila - Recepcao [TESTE] | `iaUbATlT7xkZArVd` | 49 = 49 | 300 | sim | sim |
 | Barbearia Vila - Vigia da recepcao [TESTE] | `fzJA2yWESqiPXyib` | 2 = 2 | — | sim | sim |
+
+## Agente: ids, ordem do fluxo e politica de teste (feature `agente-conversacional-graces`, TESTE, 2026-10-18)
+
+- Ids (TESTE): `bv-graces` `mjhd7O0AzrqNVrf0`; `entregar-rajada` `ilzXqBWGtcczlGEu` (mesmo id do stub). PROD: nada criado (`config/ambientes/producao.json` sem workflows; REST conferida em 2026-10-18: os 6 workflows `bv-*` existentes terminam em `[TESTE]`).
+- Ordem do fluxo: Chat Master -> `bv-recepcao` (buffer 8 s, lock) -> `entregar-rajada` (`Registrar turno` -> contexto -> agente `gpt-5.6-luna` -> ferramentas `bv-graces` -> `Compor` -> ate 4 saidas) -> Chat Master. Sem historico de execucao salvo (`saveData*Execution=none`), entao o diagnostico de falha exige ligar `saveDataErrorExecution` temporariamente e restaurar pelo deploy.
+- Politica de teste: `python3 -I scripts/smoke-agente.py [--so c2 c3 c5 c9 c10 c11 c14 c15 c12 c13]`. So contatos simulados; `teste.contatos_escrita` vazio (conferido tambem no workflow implantado); chamador temporario (webhook de path aleatorio, apagado no `finally`) para chamar `bv-graces`/`entregar-rajada` direto; c12/c13 trocam a credencial so no TESTE e restauram pelo deploy; ao fim, SC-010 (nenhuma proposta `executada` fica sem cancelar na Graces) e limpeza de Postgres/Redis.
+- Limites medidos: c14 (pergunta longa) = 2 mensagens, ate 1 "?" por mensagem, <= 700 caracteres. S1/S2 (lista renderizada e formato do toque) continuam dependentes do contato de teste real (P2). `falhas_agente` do agente que falha = `agente|agente_falhou` (nao distingue modelo de ferramenta).
+- Limite do smoke sem P1: telefone simulado nao tem cliente na Graces e `cadastrar_cliente` e vedado, entao o funil completo (resumo -> `executada`) so roda em 7.2.1; a fase 1/2 e coberta por chamada direta (c3).
+- Rodada P1/P2 (onda-013): cliente de teste = Paulo (5511967296849, ja existia na Graces; nenhum cadastro feito), sempre no barbeiro de teste, tudo cancelado em `encerrar()`. `python3 -I scripts/smoke-agente.py --so c1 c4 c6 c7` (escrita real na Graces via redirecionamento ao barbeiro de teste, telefone do Paulo, sem envio real) passou; latencia SC-009 medida do inicio do turno a primeira mensagem: n=22, p50 6,7 s, p90 10,7 s (<= 20 s). `--so p2` exige `teste.contatos_escrita` = `["+5511967296849"]` no config e redeploy do `entregar_rajada` (envio real ao Paulo pela conexao 145); rodou uma vez e o config foi restaurado a `[]`.
+- Defeitos achados e corrigidos nessa rodada (so TESTE): (1) a fase 2 nunca executava porque o modelo nao via o `proposta_id` do turno anterior; `Ler contexto` passou a ler a proposta pendente e `Preparar` a injeta no prompt; (2) `horarios_livres` trocava a oferta e o reagendar perdia o agendamento escolhido; `meus_agendamentos` agora guarda `pedido.agendamentos` e `bvgResolver` o usa; (3) prompt: oferecer marcar outro apos cancelar e roteiro de reagendar. PROD segue sem deploy.
+- Limites S2 (itens/titulo) e formato do toque: a API aceitou 1/10/11 itens e titulos de 24/25 caracteres com `200`, sem recusar; o limite real de exibicao e o RowId do toque dependem de o owner olhar/tocar no aparelho (tarefas 1.3.1-1.3.3 seguem abertas).

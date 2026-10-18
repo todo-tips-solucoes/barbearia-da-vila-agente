@@ -16,9 +16,10 @@ class WorkflowRecepcao(unittest.TestCase):
             nomes = {n["name"] for n in wf["nodes"]}
             for origem, c in wf["connections"].items():
                 self.assertIn(origem, nomes)
-                for saida in c["main"]:
-                    for d in saida:
-                        self.assertIn(d["node"], nomes, rel)
+                for saidas in c.values():
+                    for saida in saidas:
+                        for d in saida:
+                            self.assertIn(d["node"], nomes, rel)
 
     def test_sem_segredo_nem_log_de_conteudo(self):
         texto, _ = carregar("bv-recepcao.json")
@@ -33,14 +34,6 @@ class WorkflowRecepcao(unittest.TestCase):
             if n["type"] == "n8n-nodes-base.redis":
                 self.assertIn("{{BV:redis.prefixo}}", n["parameters"]["key"])
                 self.assertNotIn("telefone", n["parameters"]["key"])
-
-    def test_stub_segue_contrato_de_entrega(self):
-        texto, wf = carregar("sub/entregar-rajada.json")
-        tipos = {n["type"] for n in wf["nodes"]}
-        self.assertIn("n8n-nodes-base.executeWorkflowTrigger", tipos)
-        self.assertIn("{{BV:teste.atraso_entrega_s}}", texto)
-        self.assertIn("__falha__", texto)
-        self.assertIn("{ ok, turno_id", texto)
 
     def test_chamada_ao_sub_marca_e_desmarca_turno(self):
         _, wf = carregar("bv-recepcao.json")

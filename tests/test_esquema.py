@@ -93,3 +93,25 @@ class Migracao0004(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+M6 = open("db/migrations/0006_agente.sql").read()
+
+
+class Migracao0006(unittest.TestCase):
+    def test_tabelas_checks_e_fks(self):
+        for t in ("turnos", "conversas", "propostas", "falhas_agente"):
+            self.assertIn(f"CREATE TABLE IF NOT EXISTS {t} (", M6)
+        for trecho in ("IN ('em_andamento','concluido','falhou')", "IN ('agendar','reagendar','cancelar','trocar_servico')",
+                       "IN ('pendente','executando','executada','incerta','falhou','substituida','expirada')",
+                       "IN ('graces','chatmaster','agente','turno')",
+                       "propostas (contato_id) WHERE estado = 'pendente'"):
+            self.assertIn(trecho, M6)
+        self.assertEqual(M6.count("REFERENCES contatos(id) ON DELETE CASCADE"), 4)
+
+    def test_idempotente_e_sem_sensiveis(self):
+        for l in M6.splitlines():
+            if l.startswith(("CREATE TABLE", "CREATE INDEX", "CREATE UNIQUE")):
+                self.assertIn("IF NOT EXISTS", l)
+        for proibido in ("token", "payload", "telefone", "email", "cpf"):
+            self.assertNotIn(proibido, "\n".join(l for l in M6.lower().splitlines() if not l.startswith("--")))

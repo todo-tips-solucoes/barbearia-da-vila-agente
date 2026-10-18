@@ -17,6 +17,9 @@ ARQ = {"teste": "integracao.json", "producao": "producao.json"}
 NOMES = {"teste": "Barbearia Vila Postgres TESTE", "producao": "Barbearia Vila Postgres PROD"}
 NOME_REDIS = "Barbearia Vila Redis"
 NOME_VERIF = "Barbearia Vila Verificacao"  # so TESTE (webhook bv-verificacao); token nasce e fica em infra.env na VPS
+NOME_OPENAI, NOME_GRACES, NOME_CHAT = "Barbearia Vila OpenAI", "Barbearia Vila Graces", "Barbearia Vila Chat Master"
+# Chaves do agente em .env.smoke (fora do git); so o TESTE as recebe (a Graces so existe em prod, a chave serve ao teste).
+CHAVES_APP = ("OPENAI_API_KEY", "GRACES_API_KEY", "CHATMASTER_TOKEN_TESTE")
 # Host/porta dentro da rede docker da stack n8n (documentado em docs/infra.md).
 PG_HOST, PG_PORT, REDIS_HOST, REDIS_PORT = "postgres", 5432, "redis", 6379
 
@@ -50,7 +53,13 @@ def segredos_vps(alvo):
     return linhas[0], linhas[1], linhas[2]
 
 
-def montar(alvo, cfg, pg_pw, redis_pw, token=""):
+def segredos_app():
+    """(openai, graces, chatmaster) de $BV_ENV_SMOKE (default .env.smoke)."""
+    env = ler_env(os.environ.get("BV_ENV_SMOKE", os.path.join(RAIZ, ".env.smoke")))
+    return tuple(env[k] for k in CHAVES_APP)
+
+
+def montar(alvo, cfg, pg_pw, redis_pw, token="", app=None):
     d = _vps.ALVOS[alvo][0]
     return [
         {"name": NOMES[alvo], "type": "postgres", "data": {
@@ -60,7 +69,11 @@ def montar(alvo, cfg, pg_pw, redis_pw, token=""):
             "host": REDIS_HOST, "port": REDIS_PORT, "database": cfg["redis"]["db"],
             "password": redis_pw, "ssl": False}},
     ] + ([{"name": NOME_VERIF, "type": "httpHeaderAuth", "data": {"name": "X-BV-Token", "value": token}}]
-         if alvo == "teste" else [])
+         if alvo == "teste" else []) + ([
+        {"name": NOME_OPENAI, "type": "openAiApi", "data": {"apiKey": app[0]}},
+        {"name": NOME_GRACES, "type": "httpHeaderAuth", "data": {"name": "X-Api-Key", "value": app[1]}},
+        {"name": NOME_CHAT, "type": "httpHeaderAuth", "data": {"name": "Authorization", "value": "Bearer " + app[2]}},
+    ] if alvo == "teste" and app else [])
 
 
 def criar(env, creds, http=api):
@@ -75,7 +88,7 @@ def criar(env, creds, http=api):
     return res
 
 
-def main(argv, http=api, segredos=segredos_vps):
+def main(argv, http=api, segredos=segredos_vps, app_segredos=segredos_app):
     ap = argparse.ArgumentParser()
     ap.add_argument("--alvo", default="teste", choices=list(ARQ))
     a = ap.parse_args(argv)
@@ -85,7 +98,8 @@ def main(argv, http=api, segredos=segredos_vps):
         with open(os.path.join(RAIZ, "config", "ambientes", ARQ[a.alvo]), encoding="utf-8") as f:
             cfg = json.load(f)
         pg_pw, redis_pw, token = segredos(a.alvo)
-        for nome, cid, pulada in criar(env, montar(a.alvo, cfg, pg_pw, redis_pw, token), http):
+        app = app_segredos() if a.alvo == "teste" else None
+        for nome, cid, pulada in criar(env, montar(a.alvo, cfg, pg_pw, redis_pw, token, app), http):
             print(f"{nome} -> {cid}" + (" (ja existia, pulada)" if pulada else ""))
     except _vps.Recusado as e:
         print(f"recusado: {e}", file=sys.stderr)

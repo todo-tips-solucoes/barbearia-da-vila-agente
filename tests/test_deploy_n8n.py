@@ -114,6 +114,18 @@ class T(unittest.TestCase):
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
+    def test_producao_recusa_chave_teste(self):
+        os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
+        try:
+            json.dump(dict(WF, name="{{BV:teste.contato}}"), open(f"{self.d}/workflows/bv-verificacao.json", "w"))
+            api = FakeApi()
+            rc, _, err = self.run_main(["producao", "--confirmar-id", "wfP"], api)
+            self.assertEqual(rc, 2)
+            self.assertIn("teste.*", err)
+            self.assertEqual(api.chamadas, [])
+        finally:
+            os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
+
     def test_placeholders_include_e_sub_primeiro(self):
         os.environ["BV_WEBHOOK_TOKEN_SHA256"] = "abc"
         os.makedirs(f"{self.d}/workflows/shared"); os.makedirs(f"{self.d}/workflows/sub")
