@@ -111,9 +111,9 @@ Ref: plan.md §Seguranca, checklists/infra.md CHK010
 
 Ref: FR-015, FR-013, contracts/scripts-cli.md
 
-- [ ] 4.1.1 Criar `scripts/criar-credenciais-n8n.py [--alvo ...]`: cria Postgres e Redis do alvo por nome (nome existente -> pula), segredos lidos de fonte fora do repo (`infra.env`/`.env.n8n`), imprime so `nome -> id`; schema da API conforme 1.4.3
-- [ ] 4.1.2 Testes `unittest` (mock HTTP): nome existente pulado, nenhum segredo na saida, PROD sem trava recusado
-- [ ] 4.1.3 Executar `--alvo teste`; gravar os ids retornados em `integracao.json` e `docs/infra.md` (fonte: saida do script)
+- [x] 4.1.1 Criar `scripts/criar-credenciais-n8n.py [--alvo ...]`: cria Postgres e Redis do alvo por nome (nome existente -> pula), segredos lidos de fonte fora do repo (`infra.env`/`.env.n8n`), imprime so `nome -> id`; schema da API conforme 1.4.3
+- [x] 4.1.2 Testes `unittest` (mock HTTP): nome existente pulado, nenhum segredo na saida, PROD sem trava recusado
+- [x] 4.1.3 Executar `--alvo teste`; gravar os ids retornados em `integracao.json` e `docs/infra.md` (fonte: saida do script)
 
 ---
 

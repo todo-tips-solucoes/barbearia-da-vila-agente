@@ -18,7 +18,14 @@ Sem segredos. Atualizado a cada fase de `infra-base`. Segredos vivem na VPS (`/r
 
 ## Credenciais n8n
 
-Credenciais da instancia (47) listadas por `GET /api/v1/credentials`: **nenhuma** especifica da Barbearia da Vila (`Barbearia Vila Postgres TESTE/PROD`, `Barbearia Vila Redis`, `Barbearia Vila Verificacao` estao **inexistentes**; serao criadas na fase 4).
+Credenciais da instancia (47) listadas por `GET /api/v1/credentials`: **nenhuma** especifica da Barbearia da Vila na data da consulta (fase 1). Criadas na fase 4 por `scripts/criar-credenciais-n8n.py`.
+
+| Credencial | Tipo | Id (saida do script, 2026-10-18) |
+|---|---|---|
+| `Barbearia Vila Postgres TESTE` | postgres | `X3WoZnCScCKqBdg2` |
+| `Barbearia Vila Redis` (DB 2) | redis | `chtScO4j08LclN89` |
+| `Barbearia Vila Postgres PROD` | postgres | nao criada (PROD exige a trava) |
+| `Barbearia Vila Verificacao` | httpHeaderAuth | fase 5.3 |
 
 Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
@@ -37,4 +44,4 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 ## Redis (fase 3)
 
 - DB 2 da stack `n8n-redis-1`, prefixos `bv:teste:` e `bv:prod:` (disjuntos). `scripts/limpar-redis.py` apaga so chaves do prefixo do alvo (`SCAN MATCH` + `DEL` em lote; nunca `FLUSHDB`/`FLUSHALL`); PROD exige a trava `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim`. `verificar-infra.py --redis` faz `SET/GET/DEL` so sob `bv:teste:verif:` (validado em 2026-10-18).
-- CHK010 / task 3.2.1 `[PENDENTE-OWNER]`: isolamento por ACL Redis (`~bv:teste:*`) nao decidido; vale o isolamento so por prefixo (modelo do Gold). Risco: qualquer cliente com a senha da stack le/escreve em qualquer prefixo.
+- CHK010 / task 3.2.1 (resolvida pelo owner, dec-030, 2026-10-18): isolamento **so por prefixo** no DB 2, sem ACL propria (modelo do Gold). **Risco aceito**: qualquer cliente com a senha da stack le/escreve em qualquer prefixo e DB; o isolamento depende da disciplina dos workflows e de `limpar-redis.py`.
