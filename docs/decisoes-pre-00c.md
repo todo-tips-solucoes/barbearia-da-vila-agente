@@ -80,3 +80,12 @@ Criadas ao agendar na Graces; apagadas ao cancelar e recriadas ao reagendar.
 2. Número e conexão de **PROD**: **adiado** por decisão do owner (2026-10-18). Cada feature entrega o TESTE completo e deixa PROD parametrizado (`whatsappId`, path/webhookId de PROD) até a conexão existir. Isso não bloqueia nenhuma feature.
 4. **Captura de payload real (owner, 2026-10-18):** autorizado **trocar temporariamente o webhook da conexão 145** para o webhook de captura no n8n TESTE. Antes da troca, registrar a URL atual; ao final da captura, restaurá-la. Nunca versionar dados pessoais dos eventos.
 3. ~~A descobrir: `whatsappId`, `userId`, setor do handoff, funil~~: resolvido (conexão 145, usuário 100, setor 78, funil 5).
+
+## Decisões durante a execução (2026-10-18)
+
+| Tema | Decisão do owner |
+|---|---|
+| Merge em `develop` | **Automático** quando CI e commitlint passarem (o `aprovacao-de-dono` falha porque o autor do PR é a própria conta CODEOWNER). Promoção para `main`/PROD continua **só com aprovação explícita**. |
+| Retenção (CHK026) | **Confirmada:** mídia recebida fica guardada por 24 h; eventos brutos são apagados depois de virar fixtures. |
+| Duplicadas de texto (dec-031) | **Dedupe por conteúdo:** descartar a mensagem igual (mesmo contato e mesmo texto) recebida em até ~10 s. Risco aceito: um "ok" repetido de propósito pode ser descartado. |
+| Robustez da recepção | **Corrigir antes da feature 3:** (a) não responder 200 antes de gravar no Postgres, ou alertar a falha; (b) Redis indisponível não pode travar o nó e precisa registrar a falha em `falhas_recepcao`. |
