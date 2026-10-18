@@ -52,3 +52,8 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 - Rollback (CHK015): antes do PUT o JSON atual vai para um arquivo temporario fora do git (modo 600). Se o publish falhar apos o PUT, o script tenta restaurar o JSON anterior por PUT, informa o estado final (restaurado ou nao, e o caminho da copia) e sai com exit 1. Copia removida so no sucesso.
 - Workflow `bv-verificacao` (TESTE): id `uoDF0RFEgzAtKUay`, webhook `POST /webhook/bv-verificacao` com Header Auth; responde so `{ok: true}`. Validado em 2026-10-18: 3 execucoes de deploy = 1 workflow ativo; chamada sem token = 403.
 - A API key do n8n vem de `.env.n8n` (do Gold, fora do git) via `BV_ENV_N8N`.
+
+## Backup (fase 6)
+
+- `scripts/backup-bancos.py --alvo teste|producao|todos --retencao N [--validar]`: `pg_dump -Fc` em `/root/barbearia_vila/backups/bv-<banco>-<UTC>.dump` (modo 600, diretorio 700), arquivo novo por execucao; rotacao so de `bv-<banco>-*.dump`. PROD (inclusive em `todos`) exige a trava. Validado em 2026-10-18 para TESTE (`pg_restore --list` ok).
+- `[PENDENTE-OWNER]` (CHK020/P3, task 6.1.4): frequencia e retencao do backup. Nenhum cron foi instalado e nenhum valor foi escolhido.

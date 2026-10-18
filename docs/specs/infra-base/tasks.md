@@ -151,9 +151,9 @@ Ref: plan.md §Structure Decision, Principio XII
 
 Ref: FR-021, SC-001, checklists/infra.md CHK019/CHK020
 
-- [ ] 6.1.1 Criar `scripts/backup-bancos.py --alvo teste|producao|todos --retencao N`: `pg_dump -Fc` em `/root/barbearia_vila/backups/` (modo 600), arquivo novo por execucao, rotacao apenas do proprio padrao
-- [ ] 6.1.2 Testes `unittest` (mock): rotacao nao apaga arquivos alheios, `--retencao` obrigatorio, PROD sem trava recusado
-- [ ] 6.1.3 Executar para TESTE e validar o dump (`pg_restore --list`)
+- [x] 6.1.1 Criar `scripts/backup-bancos.py --alvo teste|producao|todos --retencao N`: `pg_dump -Fc` em `/root/barbearia_vila/backups/` (modo 600), arquivo novo por execucao, rotacao apenas do proprio padrao
+- [x] 6.1.2 Testes `unittest` (mock): rotacao nao apaga arquivos alheios, `--retencao` obrigatorio, PROD sem trava recusado
+- [x] 6.1.3 Executar para TESTE e validar o dump (`pg_restore --list`)
 - [!] 6.1.4 Decisao do owner `[PENDENTE-OWNER]` (CHK020/P3): frequencia e retencao do backup. Esta feature nao instala cron nem escolhe valores; registrar a pendencia em `docs/infra.md`
 
 ---
