@@ -91,27 +91,27 @@ Ref: spec.md FR-003, FR-004; contracts/webhook-chatmaster.md
 
 Ref: data-model.md; plan.md "Estrutura"
 
-- [ ] 3.1.1 Criar db/migrations/0002_recepcao_buffer.sql com `IF NOT EXISTS`, conforme data-model.md
-- [ ] 3.1.2 Aplicar a migracao em barbearia_vila_teste via scripts/migrar.py (PROD fica sem aplicar)
-- [ ] 3.1.3 Teste tests/test_esquema.py para colunas, chaves e idempotencia da migracao
+- [x] 3.1.1 Criar db/migrations/0002_recepcao_buffer.sql com `IF NOT EXISTS`, conforme data-model.md
+- [x] 3.1.2 Aplicar a migracao em barbearia_vila_teste via scripts/migrar.py (PROD fica sem aplicar)
+- [x] 3.1.3 Teste tests/test_esquema.py para colunas, chaves e idempotencia da migracao
 
 ### 3.2 Config de ambientes `[A]`
 
 Ref: contracts/config-recepcao.md; spec.md FR-016, FR-017
 
-- [ ] 3.2.1 Acrescentar as chaves de config-recepcao.md em config/ambientes/integracao.json e producao.json (PROD com path e whatsapp_id vazios)
-- [ ] 3.2.2 Incluir a chave de deduplicacao (1.2) e o limite de payload/midia (1.1)
-- [ ] 3.2.3 Estender scripts/verificar-repo.py: path TESTE diferente de PROD e `espera_s * tentativas >= ttl_s`
-- [ ] 3.2.4 Testes da verificacao com configs validas e invalidas
+- [x] 3.2.1 Acrescentar as chaves de config-recepcao.md em config/ambientes/integracao.json e producao.json (PROD com path e whatsapp_id vazios) (midia.retencao_h omitida: midia chega por fileUrl, sem tabela midias_recebidas; CHK026 segue pendente)
+- [x] 3.2.2 Incluir a chave de deduplicacao (1.2) e o limite de payload/midia (1.1)
+- [x] 3.2.3 Estender scripts/verificar-repo.py: path TESTE diferente de PROD e `espera_s * tentativas >= ttl_s`
+- [x] 3.2.4 Testes da verificacao com configs validas e invalidas
 
 ### 3.3 Extensao do deploy `[A]`
 
 Ref: spec.md FR-018; plan.md "Estrutura"
 
-- [ ] 3.3.1 Estender scripts/deploy-n8n.py: placeholders `{{BV:...}}`, include de rajada.js, sub-workflow antes do principal
-- [ ] 3.3.2 Recusar deploy de bv-captura em PROD e abortar PROD com path ou whatsapp_id vazio
-- [ ] 3.3.3 Ler o hash do token de `.env.n8n`, nunca versionado
-- [ ] 3.3.4 Testes em tests/test_deploy_n8n.py para as tres recusas
+- [x] 3.3.1 Estender scripts/deploy-n8n.py: placeholders `{{BV:...}}`, include de rajada.js, sub-workflow antes do principal
+- [x] 3.3.2 Recusar deploy de bv-captura em PROD e abortar PROD com path ou whatsapp_id vazio
+- [x] 3.3.3 Ler o hash do token de `.env.n8n`, nunca versionado
+- [x] 3.3.4 Testes em tests/test_deploy_n8n.py para as tres recusas
 
 ---
 

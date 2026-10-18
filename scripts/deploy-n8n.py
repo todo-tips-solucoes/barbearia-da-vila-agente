@@ -6,6 +6,7 @@ Exit 0 ok, 1 falha de execucao, 2 uso invalido/alvo recusado."""
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import urllib.error
@@ -36,6 +37,26 @@ class Api:
             raise Falha(f"{metodo} {rota} -> HTTP {e.code}") from None
         except (urllib.error.URLError, OSError) as e:
             raise Falha(f"{metodo} {rota} -> {type(e).__name__}") from None
+
+
+def renderizar(texto, cfg, raiz):
+    """Troca {{BV:a.b}} pelo valor do config, {{BV:INCLUDE:shared/x.js}} pelo arquivo e {{BV:TOKEN_SHA256}} por
+    BV_WEBHOOK_TOKEN_SHA256 (de .env.n8n, nunca versionado). Valores entram escapados como conteudo de string JSON."""
+    def sub(m):
+        k = m.group(1)
+        if k == "TOKEN_SHA256":
+            v = os.environ["BV_WEBHOOK_TOKEN_SHA256"]
+        elif k.startswith("INCLUDE:"):
+            with open(os.path.join(raiz, "workflows", k[8:]), encoding="utf-8") as f:
+                v = f.read()
+        else:
+            v = cfg
+            for p in k.split("."):
+                if not isinstance(v, dict) or p not in v:
+                    raise Falha(f"placeholder {{{{BV:{k}}}}} sem valor no config")
+                v = v[p]
+        return json.dumps(str(v), ensure_ascii=False)[1:-1]
+    return re.sub(r"\{\{BV:([^}]+)\}\}", sub, texto)
 
 
 def corpo_put(wf):
@@ -116,16 +137,26 @@ def main(argv=None, raiz=RAIZ, api=None):
     try:
         carregar_env(os.environ.get("BV_ENV_N8N", os.path.join(raiz, ".env.n8n")))
         api = api or Api(os.environ["N8N_API_URL"], os.environ["N8N_API_KEY"])
-        nomes = [a.criar] if a.criar else [n for n in cfg["workflows"] if not a.so or n == a.so]
-        if not nomes or (a.so and a.so not in cfg["workflows"]):
+        subs = cfg.get("workflows_sub", {})  # shortcut: --criar grava em workflows, nao em workflows_sub; criar subs a mao
+        todos = {**subs, **cfg["workflows"]}  # sub-workflows primeiro: o principal os referencia
+        nomes = [a.criar] if a.criar else [n for n in todos if not a.so or n == a.so]
+        if not nomes or (a.so and a.so not in todos):
             raise Falha("nenhum workflow para implantar")
+        if a.ambiente == "producao":
+            if "bv-captura" in nomes:
+                print("producao recusada: bv-captura e so do TESTE.", file=sys.stderr)
+                return 2
+            if "bv-recepcao" in nomes and not (cfg.get("webhook", {}).get("path") and cfg.get("chatmaster", {}).get("whatsapp_id")):
+                print("producao recusada: webhook.path e chatmaster.whatsapp_id devem estar preenchidos.", file=sys.stderr)
+                return 2
         for nome in nomes:
-            with open(os.path.join(raiz, "workflows", nome + ".json"), encoding="utf-8") as f:
-                wf = json.load(f)
+            arq = os.path.join(raiz, "workflows", ("sub/" + nome.replace("_", "-") if nome in subs else nome) + ".json")
+            with open(arq, encoding="utf-8") as f:
+                wf = json.loads(renderizar(f.read(), cfg, raiz))
             if a.criar:
                 print(f"{nome} -> {criar(api, cfg, arq_cfg, nome, wf)}")
             else:
-                wid = implantar(api, nome, cfg["workflows"].get(nome), wf)
+                wid = implantar(api, nome, todos.get(nome), wf)
                 print(f"Workflow {wid} ({a.ambiente}, {nome}) atualizado e publicado.")
     except KeyError as e:
         print(f"variavel ausente: {e.args[0]} (defina em .env.n8n)", file=sys.stderr)

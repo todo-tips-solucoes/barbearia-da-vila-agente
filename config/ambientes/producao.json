@@ -9,7 +9,10 @@
   "redis": {
     "prefixo": "bv:prod:",
     "db": 2,
-    "db_confirmado": true
+    "db_confirmado": true,
+    "ttl": {
+      "ultima_s": 120
+    }
   },
   "credenciais": {
     "redis": "",
@@ -17,5 +20,27 @@
     "graces": "",
     "chatmaster": ""
   },
-  "workflows": {}
+  "workflows": {},
+  "webhook": {
+    "path": "",
+    "webhook_id": ""
+  },
+  "chatmaster": {
+    "whatsapp_id": ""
+  },
+  "buffer": {
+    "janela_s": 8,
+    "teto_s": 60
+  },
+  "lock": {
+    "ttl_s": 120,
+    "espera_s": 3,
+    "tentativas": 45
+  },
+  "dedup": {
+    "janela_h": 24
+  },
+  "payload": {
+    "max_kb": 2048
+  }
 }

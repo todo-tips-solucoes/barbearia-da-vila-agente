@@ -41,5 +41,25 @@ class Esquema(unittest.TestCase):
             self.assertNotIn(proibido, SQL.lower())
 
 
+M2 = open("db/migrations/0002_recepcao_buffer.sql").read()
+
+
+class Migracao0002(unittest.TestCase):
+    def test_colunas_indice_e_check(self):
+        for c in ("processada_em timestamptz", "midia_url text", "turno_id uuid", "turno_em timestamptz"):
+            self.assertIn(c, M2)
+        self.assertIn("mensagens_pendentes_idx ON mensagens (contato_id, criado_em, id)", M2)
+        self.assertIn("WHERE direcao = 'entrada' AND processada_em IS NULL", M2)
+        self.assertIn("tipo IN ('texto','audio','imagem')", M2)
+
+    def test_idempotente(self):
+        for l in M2.splitlines():
+            if l.startswith(("ALTER TABLE mensagens ADD COLUMN", "CREATE INDEX")):
+                self.assertIn("IF NOT EXISTS", l)
+        self.assertIn("DROP CONSTRAINT IF EXISTS", M2)
+        # backfill so na primeira aplicacao, dentro do guarda de coluna inexistente
+        self.assertLess(M2.index("IF NOT EXISTS (SELECT 1"), M2.index("UPDATE mensagens SET processada_em"))
+
+
 if __name__ == "__main__":
     unittest.main()
