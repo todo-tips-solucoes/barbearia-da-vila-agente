@@ -28,4 +28,8 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
 ## Pendencias do owner
 
-- CONNECT publico no database `n8n` (aberto): restringir (`REVOKE CONNECT ... FROM PUBLIC`) altera a stack compartilhada; so com decisao do owner.
+- (resolvida 2026-10-18, decisao do owner, dec-025) `REVOKE CONNECT ON DATABASE n8n FROM PUBLIC` aplicado, com `GRANT CONNECT` ao role `n8n` (superusuario e unico que conectava; `goldincision*` conectam so nos proprios databases). `datacl` agora `{=T/n8n,n8n=CTc/n8n}`; n8n e containers seguem Up, sem erros de conexao nos logs. Reversao: `GRANT CONNECT ON DATABASE n8n TO PUBLIC`.
+
+## Bancos da Barbearia (fase 2)
+
+- `barbearia_vila_teste` (role homonimo) preparado por `scripts/preparar-bancos.py --alvo teste`; migracao `0001` aplicada por `scripts/migrar.py`; reexecucao = 0 alteracoes (`verificar-infra.py --idempotencia`). Acesso cruzado do role TESTE a `n8n` negado; a `barbearia_vila` (PROD ainda nao criado) a conexao falha por database inexistente.

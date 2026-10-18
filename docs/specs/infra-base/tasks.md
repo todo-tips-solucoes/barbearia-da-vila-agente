@@ -72,18 +72,18 @@ Ref: data-model.md, FR-003, FR-004, checklists/infra.md CHK004
 
 Ref: FR-001, FR-002, FR-005, SC-001, SC-002
 
-- [ ] 2.3.1 Criar `scripts/preparar-bancos.py --alvo teste|producao`: role + database + `REVOKE`/`GRANT CONNECT`, senha gerada so se ausente em `/root/barbearia_vila/infra.env` (modo 600), nunca trocada nem impressa
-- [ ] 2.3.2 Trava de PROD: `--alvo producao` sem `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` -> exit 2 sem chamada remota
-- [ ] 2.3.3 Testes `unittest` (mock): idempotencia (2a execucao = 0 alteracoes), recusa de PROD sem trava
-- [ ] 2.3.4 Executar `--alvo teste` na VPS; confirmar acesso cruzado negado (TESTE nao conecta em `barbearia_vila` nem em `n8n`) via `verificar-infra.py --acesso`
+- [x] 2.3.1 Criar `scripts/preparar-bancos.py --alvo teste|producao`: role + database + `REVOKE`/`GRANT CONNECT`, senha gerada so se ausente em `/root/barbearia_vila/infra.env` (modo 600), nunca trocada nem impressa
+- [x] 2.3.2 Trava de PROD: `--alvo producao` sem `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` -> exit 2 sem chamada remota
+- [x] 2.3.3 Testes `unittest` (mock): idempotencia (2a execucao = 0 alteracoes), recusa de PROD sem trava
+- [x] 2.3.4 Executar `--alvo teste` na VPS; confirmar acesso cruzado negado (TESTE nao conecta em `barbearia_vila` nem em `n8n`) via `verificar-infra.py --acesso`
 
 ### 2.4 Migracao `[C]`
 
 Ref: FR-003, FR-005, contracts/scripts-cli.md
 
-- [ ] 2.4.1 Criar `scripts/migrar.py --alvo ... [--dry-run]` com controle por `schema_migrations` + sha256; hash divergente -> exit 1
-- [ ] 2.4.2 Testes `unittest` (mock): reaplicacao sem efeito, divergencia de hash falha, `--dry-run` sem escrita, PROD sem trava recusado
-- [ ] 2.4.3 Executar `--alvo teste` e validar estruturas existentes; 2a execucao = 0 alteracoes (`verificar-infra.py --idempotencia`)
+- [x] 2.4.1 Criar `scripts/migrar.py --alvo ... [--dry-run]` com controle por `schema_migrations` + sha256; hash divergente -> exit 1
+- [x] 2.4.2 Testes `unittest` (mock): reaplicacao sem efeito, divergencia de hash falha, `--dry-run` sem escrita, PROD sem trava recusado
+- [x] 2.4.3 Executar `--alvo teste` e validar estruturas existentes; 2a execucao = 0 alteracoes (`verificar-infra.py --idempotencia`)
 
 ---
 

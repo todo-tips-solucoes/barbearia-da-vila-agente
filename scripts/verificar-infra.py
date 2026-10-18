@@ -19,8 +19,9 @@ def main(argv):
     ap.add_argument("--db", type=int, default=2)
     ap.add_argument("--acesso", action="store_true")
     ap.add_argument("--backup", action="store_true")
+    ap.add_argument("--idempotencia", action="store_true")
     a = ap.parse_args(argv)
-    if not (a.redis or a.acesso or a.backup):
+    if not (a.redis or a.acesso or a.backup or a.idempotencia):
         ap.error("informe --redis, --acesso ou --backup")
     try:
         if a.redis:
@@ -31,6 +32,22 @@ def main(argv):
                 return 1
         if a.acesso:
             print("datacl database n8n:", _vps.sondar("connect-n8n").strip())
+            vazou = False
+            for dest in ("n8n", "barbearia_vila"):
+                negado, msg = _vps.acesso_cruzado("teste", dest)
+                print(f"TESTE -> {dest}: {'NEGADO' if negado else 'ACESSO PERMITIDO (falha)'} ({msg})")
+                vazou = vazou or not negado
+            if vazou:
+                return 1
+        if a.idempotencia:  # TESTE: reexecutar preparar + migrar nao pode alterar nada
+            import importlib.util
+            sp = importlib.util.spec_from_file_location("migrar", os.path.join(os.path.dirname(__file__), "migrar.py"))
+            mig = importlib.util.module_from_spec(sp); sp.loader.exec_module(mig)
+            alt_prep = _vps.preparar("teste")[0]
+            novas, div = mig.planejar("barbearia_vila_teste", _vps.psql)
+            print(f"idempotencia: preparar={alt_prep} migracoes_pendentes={len(novas)} divergentes={len(div)}")
+            if alt_prep or novas or div:
+                return 1
         if a.backup:
             print("backup existente:", _vps.sondar("backup-existente").strip() or "(nada encontrado)")
     except _vps.Recusado as e:
