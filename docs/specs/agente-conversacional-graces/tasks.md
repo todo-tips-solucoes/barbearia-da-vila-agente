@@ -154,9 +154,9 @@ Ref: contracts/saida-chatmaster.md; research.md Decisions 5, 6, 7; spec.md FR-00
 
 Ref: quickstart.md Pré-requisitos; Constitution XII, XIII
 
-- [ ] 6.1.1 Rodar `scripts/deploy-n8n.sh integracao --criar bv-graces` e depois `scripts/deploy-n8n.sh integracao`; registrar o id do `bv-graces` em `integracao.json`
-- [ ] 6.1.2 Conferir pelo MCP do n8n (`get_workflow_details`) tipos, versões, ativo e versão publicada de `bv-graces` e `entregar-rajada` (`validate_workflow` não se aplica a JSON)
-- [ ] 6.1.3 Confirmar que nada foi publicado em PROD
+- [x] 6.1.1 Rodar `scripts/deploy-n8n.sh integracao --criar bv-graces` e depois `scripts/deploy-n8n.sh integracao`; registrar o id do `bv-graces` em `integracao.json` (evidência: veracity-report-onda3.md, "Validação MCP"/"Revalidação MCP")
+- [x] 6.1.2 Conferir pelo MCP do n8n (`get_workflow_details`) tipos, versões, ativo e versão publicada de `bv-graces` e `entregar-rajada` (`validate_workflow` não se aplica a JSON) (evidência: veracity-report-onda3.md, "Validação MCP"/"Revalidação MCP")
+- [x] 6.1.3 Confirmar que nada foi publicado em PROD (REST 2026-10-18: 6 workflows bv-* todos [TESTE]; producao.json sem workflows)
 
 ---
 
@@ -166,9 +166,9 @@ Ref: quickstart.md Pré-requisitos; Constitution XII, XIII
 
 Ref: quickstart.md cenários 2, 3, 5, 9–11, 14, 15; spec.md SC-001..SC-004, SC-006, SC-007
 
-- [ ] 7.1.1 Criar `scripts/smoke-agente.py` com contatos simulados, `--so NOME`, limpeza de Postgres/Redis do contato e cancelamento das propostas `executadas` no `finally`
-- [ ] 7.1.2 Cenários 2 (parar no resumo), 3 (fase 2 no mesmo turno), 5 (texto livre), 9 ("Oi" após 2 h com `ultima_entrada_em` recuado), 10 (barbeiro de teste pelo nome), 11 (turno repetido), 14 (limites de saída), 15 (áudio)
-- [ ] 7.1.3 Cenários 12 e 13: credencial Graces/OpenAI inválida só no workflow de TESTE, restaurada e apagada no `finally`
+- [x] 7.1.1 Criar `scripts/smoke-agente.py` com contatos simulados, `--so NOME`, limpeza de Postgres/Redis do contato e cancelamento das propostas `executadas` no `finally`
+- [x] 7.1.2 Cenários 2 (parar no resumo), 3 (fase 2 no mesmo turno), 5 (texto livre), 9 ("Oi" após 2 h com `ultima_entrada_em` recuado), 10 (barbeiro de teste pelo nome), 11 (turno repetido), 14 (limites de saída), 15 (áudio) (c2/c5 sem resumo ponta a ponta: telefone simulado sem cliente na Graces, cadastro vedado sem P1; fase 1/2 coberta por c3; refazer em 7.2.1)
+- [x] 7.1.3 Cenários 12 e 13: credencial Graces/OpenAI inválida só no workflow de TESTE, restaurada e apagada no `finally`
 
 ### 7.2 Roteiros que escrevem na Graces `[C]`
 
@@ -176,7 +176,7 @@ Ref: quickstart.md cenários 1, 4, 6–8, 16; spec.md SC-002, SC-005, SC-008..SC
 
 - [ ] 7.2.1 `{humano:P1}` Cenário 1 (agendar, cliente conhecido) com o cliente de teste, só no barbeiro de teste; ≤ 8 trocas do cliente
 - [ ] 7.2.2 `{humano:P1}` Cenários 4 (horário tomado), 6 (cancelar sugerindo remarcar), 7 (reagendar) e 8 ("vamos marcar outro")
-- [ ] 7.2.3 Conferir SC-010 ao fim de cada rodada: 0 agendamentos ativos do barbeiro de teste criados pela rodada; cancelar o que sobrar
+- [x] 7.2.3 Conferir SC-010 ao fim de cada rodada: 0 agendamentos ativos do barbeiro de teste criados pela rodada; cancelar o que sobrar
 - [ ] 7.2.4 `{humano:P2}` Cenário 1 com o contato real: roundtrip Chat Master → `bv-recepcao` → `entregar-rajada` → Graces → Chat Master e comparação do shape das respostas da Graces com contracts/ferramentas-graces.md
 - [ ] 7.2.5 Cenário 16: latência do fim do turno à primeira mensagem, p90 ≤ 20 s (SC-009); se exceder, aplicar o corte por barbeiros ou paralelismo de plan.md Riscos e medir de novo
 
@@ -188,10 +188,10 @@ Ref: quickstart.md cenários 1, 4, 6–8, 16; spec.md SC-002, SC-005, SC-008..SC
 
 Ref: Constitution II-bis, XVI; plan.md Project Structure
 
-- [ ] 8.1.1 `docs/infra.md` e `workflows/README.md`: ids novos, limites medidos (S1/S2), ordem do fluxo e política de teste
+- [x] 8.1.1 `docs/infra.md` e `workflows/README.md`: ids novos, limites medidos (S1/S2), ordem do fluxo e política de teste
 - [ ] 8.1.2 `{humano:base-legal}` Registrar em docs a pendência do aviso/base legal de tratamento (CHK009) e do prazo de retenção (CHK008); não afirmar base legal sem decisão do owner
-- [ ] 8.1.3 Rodar o `data-veracity-verifier` sobre spec/plan/contratos e `varrer-segredos.py` e `verificar-repo.py` antes do commit
-- [ ] 8.1.4 Suítes finais: `node tests/agente.test.js` e `python3 -I -m unittest discover -s tests`
+- [x] 8.1.3 Rodar o `data-veracity-verifier` sobre spec/plan/contratos e `varrer-segredos.py` e `verificar-repo.py` antes do commit (verifier: 3 itens só de citação, conferidos: Postgres 17.10, funil.js:504/599)
+- [x] 8.1.4 Suítes finais: `node tests/agente.test.js` e `python3 -I -m unittest discover -s tests`
 
 ---
 

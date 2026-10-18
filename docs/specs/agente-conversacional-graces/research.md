@@ -221,7 +221,7 @@ parte perder o sentido, vira a pergunta aberta `textos.reformular` (padrão `giF
 **Decision**: turno só com áudio/imagem → texto fixo pedindo que escreva (`textos.midia`); pedido de
 humano → texto fixo de que uma pessoa vai retornar (`textos.humano`), sem transferir (handoff é da
 `crm-etiquetas-handoff`); falha do agente/modelo → `textos.contingencia` e `falhas_agente`
-(`agente|erro_modelo`), com o turno respondido `{ok:true}` para não reprocessar em laço. Textos são
+(`agente|agente_falhou`), com o turno respondido `{ok:true}` para não reprocessar em laço. Textos são
 `[PROPOSTA]` de redação, ajustáveis pelo owner. Perguntas sobre endereço e contatos usam
 `loja.*` do config, copiados de `informacaoes_barbearia.txt` (preço e horário vêm sempre da Graces).
 

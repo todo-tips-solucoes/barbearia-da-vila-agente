@@ -49,7 +49,7 @@ rodada (SC-010) e limpar Postgres/Redis de TESTE do contato.
     `finally`, como o roteiro `redis` do `smoke-recepcao.py`) → **Expected**: texto "uma pessoa vai
     ajudar", `falhas_agente` com `code` `NAO_AUTENTICADO`, sem detalhe técnico ao cliente.
 13. **Falha do modelo** (US7-4): credencial OpenAI inválida no TESTE → **Expected**: contingência
-    enviada, `falhas_agente` `agente|erro_modelo`, turno `concluido`.
+    enviada, `falhas_agente` `agente|agente_falhou` (o no do agente nao distingue modelo de ferramenta), turno `concluido`.
 14. **Limites de saída** (US4, SC-003): pergunta aberta longa → **Expected**: ≤ 4 mensagens, ≤ 1 "?"
     por mensagem; digitando antes de cada uma (ver log de execução no TESTE).
 15. **Áudio** (Edge Case) → **Expected**: pedido para escrever.

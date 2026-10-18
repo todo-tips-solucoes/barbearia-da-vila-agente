@@ -124,7 +124,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO conversas (contato_id) VALUES ($1::bigint) ON CONFLICT (contato_id) DO UPDATE SET sessao_iniciada_em = CASE WHEN $2::boolean THEN now() ELSE conversas.sessao_iniciada_em END, pedido = CASE WHEN $2::boolean THEN (CASE WHEN NULLIF($3::text, '') IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('pedido_anterior', $3::jsonb) END) ELSE conversas.pedido END, opcoes = CASE WHEN $2::boolean THEN '{}'::jsonb ELSE conversas.opcoes END, atualizado_em = now()",
+        "query": "INSERT INTO conversas (contato_id) VALUES ($1::bigint) ON CONFLICT (contato_id) DO UPDATE SET sessao_iniciada_em = CASE WHEN $2::boolean THEN now() ELSE conversas.sessao_iniciada_em END, pedido = CASE WHEN $2::boolean THEN (CASE WHEN NULLIF($3::text, '') IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('pedido_anterior', NULLIF($3::text, '')::jsonb) END) ELSE conversas.pedido END, opcoes = CASE WHEN $2::boolean THEN '{}'::jsonb ELSE conversas.opcoes END, atualizado_em = now()",
         "options": {
           "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, String($json.sessao_nova), $json.pedido_anterior] }}"
         }
