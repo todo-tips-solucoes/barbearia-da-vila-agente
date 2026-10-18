@@ -46,6 +46,7 @@ jobs:
             yarn)
               if [ -f .yarnrc.yml ]; then corepack enable && yarn install --immutable; else yarn install --frozen-lockfile; fi ;;
             bun) npm install --global bun && bun install --frozen-lockfile ;;
+            nenhum) echo "sem dependências: projeto n8n publica JSON" ;;
             *) echo "::error::Gerenciador de pacotes '$GERENCIADOR' não suportado pelo template: edite este passo à mão."; exit 1 ;;
           esac
 
@@ -58,6 +59,9 @@ jobs:
         shell: bash
         run: |
           find workflows -name '*.json' -print0 | xargs -0 -r -n1 python3 -I -m json.tool >/dev/null
+          python3 -I scripts/verificar-repo.py
+          python3 -I scripts/varrer-segredos.py
+          python3 -I -m unittest discover -s tests
 
       - name: Build
         shell: bash

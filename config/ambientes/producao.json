@@ -1,0 +1,21 @@
+{
+  "ambiente": "producao",
+  "rotulo": "PROD",
+  "n8n_url": "https://n8n2.todo-tips.com",
+  "postgres": {
+    "database": "barbearia_vila",
+    "credencial_id": ""
+  },
+  "redis": {
+    "prefixo": "bv:prod:",
+    "db": 2,
+    "db_confirmado": true
+  },
+  "credenciais": {
+    "redis": "",
+    "openai": "",
+    "graces": "",
+    "chatmaster": ""
+  },
+  "workflows": {}
+}

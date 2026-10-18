@@ -12,7 +12,7 @@ Branch de integração:   develop
 Branch de produção:     main
 Gerenciador de pacotes: nenhum
 Typecheck:              echo sem typecheck: projeto n8n sem código tipado
-Lint:                   find workflows -name '*.json' -print0 | xargs -0 -r -n1 python3 -I -m json.tool >/dev/null
+Lint:                   find workflows -name '*.json' -print0 | xargs -0 -r -n1 python3 -I -m json.tool >/dev/null && python3 -I scripts/verificar-repo.py && python3 -I scripts/varrer-segredos.py && python3 -I -m unittest discover -s tests
 Build:                  echo sem build: workflows n8n são publicados como JSON
 Deploy de integração:   scripts/deploy-n8n.sh integracao
 Deploy de produção:     scripts/deploy-n8n.sh producao
