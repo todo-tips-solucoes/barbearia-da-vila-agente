@@ -42,8 +42,8 @@ Ref: quickstart.md S0; plan.md Technical Context; research.md Decision 14
 Ref: quickstart.md S1; research.md Decision 6; `chatmasterveloz-api/endpoints.json`; checklists/api.md CHK009
 
 - [x] 1.2.1 Ler `chatmasterveloz-api/` e documentar como informar `whatsappId` 145 em texto, digitando e lista (campos e cabeçalhos citando a fonte)
-- [ ] 1.2.2 `{humano:P2}` `{humano:S1}` Enviar texto, digitando e lista ao contato de teste real e confirmar 2xx e recebimento; sem forma aceita, registrar bloqueio humano (opções de Decision 6) e seguir só com envio simulado
-- [ ] 1.2.3 Registrar o resultado medido em research.md Decision 6 e marcar CHK009 (parte S1)
+- [x] 1.2.2 `{humano:P2}` `{humano:S1}` Enviar texto, digitando e lista ao contato de teste real e confirmar 2xx e recebimento; sem forma aceita, registrar bloqueio humano (opções de Decision 6) e seguir só com envio simulado
+- [x] 1.2.3 Registrar o resultado medido em research.md Decision 6 e marcar CHK009 (parte S1)
 
 ### 1.3 S2: formato e limites da lista Pro `[C]`
 
@@ -64,7 +64,7 @@ Ref: data-model.md; plan.md Project Structure; Constitution VII
 - [x] 2.1.1 Criar `db/migrations/0006_agente.sql` idempotente (`IF NOT EXISTS`): `turnos`, `conversas`, `propostas`, `falhas_agente` com FKs `ON DELETE CASCADE` e sem coluna de token/payload bruto/PII
 - [x] 2.1.2 Estender `tests/test_esquema.py` (tabelas, PKs, CHECKs de estado) e rodar a migração duas vezes em `barbearia_vila_teste` com `scripts/migrar.py --alvo teste`
 - [x] 2.1.3 Confirmar que a migração não foi aplicada em `barbearia_vila` (PROD inativo)
-- [ ] 2.1.4 `{humano:LGPD}` Política de retenção por idade do histórico (CHK008): enquanto indefinida, manter "apagado junto com o contato" e registrar a pendência; não criar job de limpeza
+- [x] 2.1.4 `{humano:LGPD}` Política de retenção por idade do histórico (CHK008): enquanto indefinida, manter "apagado junto com o contato" e registrar a pendência; não criar job de limpeza (owner 2026-10-18: LGPD fora do escopo por agora; sem expurgo; pendência em docs/infra.md P7)
 
 ### 2.2 Config de ambiente `[A]`
 
@@ -174,11 +174,11 @@ Ref: quickstart.md cenários 2, 3, 5, 9–11, 14, 15; spec.md SC-001..SC-004, SC
 
 Ref: quickstart.md cenários 1, 4, 6–8, 16; spec.md SC-002, SC-005, SC-008..SC-010; FR-024
 
-- [ ] 7.2.1 `{humano:P1}` Cenário 1 (agendar, cliente conhecido) com o cliente de teste, só no barbeiro de teste; ≤ 8 trocas do cliente
-- [ ] 7.2.2 `{humano:P1}` Cenários 4 (horário tomado), 6 (cancelar sugerindo remarcar), 7 (reagendar) e 8 ("vamos marcar outro")
+- [x] 7.2.1 `{humano:P1}` Cenário 1 (agendar, cliente conhecido) com o cliente de teste, só no barbeiro de teste; ≤ 8 trocas do cliente
+- [x] 7.2.2 `{humano:P1}` Cenários 4 (horário tomado), 6 (cancelar sugerindo remarcar), 7 (reagendar) e 8 ("vamos marcar outro")
 - [x] 7.2.3 Conferir SC-010 ao fim de cada rodada: 0 agendamentos ativos do barbeiro de teste criados pela rodada; cancelar o que sobrar
-- [ ] 7.2.4 `{humano:P2}` Cenário 1 com o contato real: roundtrip Chat Master → `bv-recepcao` → `entregar-rajada` → Graces → Chat Master e comparação do shape das respostas da Graces com contracts/ferramentas-graces.md
-- [ ] 7.2.5 Cenário 16: latência do fim do turno à primeira mensagem, p90 ≤ 20 s (SC-009); se exceder, aplicar o corte por barbeiros ou paralelismo de plan.md Riscos e medir de novo
+- [x] 7.2.4 `{humano:P2}` Cenário 1 com o contato real: roundtrip Chat Master → `bv-recepcao` → `entregar-rajada` → Graces → Chat Master e comparação do shape das respostas da Graces com contracts/ferramentas-graces.md
+- [x] 7.2.5 Cenário 16: latência do fim do turno à primeira mensagem, p90 ≤ 20 s (SC-009); se exceder, aplicar o corte por barbeiros ou paralelismo de plan.md Riscos e medir de novo
 
 ---
 
@@ -189,7 +189,7 @@ Ref: quickstart.md cenários 1, 4, 6–8, 16; spec.md SC-002, SC-005, SC-008..SC
 Ref: Constitution II-bis, XVI; plan.md Project Structure
 
 - [x] 8.1.1 `docs/infra.md` e `workflows/README.md`: ids novos, limites medidos (S1/S2), ordem do fluxo e política de teste
-- [ ] 8.1.2 `{humano:base-legal}` Registrar em docs a pendência do aviso/base legal de tratamento (CHK009) e do prazo de retenção (CHK008); não afirmar base legal sem decisão do owner
+- [x] 8.1.2 `{humano:base-legal}` Registrar em docs a pendência do aviso/base legal de tratamento (CHK009) e do prazo de retenção (CHK008); não afirmar base legal sem decisão do owner
 - [x] 8.1.3 Rodar o `data-veracity-verifier` sobre spec/plan/contratos e `varrer-segredos.py` e `verificar-repo.py` antes do commit (verifier: 3 itens só de citação, conferidos: Postgres 17.10, funil.js:504/599)
 - [x] 8.1.4 Suítes finais: `node tests/agente.test.js` e `python3 -I -m unittest discover -s tests`
 

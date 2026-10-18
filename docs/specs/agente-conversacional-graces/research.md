@@ -121,6 +121,13 @@ registrar a resposta. Se nenhuma forma for aceita ou documentada, bloqueio human
 ou usar token da conexão 145). Até lá, o caminho de envio é implementado e testado só com envio
 simulado.
 
+**Resultado da sonda S1 (onda-013, 2026-10-18, contato 5511967296849 autorizado pelo owner)**: com `whatsappId` 145 no
+corpo, `sendComposingPRO`, `messages/send` (`openTicket` "0", `queueId` 78) e `sendListPRO` responderam `200`
+("Mensagem de TEXTO/LISTA via WHATSMEOW PRO enviada SEM TICKET", `ack` 3). A API NAO prova que o campo `whatsappId`
+e necessario (nao foi testado o envio sem ele); a conexao do token foi aceita assim. Requisicoes sem `User-Agent`
+levam `403 error code: 1010` (Cloudflare): enviar um `User-Agent` explicito. O corpo devolvido da lista traz a versao em texto
+("MENU ENVIADO ... 1 - titulo"), entao a renderizacao no aparelho (lista interativa x texto) so o owner confirma olhando o WhatsApp.
+
 ## Decision 7: sequência de até 4 mensagens
 
 **Decision**: sequência desenrolada em até 4 posições fixas (IF "há mensagem i?" → digitando → Wait →

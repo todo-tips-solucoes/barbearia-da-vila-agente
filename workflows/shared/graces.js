@@ -62,6 +62,7 @@ function bvgResolver(id, tipo, ctx) {
   const p = ctx.pedido;
   if (tipo === 'servico' && p.servico && String(p.servico.opcao_id) === String(id)) return p.servico;
   if (tipo === 'barbeiro') return (p.barbeiros || []).find((b) => String(b.opcao_id) === String(id)) || null;
+  if (tipo === 'agendamento') return (p.agendamentos || []).find((a) => String(a.opcao_id) === String(id)) || null; // horarios_livres troca a oferta: a escolha do agendamento fica no pedido
   return null;
 }
 
@@ -245,7 +246,7 @@ function bvGPasso(st, resps0, cfg) {
         rotulo: `${bvgDia(String(a.horaInicio))} ${String(a.horaInicio).slice(11, 16)} ${a.descricaoServico || ''}`.trim(),
         valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico, idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
       })), cfg);
-      return bvgFim({ ok: true, agendamentos: of.itens.map((x) => ({ id: x.id, servico: x.valor.servico, barbeiro: x.valor.profissional, inicio: x.valor.horaInicio })), orientacao: of.itens.length ? undefined : 'nenhum agendamento futuro' }, { opcoes: of });
+      return bvgFim({ ok: true, agendamentos: of.itens.map((x) => ({ id: x.id, servico: x.valor.servico, barbeiro: x.valor.profissional, inicio: x.valor.horaInicio })), orientacao: of.itens.length ? undefined : 'nenhum agendamento futuro' }, { opcoes: of, pedido: { agendamentos: of.itens.map((x) => ({ opcao_id: x.id, ...x.valor })) } });
     }
     default:
       return falha(op, { status: 500 });
@@ -257,7 +258,7 @@ function bvgPassoEscrita(st, resps, cfg) {
   const p = meta.proposta, d = p.dados || {};
   const r0 = resps[0] || { status: 0 };
   const ok = r0.status >= 200 && r0.status < 300 && !(r0.body && r0.body.sucesso === false);
-  const limpa = { opcoes: {}, pedido: { servico: null, barbeiros: null, horario: null } };
+  const limpa = { opcoes: {}, pedido: { servico: null, barbeiros: null, horario: null, agendamentos: null } };
   const termina = (estado, resultado, extra = {}) => bvgFim(resultado, { ...extra, proposta_upd: { id: p.id, estado, resultado: { ok: !!resultado.ok, code: resultado.code } } });
   const err = (op, r) => { const e = bvGErro(r, op); return { e, f: e.falha }; };
   if (meta.etapa === 'reval') {

@@ -22,7 +22,9 @@ PREFIXO = "+5500000000"  # + 3 digitos (faixa 500-599, longe do smoke-recepcao)
 CFG = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
 URL = f"{CFG['n8n_url']}/webhook/{CFG['webhook']['path']}"
 TESTE_ID = CFG["graces"]["barbeiro_teste_id"]
-_falhas, _info = [], []
+_falhas, _info, _lat = [], [], []
+PAULO = "95e69175-6021-4280-a001-5ef2a0135bf8"  # cliente de teste autorizado pelo owner (P1): GET /agenda/clientes?celular=5511967296849
+_ocupados = []  # idAgenda criados pelo c4 para ocupar horario
 FANTASMA = "00000000-0000-0000-0000-0000000000aa"  # cliente/profissional ficticios: so alimentam a fase 1 (nada vai a Graces)
 
 
@@ -37,7 +39,12 @@ def _env(*arquivos):
             pass
 
 
+PAULO_TEL = "+5511967296849"  # P1/P2: telefone real do cliente de teste; no TESTE nada e enviado (contatos_escrita vazio)
+
+
 def tel(n):
+    if n >= 520:
+        return PAULO_TEL
     return f"{PREFIXO}{n:03d}"
 
 
@@ -126,6 +133,10 @@ def turno(n, corpo, limite=240):
     tid, est = sql(f"SELECT turno_id, estado FROM turnos WHERE contato_id={cid(n)} ORDER BY iniciado_em DESC LIMIT 1;").split("|")
     saidas = json.loads(sql(f"SELECT coalesce(json_agg(conteudo ORDER BY id),'[]') FROM mensagens WHERE contato_id={cid(n)} "
                             f"AND direcao='saida' AND mensagem_id_canal LIKE 'out-{tid}-%';"))
+    lat = sql(f"SELECT extract(epoch FROM min(m.criado_em) - min(t.iniciado_em)) FROM turnos t JOIN mensagens m ON m.contato_id=t.contato_id AND m.direcao='saida' "
+              f"AND m.mensagem_id_canal LIKE 'out-' || t.turno_id || '-%' WHERE t.turno_id='{tid}';")
+    if lat:
+        _lat.append(float(lat))  # SC-009: inicio do turno (fim da rajada) -> primeira mensagem
     return {"turno_id": tid, "estado": est, "saidas": saidas}
 
 
@@ -383,6 +394,175 @@ def c13():
     _cenario_credencial(509, "entregar_rajada", "entregar_rajada", "openAiApi", {"apiKey": "sk-invalida-smoke"}, "oi, tudo bem?", esperado)
 
 
+def graces_post(caminho, corpo):
+    req = urllib.request.Request(f"https://{os.environ['GRACES_BASE_URL_PROD']}/public/v1{caminho}", data=json.dumps(corpo).encode(), method="POST",
+                                 headers={"X-Api-Key": os.environ["GRACES_API_KEY"], "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        return {"http": e.code, "corpo": e.read()[:200].decode()}
+
+
+def _agendas_paulo():
+    return [a for a in graces_get(f"/agenda/agendamentos?idCliente={PAULO}&proximos=true") if a.get("idProfissional") == TESTE_ID]
+
+
+def novo_paulo(n):
+    """Mesmo telefone em todos os roteiros P1: zera o contato antes (cascade) e semeia a sessao (cliente achado pelo telefone na Graces)."""
+    sql(f"DELETE FROM contatos WHERE telefone='{PAULO_TEL}';")
+    return semear(n, {})
+
+
+def guiar(n, falas, parar, maximo=7):
+    """Como conduzir, mas toca cada tipo de oferta uma vez (a oferta de servico pode persistir enquanto o modelo pergunta o dia)."""
+    log, falas, tocados = [], list(falas), set()
+    for _ in range(maximo):
+        op = estado(n)["opcoes"]
+        itens = [i for i in (op.get("itens") or []) if "TESTE" not in str(i.get("rotulo", "")).upper()]
+        if itens and op.get("tipo") not in tocados:
+            tocados.add(op.get("tipo"))
+            fala = itens[0]["rotulo"]
+        else:
+            fala = falas.pop(0) if falas else "pode ser o primeiro que você sugerir"
+        t = turno(n, evento(n, fala))
+        if t is None:
+            checar("turno terminou no limite", False, f"fala={fala!r}")
+            break
+        t["fala"], t["estado_conversa"] = fala, estado(n)
+        log.append(t)
+        print(f"    > {fala!r} -> {t['estado']} oferta={t['estado_conversa']['opcoes'].get('tipo')} {str(t['saidas'])[:200]}")
+        if t["estado"] != "concluido" or parar(t):
+            break
+    return log
+
+
+def _say(n, fala):
+    t = turno(n, evento(n, fala))
+    print(f"    > {fala!r} -> {t and t['estado']} {str(t and t['saidas'])[:230]}")
+    return t
+
+
+def c1():
+    print("C1 agendar, cliente conhecido (US1, SC-008): 1 proposta executada no barbeiro de teste, <= 8 falas, 0 'TESTE' nas ofertas")
+    novo_paulo(520)
+    log = guiar(520, ["oi, queria marcar um corte", "amanhã", "qualquer barbeiro"], lambda t: bool(propostas(520, "pendente")), 7)
+    pend = propostas(520, "pendente")
+    checar("chegou ao resumo (proposta pendente)", len(pend) == 1, f"falhas={falhas(520)}")
+    if not pend:
+        return
+    t = _say(520, "sim")
+    if not propostas(520, "executada"):
+        print("    (1o 'sim' nao executou; estado:", [(p["acao"], p["estado"]) for p in propostas(520)], ")")
+        t = _say(520, "sim, pode confirmar")
+    falas = int(sql(f"SELECT count(*) FROM mensagens WHERE contato_id={cid(520)} AND direcao='entrada';"))
+    checar("proposta executada", len(propostas(520, "executada")) == 1, f"falhas={falhas(520)} {t and t['saidas']}"[:200])
+    checar("<= 8 falas do cliente (SC-008)", falas <= 8, f"falas={falas}")
+    checar("0 ofertas com TESTE (SC-001)", "TESTE" not in json.dumps([x["estado_conversa"]["opcoes"] for x in log]).upper())
+    checar("agendamento criado no barbeiro de teste, no nome do Paulo", len(_agendas_paulo()) >= 1)
+
+
+def c4():
+    print("C4 horario tomado (US1-4): ocupar o horario entre resumo e 'sim' -> aviso/novas opcoes, 0 duplicado")
+    novo_paulo(521)
+    guiar(521, ["oi, queria marcar um corte", "amanhã", "qualquer barbeiro"], lambda t: bool(propostas(521, "pendente")), 7)
+    pend = propostas(521, "pendente")
+    checar("chegou ao resumo", len(pend) == 1, f"falhas={falhas(521)}")
+    if not pend:
+        return
+    d = pend[0]["dados"]
+    antes = len(_agendas_paulo())
+    r = graces_post("/agenda", {"idCliente": PAULO, "idServico": d["idServico"], "idProfissional": TESTE_ID, "data": d["data"], "horaInicio": d["hora"]})
+    print("    ocupacao:", str(r)[:160])
+    if isinstance(r, dict) and r.get("idAgenda"):
+        _ocupados.append(r["idAgenda"])
+    t = _say(521, "sim")
+    depois = len(_agendas_paulo())
+    checar("nenhum agendamento duplicado", depois <= antes + 1, f"antes={antes} depois={depois}")
+    for a in _ocupados:  # libera o horario para os roteiros seguintes
+        urllib.request.urlopen(urllib.request.Request(f"https://{os.environ['GRACES_BASE_URL_PROD']}/public/v1/agenda/{a}", method="DELETE", headers={"X-Api-Key": os.environ["GRACES_API_KEY"]}), timeout=30)
+    _ocupados.clear()
+    checar("avisou e/ou ofereceu novas opcoes", bool(t) and (estado(521)["opcoes"].get("tipo") == "horario" or any("hor" in x.lower() for x in t["saidas"])), str(t and t["saidas"])[:200])
+
+
+def _semear_agendamento(n, hora="15:00"):
+    """Agendamento do Paulo no barbeiro de teste, direto na Graces (o roteiro seguinte o cancela em encerrar)."""
+    for a in _agendas_paulo():  # roteiros anteriores deixam agendamentos do Paulo no barbeiro de teste: cancela antes
+        urllib.request.urlopen(urllib.request.Request(f"https://{os.environ['GRACES_BASE_URL_PROD']}/public/v1/agenda/{a['idAgenda']}", method="DELETE", headers={"X-Api-Key": os.environ["GRACES_API_KEY"]}), timeout=30)
+    s0 = next(x for x in graces_get("/agenda/servicos?texto=corte") if x.get("ativo", True) and "adulto" in x["descricaoAgenda"].lower())
+    dia = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 3600 + 86400))
+    r = graces_post("/agenda", {"idCliente": PAULO, "idServico": s0["idServico"], "idProfissional": TESTE_ID, "data": dia, "horaInicio": hora})
+    checar("semeou agendamento (Graces)", isinstance(r, dict) and bool(r.get("idAgenda")), str(r)[:160])
+    novo_paulo(n)
+    return r
+
+
+def _dump(n):
+    for p in propostas(n):
+        print("    proposta:", p["acao"], p["estado"], json.dumps(p["dados"], ensure_ascii=False)[:200])
+    print("    falhas:", falhas(n))
+
+
+def c6():
+    print("C6 cancelar sugerindo remarcar (US3-1/2, SC-005): sugere remarcar; apos recusa e 'sim', DELETE e oferta de marcar outro")
+    _semear_agendamento(523)
+    log = guiar(523, ["quero cancelar", "não quero remarcar, quero cancelar mesmo"], lambda t: bool(propostas(523, "pendente")), 6)
+    checar("sugeriu remarcar antes de cancelar (SC-005)", any("remarc" in x.lower() or "outro hor" in x.lower() for t in log for x in t["saidas"]), str([t["saidas"] for t in log])[:200])
+    t = _say(523, "sim, pode cancelar") if propostas(523, "pendente") else None
+    _dump(523)
+    checar("cancelamento executado", any(p["acao"] == "cancelar" and p["estado"] == "executada" for p in propostas(523)))
+    checar("agenda do Paulo no barbeiro de teste vazia", not _agendas_paulo())
+    checar("ofereceu marcar outro", bool(t) and any("marcar" in x.lower() or "agendar" in x.lower() for x in t["saidas"]), str(t and t["saidas"])[:200])
+    t = _say(523, "cancelei, vamos marcar outro")  # C8 (US3-3)
+    txt = " ".join(t["saidas"]).lower() if t else ""
+    checar("C8 'vamos marcar outro': segue para novo agendamento, sem 'nao encontrei agendamento'", bool(t) and "encontrei agendamento" not in txt, txt[:200])
+
+
+def c7():
+    print("C7 reagendar (US3-4): PUT com servico preservado; resumo 'de X para Y'")
+    _semear_agendamento(524, "17:00")
+    _say(524, "queria remarcar meu horário de amanhã")
+    tocados, falas7 = set(), ["amanhã mesmo, depois das 18h", "qualquer barbeiro"]
+    for _ in range(9):
+        op = estado(524)["opcoes"]
+        its = [i for i in (op.get("itens") or []) if "TESTE" not in str(i.get("rotulo", "")).upper()]
+        if op.get("tipo") == "horario" and its:
+            alvo = next((i for i in its if "18" in i["rotulo"] or "19" in i["rotulo"]), its[-1])
+            _say(524, alvo["rotulo"])
+        elif op.get("tipo") in ("agendamento", "servico", "barbeiro") and its and op["tipo"] not in tocados:
+            tocados.add(op["tipo"])
+            _say(524, its[0]["rotulo"])
+        else:
+            _say(524, falas7.pop(0) if falas7 else "pode ser qualquer barbeiro")
+        if propostas(524, "pendente"):
+            break
+    pend = propostas(524, "pendente")
+    checar("proposta de reagendar pendente (resumo de X para Y)", len(pend) == 1 and pend[0]["acao"] == "reagendar", str([(p["acao"], p["estado"]) for p in propostas(524)]))
+    if pend:
+        _say(524, "sim")
+    _dump(524)
+    checar("reagendar executado", any(p["acao"] == "reagendar" and p["estado"] == "executada" for p in propostas(524)))
+    ag = _agendas_paulo()
+    checar("1 agendamento no barbeiro de teste, em outra hora", len(ag) == 1 and str(ag[0].get("horaInicio", ""))[11:16] != "15:00", str([a.get("horaInicio") for a in ag]))
+
+
+def p2():
+    print("P2 ponta a ponta com o contato real (7.2.4): Chat Master -> bv-recepcao -> entregar-rajada -> Graces -> Chat Master (envio REAL ao 5511967296849 pela conexao 145)")
+    checar("config: contatos_escrita = so o contato real do owner (P2)", CFG["teste"]["contatos_escrita"] == [PAULO_TEL])
+    sv = [x for x in graces_get("/agenda/servicos?texto=corte") if x.get("ativo", True)]
+    checar("shape /agenda/servicos", bool(sv) and {"idServico", "descricaoAgenda", "tempoPadrao", "valorPadrao"} <= set(sv[0]), str(sorted(sv[0]))[:200] if sv else "")
+    c1()
+    ag = _agendas_paulo()
+    checar("shape /agenda/agendamentos", bool(ag) and {"idAgenda", "horaInicio", "idServico", "descricaoServico", "idProfissional", "profissional"} <= set(ag[0]), str(sorted(ag[0]))[:300] if ag else "")
+    bs = graces_get(f"/servicos/profissionais?idServico={sv[0]['idServico']}")
+    checar("shape /servicos/profissionais", bool(bs) and {"idProfissional", "apelido"} <= set(bs[0]), str(sorted(bs[0]))[:200] if bs else "")
+    dia = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 3600 + 86400))
+    hl = graces_get(f"/agenda/horarios-livres?idServico={sv[0]['idServico']}&idProfissional={bs[0]['idProfissional']}&data={dia}")
+    checar("shape /agenda/horarios-livres", isinstance(hl, dict) and {"horarios", "minutos"} <= set(hl), str(hl)[:120])
+    n_out = int(sql(f"SELECT count(*) FROM mensagens m JOIN contatos c ON c.id=m.contato_id WHERE c.telefone='{PAULO_TEL}' AND m.direcao='saida';"))
+    checar("mensagens de saida gravadas (enviadas pelo Chat Master)", n_out >= 1, f"n={n_out}")
+
+
 # ---------------------------------------------------------------- limpeza e SC-010
 def encerrar():
     print("encerramento (TESTE): SC-010, cancelamento do que ficou executado, limpeza de Postgres/Redis")
@@ -396,11 +576,17 @@ def encerrar():
                 urllib.request.urlopen(req, timeout=30)
             except urllib.error.HTTPError as err:
                 print(f"  cancelamento de {e['a']}: HTTP {err.code}")
+    for a in set(_ocupados) | {x["idAgenda"] for x in (_agendas_paulo() if os.environ.get("GRACES_API_KEY") else [])}:  # roteiros P1: tudo do Paulo no barbeiro de teste
+        try:
+            urllib.request.urlopen(urllib.request.Request(f"https://{os.environ['GRACES_BASE_URL_PROD']}/public/v1/agenda/{a}", method="DELETE", headers={"X-Api-Key": os.environ["GRACES_API_KEY"]}), timeout=30)
+            print(f"  cancelado (barbeiro de teste): {a}")
+        except urllib.error.HTTPError as err:
+            print(f"  cancelamento de {a}: HTTP {err.code}")
     checar("SC-010: 0 agendamentos criados pela rodada ficaram ativos (propostas executadas a cancelar)", not ex, f"cancelados={len(ex)}")
     lista = CFG["teste"]
-    checar("nenhum envio real: contatos_escrita vazio e todos os contatos do smoke simulados", lista["contatos_escrita"] == [] and tel(500)[:11] == "+5500000000")
+    checar("nenhum envio real: contatos_escrita vazio e todos os contatos do smoke simulados", lista["contatos_escrita"] in ([], [PAULO_TEL]) and tel(500)[:11] == "+5500000000")
     sql(f"DELETE FROM falhas_agente WHERE contato_id IN (SELECT id FROM contatos WHERE telefone LIKE '{PREFIXO}%');")
-    sql(f"DELETE FROM contatos WHERE telefone LIKE '{PREFIXO}%';")  # turnos/mensagens/conversas/propostas caem por CASCADE
+    sql(f"DELETE FROM contatos WHERE telefone LIKE '{PREFIXO}%' OR telefone='{PAULO_TEL}';")  # turnos/mensagens/conversas/propostas caem por CASCADE
     spec = importlib.util.spec_from_file_location("limpar_redis", os.path.join(RAIZ, "scripts", "limpar-redis.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -417,7 +603,7 @@ def verificar_implantado():
     checar("entregar-rajada implantado: lista de envio real vazia", "const escrita = [].map(dig);" in cod.replace("[ ]", "[]"))
 
 
-CENARIOS = dict(c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13)
+CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13)
 
 if __name__ == "__main__":
     _env(".env.smoke", ".env.n8n")
@@ -430,12 +616,16 @@ if __name__ == "__main__":
     if not TOKEN or any(n not in CENARIOS for n in nomes):
         sys.exit("CHATMASTER_TOKEN_TESTE ausente ou cenario desconhecido")
     try:
-        verificar_implantado()
+        if "p2" not in nomes:
+            verificar_implantado()
         for n in nomes:
             CENARIOS[n]()
     finally:
         encerrar()
     for i in _info:
         print("info:", i)
+    if _lat:
+        q = sorted(_lat)
+        print(f"latencia SC-009: n={len(q)} p50={q[len(q)//2]:.1f}s p90={q[min(len(q)-1, int(len(q)*0.9))]:.1f}s max={q[-1]:.1f}s")
     print("FALHAS:", _falhas or "nenhuma")
     sys.exit(1 if _falhas else 0)
