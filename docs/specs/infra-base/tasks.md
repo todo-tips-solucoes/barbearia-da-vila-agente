@@ -259,3 +259,25 @@ flowchart TD
 | RET-HIST | Retencao do historico de mensagens | `[PENDENTE-OWNER]` P7; fora desta feature |
 | CRED-NEG | Credenciais OpenAI, Graces e Chat Master | Criadas pelas features que as usam (research) |
 | LOGICA-ATEND | Logica de atendimento, buffer, agendadas | Features seguintes do roadmap |
+
+
+## FASE 9 - Convergência
+
+> Fase gerada automaticamente pela skill `converge` (reconciliação
+> spec-vs-código). Cada tarefa abaixo corresponde a um achado (`Gap`)
+> entre o que `spec.md`/`plan.md`/`tasks.md` descreveram e o estado
+> presente do código. Tarefas sem o prefixo `[Revisar]` são acionáveis
+> (`missing`/`partial`/`contradicts`); tarefas com `[Revisar]` são item de
+> revisão (`unrequested`, FR-013) — nunca "implementar", o código já
+> existe. Append-only: esta fase nunca reescreve fases/tarefas anteriores
+> do arquivo (FR-009).
+
+### 9.1 Validar `bv-verificacao.json` com as ferramentas de n8n `[C]`
+
+Ref: 5.3 · tipo: `partial` · severidade: `CRITICAL`
+
+A tarefa 5.3.1 exige criar `workflows/bv-verificacao.json` **e validá-lo com as skills de n8n antes do commit** (Princípio XII, MUST). O arquivo existe, foi implantado e funciona no TESTE (deploy idempotente e 403 sem token, `docs/infra.md`), mas não há registro de validação pelo MCP/skills do n8n (`validate_workflow` ou equivalente). Falta só a validação e o registro dela; o JSON pode ficar como está se passar.
+
+- [ ] 9.1.1 Validar `workflows/bv-verificacao.json` com o MCP/skills de n8n (validação de workflow, nós `webhook` 2.2 e `respondToWebhook` 1.1), corrigir erros reais (falsos positivos documentados) e registrar o resultado em `docs/infra.md`
+
+<!-- converge-key: 4414f9e31428 -->
