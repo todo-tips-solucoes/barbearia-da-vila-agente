@@ -165,7 +165,11 @@ def main(argv=None, raiz=RAIZ, api=None):
         for nome in nomes:
             arq = os.path.join(raiz, "workflows", ("sub/" + nome.replace("_", "-") if nome in subs else nome) + ".json")
             with open(arq, encoding="utf-8") as f:
-                wf = json.loads(renderizar(f.read(), cfg, raiz))
+                bruto = f.read()
+            if a.ambiente == "producao" and re.search(r"\{\{BV:(NUM:)?teste\.", bruto):
+                print(f"producao recusada: {nome} usa chave teste.* do config.", file=sys.stderr)
+                return 2
+            wf = json.loads(renderizar(bruto, cfg, raiz))
             if a.criar:
                 print(f"{nome} -> {criar(api, cfg, arq_cfg, nome, wf)}")
             else:

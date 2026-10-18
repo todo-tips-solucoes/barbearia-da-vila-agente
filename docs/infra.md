@@ -26,6 +26,9 @@ Credenciais da instancia (47) listadas por `GET /api/v1/credentials`: **nenhuma*
 | `Barbearia Vila Redis` (DB 2) | redis | `chtScO4j08LclN89` |
 | `Barbearia Vila Postgres PROD` | postgres | nao criada (PROD exige a trava) |
 | `Barbearia Vila Verificacao` (header `X-BV-Token`; token so em `infra.env` na VPS) | httpHeaderAuth | `i7qS8QNvswOIbepF` |
+| `Barbearia Vila OpenAI` | openAiApi | `3e2ki13KTZskEv7O` |
+| `Barbearia Vila Graces` (header `X-Api-Key`) | httpHeaderAuth | `NCWLnCOpE4DgIUVU` |
+| `Barbearia Vila Chat Master` (header `Authorization`) | httpHeaderAuth | `FKqysWSzX8p4X1re` |
 
 Campos do schema da API (`GET /credentials/schema/{tipo}`):
 

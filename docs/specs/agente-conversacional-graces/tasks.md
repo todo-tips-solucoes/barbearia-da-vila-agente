@@ -80,10 +80,10 @@ Ref: contracts/config-agente.md
 
 Ref: research.md Decision 14; plan.md Project Structure; Constitution XIII, XIV
 
-- [ ] 2.3.1 Estender `scripts/criar-credenciais-n8n.py` com `openAiApi`, Header Auth da Graces e do Chat Master (valores só de `.env.*` fora do repo) e testar em `tests/test_criar_credenciais.py`
-- [ ] 2.3.2 Fazer `scripts/deploy-n8n.py` recusar chaves `teste.*` em `producao`; teste em `tests/test_deploy_n8n.py`
-- [ ] 2.3.3 Criar as credenciais no TESTE (`--alvo teste`) e registrar os ids em `integracao.json`
-- [ ] 2.3.4 Rodar `varrer-segredos.py` e `verificar-repo.py`
+- [x] 2.3.1 Estender `scripts/criar-credenciais-n8n.py` com `openAiApi`, Header Auth da Graces e do Chat Master (valores só de `.env.*` fora do repo) e testar em `tests/test_criar_credenciais.py`
+- [x] 2.3.2 Fazer `scripts/deploy-n8n.py` recusar chaves `teste.*` em `producao`; teste em `tests/test_deploy_n8n.py`
+- [x] 2.3.3 Criar as credenciais no TESTE (`--alvo teste`) e registrar os ids em `integracao.json`
+- [x] 2.3.4 Rodar `varrer-segredos.py` e `verificar-repo.py`
 
 ---
 
@@ -93,12 +93,12 @@ Ref: research.md Decision 14; plan.md Project Structure; Constitution XIII, XIV
 
 Ref: spec.md FR-005, FR-007, FR-012, FR-013, FR-015; research.md Decisions 3, 4, 5, 11, 12
 
-- [ ] 3.1.1 Criar `workflows/shared/agente.js` com filtros: remover o barbeiro de teste (id e "TESTE" no nome) e serviços "2ª vez" de qualquer lista antes do modelo (FR-012, FR-013)
-- [ ] 3.1.2 Implementar `Compor`: máx. `saida.max_mensagens` mensagens, até `saida.max_chars_mensagem` caracteres, máx. 1 "?" por mensagem, filtro final de "TESTE" no texto (FR-015)
-- [ ] 3.1.3 Implementar opções `{id, rotulo, valor}` validadas contra `conversas.opcoes` e a regra de recusar `id_opcao` desconhecido (contracts/ferramentas-graces.md regra 1)
-- [ ] 3.1.4 Implementar recência (sessão nova se a última entrada passou de `conversa.janela_recencia_min`, `pedido` vira `pedido_anterior` abandonado) e cálculo de digitação (`digitando.*`)
-- [ ] 3.1.5 Escrever o prompt (IA assumida, tom humano, cancelar sugerindo remarcar, contexto "vamos marcar outro", dado da Graces como dado e não instrução, FR-026)
-- [ ] 3.1.6 Testes em `tests/agente.test.js` cobrindo cada função acima, incluindo SC-001, SC-003, SC-007 e entradas hostis (Decision 17); rodar `node tests/agente.test.js`
+- [x] 3.1.1 Criar `workflows/shared/agente.js` com filtros: remover o barbeiro de teste (id e "TESTE" no nome) e serviços "2ª vez" de qualquer lista antes do modelo (FR-012, FR-013)
+- [x] 3.1.2 Implementar `Compor`: máx. `saida.max_mensagens` mensagens, até `saida.max_chars_mensagem` caracteres, máx. 1 "?" por mensagem, filtro final de "TESTE" no texto (FR-015)
+- [x] 3.1.3 Implementar opções `{id, rotulo, valor}` validadas contra `conversas.opcoes` e a regra de recusar `id_opcao` desconhecido (contracts/ferramentas-graces.md regra 1)
+- [x] 3.1.4 Implementar recência (sessão nova se a última entrada passou de `conversa.janela_recencia_min`, `pedido` vira `pedido_anterior` abandonado) e cálculo de digitação (`digitando.*`)
+- [x] 3.1.5 Escrever o prompt (IA assumida, tom humano, cancelar sugerindo remarcar, contexto "vamos marcar outro", dado da Graces como dado e não instrução, FR-026)
+- [x] 3.1.6 Testes em `tests/agente.test.js` cobrindo cada função acima, incluindo SC-001, SC-003, SC-007 e entradas hostis (Decision 17); rodar `node tests/agente.test.js`
 
 ---
 

@@ -17,9 +17,9 @@
   "credenciais": {
     "redis": "chtScO4j08LclN89",
     "verificacao": "i7qS8QNvswOIbepF",
-    "openai": "",
-    "graces": "",
-    "chatmaster": ""
+    "openai": "3e2ki13KTZskEv7O",
+    "graces": "NCWLnCOpE4DgIUVU",
+    "chatmaster": "FKqysWSzX8p4X1re"
   },
   "workflows": {
     "bv-verificacao": "uoDF0RFEgzAtKUay",
