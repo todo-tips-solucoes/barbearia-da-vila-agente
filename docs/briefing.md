@@ -34,7 +34,7 @@
 
 1. Infra: banco `barbearia_vila` / `barbearia_vila_teste`, prefixos Redis distintos por ambiente, script de deploy via API pública do n8n.
 2. Recepção do webhook do Chat Master, com buffer de 8 s para juntar rajadas e lock por contato.
-3. Agente (nó AI Agent, `gpt-5.6-luna`) com ferramentas Graces: identificar/cadastrar cliente, serviços, barbeiros, horários livres, agendar, reagendar, cancelar, pacotes. Conversa em vez de menus; contexto da conversa; sugerir remarcar ao cancelar; oferecer todos os inícios em que o serviço cabe; não retomar coleta antiga num "Oi"; nunca expor o barbeiro de teste.
+3. Agente (nó AI Agent, `gpt-5.6-luna`) com ferramentas Graces: identificar/cadastrar cliente, serviços, barbeiros, horários livres, agendar, reagendar, cancelar, pacotes. Múltipla escolha sempre por botão de lista (decisão do owner, 2026-10-18), com texto humano; contexto da conversa; sugerir remarcar ao cancelar; oferecer todos os inícios em que o serviço cabe; não retomar coleta antiga num "Oi"; nunca expor o barbeiro de teste.
 4. Cadência humana: até 4 mensagens curtas, "digitando…" proporcional, uma pergunta por mensagem.
 5. Áudio (transcrição) e imagem (interpretação) de entrada.
 6. Regras de negócio: pacotes (perguntar se usa a sessão ou paga avulso), serviços "2ª vez" nunca oferecidos, agendamento para terceiros, vários serviços encadeados (um agendamento por serviço).
@@ -59,7 +59,7 @@
 
 **Ordem de prioridade** [inferido]: correção dos dados da agenda (nunca oferecer horário que não veio da Graces) > naturalidade da conversa > cobertura de recursos (CRM, lembretes) > velocidade.
 
-**Decisões explícitas** [fornecido]: a Graces é a fonte da verdade (inclusive faixas de idade e preços, não `informacaoes_barbearia.txt`); botão só na confirmação; o agente nunca agenda com o barbeiro de teste.
+**Decisões explícitas** [fornecido]: a Graces é a fonte da verdade (inclusive faixas de idade e preços, não `informacaoes_barbearia.txt`); múltipla escolha sempre por botão de lista e confirmação por Quick Reply (owner, 2026-10-18, revisa o feedback do áudio); o agente nunca agenda com o barbeiro de teste.
 
 ## 5. Restricoes
 
