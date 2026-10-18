@@ -25,3 +25,11 @@ Veredito: has_unsourced (2 itens), recomendação do verificador: human_block. T
 - `get_workflow_details`: 25 nós, `active=true`, versão ativa igual à atual (`593fc103-…`), `executionTimeout` 300.
 - `validade_min`: não é um valor fixo. O fonte usa `{{BV:proposta.validade_min}}`, e o 30 vem da config. Ponto encerrado.
 - Ainda não houve execução real. O gatilho (executeWorkflowTrigger) não pode ser executado direto pelo MCP, então o caminho POST/PUT só será exercido no smoke da Fase 7.
+
+## Validação MCP do entregar-rajada (pai, após a onda-011)
+
+- `get_workflow_details` (`ilzXqBWGtcczlGEu`): 68 nós, `active=true`, versão ativa = versão atual (`8988958e-…`), `executionTimeout` 300.
+- Tipos: agent@3 ×1, lmChatOpenAi@1.3 ×1, toolWorkflow@2.2 ×10, httpRequest@4.2 ×8 (todos com `sendQuery`/`sendBody` literais), if@2.2, postgres@2.5, wait@1.1, code@2.
+- `validate_node_config`: "Agente" (com subnós modelo e ferramenta), "Modelo" (`gpt-5.6-luna`, Responses API, raciocínio `low`), "Ferramenta identificar_cliente" (`isToolNode`) e "Digitando 1" estão **válidos**.
+- Envio real: `simulado = !teste.contatos_escrita.includes(telefone)`. Com `contatos_escrita: []`, nenhum envio sai pelo Chat Master até o P2.
+- Ainda sem execução real ponta a ponta (OpenAI, Graces, Chat Master).
