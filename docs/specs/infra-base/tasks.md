@@ -123,25 +123,25 @@ Ref: FR-015, FR-013, contracts/scripts-cli.md
 
 Ref: FR-009, FR-010, FR-011, SC-004, SC-005, contracts/scripts-cli.md
 
-- [ ] 5.1.1 Criar `scripts/deploy-n8n.py` e wrapper `scripts/deploy-n8n.sh`: GET -> PUT -> publish por id do config; id inexistente ou falha no PUT -> erro claro, sem publicar, indicando a etapa
-- [ ] 5.1.2 Implementar `--criar NOME` (so TESTE, uma unica vez): recusa se id ja no config ou nome ja existe; imprime o id
-- [ ] 5.1.3 Trava de PROD: exige `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` e `--confirmar-id` igual ao id de PROD do config; sem isso exit 2, zero chamadas remotas
-- [ ] 5.1.4 Testes `unittest` (mock HTTP): 3 deploys = 1 workflow por id e nenhum POST; falha no PUT nao publica; PROD sem confirmacao recusado; id inexistente falha
+- [x] 5.1.1 Criar `scripts/deploy-n8n.py` e wrapper `scripts/deploy-n8n.sh`: GET -> PUT -> publish por id do config; id inexistente ou falha no PUT -> erro claro, sem publicar, indicando a etapa
+- [x] 5.1.2 Implementar `--criar NOME` (so TESTE, uma unica vez): recusa se id ja no config ou nome ja existe; imprime o id
+- [x] 5.1.3 Trava de PROD: exige `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` e `--confirmar-id` igual ao id de PROD do config; sem isso exit 2, zero chamadas remotas
+- [x] 5.1.4 Testes `unittest` (mock HTTP): 3 deploys = 1 workflow por id e nenhum POST; falha no PUT nao publica; PROD sem confirmacao recusado; id inexistente falha
 
 ### 5.2 Rollback do workflow (CHK015) `[A]`
 
 Ref: checklists/infra.md CHK015, FR-010
 
-- [ ] 5.2.1 Antes do PUT, guardar o JSON atual (GET) em arquivo local temporario fora do git (sem segredos), para restauracao
-- [ ] 5.2.2 Falha no `publish` apos PUT bem-sucedido: tentar restaurar o JSON anterior por PUT, reportar o estado final (restaurado ou nao) e sair com exit 1
-- [ ] 5.2.3 Teste `unittest` (mock HTTP) do cenario PUT ok + publish falha: restauracao tentada e mensagem indica o estado; registrar o comportamento em `docs/infra.md`
+- [x] 5.2.1 Antes do PUT, guardar o JSON atual (GET) em arquivo local temporario fora do git (sem segredos), para restauracao
+- [x] 5.2.2 Falha no `publish` apos PUT bem-sucedido: tentar restaurar o JSON anterior por PUT, reportar o estado final (restaurado ou nao) e sair com exit 1
+- [x] 5.2.3 Teste `unittest` (mock HTTP) do cenario PUT ok + publish falha: restauracao tentada e mensagem indica o estado; registrar o comportamento em `docs/infra.md`
 
 ### 5.3 Workflow de verificacao (so TESTE) `[M]`
 
 Ref: plan.md §Structure Decision, Principio XII
 
-- [ ] 5.3.1 Criar `workflows/bv-verificacao.json` (webhook Header Auth, responde so `{ok: true}`) e validar com as skills de n8n antes do commit
-- [ ] 5.3.2 `deploy-n8n.sh integracao --criar bv-verificacao` (uma vez), gravar o id retornado em `integracao.json`/`docs/infra.md`, depois `deploy-n8n.sh integracao` duas vezes e conferir 1 workflow publicado
+- [x] 5.3.1 Criar `workflows/bv-verificacao.json` (webhook Header Auth, responde so `{ok: true}`) e validar com as skills de n8n antes do commit
+- [x] 5.3.2 `deploy-n8n.sh integracao --criar bv-verificacao` (uma vez), gravar o id retornado em `integracao.json`/`docs/infra.md`, depois `deploy-n8n.sh integracao` duas vezes e conferir 1 workflow publicado
 
 ---
 

@@ -16,6 +16,7 @@ import _vps
 ARQ = {"teste": "integracao.json", "producao": "producao.json"}
 NOMES = {"teste": "Barbearia Vila Postgres TESTE", "producao": "Barbearia Vila Postgres PROD"}
 NOME_REDIS = "Barbearia Vila Redis"
+NOME_VERIF = "Barbearia Vila Verificacao"  # so TESTE (webhook bv-verificacao); token nasce e fica em infra.env na VPS
 # Host/porta dentro da rede docker da stack n8n (documentado em docs/infra.md).
 PG_HOST, PG_PORT, REDIS_HOST, REDIS_PORT = "postgres", 5432, "redis", 6379
 
@@ -35,18 +36,21 @@ def api(env, metodo, caminho, corpo=None):
 
 
 def segredos_vps(alvo):
-    """(senha_postgres, senha_redis) lidas na VPS; nada vai para stdout."""
+    """(senha_postgres, senha_redis, token_verificacao|"") lidas na VPS; nada vai para stdout."""
     _d, var = _vps._alvo(alvo)
+    tok = ("grep -q '^BV_VERIFICACAO_TOKEN=' {f} || printf 'BV_VERIFICACAO_TOKEN=%s\\n' \"$(openssl rand -hex 32)\" >> {f}; "
+           .format(f=_vps.INFRA_ENV) if alvo == "teste" else "")
     rc, out, err = _vps._ssh(
-        f"set -a; . {_vps.INFRA_ENV}; set +a; printf '%s\\n' \"${var}\"; "
-        f"sed -n 's/.*\"-a\", *\"\\([^\"]*\\)\".*/\\1/p' {_vps.COMPOSE} | head -1")
+        f"umask 077; {tok}set -a; . {_vps.INFRA_ENV}; set +a; printf '%s\\n' \"${var}\"; "
+        f"sed -n 's/.*\"-a\", *\"\\([^\"]*\\)\".*/\\1/p' {_vps.COMPOSE} | head -1; "
+        f"printf '%s\\n' \"${{BV_VERIFICACAO_TOKEN:-}}\"")
     linhas = out.split("\n")
-    if rc or len(linhas) < 2 or not linhas[0] or not linhas[1]:
+    if rc or len(linhas) < 3 or not linhas[0] or not linhas[1] or (alvo == "teste" and not linhas[2]):
         raise RuntimeError("segredos nao encontrados na VPS")
-    return linhas[0], linhas[1]
+    return linhas[0], linhas[1], linhas[2]
 
 
-def montar(alvo, cfg, pg_pw, redis_pw):
+def montar(alvo, cfg, pg_pw, redis_pw, token=""):
     d = _vps.ALVOS[alvo][0]
     return [
         {"name": NOMES[alvo], "type": "postgres", "data": {
@@ -55,7 +59,8 @@ def montar(alvo, cfg, pg_pw, redis_pw):
         {"name": NOME_REDIS, "type": "redis", "data": {
             "host": REDIS_HOST, "port": REDIS_PORT, "database": cfg["redis"]["db"],
             "password": redis_pw, "ssl": False}},
-    ]
+    ] + ([{"name": NOME_VERIF, "type": "httpHeaderAuth", "data": {"name": "X-BV-Token", "value": token}}]
+         if alvo == "teste" else [])
 
 
 def criar(env, creds, http=api):
@@ -79,8 +84,8 @@ def main(argv, http=api, segredos=segredos_vps):
         env = ler_env(os.environ.get("BV_ENV_N8N", os.path.join(RAIZ, ".env.n8n")))
         with open(os.path.join(RAIZ, "config", "ambientes", ARQ[a.alvo]), encoding="utf-8") as f:
             cfg = json.load(f)
-        pg_pw, redis_pw = segredos(a.alvo)
-        for nome, cid, pulada in criar(env, montar(a.alvo, cfg, pg_pw, redis_pw), http):
+        pg_pw, redis_pw, token = segredos(a.alvo)
+        for nome, cid, pulada in criar(env, montar(a.alvo, cfg, pg_pw, redis_pw, token), http):
             print(f"{nome} -> {cid}" + (" (ja existia, pulada)" if pulada else ""))
     except _vps.Recusado as e:
         print(f"recusado: {e}", file=sys.stderr)

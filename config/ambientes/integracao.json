@@ -13,12 +13,12 @@
   },
   "credenciais": {
     "redis": "chtScO4j08LclN89",
-    "verificacao": "",
+    "verificacao": "i7qS8QNvswOIbepF",
     "openai": "",
     "graces": "",
     "chatmaster": ""
   },
   "workflows": {
-    "bv-verificacao": ""
+    "bv-verificacao": "uoDF0RFEgzAtKUay"
   }
 }

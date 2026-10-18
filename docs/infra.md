@@ -25,7 +25,7 @@ Credenciais da instancia (47) listadas por `GET /api/v1/credentials`: **nenhuma*
 | `Barbearia Vila Postgres TESTE` | postgres | `X3WoZnCScCKqBdg2` |
 | `Barbearia Vila Redis` (DB 2) | redis | `chtScO4j08LclN89` |
 | `Barbearia Vila Postgres PROD` | postgres | nao criada (PROD exige a trava) |
-| `Barbearia Vila Verificacao` | httpHeaderAuth | fase 5.3 |
+| `Barbearia Vila Verificacao` (header `X-BV-Token`; token so em `infra.env` na VPS) | httpHeaderAuth | `i7qS8QNvswOIbepF` |
 
 Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
@@ -45,3 +45,10 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
 - DB 2 da stack `n8n-redis-1`, prefixos `bv:teste:` e `bv:prod:` (disjuntos). `scripts/limpar-redis.py` apaga so chaves do prefixo do alvo (`SCAN MATCH` + `DEL` em lote; nunca `FLUSHDB`/`FLUSHALL`); PROD exige a trava `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim`. `verificar-infra.py --redis` faz `SET/GET/DEL` so sob `bv:teste:verif:` (validado em 2026-10-18).
 - CHK010 / task 3.2.1 (resolvida pelo owner, dec-030, 2026-10-18): isolamento **so por prefixo** no DB 2, sem ACL propria (modelo do Gold). **Risco aceito**: qualquer cliente com a senha da stack le/escreve em qualquer prefixo e DB; o isolamento depende da disciplina dos workflows e de `limpar-redis.py`.
+
+## Deploy de workflows (fase 5)
+
+- `scripts/deploy-n8n.sh integracao [--so NOME]` faz GET -> PUT -> publish por id do config; nunca POST. `--criar NOME` cria uma unica vez (so TESTE) e grava o id no config. PROD exige `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` e `--confirmar-id`.
+- Rollback (CHK015): antes do PUT o JSON atual vai para um arquivo temporario fora do git (modo 600). Se o publish falhar apos o PUT, o script tenta restaurar o JSON anterior por PUT, informa o estado final (restaurado ou nao, e o caminho da copia) e sai com exit 1. Copia removida so no sucesso.
+- Workflow `bv-verificacao` (TESTE): id `uoDF0RFEgzAtKUay`, webhook `POST /webhook/bv-verificacao` com Header Auth; responde so `{ok: true}`. Validado em 2026-10-18: 3 execucoes de deploy = 1 workflow ativo; chamada sem token = 403.
+- A API key do n8n vem de `.env.n8n` (do Gold, fora do git) via `BV_ENV_N8N`.
