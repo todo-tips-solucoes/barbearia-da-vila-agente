@@ -93,9 +93,9 @@ Ref: FR-003, FR-005, contracts/scripts-cli.md
 
 Ref: FR-007, FR-008, FR-019, SC-007
 
-- [ ] 3.1.1 Criar `scripts/limpar-redis.py --alvo ... [--padrao SUFIXO]` com `SCAN MATCH <prefixo><sufixo>*` + `DEL` em lote, so no DB do config e so se `db_confirmado=true`; PROD exige a trava
-- [ ] 3.1.2 Testes `unittest` (mock): prefixos `bv:prod:` e `bv:teste:` disjuntos; limpeza de TESTE nao toca chaves de PROD nem alheias; nenhum `FLUSHDB`/`FLUSHALL`
-- [ ] 3.1.3 Implementar e executar `verificar-infra.py --redis` com escrita (`SET/DEL` somente sob `bv:teste:verif:`) apos DB confirmado
+- [x] 3.1.1 Criar `scripts/limpar-redis.py --alvo ... [--padrao SUFIXO]` com `SCAN MATCH <prefixo><sufixo>*` + `DEL` em lote, so no DB do config e so se `db_confirmado=true`; PROD exige a trava
+- [x] 3.1.2 Testes `unittest` (mock): prefixos `bv:prod:` e `bv:teste:` disjuntos; limpeza de TESTE nao toca chaves de PROD nem alheias; nenhum `FLUSHDB`/`FLUSHALL`
+- [x] 3.1.3 Implementar e executar `verificar-infra.py --redis` com escrita (`SET/DEL` somente sob `bv:teste:verif:`) apos DB confirmado
 
 ### 3.2 Isolamento por ACL Redis (CHK010) `[M]`
 

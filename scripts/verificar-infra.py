@@ -1,5 +1,6 @@
 """Sondagens somente leitura da infra (contracts/scripts-cli.md). Uso: --redis [--db N] | --acesso | --backup."""
 import argparse
+import json
 import os
 import sys
 
@@ -30,6 +31,18 @@ def main(argv):
             print("keyspace:", _vps.sondar("redis-keyspace").strip().replace("\n", " | "))
             if not livre:
                 return 1
+        if a.redis:  # escrita so apos DB confirmado no config, somente sob bv:teste:verif:
+            cfg = json.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                              "config", "ambientes", "integracao.json")))["redis"]
+            if cfg.get("db_confirmado") and cfg["db"] == a.db:
+                k = _vps.PREFIXO_ESCRITA + "ping"
+                _vps.redis(a.db, "SET", k, "1")
+                ok = _vps.redis(a.db, "GET", k).strip() == "1"
+                _vps.redis(a.db, "DEL", k)
+                resto = _vps.redis(a.db, "EXISTS", k).strip() == "0"
+                print(f"redis escrita SET/GET/DEL {k}: {'OK' if ok and resto else 'FALHA'}")
+                if not (ok and resto):
+                    return 1
         if a.acesso:
             print("datacl database n8n:", _vps.sondar("connect-n8n").strip())
             vazou = False

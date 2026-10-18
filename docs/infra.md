@@ -33,3 +33,8 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 ## Bancos da Barbearia (fase 2)
 
 - `barbearia_vila_teste` (role homonimo) preparado por `scripts/preparar-bancos.py --alvo teste`; migracao `0001` aplicada por `scripts/migrar.py`; reexecucao = 0 alteracoes (`verificar-infra.py --idempotencia`). Acesso cruzado do role TESTE a `n8n` negado; a `barbearia_vila` (PROD ainda nao criado) a conexao falha por database inexistente.
+
+## Redis (fase 3)
+
+- DB 2 da stack `n8n-redis-1`, prefixos `bv:teste:` e `bv:prod:` (disjuntos). `scripts/limpar-redis.py` apaga so chaves do prefixo do alvo (`SCAN MATCH` + `DEL` em lote; nunca `FLUSHDB`/`FLUSHALL`); PROD exige a trava `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim`. `verificar-infra.py --redis` faz `SET/GET/DEL` so sob `bv:teste:verif:` (validado em 2026-10-18).
+- CHK010 / task 3.2.1 `[PENDENTE-OWNER]`: isolamento por ACL Redis (`~bv:teste:*`) nao decidido; vale o isolamento so por prefixo (modelo do Gold). Risco: qualquer cliente com a senha da stack le/escreve em qualquer prefixo.

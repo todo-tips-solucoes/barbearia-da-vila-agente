@@ -18,6 +18,7 @@ INFRA_ENV = "/root/barbearia_vila/infra.env"
 BACKUPS = "/root/barbearia_vila/backups"
 COMPOSE = "/var/lib/docker/volumes/portainer_portainer_data/_data/compose/1/docker-compose.yml"
 PREFIXO_ESCRITA = "bv:teste:verif:"
+PREFIXO_LIMPEZA = ("bv:teste:", "bv:prod:")  # DEL em lote de limpar-redis; bv:prod: exige a trava
 LEITURA = {"SCAN", "GET", "TTL", "EXISTS", "DBSIZE"}
 ESCRITA = {"SET", "DEL"}  # so em chave com PREFIXO_ESCRITA
 SONDAS = {  # leitura pura; sql roda como superusuario do container postgres
@@ -75,10 +76,13 @@ def cmd_redis(db, args):
     if db in (0, 1) or not 0 <= db <= 15:
         raise Recusado("db invalido (0 e 1 pertencem a outros projetos)")
     if verbo in ESCRITA:
-        if len(args) < 2 or any(not a.startswith(PREFIXO_ESCRITA) for a in args[1:2]):
-            raise Recusado(f"escrita so em chaves {PREFIXO_ESCRITA}*")
-        if verbo == "DEL" and any(not a.startswith(PREFIXO_ESCRITA) for a in args[1:]):
-            raise Recusado("DEL so de chaves de verificacao")
+        if len(args) < 2 or (verbo == "SET" and not args[1].startswith(PREFIXO_ESCRITA)) \
+                or (verbo == "DEL" and not args[1].startswith(PREFIXO_LIMPEZA)):
+            raise Recusado(f"escrita so em chaves {PREFIXO_ESCRITA}* (SET) ou bv:*: (DEL)")
+        if verbo == "DEL" and any(not a.startswith(PREFIXO_LIMPEZA) for a in args[1:]):
+            raise Recusado("DEL so de chaves bv:teste:/bv:prod:")
+        if verbo == "DEL" and any(a.startswith("bv:prod:") for a in args[1:]) and not _prod():
+            raise Recusado("producao exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim")
     elif verbo not in LEITURA:
         raise Recusado(f"verbo redis nao permitido: {verbo}")
     resto = " ".join(shlex.quote(a) for a in [verbo] + list(args[1:]))
