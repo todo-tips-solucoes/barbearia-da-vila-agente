@@ -108,22 +108,22 @@ Ref: spec.md FR-005, FR-007, FR-012, FR-013, FR-015; research.md Decisions 3, 4,
 
 Ref: contracts/ferramentas-graces.md; `graces-api/01..05`; spec.md FR-003, FR-004, FR-020
 
-- [ ] 4.1.1 Criar `workflows/sub/bv-graces.json`: gatilho com `operacao`, campos fixos (`telefone`) e Switch por operação; HTTP Graces com `graces.timeout_ms` e `neverError`; `Normalizar` que recusa campo desconhecido
-- [ ] 4.1.2 Ferramentas `identificar_cliente` (0, 1 e vários), `escolher_cliente`, `listar_servicos`, `listar_barbeiros` (`apelido` com `trim()`), `horarios_livres` (um por barbeiro real no "qualquer"), `meus_agendamentos`
-- [ ] 4.1.3 Garantir que nenhuma consulta use `GET /agenda/completa` e que `idCliente` venha só de `conversas.pedido` ou do `telefone` fixo (FR-020)
-- [ ] 4.1.4 Testes estáticos em `tests/test_workflows_agente.py`: filtros aplicados antes da saída, SQL só com parâmetros `$1…`, sem segredo no JSON
+- [x] 4.1.1 Criar `workflows/sub/bv-graces.json`: gatilho com `operacao`, campos fixos (`telefone`) e Switch por operação; HTTP Graces com `graces.timeout_ms` e `neverError`; `Normalizar` que recusa campo desconhecido
+- [x] 4.1.2 Ferramentas `identificar_cliente` (0, 1 e vários), `escolher_cliente`, `listar_servicos`, `listar_barbeiros` (`apelido` com `trim()`), `horarios_livres` (um por barbeiro real no "qualquer"), `meus_agendamentos`
+- [x] 4.1.3 Garantir que nenhuma consulta use `GET /agenda/completa` e que `idCliente` venha só de `conversas.pedido` ou do `telefone` fixo (FR-020)
+- [x] 4.1.4 Testes estáticos em `tests/test_workflows_agente.py`: filtros aplicados antes da saída, SQL só com parâmetros `$1…`, sem segredo no JSON
 
 ### 4.2 Escrita em duas fases `[C]`
 
 Ref: contracts/ferramentas-graces.md regras 2–6; research.md Decisions 3, 9, 10; spec.md FR-006, FR-007, FR-017, FR-023
 
-- [ ] 4.2.1 `agendar`, `reagendar`, `cancelar` fase 1: criar `propostas` pendente com resumo (serviço, barbeiro, dia, hora, valor); `cancelar` devolve `sugerir_remarcar:true`
-- [ ] 4.2.2 Fase 2: executar só se a proposta está `pendente`, é do mesmo contato, de turno anterior ao corrente e dentro de `proposta.validade_min`; revalidar `horarios-livres` antes de `POST`/`PUT`; sempre avulso (FR-023)
-- [ ] 4.2.3 `trocar_servico` (POST do novo e depois DELETE do antigo na mesma proposta)
-- [ ] 4.2.4 Em TESTE, redirecionar toda escrita ao barbeiro de teste (`teste.redirecionar_escrita`) e recusar `idProfissional` de teste vindo do modelo; recusar qualquer escrita em `producao`
-- [ ] 4.2.5 Erros por `code`; timeout/5xx na escrita vira `incerta` e verifica por `meus_agendamentos` antes de repetir; registrar `code` e `traceId` em `falhas_agente` sem PII
-- [ ] 4.2.6 `{humano:P1}` Cadastro de cliente (`cadastrar_cliente`) em produção só no roteiro explícito autorizado pelo owner; sem `teste.cliente_teste_id` a tarefa 4.2.6 permanece `[ ]` e nenhum `POST /agenda/clientes` real é feito. Implementar a ferramenta e testar só com mock
-- [ ] 4.2.7 Testes estáticos e unitários: fase 2 no mesmo turno recusada (FR-007), horário tomado gera novas opções, erro de escrita não repete
+- [x] 4.2.1 `agendar`, `reagendar`, `cancelar` fase 1: criar `propostas` pendente com resumo (serviço, barbeiro, dia, hora, valor); `cancelar` devolve `sugerir_remarcar:true`
+- [x] 4.2.2 Fase 2: executar só se a proposta está `pendente`, é do mesmo contato, de turno anterior ao corrente e dentro de `proposta.validade_min`; revalidar `horarios-livres` antes de `POST`/`PUT`; sempre avulso (FR-023)
+- [x] 4.2.3 `trocar_servico` (POST do novo e depois DELETE do antigo na mesma proposta)
+- [x] 4.2.4 Em TESTE, redirecionar toda escrita ao barbeiro de teste (`teste.redirecionar_escrita`) e recusar `idProfissional` de teste vindo do modelo; recusar qualquer escrita em `producao`
+- [x] 4.2.5 Erros por `code`; timeout/5xx na escrita vira `incerta` e verifica por `meus_agendamentos` antes de repetir; registrar `code` e `traceId` em `falhas_agente` sem PII
+- [ ] 4.2.6 `{humano:P1}` [ferramenta implementada em `bv-graces`/`graces.js`, travada por `cadastroLiberado:false` e testada so com mock; permanece pendente ate o P1] Cadastro de cliente (`cadastrar_cliente`) em produção só no roteiro explícito autorizado pelo owner; sem `teste.cliente_teste_id` a tarefa 4.2.6 permanece `[ ]` e nenhum `POST /agenda/clientes` real é feito. Implementar a ferramenta e testar só com mock
+- [x] 4.2.7 Testes estáticos e unitários: fase 2 no mesmo turno recusada (FR-007), horário tomado gera novas opções, erro de escrita não repete
 
 ---
 

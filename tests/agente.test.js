@@ -30,6 +30,10 @@ assert.ok(m.every((x) => (x.texto.match(/\?/g) || []).length <= 1));
 assert.equal(m.length, 4);
 m = a.bvCompor('Claro! Temos o ZZ TESTE INTEGRACAO livre. Posso ajudar com outro?', null, cfg);
 assert.ok(m.every((x) => !/teste/i.test(x.texto)) && m.length === 1);
+m = a.bvCompor('Beleza, vou testar um horário. Pode ser?', null, cfg);
+assert.equal(m.map((x) => x.texto).join(' '), 'Beleza, vou testar um horário. Pode ser?');
+m = a.bvCompor(`Com o profissional ${TESTE_ID} fica bom. Qual dia?`, null, { ...cfg, graces: { barbeiro_teste_id: TESTE_ID } });
+assert.equal(m.length, 1);
 m = a.bvCompor('x'.repeat(2000), null, cfg);
 assert.ok(m[0].texto.length <= 700);
 

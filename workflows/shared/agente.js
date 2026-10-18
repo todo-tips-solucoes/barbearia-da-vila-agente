@@ -2,6 +2,8 @@
 // Regras duras em codigo, nao so no prompt: FR-012, FR-013, FR-015, FR-026; contracts/ferramentas-graces.md regra 1.
 
 const BV_TESTE = /\bteste\b/i;
+// Nome do barbeiro de teste (ZZ TESTE INTEGRACAO - NAO AGENDAR); a palavra comum "teste" ("vou testar") nao entra aqui.
+const BV_NOME_TESTE = /\bZZ\s*TESTE\b|\bNAO\s+AGENDAR\b|\bNÃO\s+AGENDAR\b/i;
 const BV_SEGUNDA_VEZ = /\b2\s*[ªaºo°]?\s*vez\b/i;
 
 // FR-012: barbeiro de teste (id fixo OU "TESTE" no nome/apelido) nunca chega ao modelo.
@@ -45,12 +47,13 @@ function bvCortar(s, max) {
   return s.slice(0, corte > 0 ? corte : max).trim();
 }
 
-// FR-015: ate max_mensagens, max_chars cada, no maximo 1 "?" por mensagem, sem "TESTE" no texto.
+// FR-015: ate max_mensagens, max_chars cada, no maximo 1 "?" por mensagem, sem o nome/id do barbeiro de teste no texto.
 // `oferta` = conversas.opcoes; o bloco "OPCOES:\n<id> | <titulo>" do modelo so vale para ids da oferta.
 function bvCompor(textoModelo, oferta, cfg) {
   const { max_mensagens: maxMsg, max_chars_mensagem: maxChars } = cfg.saida;
   const [corpo, bloco = ''] = String(textoModelo || '').split(/^\s*OPCOES:\s*$/m);
-  const frases = bvFrases(corpo).filter((f) => !BV_TESTE.test(f));
+  const testeId = cfg.graces && cfg.graces.barbeiro_teste_id;
+  const frases = bvFrases(corpo).filter((f) => !BV_NOME_TESTE.test(f) && !(testeId && f.includes(testeId)));
   const msgs = [];
   let atual = '';
   const fecha = () => { if (atual) msgs.push(atual); atual = ''; };
