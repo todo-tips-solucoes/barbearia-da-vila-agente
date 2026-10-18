@@ -4,13 +4,10 @@ Só TESTE (`barbearia_vila_teste`, prefixo `bv:teste:`, contatos sintéticos `+5
 Cenários novos em `scripts/smoke-recepcao.py`; cada um limpa o que criou e restaura o workflow
 versionado no `finally`, no padrão do cenário `redis()` existente.
 
-## S0 - Sonda do timeout do sub-workflow (pré-requisito de US2)
+## S0 - Sonda do timeout (feita: sonda 1.1 refutou o sub-workflow; sonda 2 mediu o workflow inteiro)
 
-1. Publicar `redis-op` com `executionTimeout = redis.timeout_s` → 2. trocar só a credencial Redis
-do `redis-op` por uma credencial temporária com senha inválida → 3. postar texto sintético →
-**Expected**: execução do `bv-recepcao` termina em ≤ `redis.timeout_s + 2` s, linha em
-`falhas_recepcao` (`redis_indisponivel`, motivo em código), mensagem pendente. Diferente disso →
-bloqueio humano (research D3).
+Sonda 2: workflow descartável com `executionTimeout` curto e nó Redis com credencial inválida →
+**Medido**: execução `canceled` em ≤ 7 s; error workflow não disparado (research D3).
 
 ## S1 - Confirmação só após gravar (US1, happy path)
 
@@ -25,8 +22,8 @@ bloqueio humano (research D3).
 
 ## S3 - Redis fora (US2)
 
-1. Credencial Redis inválida no `redis-op` → 2. postar texto → **Expected**: 200 (gravou antes);
-execução termina em ≤ `timeout + 2` s; falha registrada sem PII. 3. Restaurar e postar novo texto
+1. Credencial Redis inválida só nos nós Redis do `bv-recepcao` → 2. postar texto → **Expected**: 200 (gravou antes);
+execução `canceled` em ≤ `execucao.timeout_s + 2` s (medida do webhook ao cancelamento); falha registrada sem PII (depende de block-003). 3. Restaurar e postar novo texto
 do mesmo contato → **Expected**: as duas mensagens no mesmo turno, entregues uma vez (SC-003).
 
 ## S4 - Dedupe por conteúdo (US3)
@@ -40,8 +37,7 @@ marcas vencidas somem após a próxima mensagem.
 
 Unitário em `tests/test_deploy_n8n.py` (API fake): sub com id vazio → id em `workflows_sub`;
 deploy normal seguinte faz GET/PUT no mesmo id; principal inalterado; id já preenchido, nome
-existente e PROD recusados. Real: `deploy-n8n.sh integracao --criar redis_op` uma vez, depois
-`deploy-n8n.sh integracao` sem edição manual.
+existente e PROD recusados. Real: sem sub-workflow novo na feature; coberto só pelo teste unitário.
 
 ## S6 - Regressão
 

@@ -30,12 +30,12 @@ Gate `requirement-coverage.sh`: 18/18 FRs com cenário (0 findings).
 ## Redis sem travar
 
 - [ ] CHK016 - O valor de 5 s do tempo máximo foi confirmado pelo owner? [Assumption, Spec §FR-006 `[PROPOSTA]`; contracts/config-robustez.md] {humano}
-- [ ] CHK017 - O início da medição de SC-002 ("tempo máximo + 2 s") está definido (por operação Redis ou por execução, a partir de quando)? [Ambiguity, Spec §SC-002; quickstart S0/S3 medem a execução] {auto}
-- [ ] CHK018 - Os três tipos de FR-008 (indisponível, credencial recusada, tempo esgotado) continuam distinguíveis se o nó pendurado só produzir timeout? [Conflict, Spec §FR-008 e US2 cenário 2 vs research D3 "Limite conhecido"] {auto}
+- [x] CHK017 - O início da medição de SC-002 ("tempo máximo + 2 s") está definido (por operação Redis ou por execução, a partir de quando)? [Ambiguity, Spec §SC-002; quickstart S0/S3 medem a execução] {auto} EVIDENCIA 1.2.1: SC-002 agora mede por execução, do webhook ao status `canceled`.
+- [x] CHK018 - Os três tipos de FR-008 (indisponível, credencial recusada, tempo esgotado) continuam distinguíveis se o nó pendurado só produzir timeout? [Conflict, Spec §FR-008 e US2 cenário 2 vs research D3 "Limite conhecido"] {auto} EVIDENCIA 1.2.2: com o timeout só há `tempo_esgotado`; limite documentado em FR-008, registro pendente de block-003.
 - [x] CHK019 - Há caminho definido se a hipótese do timeout de sub-workflow falhar? [Dependências, research D3 "HIPÓTESE NÃO MEDIDA": sonda + bloqueio humano com 3 opções] {auto}
 - [x] CHK020 - A falha do Redis após a gravação está especificada como não alterando a resposta? [Consistência, Spec §FR-009; contracts §Resposta] {auto}
-- [ ] CHK021 - O registro de falha cobre também a liberação da posse (`Liberar posse`), que hoje segue sem registro? [Gap, Spec §FR-008 "nesse caminho" vs plan §Fluxo "erro delas segue continueRegularOutput"] {auto}
-- [x] CHK022 - O acesso ao sub-workflow `redis-op` está restrito numa instância n8n compartilhada? [Segurança, research D3 política de chamador + prefixo] {auto}
+- [x] CHK021 - O registro de falha cobre também a liberação da posse (`Liberar posse`), que hoje segue sem registro? [Gap, Spec §FR-008 "nesse caminho" vs plan §Fluxo "erro delas segue continueRegularOutput"] {auto} EVIDENCIA 1.2.3: decisão de não registrar (posse expira por TTL), em plan §Fluxo e contracts §Tempo máximo.
+- [x] CHK022 - (obsoleto, dec-020: sem sub-workflow) O acesso ao sub-workflow `redis-op` está restrito numa instância n8n compartilhada? [Segurança, research D3 política de chamador + prefixo] {auto}
 - [x] CHK023 - A mensagem de erro bruta (que pode citar host) é excluída do registro? [Segurança, research D3; data-model "Falha"] {auto}
 - [x] CHK024 - A entrega no turno seguinte de mensagens pendentes após o Redis voltar está especificada sem duplicidade? [Cobertura, Spec §SC-003; data-model "Mensagem"] {auto}
 

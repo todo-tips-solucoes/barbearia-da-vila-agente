@@ -13,7 +13,7 @@ Chat Master segue `docs/specs/recepcao-buffer/contracts/webhook-chatmaster.md`, 
 | mensagem gravada | 200 | só depois de `Inserir mensagem` devolver `id` (FR-001) |
 | duplicada por id ou por conteúdo | 200 | depois da query, sem gravação |
 | falha de contato ou de mensagem no Postgres | 500 `[PROPOSTA]` | depois de tentar registrar a falha, mesmo se o registro falhar (FR-002, FR-004) |
-| falha do Redis | — | não altera a resposta, que já saiu (FR-009) |
+| falha do Redis | — | não altera a resposta, que já saiu (FR-009); nó pendurado: execução cancelada em `execucao.timeout_s` |
 
 O reenvio do canal diante de 5xx não está documentado em `chatmasterveloz-api/`; não é premissa.
 
@@ -24,15 +24,14 @@ Texto sem `idCanal`: mesmo `contato_id` e mesmo `sha256(texto)` em menos de
 ficam fora (FR-011). **Risco aceito pelo owner**: um "ok" repetido de propósito dentro da janela é
 descartado (FR-012). Nenhum texto ou telefone é guardado na marca.
 
-## Sub-workflow `redis-op`
+## Tempo máximo da execução (substitui o sub-workflow `redis-op`, dec-020)
 
-Entrada (Execute Workflow, passthrough): `{ "op": "get|set|incr|delete", "chave": "<prefixo>…",
-"valor": "<string, só set>", "ttl_s": <inteiro, só set> }`. Saída: `{ "valor": <string|null> }`
-para `get`, `{ "valor": <inteiro> }` para `incr`, `{ "ok": true }` para `set`/`delete`. Chave fora
-de `redis.prefixo` → erro (o chamador registra como `indisponivel`, sem expor a chave).
-`settings.executionTimeout = redis.timeout_s`; política de chamador restrita ao `bv-recepcao` do
-mesmo ambiente. Comportamento do timeout em sub-workflow: não
-medido (research D3); a sonda decide.
+`settings.executionTimeout = execucao.timeout_s` no `bv-recepcao`. Medido (sonda 2, TESTE): com
+credencial Redis inválida a execução vira `canceled` no tempo configurado (5 s no teste) e o
+`errorWorkflow` do n8n NÃO é disparado. Os nós Redis ficam no `bv-recepcao` com
+`continueErrorOutput` (erro de comando → `Registrar falha Redis`). `Liberar posse` mantém
+`continueRegularOutput`: erro não é registrado, a posse expira por `lock.ttl_s` (limite aceito).
+Registro do caso "nó pendurado": ver FR-008 / block-003.
 
 ## `scripts/deploy-n8n.sh integracao --criar NOME`
 

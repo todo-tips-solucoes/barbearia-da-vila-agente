@@ -47,7 +47,8 @@
     "tentativas": 45
   },
   "dedup": {
-    "janela_h": 24
+    "janela_h": 24,
+    "conteudo_janela_s": 10
   },
   "payload": {
     "max_kb": 2048
@@ -62,5 +63,8 @@
   },
   "workflows_sub": {
     "entregar_rajada": "ilzXqBWGtcczlGEu"
+  },
+  "execucao": {
+    "timeout_s": 300
   }
 }

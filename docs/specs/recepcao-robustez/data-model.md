@@ -16,7 +16,7 @@ Migração nova `db/migrations/0004_recepcao_robustez.sql`, idêntica em `barbea
 |--------|----------|--------|
 | `gravacao` | `contato_falhou` | erro em `Upsert contato` |
 | `gravacao` | `mensagem_falhou` | erro em `Inserir mensagem` |
-| `redis_indisponivel` | `tempo_esgotado` / `credencial_recusada` / `indisponivel` | erro de `redis-op` (research D3) |
+| `redis_indisponivel` | `tempo_esgotado` / `credencial_recusada` / `indisponivel` | erro de comando de nó Redis (`Registrar falha Redis`); `tempo_esgotado` só se block-003 definir mecanismo (research D3) |
 
 Nunca telefone, texto, token ou mensagem de erro bruta (FR-002, FR-008, SC-006).
 

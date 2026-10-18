@@ -1,5 +1,5 @@
 """Smoke da recepcao-buffer no TESTE (C2-C5, FR-021). So contatos sinteticos +55000000xxxx; so barbearia_vila_teste e Redis de TESTE.
-Uso: python3 -I scripts/smoke-recepcao.py [recepcao|duplicidade|limite|rajada|posse|concorrencia|falha|redis|ttl|teto ...] | --limpar
+Uso: python3 -I scripts/smoke-recepcao.py [recepcao|duplicidade|limite|rajada|posse|concorrencia|falha|gravacao|dedupe|redis|ttl|teto ...] | --limpar
 Sem argumentos roda tudo (exceto teto ~80 s e ttl ~5 min: peca por nome) e limpa no fim. Token vem de .env.smoke (nunca impresso).
 Exit 1 se algum cenario falhar."""
 import copy
@@ -226,6 +226,80 @@ def falha():
     checar("posse liberada pelo dono", not posse_existe(tel(40)))
 
 
+def _api_deploy():
+    spec = importlib.util.spec_from_file_location("deploy_n8n", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
+    d = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(d)
+    return d, d.Api(os.environ["N8N_API_URL"], os.environ["N8N_API_KEY"])
+
+
+def gravacao():
+    print("S1/S2 resposta so apos gravar; falha de gravacao (senha invalida so na credencial do no, temporaria, apagada no fim)")
+    d, api = _api_deploy()
+    wid = CFG["workflows"]["bv-recepcao"]
+    ok = post(evento_texto(60, "grava antes de confirmar")) == 200
+    checar("S1 200 e a linha ja existe ao receber o 200", ok and len([l for l in linhas() if l["tel"] == tel(60)]) == 1)
+    cid = api("POST", "/credentials", {"name": "Barbearia Vila Postgres INVALIDA (smoke)", "type": "postgres", "data": {
+        "host": "postgres", "port": 5432, "database": BANCO, "user": BANCO, "password": "senha-invalida-smoke",
+        "ssl": "disable", "allowUnauthorizedCerts": False, "sshTunnel": False}})["id"]
+
+    def trocar(nomes):
+        wf = api("GET", f"/workflows/{wid}")
+        for n in wf["nodes"]:
+            if n["name"] in nomes:
+                n["credentials"]["postgres"] = {"id": cid, "name": "Barbearia Vila Postgres INVALIDA (smoke)"}
+        api("PUT", f"/workflows/{wid}", d.corpo_put(wf))
+        api("POST", f"/workflows/{wid}/publish", {})
+        time.sleep(2)
+    try:
+        trocar({"Inserir mensagem"})
+        checar("S2 500 com a gravacao fora", post(evento_texto(61, "falha gravacao")) == 500)
+        checar("S2 0 linhas em mensagens", not [l for l in linhas() if l["tel"] == tel(61)])
+        checar("S2 falha registrada sem conteudo", falhas_de(tel(61)) == ["gravacao|mensagem_falhou"], str(falhas_de(tel(61))))
+        trocar({"Inserir mensagem", "Registrar falha mensagem"})
+        checar("S2 500 mesmo sem registrar a falha (FR-004)", post(evento_texto(62, "falha dupla")) == 500)
+    finally:
+        rc = d.main(["integracao", "--so", "bv-recepcao"])  # restaura o JSON versionado
+        checar("workflow restaurado", rc == 0)
+        if rc == 0:
+            api("DELETE", f"/credentials/{cid}")
+        else:
+            print("  ATENCAO: credencial invalida mantida (workflow ainda a referencia); restaure e apague a mao.")
+    time.sleep(2)
+    checar("S2 reenvio grava uma vez", post(evento_texto(61, "falha gravacao")) == 200
+           and len([l for l in linhas() if l["tel"] == tel(61)]) == 1)
+
+
+def dedupe():
+    print("S4 dedupe por conteudo (janela dedup.conteudo_janela_s = %s s)" % CFG["dedup"]["conteudo_janela_s"])
+    janela, n = CFG["dedup"]["conteudo_janela_s"], 20
+    base = 100
+    for i in range(n):  # pares iguais dentro da janela
+        post(evento_texto(base + i, "ok dedupe"))
+        post(evento_texto(base + i, "ok dedupe"))
+    for i in range(n):  # texto diferente no mesmo contato (a); mesmo texto em contatos diferentes (b)
+        post(evento_texto(base + n + i, "um"))
+        post(evento_texto(base + n + i, "dois"))
+        post(evento_texto(base + 2 * n + i, "ok dedupe"))
+    for i in range(n):  # fora da janela: primeiro envio agora, segundo depois
+        post(evento_texto(base + 3 * n + i, "depois da janela"))
+    time.sleep(janela + 1)
+    for i in range(n):
+        post(evento_texto(base + 3 * n + i, "depois da janela"))
+    ls = linhas()
+    por = lambda k: [len([l for l in ls if l["tel"] == tel(base + k * n + i)]) for i in range(n)]
+    checar("20 pares iguais na janela: 20 descartadas", por(0) == [1] * n, str(por(0)))
+    checar("textos diferentes: 0 descartadas", por(1) == [2] * n, str(por(1)))
+    checar("mesmo texto, contatos diferentes: 0 descartadas", por(2) == [1] * n, str(por(2)))
+    checar("fora da janela: 0 descartadas", por(3) == [2] * n, str(por(3)))
+    cols = _vps.psql(BANCO, "SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns "
+                            "WHERE table_name='marcas_conteudo';").strip()
+    checar("marcas sem texto nem telefone", cols == "contato_id,hash_conteudo,visto_em", cols)
+    img = [post(evento_imagem(base + 4 * n, "https://exemplo.invalid/dedupe-midia.jpg")) for _ in range(2)]
+    checar("midia segue a regra por id (1 linha)", img == [200, 200] and
+           len([l for l in linhas() if l["tel"] == tel(base + 4 * n)]) == 1)
+
+
 def redis():
     print("CA-4 Redis indisponivel (senha invalida so na credencial do workflow de TESTE; Redis compartilhado intocado. Host inalcancavel nao serve: o no reconecta para sempre)")
     spec = importlib.util.spec_from_file_location("deploy_n8n", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
@@ -306,7 +380,7 @@ def limpar():
 
 
 CENARIOS = dict(recepcao=recepcao, duplicidade=duplicidade, limite=limite, rajada=rajada, posse=posse,
-                concorrencia=concorrencia, falha=falha, redis=redis, ttl=ttl, teto=teto)
+                concorrencia=concorrencia, falha=falha, gravacao=gravacao, dedupe=dedupe, redis=redis, ttl=ttl, teto=teto)
 
 if __name__ == "__main__":
     _env(".env.smoke", ".env.n8n")

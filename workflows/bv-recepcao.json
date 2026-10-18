@@ -225,8 +225,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1680,
-        0
+        720,
+        100
       ]
     },
     {
@@ -250,14 +250,15 @@
           "id": "{{BV:postgres.credencial_id}}",
           "name": "Postgres Barbearia Vila"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, midia_url) VALUES ($1::bigint, $2::text, 'entrada', $3::text, $4::text, $5::text) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id, contato_id",
+        "query": "WITH marca AS (INSERT INTO marcas_conteudo (contato_id, hash_conteudo) SELECT $1::bigint, sha256(convert_to($4::text, 'UTF8')) WHERE $2::text IS NULL AND $3::text = 'texto' ON CONFLICT (contato_id, hash_conteudo) DO UPDATE SET visto_em = now() WHERE marcas_conteudo.visto_em < now() - make_interval(secs => $6::int) RETURNING 1), ins AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, midia_url) SELECT $1::bigint, $2::text, 'entrada', $3::text, $4::text, $5::text WHERE $3::text <> 'texto' OR $2::text IS NOT NULL OR EXISTS (SELECT 1 FROM marca) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id) SELECT (SELECT id FROM ins) AS id, $1::bigint AS contato_id",
         "options": {
-          "queryReplacement": "={{ [$json.contato_id, $('Normalizar').first().json.msg.idCanal, $('Normalizar').first().json.msg.tipo, $('Normalizar').first().json.msg.conteudo, $('Normalizar').first().json.msg.midiaUrl] }}"
+          "queryReplacement": "={{ [$json.contato_id, $('Normalizar').first().json.msg.idCanal, $('Normalizar').first().json.msg.tipo, $('Normalizar').first().json.msg.conteudo, $('Normalizar').first().json.msg.midiaUrl, {{BV:dedup.conteudo_janela_s}}] }}"
         }
       },
       "id": "a98210a4-c806-554d-8323-11dc01ab3cbb",
@@ -273,13 +274,14 @@
           "id": "{{BV:postgres.credencial_id}}",
           "name": "Postgres Barbearia Vila"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
         "operation": "set",
         "key": "={{ '{{BV:redis.prefixo}}ultima:' + $('Inserir mensagem').first().json.contato_id }}",
-        "value": "={{ String($json.id) }}",
+        "value": "={{ String($('Inserir mensagem').first().json.id) }}",
         "keyType": "string",
         "expire": true,
         "ttl": "={{ {{BV:redis.ttl.ultima_s}} }}"
@@ -1031,6 +1033,128 @@
         1200,
         800
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5358a570-21c3-5c3d-96d4-4f3d2088eb14",
+              "leftValue": "={{ $json.id ? 'sim' : 'nao' }}",
+              "rightValue": "sim",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "850f9a9b-6871-5da9-aa46-ec741b7cce9a",
+      "name": "Gravada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM marcas_conteudo WHERE visto_em < now() - make_interval(secs => $1::int)",
+        "options": {
+          "queryReplacement": "={{ [{{BV:dedup.conteudo_janela_s}}] }}"
+        }
+      },
+      "id": "41ae0b71-780d-52f9-9b08-c63a480c4348",
+      "name": "Limpar marcas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        960,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_recepcao (tipo, motivo, contato_id) VALUES ('gravacao', 'mensagem_falhou', $1::bigint) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$('Upsert contato').first().json.contato_id] }}"
+        }
+      },
+      "id": "c6943eb1-a827-565f-93c9-153894a579a1",
+      "name": "Registrar falha mensagem",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "b31da7e5-1e8f-53ea-bdac-00b4588b557c",
+      "name": "Responder 500",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_recepcao (tipo, motivo) VALUES ('gravacao', 'contato_falhou') RETURNING id",
+        "options": {}
+      },
+      "id": "2340a221-cab0-5ad9-b4a9-98680927ef6b",
+      "name": "Registrar falha contato",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -1059,7 +1183,7 @@
         ],
         [
           {
-            "node": "Responder 200 aceita",
+            "node": "Upsert contato",
             "type": "main",
             "index": 0
           }
@@ -1103,7 +1227,7 @@
       "main": [
         [
           {
-            "node": "Upsert contato",
+            "node": "Limpar marcas",
             "type": "main",
             "index": 0
           }
@@ -1118,6 +1242,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Registrar falha contato",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1125,7 +1256,14 @@
       "main": [
         [
           {
-            "node": "Marcar ultima",
+            "node": "Gravada?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar falha mensagem",
             "type": "main",
             "index": 0
           }
@@ -1526,12 +1664,64 @@
           }
         ]
       ]
+    },
+    "Gravada?": {
+      "main": [
+        [
+          {
+            "node": "Responder 200 aceita",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 200 descartada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpar marcas": {
+      "main": [
+        [
+          {
+            "node": "Marcar ultima",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar falha mensagem": {
+      "main": [
+        [
+          {
+            "node": "Responder 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar falha contato": {
+      "main": [
+        [
+          {
+            "node": "Responder 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "saveDataSuccessExecution": "none",
     "saveDataErrorExecution": "none",
-    "saveManualExecutions": false
+    "saveManualExecutions": false,
+    "executionTimeout": "{{BV:NUM:execucao.timeout_s}}"
   }
 }

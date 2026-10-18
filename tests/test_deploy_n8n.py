@@ -130,6 +130,13 @@ class T(unittest.TestCase):
         self.assertEqual([p[1] for p in puts], ["/workflows/wfS", "/workflows/wfR"])
         self.assertEqual(puts[1][2]["nodes"][0]["p"], 'pp|abc|var a = "x";\n')
 
+    def test_placeholder_num_vira_numero_cru(self):
+        out = dep.renderizar('{"t": "{{BV:NUM:a.b}}", "s": "{{BV:a.b}}"}', {"a": {"b": 300}}, self.d)
+        self.assertEqual(json.loads(out), {"t": 300, "s": "300"})
+        for ruim in ({"a": {"b": "x"}}, {"a": {}}):
+            with self.assertRaises(dep.Falha):
+                dep.renderizar('"{{BV:NUM:a.b}}"', ruim, self.d)
+
     def test_placeholder_sem_valor_falha(self):
         with self.assertRaises(dep.Falha):
             dep.renderizar("{{BV:nao.existe}}", {}, self.d)
@@ -147,6 +154,35 @@ class T(unittest.TestCase):
         api = FakeApi(existentes=["BV Verificacao"])
         self.assertEqual(self.run_main(["integracao", "--criar", "bv-verificacao"], api)[0], 1)
         self.assertNotIn(("POST", "/workflows"), api.chamadas)
+
+    def test_criar_sub_grava_em_workflows_sub_e_deploy_seguinte_atualiza(self):
+        os.makedirs(f"{self.d}/workflows/sub")
+        json.dump(dict(WF, name="Sub"), open(f"{self.d}/workflows/sub/entregar-rajada.json", "w"))
+        json.dump({"workflows": {"bv-verificacao": "wf1"}, "workflows_sub": {"entregar_rajada": ""}},
+                  open(f"{self.d}/config/ambientes/integracao.json", "w"))
+        api = FakeApi()
+        rc, out, _ = self.run_main(["integracao", "--criar", "entregar_rajada"], api)
+        self.assertEqual((rc, out.strip()), (0, "entregar_rajada -> novo1"))
+        cfg = json.load(open(f"{self.d}/config/ambientes/integracao.json"))
+        self.assertEqual(cfg["workflows_sub"]["entregar_rajada"], "novo1")
+        self.assertEqual(cfg["workflows"], {"bv-verificacao": "wf1"})  # principal intacto
+        self.assertEqual(self.run_main(["integracao", "--criar", "entregar_rajada"], api)[0], 1)  # id preenchido
+        api2 = FakeApi()
+        self.assertEqual(self.run_main(["integracao", "--so", "entregar_rajada"], api2)[0], 0)
+        self.assertEqual({r for _, r in api2.chamadas}, {"/workflows/novo1", "/workflows/novo1/publish"})
+
+    def test_criar_principal_continua_em_workflows(self):
+        json.dump({"workflows": {"bv-verificacao": ""}, "workflows_sub": {}}, open(f"{self.d}/config/ambientes/integracao.json", "w"))
+        self.assertEqual(self.run_main(["integracao", "--criar", "bv-verificacao"], FakeApi())[0], 0)
+        cfg = json.load(open(f"{self.d}/config/ambientes/integracao.json"))
+        self.assertEqual((cfg["workflows"]["bv-verificacao"], cfg["workflows_sub"]), ("novo1", {}))
+
+    def test_criar_producao_recusado(self):
+        os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
+        try:
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP", "--criar", "bv-verificacao"], FakeApi())[0], 2)
+        finally:
+            os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
 
 if __name__ == "__main__":

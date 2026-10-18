@@ -80,3 +80,12 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
 Sugestao de hook `PreToolUse` (Bash) em `.claude/settings.json` que recuse comandos do agente contendo a string `BV_DEPLOY_PRODUCAO_AUTORIZADO`, para que so o owner (em terminal proprio) possa liberar PROD. Aplicar depende de aprovacao do owner.
 - Sub-workflow `entregar-rajada` (stub, TESTE): id `ilzXqBWGtcczlGEu`, chamado pelo `bv-recepcao`; atraso `teste.atraso_entrega_s`. Smoke C2-C5 (`scripts/smoke-recepcao.py`) em 2026-10-18: premissa `token_origin` = `CHATMASTER_TOKEN_TESTE` confirmada (200 com o token); rajada entregue 8,1-8,7 s apos a ultima; 50 mensagens em 10 contatos sem sobreposicao de turnos; teto ~60 s.
+
+## Robustez da recepcao: medicoes (feature `recepcao-robustez`, TESTE, 2026-10-18)
+
+- Migracao `0004_recepcao_robustez.sql` aplicada so em `barbearia_vila_teste` (tipo `gravacao` em `falhas_recepcao`; tabela `marcas_conteudo`); PROD intocado.
+- Sonda 1.1 (sub-workflow com `executionTimeout=5` e no Redis com credencial invalida, chamado por Execute Workflow): o pai nao recebeu erro em 60 s; timeout de sub-workflow NAO encerra a chamada. Com credencial valida a chamada custou 0,16-0,20 s. Desenho `redis-op` descartado (dec-020).
+- Sonda 2 (workflow raiz com `executionTimeout=5`, no Redis invalido, `errorWorkflow` configurado): execucao `canceled` em <= 7 s; o error workflow NAO foi disparado em 34 s. Limite: a falha do Redis pendurado nao tem registro em `falhas_recepcao` sem peca nova (block-003).
+- `bv-recepcao` (TESTE) publicado com `executionTimeout` = 300 s (`execucao.timeout_s`, `[PROPOSTA]`: maior que `buffer.teto_s` + `lock.espera_s` x `lock.tentativas` + `buffer.janela_s`). Smoke: `gravacao` e `dedupe` verdes; regressao (`recepcao duplicidade limite rajada posse concorrencia falha`) verde.
+- Nao medido: cenario `contato_falhou` ao vivo (so teste estatico) e o cancelamento por timeout de 300 s no workflow real.
+

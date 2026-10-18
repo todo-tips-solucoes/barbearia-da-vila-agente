@@ -54,7 +54,21 @@ duas chegadas simultâneas passam as duas pelo `NOT EXISTS`.
 Hoje todo texto chega com `idCanal = null` (`workflows/shared/rajada.js`, shortcut documentado),
 então a dedupe por conteúdo vale para todo texto até o owner informar o id do canal.
 
-## Decision 3 - Toda operação Redis passa por um sub-workflow com tempo máximo (FR-006..FR-009)
+## Decision 3 - Tempo máximo da execução inteira (FR-006..FR-009; revisada pela dec-020)
+
+**DECISÃO VIGENTE (owner, dec-020, opção b)**: `settings.executionTimeout = execucao.timeout_s`
+(300 s `[PROPOSTA]`) no `bv-recepcao` inteiro; nós Redis permanecem no `bv-recepcao` (como no
+Gold) com `continueErrorOutput`. Sem sub-workflow `redis-op`. **RESULTADO DA SONDA 2 (2026-10-18,
+TESTE, onda-008)**: workflow de sonda (Webhook `onReceived` + nó Redis com credencial de senha
+inválida, `executionTimeout=5`, `errorWorkflow` apontando para um workflow com Error Trigger):
+a execução ficou `canceled` em ≤ 7 s (o timeout do workflow raiz FUNCIONA, ao contrário do de
+sub-workflow), mas o error workflow NÃO foi disparado (nenhuma execução em 34 s). Logo o
+registro da falha em `falhas_recepcao` para o caso "nó pendurado" não é possível só com error
+workflow; pendente de decisão do owner (block-003). Recursos da sonda (2 workflows, 1 credencial
+`SONDA2`) apagados. O restante desta seção descreve o desenho original (sub-workflow), refutado
+na sonda 1.1, mantido como rastro.
+
+### Desenho original (refutado) - sub-workflow `redis-op`
 
 **Decision**: sub-workflow novo `workflows/sub/redis-op.json` (`workflows_sub.redis_op`). Entrada
 `{op, chave, valor, ttl_s}` com `op ∈ {get, set, incr, delete}`; um Code node recusa chave fora de

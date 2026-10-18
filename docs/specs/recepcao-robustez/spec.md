@@ -95,9 +95,9 @@ O comando de primeira criação de um workflow auxiliar (sub-workflow) registra 
 - **FR-003**: Falha de gravação MUST gerar sinalização que torne a perda detectável por quem opera o sistema (registro consultável em `falhas_recepcao`), de modo que nenhuma mensagem se perca em silêncio.
 - **FR-004**: Se também o registro da falha falhar, a resposta de erro ao Chat Master MUST ser mantida; a perda MUST NOT ser confirmada como sucesso.
 - **FR-005**: O reenvio de mensagem pelo canal após erro MUST resultar em uma única gravação (sem duplicidade).
-- **FR-006**: Toda chamada ao armazenamento temporário MUST ter tempo máximo de espera configurável (default `[PROPOSTA]` 5 s, registrado em `contracts/config-recepcao.md`; sem fonte externa que o fixe).
-- **FR-007**: Indisponibilidade ou recusa de credencial do armazenamento temporário MUST seguir um caminho de erro explícito que encerra a execução dentro do tempo máximo, sem travá-la.
-- **FR-008**: Nesse caminho, a recepção MUST registrar a falha em `falhas_recepcao` com o tipo (indisponível, credencial recusada, tempo esgotado), sem conteúdo pessoal nem segredo.
+- **FR-006**: A execução da recepção MUST ter tempo máximo configurável (`executionTimeout` do workflow `bv-recepcao` inteiro, chave `execucao.timeout_s`, default `[PROPOSTA]` 300 s: teto do buffer 60 s + espera de posse 135 s + janela + folga; sem fonte externa que o fixe). Decisão do owner (dec-020, opção b): o nó Redis do n8n não tem tempo máximo próprio e o timeout de sub-workflow não encerra a chamada (sonda 1.1), então o limite vale para a execução toda.
+- **FR-007**: Indisponibilidade ou recusa de credencial do armazenamento temporário MUST encerrar a execução dentro do tempo máximo (cancelada pelo n8n), sem travá-la. Erros de comando do Redis seguem a saída de erro dos nós, como hoje.
+- **FR-008**: A falha do armazenamento temporário MUST ser registrada em `falhas_recepcao` com o tipo (indisponível, credencial recusada, tempo esgotado), sem conteúdo pessoal nem segredo. **Limite medido (sonda 2, onda-008)**: a execução cancelada por `executionTimeout` NÃO dispara o error workflow do n8n (status `canceled`, nenhuma execução do error workflow em 34 s); logo o registro do caso "nó pendurado" não tem mecanismo dentro do n8n sem peça nova. Pendente de decisão do owner (block-003); credencial recusada e indisponível se confundem em `tempo_esgotado`.
 - **FR-009**: Falha do armazenamento temporário ocorrida após a gravação MUST NOT devolver erro ao Chat Master e MUST manter a mensagem pendente para o turno seguinte (reforça FR-025 da `recepcao-buffer`).
 - **FR-010**: Mensagem de texto sem identificador do canal MUST ser deduplicada por conteúdo: mesmo contato e mesmo texto recebidos em até a janela configurável (default 10 s, decisão do owner) são descartados após a primeira.
 - **FR-011**: A deduplicação por conteúdo MUST NOT afetar textos diferentes, contatos diferentes, mídias, nem mensagens com identificador (que seguem FR-014/FR-023 da `recepcao-buffer`).
@@ -121,7 +121,7 @@ O comando de primeira criação de um workflow auxiliar (sub-workflow) registra 
 ### Measurable Outcomes
 
 - **SC-001**: Em 100% das injeções de falha de gravação, o Chat Master recebe erro e existe registro da falha; 0 confirmações de sucesso sem mensagem gravada.
-- **SC-002**: Com o armazenamento temporário fora do ar ou com credencial recusada, 100% das execuções terminam em no máximo o tempo máximo configurado mais 2 s.
+- **SC-002**: Com o armazenamento temporário fora do ar ou com credencial recusada, 100% das execuções terminam em no máximo `execucao.timeout_s` mais 2 s. Medição: do recebimento do evento no webhook até a execução ficar `canceled` (o Redis falha já na primeira operação, logo a duração é o próprio timeout), uma medida por execução.
 - **SC-003**: 100% das mensagens gravadas antes da falha do armazenamento temporário são entregues no turno seguinte, sem perda nem duplicidade.
 - **SC-004**: Em 20 pares de textos iguais enviados em menos de 10 s, exatamente 20 são descartados; em 20 pares fora da janela ou com conteúdo/contato distintos, 0 são descartados.
 - **SC-005**: Criar um sub-workflow e rodar o deploy normal em seguida funciona sem nenhuma edição manual de configuração, em 100% das tentativas.
@@ -129,7 +129,7 @@ O comando de primeira criação de um workflow auxiliar (sub-workflow) registra 
 
 ## Clarifications
 
-- Tempo máximo de espera do armazenamento temporário (FR-006) e janela de 10 s (FR-010) são políticas de design; o valor de 10 s vem do owner, o de 5 s é `[PROPOSTA]` configurável.
+- Tempo máximo de espera do armazenamento temporário (FR-006) e janela de 10 s (FR-010) são políticas de design; o valor de 10 s vem do owner, o de 300 s (`execucao.timeout_s`) é `[PROPOSTA]` configurável (antes 5 s por chamada; trocado após a sonda, dec-020).
 - "Alertar a falha" (decisão do owner, alternativa à resposta de erro) é atendido por erro ao canal mais registro consultável; notificação ativa externa fica fora de escopo.
 
 ### Sessão 2026-10-18 (clarify autônomo)
