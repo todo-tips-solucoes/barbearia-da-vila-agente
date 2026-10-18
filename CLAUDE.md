@@ -24,8 +24,7 @@ A lista completa, e as pendências, estão em **`docs/decisoes-pre-00c.md`**. O 
 - `graces-api/README.md`: API da Graces, com endpoints, divergências entre portal e API real e lacunas. Os fluxos de agendar, reagendar e cancelar estão em `graces-api/05-fluxos-do-agente.md`, e os IDs reais de serviços e barbeiros em `graces-api/06-dados-da-loja.md` (snapshot; em runtime, leia da API).
 - `chatmasterveloz-api/README.md`: API do WhatsApp (Chat Master Veloz). Para gerar código, use `endpoints.json`; para atualizar, `python3 -I _tools/sync.py`.
 - `alteracoes_clientes/transcricoes.md`: feedback do dono sobre a **versão anterior** do agente. São requisitos de produto:
-  - conversa em vez de menus;
-  - botão só na mensagem de confirmação;
+  - ~~conversa em vez de menus; botão só na confirmação~~: revisto pelo owner em 2026-10-18. Toda múltipla escolha vai como **botão de lista** (constituição 2.0.0, princípio X);
   - sempre sugerir remarcar quando o cliente pedir cancelamento;
   - entender o contexto ("cancelei, vamos marcar outro");
   - entender áudio;
