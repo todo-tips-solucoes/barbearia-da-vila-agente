@@ -1,11 +1,15 @@
 <!--
 Sync Impact Report
-- Version: 1.0.0 → 1.1.0 (MINOR)
-- Princípios modificados: nenhum (I-VIII intactos)
-- Seções adicionadas: Princípios IX-XVI (próprios do projeto)
+- Version: 1.1.0 → 2.0.0 (MAJOR)
+- Princípios modificados: X (Conversa humanizada e identidade) redefinido. Múltipla escolha passa a ser
+  sempre por botão de lista (decisão do owner em 2026-10-18), no lugar de "conversa, não menus" e
+  "botão somente na confirmação".
+- Seções adicionadas: nenhuma
 - Seções removidas: nenhuma
-- Artefatos que precisam atualização: nenhum (specs/plans/tasks ainda não existem)
+- Artefatos que precisam atualização: docs/briefing.md e docs/roadmap.md (atualizados nesta mesma PR);
+  specs futuras de agente-conversacional-graces e regras-negocio-agenda
 - TODOs pendentes: nenhum
+- Histórico: 1.0.0 → 1.1.0 (MINOR) acrescentou os princípios IX-XVI
 -->
 
 # Constituição de Barbearia da Vila - Agente
@@ -160,9 +164,12 @@ repositório são código como qualquer outro.
 
 - O agente MUST assumir que é IA (assistente virtual da Barbearia da Vila), com tom humanizado.
 - O agente MUST responder em até 4 mensagens curtas, com "digitando…" proporcional e uma pergunta
-  por mensagem; MUST conduzir por conversa, não por menus.
-- Botão MUST ser usado somente na confirmação; o agente MUST NOT retomar uma coleta antiga a partir
-  de um simples "Oi".
+  por mensagem.
+- Toda múltipla escolha (horários, barbeiros, serviços, pacote ou avulso etc.) MUST ser enviada como
+  botão de lista (mensagem de lista da biblioteca Pro), acompanhada de um texto curto e humano. Se o
+  cliente responder escrevendo em vez de tocar, o agente MUST entender a resposta do mesmo jeito.
+  A confirmação de presença usa botão Quick Reply.
+- O agente MUST NOT retomar uma coleta antiga a partir de um simples "Oi".
 
 ### XI. Escrita segura na agenda
 
@@ -224,4 +231,4 @@ de um humano registrada no corpo da PR; a versão segue SemVer (MAJOR: princípi
 redefinido; MINOR: princípio ou regra adicionada; PATCH: redação). A primeira versão é a 1.0.0,
 ratificada no merge da PR que adota esta constituição.
 
-**Version**: 1.1.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-10-18
+**Version**: 2.0.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-10-18
