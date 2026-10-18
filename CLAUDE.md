@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Workspace do **agente de atendimento WhatsApp da Barbearia da Vila** (São Paulo). O agente conversa com os clientes de forma muito humanizada e agenda, reagenda e cancela serviços direto na **Graces**, o sistema de agenda da loja. Toda a documentação é em português.
 
-Estado atual: **ainda não há código**, só documentação de referência. O desenvolvimento será feito de ponta a ponta pela skill `/agente-00c` (cstk), depois que o owner fechar as decisões em aberto. Não presuma o que não está decidido: pergunte.
+Estado atual: briefing (`docs/briefing.md`), constituição 1.1.0 (`docs/constitution.md`, com princípios próprios IX–XVI) e roadmap de 9 features (`docs/roadmap.md`) prontos pelo `/agente-00c` em modo roadmap. Cada feature é executada com `/feature-00c`, seguindo o rito em `docs/rito-dev.md`. Ainda não há código. Não presuma o que não está decidido: pergunte.
 
 ## Decisões do owner (2026-10-18)
 
