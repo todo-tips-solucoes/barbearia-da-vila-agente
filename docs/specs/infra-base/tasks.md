@@ -101,7 +101,7 @@ Ref: FR-007, FR-008, FR-019, SC-007
 
 Ref: plan.md §Seguranca, checklists/infra.md CHK010
 
-- [!] 3.2.1 Decisao do owner `[PENDENTE-OWNER]`: aceitar isolamento apenas por prefixo (modelo do Gold) ou criar ACL `~bv:teste:*` (altera config compartilhada da stack). Nenhum valor/ACL inventado; sem resposta, vale o prefixo e o risco fica registrado em `docs/infra.md`
+- [x] 3.2.1 RESOLVIDA (owner, dec-030, 2026-10-18: isolamento so por prefixo no Redis DB 2, como no Gold, sem ACL propria; risco a registrar em docs/infra.md). Era: aceitar isolamento apenas por prefixo (modelo do Gold) ou criar ACL `~bv:teste:*` (altera config compartilhada da stack). Nenhum valor/ACL inventado; sem resposta, vale o prefixo e o risco fica registrado em `docs/infra.md`
 
 ---
 
