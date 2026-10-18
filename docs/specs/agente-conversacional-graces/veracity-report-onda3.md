@@ -12,3 +12,9 @@ Veredito: has_unsourced (2 itens), recomendação do verificador: human_block. T
 ## Imprecisões menores
 - research.md Decision 10 P1: citar graces-api/02-clientes.md:15 ("Não existe atualização nem exclusão"), não a linha 50.
 - research.md Decision 6: `whatsappId` também aparece em 08-equipe/api-criar-usuario.
+
+# Validação MCP do bv-graces (pai, após a onda-009)
+
+- `get_workflow_details` (MCP n8n) em `mjhd7O0AzrqNVrf0`: 19 nós, `active=true`, `executionTimeout` 300, versão ativa = versão atual (`0b04e929-…`). Os `{{BV:INCLUDE:…}}` restantes estão só em comentários do código incluído.
+- `validate_node_config` (MCP n8n): Gatilho (executeWorkflowTrigger 1.1), "Entrada valida?" (if 2.2) e "Contexto" (postgres 2.5) válidos. "Graces A" (httpRequest 4.2) **inválido no esquema**: `sendQuery` e `sendBody` esperam booleano e recebem expressão string (`={{ … }}`). O mesmo vale para "Graces E1" e "Graces E2". Esse padrão não aparece em nenhum outro workflow do repo nem do Gold. Corrigir: usar booleanos fixos e, se preciso, separar os nós por método. Exemplo: um nó sem body para GET/DELETE e outro com body para POST/PUT. Validar de novo com `validate_node_config`.
+- Também: `proposta.validade_min` está fixo em `30` no SQL do nó "Contexto", em vez de vir da config.
