@@ -77,7 +77,7 @@ O assistente se apresenta como assistente virtual (IA) da Barbearia da Vila, com
 
 **Acceptance Scenarios**:
 
-1. **Given** qualquer turno, **When** o assistente responde, **Then** envia no máximo 4 mensagens, cada uma curta, com no máximo uma pergunta.
+1. **Given** qualquer turno, **When** o assistente responde, **Then** envia no máximo 4 mensagens, cada uma curta (limite de caracteres em `saida.max_chars_mensagem`, `contracts/config-agente.md`), com no máximo uma pergunta.
 2. **Given** várias mensagens a enviar, **When** são enviadas em sequência, **Then** cada uma é precedida por "digitando…" de duração proporcional ao seu tamanho, e a ordem é preservada.
 3. **Given** o cliente pergunta "você é um robô?", **When** o assistente responde, **Then** assume que é IA, sem negar nem evitar.
 4. **Given** a resposta do modelo excede 4 mensagens ou tem várias perguntas, **When** vai ser enviada, **Then** é condensada para respeitar os limites.
@@ -173,7 +173,7 @@ Quando a Graces falha, demora ou recusa, o assistente trata pelo código de erro
 - **FR-012**: O sistema MUST NOT expor, listar, sugerir nem agendar com o barbeiro de teste (identificado pelo id fixo e por "TESTE" no nome), e MUST filtrá-lo antes de os dados chegarem ao modelo, não apenas por instrução de prompt.
 - **FR-013**: O sistema MUST NOT oferecer nem agendar serviços "2ª vez".
 - **FR-014**: O sistema MUST assumir que é IA (assistente virtual da Barbearia da Vila) com tom humanizado, e MUST responder com verdade se perguntado.
-- **FR-015**: O sistema MUST limitar cada resposta a no máximo 4 mensagens curtas, com no máximo uma pergunta por mensagem, e MUST impor esse limite na saída (condensando ou truncando), não só no prompt.
+- **FR-015**: O sistema MUST limitar cada resposta a no máximo 4 mensagens curtas (cada uma até `saida.max_chars_mensagem` caracteres, parametrizado), com no máximo uma pergunta por mensagem, e MUST impor esse limite na saída (condensando ou truncando), não só no prompt.
 - **FR-016**: O sistema MUST enviar as respostas pelo Chat Master, pela conexão do ambiente (parametrizada), em ordem, com indicação "digitando…" de duração proporcional ao tamanho de cada mensagem antes de cada envio.
 - **FR-017**: O sistema MUST tratar erros da Graces pelo campo `code`, MUST registrar `code` e `traceId` sem dados pessoais, e MUST NOT repetir escrita às cegas após timeout ou erro 5xx: antes de nova tentativa MUST consultar os agendamentos para verificar se a escrita foi aplicada.
 - **FR-018**: O sistema MUST tratar `turno_id` como chave de idempotência: um turno já tratado MUST NOT reenviar resposta nem repetir escrita na Graces.
@@ -184,6 +184,8 @@ Quando a Graces falha, demora ou recusa, o assistente trata pelo código de erro
 - **FR-023**: Nesta feature o sistema MUST agendar sempre como avulso, com o serviço escolhido; uso de pacote, agendamento para terceiros, encadeamento de vários serviços e oferta de todos os inícios possíveis ficam com `regras-negocio-agenda`, áudio e imagem com `audio-imagem`, CRM/etiquetas/handoff com `crm-etiquetas-handoff`.
 - **FR-024**: Testes que escrevem na Graces MUST usar somente o barbeiro de teste e MUST cancelar tudo o que criarem, inclusive em caso de falha do teste; envios de WhatsApp em teste MUST ir apenas a contatos de teste.
 - **FR-025**: Os workflows MUST ser gerados e implantados no TESTE pela API REST do n8n com as credenciais do `.env.n8n` (como no projeto de referência), validados pelo MCP do n8n, com ids e parâmetros de ambiente injetados, sem alterar PROD.
+
+- **FR-026**: O sistema MUST tratar o texto do cliente e os dados lidos da Graces como dado, nunca como instrução; as ferramentas de escrita MUST aceitar apenas ids de opções oferecidas na conversa (ver `contracts/ferramentas-graces.md`), de modo que injeção de prompt não alcance outros clientes nem agendamentos alheios.
 
 ### Key Entities
 
