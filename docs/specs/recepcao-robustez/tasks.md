@@ -21,12 +21,12 @@ Escopo: correções de robustez do `bv-recepcao` (feature `recepcao-buffer`, em 
 
 Ref: research.md Decision 3 (HIPÓTESE NÃO MEDIDA); quickstart.md S0; checklists/api-seguranca-confiabilidade.md CHK018
 
-- [ ] 1.1.1 Montar workflow descartável de sonda (fora do diff da PR, Princípio VIII) com Execute Workflow `onError=continueErrorOutput` chamando um sub com um nó Redis e `settings.executionTimeout` = 5, só com chaves `bv:teste:sonda:`
-- [ ] 1.1.2 Criar pela API uma credencial Redis temporária com senha inválida, usada só pelo sub de sonda
-- [ ] 1.1.3 Executar a sonda e medir: tempo até o pai receber erro, saída usada (erro ou não), mensagem de erro (só o código, sem host) e se a execução filha fica `running`
-- [ ] 1.1.4 Repetir com a credencial válida e medir a latência de uma chamada ao sub (custo do laço de posse)
-- [ ] 1.1.5 Apagar workflow de sonda, credencial temporária e chaves `bv:teste:sonda:`; parar execuções presas
-- [ ] 1.1.6 Registrar o resultado medido em research.md D3; se o pai não receber erro em ≤ timeout + 2 s, registrar bloqueio humano com as opções (a)–(c) de D3 e NÃO seguir as fases 4 e 5.2
+- [x] 1.1.1 Montar workflow descartável de sonda (fora do diff da PR, Princípio VIII) com Execute Workflow `onError=continueErrorOutput` chamando um sub com um nó Redis e `settings.executionTimeout` = 5, só com chaves `bv:teste:sonda:`
+- [x] 1.1.2 Criar pela API uma credencial Redis temporária com senha inválida, usada só pelo sub de sonda
+- [x] 1.1.3 Executar a sonda e medir: tempo até o pai receber erro, saída usada (erro ou não), mensagem de erro (só o código, sem host) e se a execução filha fica `running`
+- [x] 1.1.4 Repetir com a credencial válida e medir a latência de uma chamada ao sub (custo do laço de posse)
+- [x] 1.1.5 Apagar workflow de sonda, credencial temporária e chaves `bv:teste:sonda:`; parar execuções presas
+- [x] 1.1.6 Registrar o resultado medido em research.md D3; se o pai não receber erro em ≤ timeout + 2 s, registrar bloqueio humano com as opções (a)–(c) de D3 e NÃO seguir as fases 4 e 5.2
 
 ### 1.2 Gaps do checklist (CHK017, CHK018, CHK021) `[A]`
 

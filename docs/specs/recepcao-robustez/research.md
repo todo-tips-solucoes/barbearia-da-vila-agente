@@ -76,7 +76,16 @@ inalcançável "reconecta sem fim" e não sai pela saída de erro. Como o nó n�
 próprio, o tempo máximo precisa vir de fora dele; o "Timeout Workflow" das configurações de
 workflow do n8n (https://docs.n8n.io/workflows/settings/) é o mecanismo nativo disponível.
 
-**HIPÓTESE NÃO MEDIDA**: que o `executionTimeout` de um sub-workflow é aplicado quando ele é
+**RESULTADO DA SONDA 1.1 (2026-10-18, TESTE, onda-007): HIPÓTESE REFUTADA.** Pai (Webhook + Execute
+Workflow `onError=continueErrorOutput`, `waitForSubWorkflow`) chamando sub com nó Redis e
+`executionTimeout=5`: com a credencial válida o pai respondeu em 0,16-0,20 s (3 chamadas; custo
+do laço de posse desprezível). Com credencial Redis de senha inválida o pai NÃO recebeu erro nem
+saída alguma em 60 s (limite do cliente de medição; esperado ≤ 7 s): o `executionTimeout` do sub
+não encerrou a chamada. Logo, 1.1.6 exige bloqueio humano com as opções (a)-(c) abaixo e NÃO se
+seguem as fases 4 e 5.2. Recursos da sonda (2 pares de workflows, credencial temporária
+`cCxPlFTsqhTYRsMZ`) apagados; sem execuções presas.
+
+Texto original da hipótese (mantido para rastro) - **HIPÓTESE NÃO MEDIDA**: que o `executionTimeout` de um sub-workflow é aplicado quando ele é
 chamado por `Execute Workflow` e que o pai recebe erro na saída de erro. A documentação citada
 descreve o timeout do workflow, não o caso de sub-workflow. Por isso a primeira tarefa da
 implementação é uma sonda em TESTE (credencial Redis inválida temporária, no padrão do cenário
