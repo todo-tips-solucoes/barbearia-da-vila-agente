@@ -1,3 +1,13 @@
+<!--
+Sync Impact Report
+- Version: 1.0.0 → 1.1.0 (MINOR)
+- Princípios modificados: nenhum (I-VIII intactos)
+- Seções adicionadas: Princípios IX-XVI (próprios do projeto)
+- Seções removidas: nenhuma
+- Artefatos que precisam atualização: nenhum (specs/plans/tasks ainda não existem)
+- TODOs pendentes: nenhum
+-->
+
 # Constituição de Barbearia da Vila - Agente
 
 > Governança do desenvolvimento deste projeto. Gerada pelo cockpit a partir do `cockpit.config`;
@@ -132,8 +142,80 @@ repositório são código como qualquer outro.
 
 ## Princípios próprios do projeto
 
-> Seção reservada. Acrescente aqui os princípios específicos de Barbearia da Vila - Agente, numerados a
-> partir de IX. Nenhum princípio próprio vem preenchido pelo cockpit.
+> Princípios específicos de Barbearia da Vila - Agente, numerados a partir de IX. Adicionados na
+> emenda 1.1.0 (2026-10-18), autorizada pelo operador.
+
+### IX. A Graces é a fonte da verdade
+
+**MUST:**
+
+- O agente MUST oferecer apenas horários, serviços, barbeiros, preços e faixas de idade que vieram
+  da Graces na própria conversa; `informacaoes_barbearia.txt` MUST NOT prevalecer sobre ela.
+- O agente MUST NOT expor nem agendar com o barbeiro de teste (o que tem "TESTE" no nome).
+- Serviços "2ª vez" MUST NOT ser oferecidos nem agendados.
+
+### X. Conversa humanizada e identidade
+
+**MUST:**
+
+- O agente MUST assumir que é IA (assistente virtual da Barbearia da Vila), com tom humanizado.
+- O agente MUST responder em até 4 mensagens curtas, com "digitando…" proporcional e uma pergunta
+  por mensagem; MUST conduzir por conversa, não por menus.
+- Botão MUST ser usado somente na confirmação; o agente MUST NOT retomar uma coleta antiga a partir
+  de um simples "Oi".
+
+### XI. Escrita segura na agenda
+
+**MUST:**
+
+- O agente MUST confirmar com o cliente antes de agendar, reagendar ou cancelar.
+- Erros da Graces MUST ser tratados pelo campo `code`; uma escrita MUST NOT ser repetida às cegas
+  após timeout, e sim verificada antes.
+- Havendo pacote, o agente MUST perguntar se o cliente usa a sessão do pacote ou paga avulso.
+
+### XII. Skills e validação de n8n
+
+**MUST:**
+
+- Workflows MUST ser construídos com as skills de n8n disponíveis e validados antes de cada commit.
+- O agente MUST ser um nó AI Agent com sub-workflows como ferramentas; o Agent de primeira
+  classe do n8n MUST NOT ser usado.
+
+### XIII. Isolamento TESTE/PROD e da VPS
+
+**MUST:**
+
+- TESTE e PROD MUST ter banco (`barbearia_vila_teste` / `barbearia_vila`), prefixos Redis, path e
+  webhookId próprios.
+- Alterações na VPS MUST ficar restritas à stack `n8n`.
+- O agente-00c MUST fazer deploy apenas no TESTE; push, PR e PROD MUST ter aprovação humana do owner.
+
+### XIV. Nenhum segredo no repositório; dados de clientes mínimos
+
+**MUST:**
+
+- Credenciais, tokens e senhas MUST viver apenas nas credenciais do n8n e em `.env` fora do
+  repositório, e MUST NOT aparecer em workflow JSON, script, documento, log ou mensagem de commit.
+- Dados de clientes (nome, telefone, histórico) MUST ser coletados e persistidos apenas no
+  necessário (LGPD).
+
+### XV. Teste antes de produção
+
+**MUST:**
+
+- Toda mudança de workflow MUST passar pela suíte de conversas roteirizadas contra o webhook de
+  TESTE antes de ser promovida a PROD.
+- Testes na Graces MUST usar sempre o barbeiro de teste e MUST cancelar o que criaram.
+
+### XVI. Veracidade de Dados — Zero Fabricação (NON-NEGOTIABLE)
+
+**MUST:**
+
+- Nenhum artefato pode conter dado factual inventado. Assinaturas de request/response, URLs,
+  endpoints, querystrings (inclusive payloads do Chat Master e da Graces) e valores concretos
+  (financeiros, quantidades, status, IDs, datas, resultados de API) só podem ser escritos se
+  vierem de fonte rastreável (código, OpenAPI, documentação oficial, resposta real observada).
+  Esgotadas as fontes, a ação correta é bloqueio humano, nunca suposição plausível.
 
 ## Governança
 
@@ -142,4 +224,4 @@ de um humano registrada no corpo da PR; a versão segue SemVer (MAJOR: princípi
 redefinido; MINOR: princípio ou regra adicionada; PATCH: redação). A primeira versão é a 1.0.0,
 ratificada no merge da PR que adota esta constituição.
 
-**Version**: 1.0.0 | **Ratified**: no merge da PR que adota esta constituição
+**Version**: 1.1.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-10-18
