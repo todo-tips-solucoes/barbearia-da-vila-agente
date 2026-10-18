@@ -133,18 +133,18 @@ Ref: contracts/ferramentas-graces.md regras 2–6; research.md Decisions 3, 9, 1
 
 Ref: plan.md "Fluxo do `entregar-rajada`"; research.md Decisions 1, 2, 8, 16; spec.md FR-001, FR-002, FR-018, FR-019, FR-021
 
-- [ ] 5.1.1 Reescrever `workflows/sub/entregar-rajada.json` (mesmo id e contrato): registrar turno (`INSERT … ON CONFLICT`), "já tratado?" responde `ok` sem reenviar, ler contexto, "só mídia?" com `textos.midia`
-- [ ] 5.1.2 Nó AI Agent (`gpt-5.6-luna`, `agente.raciocinio`, `agente.iteracoes_max`) com 10 ferramentas `toolWorkflow` para `bv-graces`, sem nó de memória
-- [ ] 5.1.3 Ramo de erro: contingência `textos.contingencia` + `falhas_agente`; limite `agente.turnos_max_contato_hora` com `textos.humano`; pedido de humano sem handoff
-- [ ] 5.1.4 `Concluir turno` (estado, `conversas.ultima_entrada_em`) e resposta `{ok:true}`
+- [x] 5.1.1 Reescrever `workflows/sub/entregar-rajada.json` (mesmo id e contrato): registrar turno (`INSERT … ON CONFLICT`), "já tratado?" responde `ok` sem reenviar, ler contexto, "só mídia?" com `textos.midia`
+- [x] 5.1.2 Nó AI Agent (`gpt-5.6-luna`, `agente.raciocinio`, `agente.iteracoes_max`) com 10 ferramentas `toolWorkflow` para `bv-graces`, sem nó de memória
+- [x] 5.1.3 Ramo de erro: contingência `textos.contingencia` + `falhas_agente`; limite `agente.turnos_max_contato_hora` com `textos.humano`; pedido de humano sem handoff
+- [x] 5.1.4 `Concluir turno` (estado, `conversas.ultima_entrada_em`) e resposta `{ok:true}`
 
 ### 5.2 Envio pelo Chat Master `[C]`
 
 Ref: contracts/saida-chatmaster.md; research.md Decisions 5, 6, 7; spec.md FR-008, FR-015, FR-016
 
-- [ ] 5.2.1 Para cada posição 1..4: `Gravar saída` (`ON CONFLICT`), `Simulado?`, digitando, `Wait`, enviar texto ou lista com `whatsappId` da config; não 2xx registra falha e interrompe a sequência
-- [ ] 5.2.2 Toda múltipla escolha sai como lista Pro com texto humano (`textos.lista_topo`/`lista_botao`); resposta de texto livre entendida contra a última oferta
-- [ ] 5.2.3 Testes estáticos: ordem das mensagens, `whatsappId` vindo de config, nenhuma lista numerada em texto, contatos simulados nunca enviam
+- [x] 5.2.1 Para cada posição 1..4: `Gravar saída` (`ON CONFLICT`), `Simulado?`, digitando, `Wait`, enviar texto ou lista com `whatsappId` da config; não 2xx registra falha e interrompe a sequência
+- [x] 5.2.2 Toda múltipla escolha sai como lista Pro com texto humano (`textos.lista_topo`/`lista_botao`); resposta de texto livre entendida contra a última oferta
+- [x] 5.2.3 Testes estáticos: ordem das mensagens, `whatsappId` vindo de config, nenhuma lista numerada em texto, contatos simulados nunca enviam
 
 ---
 

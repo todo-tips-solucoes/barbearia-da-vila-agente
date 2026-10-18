@@ -5,7 +5,7 @@ Fonte versionada dos workflows. Os JSON usam placeholders `{{BV:...}}` (config d
 | Workflow | Arquivo | TESTE (id) | PROD |
 |----------|---------|------------|------|
 | bv-recepcao | `bv-recepcao.json` | `iaUbATlT7xkZArVd` | nao criado (config vazio) |
-| entregar-rajada (stub) | `sub/entregar-rajada.json` | `ilzXqBWGtcczlGEu` | nao criado |
+| entregar-rajada (agente) | `sub/entregar-rajada.json` | `ilzXqBWGtcczlGEu` | nao criado |
 | bv-captura | `bv-captura.json` | `wXcRwAdqRnGgRzA9` | nunca (deploy recusa) |
 | bv-verificacao | `bv-verificacao.json` | `uoDF0RFEgzAtKUay` | nao criado |
 | bv-graces | `sub/bv-graces.json` | `mjhd7O0AzrqNVrf0` | nao criado (recusa `teste.*`) |
@@ -33,3 +33,7 @@ Agendado a cada 5 min (TESTE). Apaga de `tentativas_recepcao` as linhas mais vel
 ## bv-graces
 
 Sub-workflow das 10 ferramentas do agente (`contracts/ferramentas-graces.md`). Logica pura em `shared/graces.js` (testes: `node tests/graces.test.js`, `tests/test_workflows_agente.py`). Fluxo: `Normalizar` (recusa campo desconhecido) -> `Contexto` (SQL com a reivindicacao atomica da proposta na fase 2) -> `Planejar` -> HTTP Graces (ate 3 estagios: leitura/revalidacao, escrita, 2a escrita do `trocar_servico`) -> `Efeitos` -> `Persistir` (conversa, proposta, `falhas_agente`). Escrita so em TESTE e sempre redirecionada ao barbeiro de teste; so em barbeiro de teste se mexe em agendamentos existentes. `cadastrar_cliente` fica travado (`cadastroLiberado:false`) ate o P1. Limite conhecido: `listar_servicos` nao filtra servico "sem barbeiro real" (exigiria uma chamada por servico); `listar_barbeiros` devolve vazio com orientacao.
+
+## entregar-rajada (agente)
+
+Substitui o stub (mesmo id e contrato de turno). Fluxo: `Registrar turno` (idempotente por `turno_id`) -> `Ler contexto` -> `Preparar` (recencia, historico, prompt) -> `Sessao` -> so midia (`textos.midia`) / limite por hora (`textos.humano`) / `Agente` (AI Agent 3, `lmChatOpenAi` 1.3, 10 `toolWorkflow` para `bv-graces`, sem memoria) -> `Compor` -> `Saidas` -> posicoes 1..4 (`Gravar saida` -> `Simulado?` -> digitando -> `Espera` -> envio -> `Enviado?`) -> `Concluir turno`. Erro do agente: `falhas_agente` + `textos.contingencia`. Envio real so para `teste.contatos_escrita` (vazio ate o P2): os demais contatos sao simulados. O smoke da recepcao (`smoke-recepcao.py`) dependia dos marcadores `__lento__`/`__falha__` do stub e nao se aplica mais a este workflow. Nao executado ponta a ponta (OpenAI/Graces/Chat Master reais): so deploy no TESTE e testes estaticos.
