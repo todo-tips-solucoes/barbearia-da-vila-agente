@@ -143,7 +143,7 @@ def valores_comuns(eventos):
     return {par for par, n in conta.items() if n >= 2}
 
 
-def fixtures(n8n, cfg, raiz, tokens=()):
+def fixtures(n8n, cfg, raiz, tokens=(), apagar=True):
     wid = cfg["workflows"].get("bv-captura")
     if not wid:
         raise Falha("bv-captura sem id no config")
@@ -160,15 +160,17 @@ def fixtures(n8n, cfg, raiz, tokens=()):
         with open(os.path.join(pasta, f"evento-{i:02d}.json"), "w", encoding="utf-8") as f:
             json.dump(anonimizar(ev, comuns, tokens), f, ensure_ascii=False, indent=2)
             f.write("\n")
-    for e in lista:
-        n8n("DELETE", f"/executions/{e['id']}")
-    return f"{len(eventos)} evento(s) anonimizado(s) em tests/fixtures/chatmaster/; {len(lista)} execucao(oes) apagada(s); revise antes de versionar"
+    if apagar:
+        for e in lista:
+            n8n("DELETE", f"/executions/{e['id']}")
+    return f"{len(eventos)} evento(s) anonimizado(s) em tests/fixtures/chatmaster/; {len(lista) if apagar else 0} execucao(oes) apagada(s); revise antes de versionar"
 
 
 def main(argv=None, raiz=RAIZ, cm=None, n8n=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("passo", choices=["anotar", "trocar", "restaurar", "fixtures"])
     ap.add_argument("--ambiente", default="integracao")
+    ap.add_argument("--manter", action="store_true", help="fixtures: nao apagar as execucoes brutas (apos revisar, rode sem --manter)")
     a = ap.parse_args(argv)
     if a.ambiente != "integracao":
         print("captura recusada: so no TESTE (integracao).", file=sys.stderr)
@@ -181,7 +183,7 @@ def main(argv=None, raiz=RAIZ, cm=None, n8n=None):
         if a.passo == "fixtures":
             n8n = n8n or (lambda m, r, c=None: http(m, os.environ["N8N_API_URL"].rstrip("/") + "/api/v1" + r,
                                                    {"X-N8N-API-KEY": os.environ["N8N_API_KEY"]}, c))
-            print(fixtures(n8n, cfg, raiz, tokens=tuple(t for t in (tok,) if t)))
+            print(fixtures(n8n, cfg, raiz, tokens=tuple(t for t in (tok,) if t), apagar=not a.manter))
         else:
             print({"anotar": anotar, "trocar": trocar, "restaurar": restaurar}[a.passo](cm, cfg, raiz))
     except KeyError as e:

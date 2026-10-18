@@ -71,17 +71,17 @@ Ref: spec.md FR-004, Clarifications; research.md D2, D3; block-001
 
 - [x] 2.2.1 Registrar a URL atual do webhook da 145 (via API; se nao devolver, bloqueio humano pedindo a URL)
 - [x] 2.2.2 Registrar bloqueio humano com o texto exato das mensagens que o owner deve enviar do celular (texto, audio, imagem, rajada e os eventos de 1.1) e o numero de destino da conexao 145
-- [~] 2.2.3 (webhook TROCADO e ativo; aguardando mensagens do owner, block pendente) Trocar o webhook para o de captura e coletar os eventos enviados pelo owner
-- [ ] 2.2.4 Restaurar o webhook original e conferir consultando a conexao (SC-006); apagar execucoes brutas do n8n
+- [x] 2.2.3 (webhook TROCADO e ativo; aguardando mensagens do owner, block pendente) Trocar o webhook para o de captura e coletar os eventos enviados pelo owner
+- [x] 2.2.4 Restaurar o webhook original e conferir consultando a conexao (SC-006); apagar execucoes brutas do n8n
 
 ### 2.3 Fixtures anonimizados e contrato do webhook `[C]`
 
 Ref: spec.md FR-003, FR-004; contracts/webhook-chatmaster.md
 
-- [ ] 2.3.1 Gerar tests/fixtures/chatmaster/*.json sem telefone, nome ou conteudo real, preservando estrutura e tipos
-- [ ] 2.3.2 Reescrever contracts/webhook-chatmaster.md apenas com campos observados, citando o fixture de origem de cada um
-- [ ] 2.3.3 Remover as "Hipoteses a confirmar" resolvidas e manter marcadas as nao observadas
-- [ ] 2.3.4 Teste tests/test_fixtures.py: ausencia de telefone/nome e presenca da estrutura esperada
+- [x] 2.3.1 Gerar tests/fixtures/chatmaster/*.json sem telefone, nome ou conteudo real, preservando estrutura e tipos
+- [x] 2.3.2 Reescrever contracts/webhook-chatmaster.md apenas com campos observados, citando o fixture de origem de cada um
+- [x] 2.3.3 Remover as "Hipoteses a confirmar" resolvidas e manter marcadas as nao observadas
+- [x] 2.3.4 Teste tests/test_fixtures.py: ausencia de telefone/nome e presenca da estrutura esperada
 
 ---
 

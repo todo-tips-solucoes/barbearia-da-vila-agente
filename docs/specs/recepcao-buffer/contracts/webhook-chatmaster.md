@@ -1,8 +1,8 @@
 # Contrato: webhook da conexão (Chat Master Veloz, QR Pro, conexão 145)
 
-**Status: PENDENTE DE CAPTURA.** Nenhum nome de campo abaixo é contrato. Este arquivo é reescrito
-pela tarefa de captura (FR-002/FR-004) com os campos observados nos eventos reais, cada um com o
-fixture de origem em `tests/fixtures/chatmaster/`. Até lá, nenhum nó que lê o payload é implementado.
+**Status: CAPTURADO (19 eventos, conexão 145, 2026-10-18).** Só os campos da seção "Contrato observado" são
+contrato; cada um cita o fixture de origem em `tests/fixtures/chatmaster/`. O que não foi observado está em
+"Hipóteses não observadas" e continua sem implementação.
 
 ## Endpoint de recepção (nosso)
 
@@ -18,21 +18,27 @@ Autenticação: research D4.
 Limite de tamanho: payload acima de `payload.max_kb` (config, `[PROPOSTA]`) é rejeitado com `400`
 sem log de conteúdo (FR-022). A captura mede o tamanho real dos eventos de mídia para calibrar o valor.
 
-## Hipóteses a confirmar na captura (fonte: documentação, não contrato)
-
-| Pergunta | O que a doc diz | Fonte |
-|----------|-----------------|-------|
-| Tipo de evento | campo `acao`; mensagem gera `start` e depois `fila-data` (QR Code) | `chatmasterveloz-api/15-webhooks/webhooks-da-conexao.md` |
-| Direção | `fromMe` (`false` = cliente) | idem |
-| Contato | `sender` | idem |
-| Grupo | `isGroup` | idem |
-| Identificador da mensagem | `mensagem.wid` | idem |
-| Texto no QR Code | "o texto está em `msg.message`" | idem |
-| Token da conexão | `token_origin`, `connection_token`, `ticketData.whatsapp.token` | idem |
-| Mídia na biblioteca Pro | base64 em `mensagem[0].mediaData[0].buffer`, `mimetype`, `originalname` | `15-webhooks/arquivos-no-webhook.md` |
-| Tags | chave `action` em vez de `acao` em parte dos avisos | `webhooks-da-conexao.md` |
-
 ## Contrato observado
 
-[A CAPTURAR] — tabela campo → tipo → exemplo anonimizado → fixture, por evento: texto, áudio, imagem,
-mensagem enviada pela loja, evento que não é mensagem, rajada.
+Corpo em `body` do evento do n8n. Valores textuais livres foram anonimizados nos fixtures (`xxxx`).
+
+| Campo | Tipo | Observação | Fixture |
+|-------|------|------------|---------|
+| `body.acao` | string | `start` (mensagem recebida, texto/imagem), `from_internal` (eco interno da mesma mensagem), outros valores de evento sem `mensagem` | 02, 01, 04, 05 |
+| `body.fromMe` | boolean | `false` nas mensagens do cliente; ausente nos eventos sem `mensagem` | 02 |
+| `body.isGroup` | boolean | `false` em todos os eventos capturados | 02 |
+| `body.sender` | string | contato (telefone; nunca logar) | 02 |
+| `body.chamadoId` | número | id do ticket | 02 |
+| `body.queueId`, `body.companyId`, `body.defaultWhatsapp_x` | número | fila, empresa, conexão (145) | 02 |
+| `body.token_origin` | string | credencial da conexão (nunca logar) | 02 |
+| `body.mensagem` (acao `start`) | array | `[0].type` (`text`, `image`), `[0].text`; mídia: `[0].fileUrl`, `[0].fileMimeType`, `[0].originalData` | 02, 13 |
+| `body.mensagem` (acao `from_internal`) | objeto | `id`, `wid`, `body`, `mediaType` (`conversation`, `image`), `fromMe`, `ticketId`, `contactId`, `createdAt` | 01, 12 |
+| `body.ticketData` | objeto | ticket, contato, fila, tags, `whatsapp.token` (segredo) | 02 |
+
+Identificador da mensagem: `mensagem.wid`/`mensagem.id` só no formato `from_internal`; o formato `start` não traz id observado.
+
+## Hipóteses não observadas (não implementar)
+
+- Áudio: o evento 17 tem `type` não repetido (anonimizado), logo o valor do tipo de áudio não foi confirmado.
+- Mensagem enviada pela loja (`fromMe=true`) e grupo (`isGroup=true`): não apareceram na captura.
+- Base64 de mídia em `mediaData[0].buffer`: não observado; a mídia chega por `fileUrl`.
