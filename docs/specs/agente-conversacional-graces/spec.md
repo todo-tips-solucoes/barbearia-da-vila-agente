@@ -149,6 +149,12 @@ Quando a Graces falha, demora ou recusa, o assistente trata pelo código de erro
 - Falha ao enviar uma das mensagens de uma sequência: as seguintes não são enviadas fora de ordem e a falha é registrada.
 - Implantação dos workflows no TESTE pela API REST do n8n com as credenciais do `.env.n8n`: o resultado é validado pelo MCP do n8n, e uma implantação que alteraria PROD é recusada.
 
+## Clarifications
+
+### Session 2026-10-18
+
+- Q: Qual a janela de recência a partir da qual uma coleta é considerada antiga (FR-011)? -> A: 2 horas sem mensagem do cliente, valor parametrizável. Alinhado ao follow-up de 2 h de `docs/decisoes-pre-00c.md` (linha 47) e ao roadmap (feature 9). Resolvido autonomamente (score 2, decisão operacional de política de design); o owner pode ajustar o valor sem mudar a spec.
+
 ## Requirements
 
 ### Functional Requirements
@@ -163,7 +169,7 @@ Quando a Graces falha, demora ou recusa, o assistente trata pelo código de erro
 - **FR-008**: Toda múltipla escolha oferecida ao cliente MUST ser enviada como mensagem de lista da biblioteca Pro do Chat Master, acompanhada de texto curto e humano; respostas escritas livres MUST ser entendidas como escolha equivalente.
 - **FR-009**: O sistema MUST sugerir remarcar toda vez que o cliente pedir cancelamento, antes de cancelar.
 - **FR-010**: O sistema MUST usar o contexto da conversa para continuar um pedido (ex.: "vamos marcar outro" logo após cancelar) reaproveitando serviço e preferência já ditos.
-- **FR-011**: O sistema MUST NOT retomar uma coleta antiga a partir de um "Oi" ou saudação isolada quando a atividade anterior estiver fora da janela de recência. [NEEDS CLARIFICATION: qual a janela de recência a partir da qual uma coleta é considerada antiga? Default adotado até resposta: 2 horas sem mensagem, alinhado ao follow-up de 2 h do roadmap.]
+- **FR-011**: O sistema MUST NOT retomar uma coleta antiga a partir de um "Oi" ou saudação isolada quando a atividade anterior estiver fora da janela de recência. A janela de recência é de 2 horas sem mensagem do cliente, parametrizável por configuração (ver Clarifications).
 - **FR-012**: O sistema MUST NOT expor, listar, sugerir nem agendar com o barbeiro de teste (identificado pelo id fixo e por "TESTE" no nome), e MUST filtrá-lo antes de os dados chegarem ao modelo, não apenas por instrução de prompt.
 - **FR-013**: O sistema MUST NOT oferecer nem agendar serviços "2ª vez".
 - **FR-014**: O sistema MUST assumir que é IA (assistente virtual da Barbearia da Vila) com tom humanizado, e MUST responder com verdade se perguntado.
