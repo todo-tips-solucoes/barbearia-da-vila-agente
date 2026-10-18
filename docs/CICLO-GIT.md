@@ -1,0 +1,44 @@
+# Ciclo git — Barbearia da Vila - Agente
+
+Repositório remoto: `todo-tips-solucoes/barbearia-da-vila-agente`.
+
+## Modelo de branches
+
+- Integração: `develop`. Toda frente nasce dela, em worktree; só o hotfix nasce da
+  produção.
+- Produção: `main`.
+- Quando as duas coincidem, o projeto usa branch única: a promoção para produção é no-op e o
+  deploy da integração já é o de produção.
+- Nomes de branch de trabalho: `feature/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>`.
+  `hotfix/<slug>` sai da branch de produção e só existe com incidente real.
+- Nunca push direto nas branches de integração e de produção, nem force-push.
+
+## Commits
+
+Conventional Commits, com descrição em português do Brasil:
+
+```text
+<tipo>(<escopo>): <descrição em português>
+```
+
+`wip` não é tipo válido; para trabalho em progresso use tipo real com marcador, por exemplo
+`chore(<escopo>): wip — <resumo>`. Nunca `--no-verify`. Stage sempre por caminhos explícitos.
+
+## Merge
+
+- **Feature para integração:** squash (`gh pr merge <número> --squash --delete-branch`). O
+  título da PR vira a mensagem do commit de squash; escreva-o em Conventional Commits.
+- **Promoção da integração para produção:** merge commit (`gh pr merge <número> --merge`), nunca
+  squash e nunca `--delete-branch`, para não divergir o histórico entre as duas branches.
+
+## Identidades
+
+Cada autor commita com a própria identidade. Conta compartilhada não commita. Identidades do
+projeto, no formato `nome:email` separadas por `;`:
+
+```text
+paulotodo:154374725+paulotodo@users.noreply.github.com
+```
+
+Antes de commitar, confira `git var GIT_AUTHOR_IDENT` e `git var GIT_COMMITTER_IDENT`: as duas
+devem corresponder a uma das identidades acima.
