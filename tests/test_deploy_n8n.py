@@ -17,10 +17,11 @@ WF = {"name": "BV Verificacao", "nodes": [], "connections": {}, "settings": {}}
 
 class FakeApi:
     def __init__(self, falha=None, existentes=()):
-        self.chamadas, self.falha, self.existentes = [], falha, list(existentes)
+        self.corpos, self.chamadas, self.falha, self.existentes = [], [], falha, list(existentes)
 
     def __call__(self, metodo, rota, corpo=None):
         self.chamadas.append((metodo, rota))
+        self.corpos.append((metodo, rota, corpo))
         if self.falha and (metodo, rota.split("?")[0]) in self.falha and self.falha.count((metodo, rota.split("?")[0])) :
             self.falha.remove((metodo, rota.split("?")[0]))
             raise dep.Falha(f"{metodo} {rota} -> HTTP 500")
@@ -91,6 +92,47 @@ class T(unittest.TestCase):
         self.assertEqual(self.run_main(["producao"], api)[0], 2)
         self.assertEqual(self.run_main(["producao", "--confirmar-id", "outro"], api)[0], 2)
         self.assertEqual(api.chamadas, [])
+
+    def test_producao_recusa_captura_e_config_vazio(self):
+        os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
+        try:
+            self.pcfg["workflows"]["bv-captura"] = "wfC"
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            api = FakeApi()
+            rc, _, err = self.run_main(["producao", "--confirmar-id", "wfC", "--so", "bv-captura"], api)
+            self.assertEqual(rc, 2)
+            self.assertIn("bv-captura", err)
+            self.pcfg["workflows"] = {"bv-recepcao": "wfR"}
+            self.pcfg["webhook"] = {"path": ""}
+            self.pcfg["chatmaster"] = {"whatsapp_id": "145"}
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfR"], api)[0], 2)
+            self.pcfg["webhook"], self.pcfg["chatmaster"] = {"path": "p"}, {"whatsapp_id": ""}
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfR"], api)[0], 2)
+            self.assertEqual(api.chamadas, [])
+        finally:
+            os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
+
+    def test_placeholders_include_e_sub_primeiro(self):
+        os.environ["BV_WEBHOOK_TOKEN_SHA256"] = "abc"
+        os.makedirs(f"{self.d}/workflows/shared"); os.makedirs(f"{self.d}/workflows/sub")
+        open(f"{self.d}/workflows/shared/r.js", "w").write('var a = "x";\n')
+        wf = {"name": "R", "nodes": [{"p": "{{BV:webhook.path}}|{{BV:TOKEN_SHA256}}|{{BV:INCLUDE:shared/r.js}}"}],
+              "connections": {}, "settings": {}}
+        json.dump(wf, open(f"{self.d}/workflows/bv-recepcao.json", "w"))
+        json.dump(dict(WF, name="S"), open(f"{self.d}/workflows/sub/entregar-rajada.json", "w"))
+        self.cfg.update(workflows={"bv-recepcao": "wfR"}, workflows_sub={"entregar_rajada": "wfS"}, webhook={"path": "pp"})
+        json.dump(self.cfg, open(f"{self.d}/config/ambientes/integracao.json", "w"))
+        api = FakeApi()
+        self.assertEqual(self.run_main(["integracao"], api)[0], 0)
+        puts = [x for x in api.corpos if x[0] == "PUT"]
+        self.assertEqual([p[1] for p in puts], ["/workflows/wfS", "/workflows/wfR"])
+        self.assertEqual(puts[1][2]["nodes"][0]["p"], 'pp|abc|var a = "x";\n')
+
+    def test_placeholder_sem_valor_falha(self):
+        with self.assertRaises(dep.Falha):
+            dep.renderizar("{{BV:nao.existe}}", {}, self.d)
 
     def test_criar_grava_id_e_recusa_repeticao(self):
         json.dump({"workflows": {"bv-verificacao": ""}}, open(f"{self.d}/config/ambientes/integracao.json", "w"))

@@ -1,0 +1,90 @@
+import json, os, re, unittest
+
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def carregar(rel):
+    with open(os.path.join(RAIZ, "workflows", rel), encoding="utf-8") as f:
+        texto = f.read()
+    return texto, json.loads(texto)
+
+
+class WorkflowRecepcao(unittest.TestCase):
+    def test_conexoes_referenciam_nos_existentes(self):
+        for rel in ("bv-recepcao.json", "sub/entregar-rajada.json"):
+            _, wf = carregar(rel)
+            nomes = {n["name"] for n in wf["nodes"]}
+            for origem, c in wf["connections"].items():
+                self.assertIn(origem, nomes)
+                for saida in c["main"]:
+                    for d in saida:
+                        self.assertIn(d["node"], nomes, rel)
+
+    def test_sem_segredo_nem_log_de_conteudo(self):
+        texto, _ = carregar("bv-recepcao.json")
+        self.assertNotIn("console.log", texto)
+        self.assertNotRegex(texto, r"[0-9a-f]{64}")  # so placeholder, nunca o hash/token
+        self.assertIn("{{BV:TOKEN_SHA256}}", texto)
+        self.assertEqual(json.loads(texto)["settings"]["saveDataSuccessExecution"], "none")
+
+    def test_chaves_redis_usam_prefixo_do_ambiente(self):
+        _, wf = carregar("bv-recepcao.json")
+        for n in wf["nodes"]:
+            if n["type"] == "n8n-nodes-base.redis":
+                self.assertIn("{{BV:redis.prefixo}}", n["parameters"]["key"])
+                self.assertNotIn("telefone", n["parameters"]["key"])
+
+    def test_stub_segue_contrato_de_entrega(self):
+        texto, wf = carregar("sub/entregar-rajada.json")
+        tipos = {n["type"] for n in wf["nodes"]}
+        self.assertIn("n8n-nodes-base.executeWorkflowTrigger", tipos)
+        self.assertIn("{{BV:teste.atraso_entrega_s}}", texto)
+        self.assertIn("__falha__", texto)
+        self.assertIn("{ ok, turno_id", texto)
+
+    def test_chamada_ao_sub_marca_e_desmarca_turno(self):
+        _, wf = carregar("bv-recepcao.json")
+        q = {n["name"]: n["parameters"].get("query", "") for n in wf["nodes"]}
+        self.assertIn("processada_em = now()", q["Marcar processada"])
+        self.assertIn("turno_id = NULL", q["Desmarcar turno"])
+        self.assertIn("ON CONFLICT (mensagem_id_canal) DO NOTHING", q["Inserir mensagem"])
+        self.assertIn("{{BV:workflows_sub.entregar_rajada}}", json.dumps(wf))
+
+    def _grafo(self):
+        _, wf = carregar("bv-recepcao.json")
+        n = {x["name"]: x for x in wf["nodes"]}
+        return n, {o: [[d["node"] for d in s] for s in c["main"]] for o, c in wf["connections"].items()}
+
+    def test_posse_so_liberada_pelo_dono(self):  # FR-012 / CA-5
+        n, g = self._grafo()
+        for nome in ("Marcar processada", "Desmarcar turno"):
+            self.assertIn("count(*)", n[nome]["parameters"]["query"])
+        self.assertEqual(g["Marcar processada"], [["Dono apos entrega?"]])
+        self.assertEqual(g["Dono apos entrega?"], [["Liberar posse"], ["Fim"]])
+        self.assertEqual(g["Dono apos falha?"], [["Liberar posse apos falha"], ["Falha da entrega"]])
+        self.assertEqual(g["Turno vazio?"][0], ["Ainda dono vazio?"])
+        self.assertEqual(g["Ainda dono vazio?"], [["Liberar posse turno vazio"], ["Fim"]])
+        # nenhum DEL de posse e alcancavel sem passar por um teste de dono
+        for d in ("Liberar posse", "Liberar posse apos falha", "Liberar posse turno vazio"):
+            pais = [o for o, s in g.items() if any(d in x for x in s)]
+            self.assertTrue(pais and all(p.startswith(("Dono", "Ainda dono")) for p in pais), (d, pais))
+
+    def test_falhas_registradas_sem_pii(self):  # FR-025 / FR-007
+        n, g = self._grafo()
+        self.assertEqual(g["Responder 400"], [["Registrar falha payload"]])
+        self.assertEqual(g["Registrar falha Redis"], [["Fim Redis indisponivel"]])
+        self.assertEqual(g["Desmarcar turno"], [["Registrar falha entrega"]])
+        for o, s in g.items():
+            if o != "Registrar falha Redis":
+                self.assertFalse(any("Fim Redis indisponivel" in x for x in s), o)
+        for nome in ("Registrar falha Redis", "Registrar falha payload", "Registrar falha entrega"):
+            p = n[nome]["parameters"]
+            self.assertIn("INSERT INTO falhas_recepcao", p["query"])
+            blob = json.dumps(p).lower()
+            for proibido in ("telefone", "conteudo", "token", "midia"):
+                self.assertNotIn(proibido, blob, nome)
+            self.assertEqual(n[nome]["onError"], "continueRegularOutput")  # log nunca derruba o fluxo
+
+
+if __name__ == "__main__":
+    unittest.main()

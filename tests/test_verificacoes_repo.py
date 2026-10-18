@@ -26,6 +26,18 @@ class T(unittest.TestCase):
     def test_config_valida(self):
         self.assertEqual(vr.verificar(OK, ""), [])
 
+    def test_lock_e_paths(self):
+        ok = {"integracao": cfg("bv:teste:", "barbearia_vila_teste", lock={"ttl_s": 120, "espera_s": 3, "tentativas": 45},
+                                webhook={"path": "a"}),
+              "producao": cfg("bv:prod:", "barbearia_vila", webhook={"path": ""})}
+        self.assertEqual(vr.verificar(ok, ""), [])
+        ruim = {"integracao": cfg("bv:teste:", "barbearia_vila_teste", lock={"ttl_s": 120, "espera_s": 3, "tentativas": 10},
+                                  webhook={"path": "a"}),
+                "producao": cfg("bv:prod:", "barbearia_vila", webhook={"path": "a"})}
+        e = " ".join(vr.verificar(ruim, ""))
+        self.assertIn("lock.espera_s", e)
+        self.assertIn("webhook.path", e)
+
     def test_prefixo_nao_disjunto(self):
         c = {"integracao": cfg("bv:teste:", "barbearia_vila_teste"), "producao": cfg("bv:", "barbearia_vila")}
         self.assertTrue(any("disjuntos" in e for e in vr.verificar(c, "")))

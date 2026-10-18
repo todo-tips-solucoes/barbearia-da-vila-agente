@@ -39,6 +39,13 @@ def verificar(cfgs, infra):
             eh_id = caminho.endswith(".credencial_id") or caminho.startswith((".credenciais.", ".workflows."))
             if eh_id and isinstance(v, str) and v and v not in infra:
                 erros.append(f"{amb}: id de {caminho} ausente em docs/infra.md")
+    lk = {a: c.get("lock", {}) for a, c in cfgs.items()}
+    for a, l in lk.items():
+        if l and l.get("espera_s", 0) * l.get("tentativas", 0) < l.get("ttl_s", 0):
+            erros.append(f"{a}: lock.espera_s * lock.tentativas deve ser >= lock.ttl_s")
+    paths = {a: c.get("webhook", {}).get("path", "") for a, c in cfgs.items()}
+    if paths.get("integracao") and paths.get("integracao") == paths.get("producao"):
+        erros.append("webhook.path de integracao e producao devem ser diferentes")
     pre = [(a, c.get("redis", {}).get("prefixo", "")) for a, c in cfgs.items()]
     for i, (a, p) in enumerate(pre):
         for b, q in pre[i + 1:]:

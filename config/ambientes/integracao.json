@@ -9,7 +9,10 @@
   "redis": {
     "prefixo": "bv:teste:",
     "db": 2,
-    "db_confirmado": true
+    "db_confirmado": true,
+    "ttl": {
+      "ultima_s": 120
+    }
   },
   "credenciais": {
     "redis": "chtScO4j08LclN89",
@@ -19,6 +22,45 @@
     "chatmaster": ""
   },
   "workflows": {
-    "bv-verificacao": "uoDF0RFEgzAtKUay"
+    "bv-verificacao": "uoDF0RFEgzAtKUay",
+    "bv-captura": "wXcRwAdqRnGgRzA9",
+    "bv-recepcao": "iaUbATlT7xkZArVd"
+  },
+  "captura": {
+    "path": "bv-captura-b889464c-5ec6-4aba-9ff3-5617408bec13",
+    "webhook_id": "36773219-e73a-4a9d-a8d8-25d26afcdeb5"
+  },
+  "webhook": {
+    "path": "bv-recepcao-a43a0aa8-57a0-4a92-85c7-7a5acf88e2cd",
+    "webhook_id": "40d24084-b482-4282-82a7-637db68acac0"
+  },
+  "chatmaster": {
+    "whatsapp_id": "145"
+  },
+  "buffer": {
+    "janela_s": 8,
+    "teto_s": 60
+  },
+  "lock": {
+    "ttl_s": 120,
+    "espera_s": 3,
+    "tentativas": 45
+  },
+  "dedup": {
+    "janela_h": 24
+  },
+  "payload": {
+    "max_kb": 2048
+  },
+  "teste": {
+    "atraso_entrega_s": 3,
+    "contatos_sinteticos": [
+      "+5500000000001",
+      "+5500000000002",
+      "+5500000000003"
+    ]
+  },
+  "workflows_sub": {
+    "entregar_rajada": "ilzXqBWGtcczlGEu"
   }
 }
