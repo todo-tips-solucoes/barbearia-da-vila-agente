@@ -14,7 +14,7 @@ A lista completa, e as pendências, estão em **`docs/decisoes-pre-00c.md`**. O 
 
 - **Roda no n8n, igual ao projeto `/home/projetos/goldincision_licienciados`.** Ele é a referência de arquitetura, deploy, testes e processo; leia o `CLAUDE.md`, `docs/infra.md`, `workflows/README.md` e `docs/constitution.md` de lá antes de projetar. Instância `https://n8n2.todo-tips.com`, na VPS `178.156.134.167` (mexer só na stack `n8n`). Interações com o n8n são feitas pelo **MCP nativo do n8n**.
 - **Banco próprio:** `barbearia_vila` (PROD) e `barbearia_vila_teste` (TESTE), no Postgres da stack n8n.
-- **Canal:** Chat Master Veloz por **QR Code (Pro)**, **sem API Oficial da Meta**. A conexão de teste é o `55 11 95213-4521`.
+- **Canal:** Chat Master Veloz por **QR Code (Pro)**, **sem API Oficial da Meta**. O token é da empresa, então informe o `whatsappId` em cada chamada. A conexão de teste é a `145` (QR Pro); o `95213-4521` é API Oficial e foi descartado. Funil 5, setor 78 e usuário 100 estão em `docs/decisoes-pre-00c.md`.
 - **LLM do atendimento:** OpenAI, modelo **`gpt-5.6-luna`**, com chave própria. A persona assume que é IA, com tom muito humanizado.
 - **Graces só funciona em produção.** A chave de `.env.smoke` responde `401` em staging. Os testes rodam em dados reais, **sempre com o barbeiro de teste** (o que tem "TESTE" no nome: `ZZ TESTE INTEGRACAO - NAO AGENDAR`, id `1cee0bb9-e58b-4428-9e9b-1db184db7943`). Ele nunca pode ser oferecido a um cliente. Cancele tudo o que um teste criar.
 - **Divergências de serviço, idade e preço: vale a Graces**, não `informacaoes_barbearia.txt`.

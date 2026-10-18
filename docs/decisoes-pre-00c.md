@@ -17,11 +17,12 @@ Insumo do briefing e da constituição. Tudo aqui foi respondido pelo owner nest
 | Tema | Decisão |
 |---|---|
 | Biblioteca | **QR Code, Pro.** *Não usar a API Oficial da Meta* (decisão revista na mesma sessão). Tem "digitando…" e botão Quick Reply. |
-| Número de TESTE | `55 11 95213-4521` (já tem um webhook, que pode ser trocado). |
+| Conexão de TESTE | **`whatsappId` 145**, "Atendimento Chat Master Veloz", canal `whatsapp_whatsmeow_pro` (QR Pro). É a conexão padrão da empresa no Chat Master. *Revisto em 2026-10-18: o `55 11 95213-4521` é a conexão 138, API Oficial Meta (`whatsapp_meta`), e por isso foi descartado para o teste.* |
 | Número de PROD | Ainda não informado. |
-| Token | `CHATMASTER_TOKEN_TESTE` em `/home/projetos/barbearia_da_villa/.env.smoke` (o owner vai incluir). |
+| Token | `CHATMASTER_TOKEN_TESTE` em `.env.smoke`. É **token da empresa** (lista as 8 conexões), então toda chamada precisa informar a conexão (`whatsappId`). Validado em 2026-10-18 (`POST /api/whatsapp-status` → 200). |
 | Entrada | Texto, **áudio** (transcrição) e **imagem** (interpretação). |
-| Handoff | Transferir para fila/setor do Chat Master e parar de responder. *Setor a descobrir via API.* |
+| Handoff | Transferir para o setor **78 "Atendimento Humano"** e parar de responder. Já existe a etiqueta **521 "BARBEARIA - AGUARDANDO ATENDENTE"**. |
+| Usuário das mensagens agendadas | **`userId` 100, "Agente IA"** (campo obrigatório de `POST /api/schedules`). |
 
 ## Agente
 
@@ -58,7 +59,7 @@ Criadas ao agendar na Graces; apagadas ao cancelar e recriadas ao reagendar.
 
 | Tema | Decisão |
 |---|---|
-| Funil | Raias: Novo contato → Em atendimento → Agendado → Confirmado → Atendido; laterais: Cancelado, Não compareceu, Humano. Criar via API se existir; senão, o owner cria. |
+| Funil | **Usar o funil já existente "Funil Agendamento Barbearia" (id 5)**, por decisão do owner em 2026-10-18. Raias: 25 Novo Contato → 26 Em Atendimento → 27 Agendado → 28 Confirmação → 29 Atendido (WON); 30 Cancelado e 31 Não compareceu (LOST). Não há raia "Humano": o handoff é marcado por etiqueta e setor. |
 | Etiquetas | Por **categoria de serviço** (Corte, Barba, Combo, Estética, Depilação), por **barbeiro** e **Cliente novo** (cadastrado pelo agente). |
 
 ## Processo
@@ -74,6 +75,6 @@ Criadas ao agendar na Graces; apagadas ao cancelar e recriadas ao reagendar.
 
 1. ~~`CHATMASTER_TOKEN_TESTE` e `OPENAI_API_KEY` no `.env.smoke`~~ — incluídos em 2026-10-18.
    - `OPENAI_API_KEY`: **válida**; `gpt-5.6-luna` e `whisper-1` disponíveis (`GET /v1/models/gpt-5.6-luna` → 200).
-   - `CHATMASTER_TOKEN_TESTE`: **recusado** pela API. `POST /api/whatsapp-status` (a chamada indicada pela documentação para testar) → `401 {"error":"Acesso não permitido"}`; `GET` → `403 "Expired Session - New token generated!"`; `/api/company/queues|users`, `/api/tags` e `/api/crm/v2/funis` → 401. O token tem 40 caracteres alfanuméricos, sem espaços nem aspas. Causas possíveis, segundo `chatmasterveloz-api/00-introducao/pre-requisitos-apis.md`: o token da conexão foi regenerado, ou a **API Externa** não está habilitada no plano. **Bloqueia** tudo o que depende do canal até o owner corrigir.
-2. Número e token da conexão de **PROD**.
-3. A descobrir com o token: `whatsappId`, `userId` (obrigatório em `/api/schedules`), setor do handoff, se existe API de criar funil.
+   - `CHATMASTER_TOKEN_TESTE`: **recusado** pela API. `POST /api/whatsapp-status` (a chamada indicada pela documentação para testar) → `401 {"error":"Acesso não permitido"}`; `GET` → `403 "Expired Session - New token generated!"`; `/api/company/queues|users`, `/api/tags` e `/api/crm/v2/funis` → 401. O token tem 40 caracteres alfanuméricos, sem espaços nem aspas. Causas possíveis, segundo `chatmasterveloz-api/00-introducao/pre-requisitos-apis.md`: o token da conexão foi regenerado, ou a **API Externa** não está habilitada no plano. **Resolvido em 2026-10-18:** o owner atualizou o token, e ele foi validado (ver tabela Canal).
+2. Número e conexão de **PROD**.
+3. ~~A descobrir: `whatsappId`, `userId`, setor do handoff, funil~~: resolvido (conexão 145, usuário 100, setor 78, funil 5).

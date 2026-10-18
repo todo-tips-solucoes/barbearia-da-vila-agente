@@ -39,7 +39,7 @@
 5. Áudio (transcrição) e imagem (interpretação) de entrada.
 6. Regras de negócio: pacotes (perguntar se usa a sessão ou paga avulso), serviços "2ª vez" nunca oferecidos, agendamento para terceiros, vários serviços encadeados (um agendamento por serviço).
 7. Mensagens agendadas pelo módulo de agendamento do Chat Master (`POST/DELETE /api/schedules`): confirmação na véspera às 18:00 com botão Quick Reply (resposta vira `POST /agenda/confirmacao`), lembrete 2 h antes, pós-atendimento 1 h depois do término; apagadas ao cancelar e recriadas ao reagendar.
-8. CRM e etiquetas: funil Novo contato → Em atendimento → Agendado → Confirmado → Atendido (laterais Cancelado, Não compareceu, Humano); etiquetas por categoria de serviço, por barbeiro e "Cliente novo".
+8. CRM e etiquetas: funil existente "Funil Agendamento Barbearia" (id 5): Novo Contato → Em Atendimento → Agendado → Confirmação → Atendido (laterais Cancelado, Não compareceu); handoff por setor 78 + etiqueta 521; etiquetas por categoria de serviço, por barbeiro e "Cliente novo".
 9. Handoff: transferir para fila/setor do Chat Master e parar de responder.
 10. Follow-up: 1 retomada gentil 2 h após a última mensagem, só se o cliente parou no meio de um agendamento.
 11. Suíte de validação: conversas roteirizadas contra o webhook de TESTE, com LLM avaliadora.
@@ -100,7 +100,7 @@
 **6 meses**: a definir. **12 meses**: a definir.
 
 **Riscos conhecidos**:
-- Token do canal de TESTE recusado pela API (bloqueia tudo que depende do canal).
+- Conexão de TESTE (145, QR Pro) é a conexão padrão da empresa no Chat Master: testes devem enviar só para contatos de teste.
 - Testes em produção da Graces: risco de poluir a agenda real (mitigado pelo barbeiro de teste e limpeza).
 - Lacunas da API Graces: idempotência do `POST /agenda`, significado de prazos 0, rate limit.
 - Payloads de webhook do Chat Master mudam entre versões; validar com eventos reais.
@@ -112,9 +112,7 @@
 
 | Item | Dimensão | Impacto |
 |------|----------|---------|
-| `CHATMASTER_TOKEN_TESTE` recusado (401/403): token regenerado ou API Externa não habilitada no plano | Integração | Alto (bloqueio humano) |
 | Número e token da conexão de PROD | Integração | Alto |
-| `whatsappId`, `userId` (obrigatório em `/api/schedules`), setor do handoff, existência de API para criar funil: descobrir com o token | Integração | Alto |
 | Requisitos LGPD (retenção, consentimento, exclusão) | Qualidade | Médio |
 | Orçamento e custo OpenAI | Restrições | Médio |
 | Prazo e métricas de sucesso | Escopo | Médio |
