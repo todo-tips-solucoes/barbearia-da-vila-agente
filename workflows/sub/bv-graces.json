@@ -188,12 +188,10 @@
         "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendQuery": "={{ Object.keys($json.req.qs || {}).length > 0 }}",
+        "sendQuery": true,
         "specifyQuery": "json",
         "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
-        "sendBody": "={{ !!$json.req.body }}",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.req.body || {}) }}",
+        "sendBody": false,
         "options": {
           "timeout": "{{BV:NUM:graces.timeout_ms}}",
           "response": {
@@ -273,12 +271,10 @@
         "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendQuery": "={{ Object.keys($json.req.qs || {}).length > 0 }}",
+        "sendQuery": true,
         "specifyQuery": "json",
         "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
-        "sendBody": "={{ !!$json.req.body }}",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.req.body || {}) }}",
+        "sendBody": false,
         "options": {
           "timeout": "{{BV:NUM:graces.timeout_ms}}",
           "response": {
@@ -358,12 +354,10 @@
         "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendQuery": "={{ Object.keys($json.req.qs || {}).length > 0 }}",
+        "sendQuery": true,
         "specifyQuery": "json",
         "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
-        "sendBody": "={{ !!$json.req.body }}",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.req.body || {}) }}",
+        "sendBody": false,
         "options": {
           "timeout": "{{BV:NUM:graces.timeout_ms}}",
           "response": {
@@ -490,6 +484,222 @@
         4320,
         0
       ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.req.m }}",
+        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
+        "sendBody": true,
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "88d976db-11d1-5db7-86de-d8df4bf16da5",
+      "name": "Graces A corpo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "63ac5643-24b9-561c-b4ba-fb14db1ecdbc",
+              "leftValue": "={{ String(!!$json.req.body) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ea2f80ab-a7d4-591a-9a14-7d34a4594509",
+      "name": "Corpo A?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.req.m }}",
+        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
+        "sendBody": true,
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "5d3ccc2d-8daf-568d-9fbf-0285415e6382",
+      "name": "Graces E1 corpo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30b304c3-1b4b-5719-bcfc-ea817e9fcf6e",
+              "leftValue": "={{ String(!!$json.req.body) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "137851ee-4642-5641-ac09-c2a41b5b4c13",
+      "name": "Corpo E1?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.req.m }}",
+        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
+        "sendBody": true,
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "fc280b7d-6577-5d84-ab0b-1bde83637a75",
+      "name": "Graces E2 corpo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0c6936eb-aa98-5336-9411-8b1541d4e059",
+              "leftValue": "={{ String(!!$json.req.body) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "86c78ac6-470f-528b-bd59-aa26c2f70860",
+      "name": "Corpo E2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        0
+      ]
     }
   ],
   "connections": {
@@ -559,7 +769,7 @@
       "main": [
         [
           {
-            "node": "Graces A",
+            "node": "Corpo A?",
             "type": "main",
             "index": 0
           }
@@ -599,7 +809,7 @@
       "main": [
         [
           {
-            "node": "Graces E1",
+            "node": "Corpo E1?",
             "type": "main",
             "index": 0
           }
@@ -639,7 +849,7 @@
       "main": [
         [
           {
-            "node": "Graces E2",
+            "node": "Corpo E2?",
             "type": "main",
             "index": 0
           }
@@ -702,6 +912,93 @@
         [
           {
             "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Corpo A?": {
+      "main": [
+        [
+          {
+            "node": "Graces A corpo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Graces A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces A corpo": {
+      "main": [
+        [
+          {
+            "node": "Passo A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Corpo E1?": {
+      "main": [
+        [
+          {
+            "node": "Graces E1 corpo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Graces E1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces E1 corpo": {
+      "main": [
+        [
+          {
+            "node": "Passo E1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Corpo E2?": {
+      "main": [
+        [
+          {
+            "node": "Graces E2 corpo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Graces E2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces E2 corpo": {
+      "main": [
+        [
+          {
+            "node": "Passo E2",
             "type": "main",
             "index": 0
           }

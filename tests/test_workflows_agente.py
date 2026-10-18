@@ -34,7 +34,7 @@ class BvGraces(unittest.TestCase):
 
     def test_http_graces_com_timeout_neverError_e_credencial(self):
         https = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.httpRequest"]
-        self.assertEqual(len(https), 3)
+        self.assertEqual(len(https), 6)  # 3 sem corpo + 3 com corpo
         for n in https:
             p = n["parameters"]
             self.assertTrue(p["url"].startswith("=https://{{BV:graces.host}}/public/v1"))
@@ -42,6 +42,8 @@ class BvGraces(unittest.TestCase):
             self.assertTrue(p["options"]["response"]["response"]["neverError"])
             self.assertEqual(n["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.graces}}")
             self.assertEqual(n["onError"], "continueRegularOutput")
+            self.assertIs(p["sendQuery"], True)  # schema exige booleano literal
+            self.assertIs(p["sendBody"], n["name"].endswith("corpo"))
 
     def test_nunca_usa_agenda_completa(self):  # FR-020 / contrato regra 5
         self.assertNotIn("/agenda/completa", self.texto)
