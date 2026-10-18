@@ -72,6 +72,8 @@ Criadas ao agendar na Graces; apagadas ao cancelar e recriadas ao reagendar.
 
 ## Pendências (bloqueiam partes da pipeline)
 
-1. `CHATMASTER_TOKEN_TESTE` e `OPENAI_API_KEY` no `.env.smoke`.
+1. ~~`CHATMASTER_TOKEN_TESTE` e `OPENAI_API_KEY` no `.env.smoke`~~ — incluídos em 2026-10-18.
+   - `OPENAI_API_KEY`: **válida**; `gpt-5.6-luna` e `whisper-1` disponíveis (`GET /v1/models/gpt-5.6-luna` → 200).
+   - `CHATMASTER_TOKEN_TESTE`: **recusado** pela API. `POST /api/whatsapp-status` (a chamada indicada pela documentação para testar) → `401 {"error":"Acesso não permitido"}`; `GET` → `403 "Expired Session - New token generated!"`; `/api/company/queues|users`, `/api/tags` e `/api/crm/v2/funis` → 401. O token tem 40 caracteres alfanuméricos, sem espaços nem aspas. Causas possíveis, segundo `chatmasterveloz-api/00-introducao/pre-requisitos-apis.md`: o token da conexão foi regenerado, ou a **API Externa** não está habilitada no plano. **Bloqueia** tudo o que depende do canal até o owner corrigir.
 2. Número e token da conexão de **PROD**.
 3. A descobrir com o token: `whatsappId`, `userId` (obrigatório em `/api/schedules`), setor do handoff, se existe API de criar funil.
