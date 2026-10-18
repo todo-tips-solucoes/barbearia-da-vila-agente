@@ -121,10 +121,10 @@ Ref: spec.md FR-018; plan.md "Estrutura"
 
 Ref: spec.md FR-006, FR-007, FR-008, FR-010, FR-011; contracts/webhook-chatmaster.md (pos-captura)
 
-- [ ] 4.1.1 Implementar `bvNormalizar` em workflows/shared/rajada.js mapeando apenas campos do contrato observado
-- [ ] 4.1.2 Implementar `deveEntregar` (ultima vence, teto, regra deterministica de 1.2) e `consolidar` (ordem de chegada)
-- [ ] 4.1.3 Testes em tests/rajada.test.js com os fixtures: texto, audio, imagem, nao mensagem, grupo, malformado, limite de tamanho
-- [ ] 4.1.4 Integrar `node tests/rajada.test.js` ao CMD_LINT/CI sem rede
+- [x] 4.1.1 Implementar `bvNormalizar` em workflows/shared/rajada.js mapeando apenas campos do contrato observado (dedup: evento `start` sem id de mensagem; idCanal = fileUrl so para midia, texto sem id: FR-014 parcial ate o owner informar o id do canal; audio detectado por originalData.audioMessage)
+- [x] 4.1.2 Implementar `deveEntregar` (ultima vence, teto, regra deterministica de 1.2) e `consolidar` (ordem de chegada)
+- [x] 4.1.3 Testes em tests/rajada.test.js com os fixtures: texto, audio, imagem, nao mensagem, grupo, malformado, limite de tamanho
+- [x] 4.1.4 Integrar `node tests/rajada.test.js` ao CMD_LINT/CI sem rede
 
 ### 4.2 Workflow bv-recepcao `[A]`
 
