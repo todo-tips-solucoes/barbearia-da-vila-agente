@@ -24,7 +24,8 @@
   "workflows": {
     "bv-verificacao": "uoDF0RFEgzAtKUay",
     "bv-captura": "wXcRwAdqRnGgRzA9",
-    "bv-recepcao": "iaUbATlT7xkZArVd"
+    "bv-recepcao": "iaUbATlT7xkZArVd",
+    "bv-vigia": "fzJA2yWESqiPXyib"
   },
   "captura": {
     "path": "bv-captura-b889464c-5ec6-4aba-9ff3-5617408bec13",
@@ -47,7 +48,8 @@
     "tentativas": 45
   },
   "dedup": {
-    "janela_h": 24
+    "janela_h": 24,
+    "conteudo_janela_s": 10
   },
   "payload": {
     "max_kb": 2048
@@ -62,5 +64,8 @@
   },
   "workflows_sub": {
     "entregar_rajada": "ilzXqBWGtcczlGEu"
+  },
+  "execucao": {
+    "timeout_s": 300
   }
 }

@@ -73,5 +73,23 @@ class Migracao0003(unittest.TestCase):
             self.assertNotIn(proibido, M3.lower().split("\n", 1)[1])
 
 
+M4 = open("db/migrations/0004_recepcao_robustez.sql").read()
+
+
+class Migracao0004(unittest.TestCase):
+    def test_check_gravacao_e_marcas(self):
+        self.assertIn("DROP CONSTRAINT IF EXISTS falhas_recepcao_tipo_check", M4)
+        self.assertIn("'redis_indisponivel','payload_invalido','entrega','gravacao'", M4)
+        self.assertIn("CREATE TABLE IF NOT EXISTS marcas_conteudo", M4)
+        self.assertIn("PRIMARY KEY (contato_id, hash_conteudo)", M4)
+        self.assertIn("REFERENCES contatos(id) ON DELETE CASCADE", M4)
+        self.assertIn("CREATE INDEX IF NOT EXISTS marcas_conteudo_visto_em_idx ON marcas_conteudo (visto_em)", M4)
+
+    def test_marca_sem_texto_nem_telefone(self):
+        corpo = M4.split("CREATE TABLE IF NOT EXISTS marcas_conteudo", 1)[1].split(");", 1)[0]
+        for proibido in ("telefone", "texto", "conteudo ", "token"):
+            self.assertNotIn(proibido, corpo.replace("hash_conteudo", ""))
+
+
 if __name__ == "__main__":
     unittest.main()

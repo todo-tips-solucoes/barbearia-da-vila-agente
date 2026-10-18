@@ -41,7 +41,19 @@ class Api:
 
 def renderizar(texto, cfg, raiz):
     """Troca {{BV:a.b}} pelo valor do config, {{BV:INCLUDE:shared/x.js}} pelo arquivo e {{BV:TOKEN_SHA256}} por
-    BV_WEBHOOK_TOKEN_SHA256 (de .env.n8n, nunca versionado). Valores entram escapados como conteudo de string JSON."""
+    BV_WEBHOOK_TOKEN_SHA256 (de .env.n8n, nunca versionado). Valores entram escapados como conteudo de string JSON.
+    "{{BV:NUM:a.b}}" (com aspas) vira o numero cru, para campos que o n8n exige numericos (ex.: executionTimeout)."""
+    def num(m):
+        v = cfg
+        for p in m.group(1).split("."):
+            if not isinstance(v, dict) or p not in v:
+                raise Falha(f"placeholder {{{{BV:NUM:{m.group(1)}}}}} sem valor no config")
+            v = v[p]
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise Falha(f"placeholder NUM:{m.group(1)} nao e inteiro")
+        return str(v)
+    texto = re.sub(r'"\{\{BV:NUM:([^}]+)\}\}"', num, texto)
+
     def sub(m):
         k = m.group(1)
         if k == "TOKEN_SHA256":
@@ -93,13 +105,14 @@ def implantar(api, nome, wid, wf):
 
 
 def criar(api, cfg, arq_cfg, nome, wf):
-    if cfg["workflows"].get(nome):
+    secao = "workflows_sub" if nome in cfg.get("workflows_sub", {}) else "workflows"  # mesmo criterio de main()
+    if cfg.get(secao, {}).get(nome):
         raise Falha(f"'{nome}' ja tem id no config; --criar recusado")
     existentes = api("GET", "/workflows?" + urllib.parse.urlencode({"name": wf["name"], "limit": 250})).get("data", [])
     if any(w["name"] == wf["name"] for w in existentes):
         raise Falha(f"ja existe workflow com o nome '{wf['name']}' na instancia; --criar recusado")
     wid = api("POST", "/workflows", corpo_put(wf))["id"]
-    cfg["workflows"][nome] = wid
+    cfg.setdefault(secao, {})[nome] = wid
     with open(arq_cfg, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
         f.write("\n")
@@ -137,7 +150,7 @@ def main(argv=None, raiz=RAIZ, api=None):
     try:
         carregar_env(os.environ.get("BV_ENV_N8N", os.path.join(raiz, ".env.n8n")))
         api = api or Api(os.environ["N8N_API_URL"], os.environ["N8N_API_KEY"])
-        subs = cfg.get("workflows_sub", {})  # shortcut: --criar grava em workflows, nao em workflows_sub; criar subs a mao
+        subs = cfg.get("workflows_sub", {})
         todos = {**subs, **cfg["workflows"]}  # sub-workflows primeiro: o principal os referencia
         nomes = [a.criar] if a.criar else [n for n in todos if not a.so or n == a.so]
         if not nomes or (a.so and a.so not in todos):

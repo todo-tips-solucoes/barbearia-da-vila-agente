@@ -85,6 +85,75 @@ class WorkflowRecepcao(unittest.TestCase):
                 self.assertNotIn(proibido, blob, nome)
             self.assertEqual(n[nome]["onError"], "continueRegularOutput")  # log nunca derruba o fluxo
 
+    def test_resposta_so_depois_de_gravar(self):  # FR-001..FR-004
+        n, g = self._grafo()
+        self.assertEqual(g["Roteador"][3], ["Upsert contato"])
+        self.assertEqual(g["Upsert contato"], [["Inserir mensagem"], ["Registrar falha contato"]])
+        self.assertEqual(g["Inserir mensagem"], [["Gravada?"], ["Registrar falha mensagem"]])
+        self.assertEqual(g["Gravada?"], [["Responder 200 aceita"], ["Responder 200 descartada"]])
+        self.assertEqual(g["Registrar falha contato"], [["Responder 500"]])
+        self.assertEqual(g["Registrar falha mensagem"], [["Responder 500"]])
+        # unico caminho ate o 200 de aceita passa por Gravada?
+        pais = [o for o, s in g.items() if any("Responder 200 aceita" in x for x in s)]
+        self.assertEqual(pais, ["Gravada?"])
+        for nome in ("Upsert contato", "Inserir mensagem"):
+            self.assertEqual(n[nome]["onError"], "continueErrorOutput")
+        # sem alwaysOutputData: ele joga item vazio na saida 0 mesmo com erro, e o erro viraria "descartada"
+        self.assertNotIn("alwaysOutputData", n["Inserir mensagem"])
+        self.assertIn("SELECT (SELECT id FROM ins) AS id, $1::bigint AS contato_id", n["Inserir mensagem"]["parameters"]["query"])
+        self.assertEqual(n["Responder 500"]["parameters"]["options"]["responseCode"], 500)
+        for nome, motivo in (("Registrar falha contato", "contato_falhou"), ("Registrar falha mensagem", "mensagem_falhou")):
+            self.assertEqual(n[nome]["onError"], "continueRegularOutput")  # FR-004
+            p = n[nome]["parameters"]
+            self.assertIn(f"'gravacao', '{motivo}'", p["query"])
+            blob = json.dumps(p).lower()
+            for proibido in ("telefone", "conteudo", "token", "midia", "error"):
+                self.assertNotIn(proibido, blob, nome)
+
+    def test_dedupe_por_conteudo_no_mesmo_statement(self):  # FR-010..FR-012
+        n, g = self._grafo()
+        q = n["Inserir mensagem"]["parameters"]["query"]
+        self.assertIn("ON CONFLICT (contato_id, hash_conteudo) DO UPDATE SET visto_em = now()", q)
+        self.assertIn("sha256(convert_to($4::text, 'UTF8'))", q)
+        self.assertIn("$2::text IS NULL AND $3::text = 'texto'", q)  # so texto sem id gera marca
+        self.assertIn("$3::text <> 'texto' OR $2::text IS NOT NULL OR EXISTS (SELECT 1 FROM marca)", q)  # midia e id fora
+        self.assertNotIn("||", q)  # sem concatenacao
+        r = n["Inserir mensagem"]["parameters"]["options"]["queryReplacement"]
+        self.assertIn("{{BV:dedup.conteudo_janela_s}}", r)
+        self.assertEqual(g["Responder 200 aceita"], [["Limpar marcas"]])
+        self.assertEqual(g["Limpar marcas"], [["Abrir tentativa"]])
+        self.assertEqual(g["Abrir tentativa"], [["Marcar ultima"]])
+        self.assertEqual(n["Limpar marcas"]["onError"], "continueRegularOutput")
+        self.assertIn("DELETE FROM marcas_conteudo", n["Limpar marcas"]["parameters"]["query"])
+
+    def test_tempo_maximo_da_execucao_parametrizado(self):  # FR-006 / dec-020
+        texto, wf = carregar("bv-recepcao.json")
+        self.assertEqual(wf["settings"]["executionTimeout"], "{{BV:NUM:execucao.timeout_s}}")
+        self.assertNotIn("redis-op", texto)
+        for n in wf["nodes"]:
+            if n["type"] == "n8n-nodes-base.redis" and n["name"].startswith(("Marcar", "Ler", "Tomar")):
+                self.assertEqual(n["onError"], "continueErrorOutput", n["name"])
+        for a in ("integracao", "producao"):
+            cfg = json.load(open(os.path.join(RAIZ, "config", "ambientes", a + ".json"), encoding="utf-8"))
+            self.assertIsInstance(cfg["execucao"]["timeout_s"], int)
+            self.assertGreater(cfg["execucao"]["timeout_s"], cfg["buffer"]["teto_s"] + cfg["lock"]["espera_s"] * cfg["lock"]["tentativas"] + cfg["buffer"]["janela_s"])
+            self.assertEqual(cfg["dedup"]["conteudo_janela_s"], 10)
+
+    def test_vigia_registra_tentativas_estouradas(self):  # block-003 / dec-025
+        _, wf = carregar("bv-vigia.json")
+        tipos = {n["name"]: n["type"] for n in wf["nodes"]}
+        self.assertIn("n8n-nodes-base.scheduleTrigger", tipos.values())
+        q = [n for n in wf["nodes"] if n["type"] == "n8n-nodes-base.postgres"][0]["parameters"]
+        self.assertIn("DELETE FROM tentativas_recepcao", q["query"])
+        self.assertIn("'tempo_esgotado'", q["query"])
+        self.assertIn("{{BV:execucao.timeout_s}}", q["options"]["queryReplacement"])
+        self.assertNotIn("conteudo", q["query"])  # sem PII
+        _, rc = carregar("bv-recepcao.json")
+        nos = {n["name"]: n for n in rc["nodes"]}
+        for fim in ("Fim", "Fim Redis indisponivel", "Fim sem posse"):
+            self.assertIn("DELETE FROM tentativas_recepcao", nos[fim]["parameters"]["query"])
+        self.assertIn("DELETE FROM tentativas_recepcao", nos["Registrar falha entrega"]["parameters"]["query"])
+
 
 if __name__ == "__main__":
     unittest.main()
