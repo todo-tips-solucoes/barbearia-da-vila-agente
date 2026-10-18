@@ -112,7 +112,7 @@
 
 | Item | Dimensão | Impacto |
 |------|----------|---------|
-| Número e token da conexão de PROD | Integração | Alto |
+| Número e conexão de PROD — **decidido (owner, 2026-10-18): adiado.** As features implementam o TESTE completo e deixam PROD parametrizado (`whatsappId`, path/webhookId) até o owner definir a conexão; o token é o da empresa | Integração | Resolvido (adiado) |
 | Requisitos LGPD (retenção, consentimento, exclusão) | Qualidade | Médio |
 | Orçamento e custo OpenAI | Restrições | Médio |
 | Prazo e métricas de sucesso | Escopo | Médio |
