@@ -21,33 +21,33 @@ Escopo: infraestrutura base (bancos TESTE/PROD, Redis com prefixos disjuntos, cr
 
 Ref: contracts/scripts-cli.md, plan.md §Seguranca, FR-006, FR-016
 
-- [ ] 1.1.1 Criar `scripts/_vps.py` (stdlib) com lista fechada de operacoes (`psql <banco>` por stdin, `redis <db> <cmd>`, `sondar <item>`, `pg_dump <banco>`); outras operacoes saem com exit 2
-- [ ] 1.1.2 Restringir a `n8n-postgres-1`, `n8n-redis-1` e `/root/barbearia_vila/`; `shlex.quote`, sem `shell=True`, `BatchMode=yes`, `StrictHostKeyChecking` padrao
-- [ ] 1.1.3 Scrub de segredos na saida de erro; SQL e senhas so por stdin
-- [ ] 1.1.4 Testes `unittest` com mock de SSH: operacao fora da lista recusada, exit codes 0/1/2, segredo nunca impresso
+- [x] 1.1.1 Criar `scripts/_vps.py` (stdlib) com lista fechada de operacoes (`psql <banco>` por stdin, `redis <db> <cmd>`, `sondar <item>`, `pg_dump <banco>`); outras operacoes saem com exit 2
+- [x] 1.1.2 Restringir a `n8n-postgres-1`, `n8n-redis-1` e `/root/barbearia_vila/`; `shlex.quote`, sem `shell=True`, `BatchMode=yes`, `StrictHostKeyChecking` padrao
+- [x] 1.1.3 Scrub de segredos na saida de erro; SQL e senhas so por stdin
+- [x] 1.1.4 Testes `unittest` com mock de SSH: operacao fora da lista recusada, exit codes 0/1/2, segredo nunca impresso
 
 ### 1.2 Sondagem Redis DB 2 livre (CHK008, P1) `[C]`
 
 Ref: FR-019, checklists/infra.md CHK008
 
-- [ ] 1.2.1 Implementar `scripts/verificar-infra.py --redis` (somente leitura: `DBSIZE`/`SCAN` no DB 2, sem escrita enquanto `db_confirmado=false`)
-- [ ] 1.2.2 Executar a sondagem na VPS e registrar o resultado (DB 2 livre ou ocupado) em `docs/infra.md`; ocupado -> escolher outro DB distinto de 0 e 1 e registrar Decisao
-- [ ] 1.2.3 So com DB livre confirmado, marcar `redis.db_confirmado: true` nos dois configs
+- [x] 1.2.1 Implementar `scripts/verificar-infra.py --redis` (somente leitura: `DBSIZE`/`SCAN` no DB 2, sem escrita enquanto `db_confirmado=false`)
+- [x] 1.2.2 Executar a sondagem na VPS e registrar o resultado (DB 2 livre ou ocupado) em `docs/infra.md`; ocupado -> escolher outro DB distinto de 0 e 1 e registrar Decisao
+- [x] 1.2.3 So com DB livre confirmado, marcar `redis.db_confirmado: true` nos dois configs
 
 ### 1.3 Sondagens de acesso e backup existente (P2, P3) `[A]`
 
 Ref: research.md P2/P3, FR-021
 
-- [ ] 1.3.1 Implementar `verificar-infra.py --acesso` (`CONNECT` publico no database `n8n`, somente leitura) e `--backup` (rotina existente da stack, somente leitura)
-- [ ] 1.3.2 Executar e registrar achados em `docs/infra.md`; `CONNECT` publico aberto -> bloqueio humano (decisao do owner, nao alterar a stack sozinho)
+- [x] 1.3.1 Implementar `verificar-infra.py --acesso` (`CONNECT` publico no database `n8n`, somente leitura) e `--backup` (rotina existente da stack, somente leitura)
+- [!] 1.3.2 Executar e registrar achados em `docs/infra.md`; `CONNECT` publico aberto -> bloqueio humano (decisao do owner, nao alterar a stack sozinho)
 
 ### 1.4 Sondagem dos ids de credenciais n8n (CHK021, P4/P6) `[A]`
 
 Ref: FR-017, checklists/infra.md CHK021, contracts/scripts-cli.md §API publica
 
-- [ ] 1.4.1 Reconfirmar no `openapi.yml` da instancia as rotas `GET /credentials/schema/{tipo}` e a listagem de credenciais por nome (read-only, via MCP/API do n8n)
-- [ ] 1.4.2 Listar credenciais existentes da instancia e registrar nome/finalidade/id realmente encontrados (ou "inexistente") com a fonte; nenhum id inventado
-- [ ] 1.4.3 Registrar os campos de cada tipo de credencial usado (Postgres, Redis) a partir do schema da API
+- [x] 1.4.1 Reconfirmar no `openapi.yml` da instancia as rotas `GET /credentials/schema/{tipo}` e a listagem de credenciais por nome (read-only, via MCP/API do n8n)
+- [x] 1.4.2 Listar credenciais existentes da instancia e registrar nome/finalidade/id realmente encontrados (ou "inexistente") com a fonte; nenhum id inventado
+- [x] 1.4.3 Registrar os campos de cada tipo de credencial usado (Postgres, Redis) a partir do schema da API
 
 ---
 
@@ -57,16 +57,16 @@ Ref: FR-017, checklists/infra.md CHK021, contracts/scripts-cli.md §API publica
 
 Ref: contracts/config-ambiente.md, FR-012
 
-- [ ] 2.1.1 Criar `config/ambientes/integracao.json` (TESTE: `barbearia_vila_teste`, `bv:teste:`, DB do item 1.2, ids vazios) sem segredos
-- [ ] 2.1.2 Criar `config/ambientes/producao.json` (PROD: `barbearia_vila`, `bv:prod:`, sem a chave `bv-verificacao`)
+- [x] 2.1.1 Criar `config/ambientes/integracao.json` (TESTE: `barbearia_vila_teste`, `bv:teste:`, DB do item 1.2, ids vazios) sem segredos
+- [x] 2.1.2 Criar `config/ambientes/producao.json` (PROD: `barbearia_vila`, `bv:prod:`, sem a chave `bv-verificacao`)
 
 ### 2.2 Esquema inicial e conferencia de colunas (CHK004) `[C]`
 
 Ref: data-model.md, FR-003, FR-004, checklists/infra.md CHK004
 
-- [ ] 2.2.1 Escrever `db/migrations/0001_esquema_inicial.sql` com `contatos`, `mensagens`, `mensagens_agendadas`, `handoffs`, `schema_migrations` exatamente como no data-model.md (tipos, CHECKs, FKs ON DELETE CASCADE, UNIQUEs, indice parcial de handoff aberto, indices `(contato_id, criado_em)` e `(situacao, previsto_para)`)
-- [ ] 2.2.2 Conferir coluna a coluna (nome, tipo, nulabilidade, default, constraints, indices) contra data-model.md e registrar resultado da conferencia; divergencia -> ajustar o SQL (nao o contrato) ou registrar Decisao
-- [ ] 2.2.3 Teste `unittest` estatico que le o SQL e verifica a presenca de cada tabela, coluna, CHECK e indice do data-model.md, e a ausencia de campos sensiveis (e-mail, documento, nascimento, endereco)
+- [x] 2.2.1 Escrever `db/migrations/0001_esquema_inicial.sql` com `contatos`, `mensagens`, `mensagens_agendadas`, `handoffs`, `schema_migrations` exatamente como no data-model.md (tipos, CHECKs, FKs ON DELETE CASCADE, UNIQUEs, indice parcial de handoff aberto, indices `(contato_id, criado_em)` e `(situacao, previsto_para)`)
+- [x] 2.2.2 Conferir coluna a coluna (nome, tipo, nulabilidade, default, constraints, indices) contra data-model.md e registrar resultado da conferencia; divergencia -> ajustar o SQL (nao o contrato) ou registrar Decisao
+- [x] 2.2.3 Teste `unittest` estatico que le o SQL e verifica a presenca de cada tabela, coluna, CHECK e indice do data-model.md, e a ausencia de campos sensiveis (e-mail, documento, nascimento, endereco)
 
 ### 2.3 Preparacao de bancos `[C]`
 
