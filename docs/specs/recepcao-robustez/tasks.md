@@ -100,7 +100,7 @@ Ref: spec.md FR-006..FR-009; research.md Decision 3 (sonda 2); contracts/recepca
 - [x] 4.1.1 `settings.executionTimeout = {{BV:execucao.timeout_s}}` em `workflows/bv-recepcao.json` (nós Redis permanecem; sem `redis-op`)
 - [x] 4.1.2 Teste estático: timeout parametrizado, nenhum `redis-op`/`executeWorkflow` para Redis, `Registrar falha Redis` sem mensagem bruta
 - [x] 4.1.3 Rodar `node tests/rajada.test.js` e a suíte unitária
-- [!] 4.1.4 Registro de falha do caso "nó pendurado": error workflow NÃO dispara em cancelamento (sonda 2); mecanismo aguarda decisão do owner (block-003)
+- [x] 4.1.4 Registro de falha do caso "nó pendurado": error workflow NÃO dispara em cancelamento (sonda 2); resolvido pela dec-025 (block-003): `tentativas_recepcao` (0005) + workflow `bv-vigia` a cada 5 min
 
 ---
 
@@ -119,9 +119,9 @@ Ref: spec.md FR-016, FR-018; Constitution XII, XIII
 Ref: quickstart.md S1–S4, S6; spec.md SC-001..SC-006, FR-017
 
 - [x] 5.2.1 `scripts/smoke-recepcao.py`: cenário S1/S2 (falha de gravação com credencial Postgres inválida temporária só no nó, depois também no registro; reenvio grava uma vez)
-- [!] 5.2.2 (aguarda block-003) Cenário S3: credencial Redis inválida só nos nós Redis, medir tempo ≤ `execucao.timeout_s + 2` s (webhook até `canceled`), falha registrada (block-003), entrega no turno seguinte sem duplicidade; substituir o cenário `redis()` antigo
+- [x] 5.2.2 Cenário S3: credencial Redis inválida só nos nós Redis, medir tempo ≤ `execucao.timeout_s + 2` s (webhook até `canceled`), falha registrada (block-003), entrega no turno seguinte sem duplicidade; substituir o cenário `redis()` antigo
 - [x] 5.2.3 Cenário S4: 20 pares na janela (20 descartadas) e 20 fora/distintos (0 descartadas); mídia inalterada; `marcas_conteudo` sem texto/telefone
-- [~] 5.2.4 (regressão verde; falta o S3) Rodar o smoke completo (S6, regressão) com limpeza e restauração no `finally`; apagar credenciais temporárias
+- [x] 5.2.4 Rodar o smoke completo (S6, regressão) com limpeza e restauração no `finally`; apagar credenciais temporárias
 
 ---
 

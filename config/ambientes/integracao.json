@@ -24,7 +24,8 @@
   "workflows": {
     "bv-verificacao": "uoDF0RFEgzAtKUay",
     "bv-captura": "wXcRwAdqRnGgRzA9",
-    "bv-recepcao": "iaUbATlT7xkZArVd"
+    "bv-recepcao": "iaUbATlT7xkZArVd",
+    "bv-vigia": "fzJA2yWESqiPXyib"
   },
   "captura": {
     "path": "bv-captura-b889464c-5ec6-4aba-9ff3-5617408bec13",

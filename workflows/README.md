@@ -8,6 +8,7 @@ Fonte versionada dos workflows. Os JSON usam placeholders `{{BV:...}}` (config d
 | entregar-rajada (stub) | `sub/entregar-rajada.json` | `ilzXqBWGtcczlGEu` | nao criado |
 | bv-captura | `bv-captura.json` | `wXcRwAdqRnGgRzA9` | nunca (deploy recusa) |
 | bv-verificacao | `bv-verificacao.json` | `uoDF0RFEgzAtKUay` | nao criado |
+| bv-vigia | `bv-vigia.json` | `fzJA2yWESqiPXyib` | nao criado (config vazio) |
 
 ## bv-recepcao
 
@@ -23,3 +24,7 @@ Robustez da recepcao (feature `recepcao-robustez`, so TESTE): o `200` de aceita 
 
 - PROD fica inativo: sem `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` + `--confirmar-id` o deploy recusa (exit 2); `webhook.path` de PROD esta vazio.
 - Texto do canal nao traz id de mensagem: duplicata so e barrada para midia (id = fileUrl). Pendente com o owner.
+
+## bv-vigia
+
+Agendado a cada 5 min (TESTE). Apaga de `tentativas_recepcao` as linhas mais velhas que `execucao.timeout_s` + 30 s e registra cada uma em `falhas_recepcao` (`redis_indisponivel|tempo_esgotado`, so `contato_id`, sem PII). Cobre o no Redis pendurado, que o `executionTimeout` cancela sem disparar error workflow. A mensagem segue pendente (`processada_em` nulo) e e entregue no turno seguinte do contato. Criacao: `scripts/deploy-n8n.sh integracao --criar bv-vigia`.

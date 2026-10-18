@@ -273,7 +273,7 @@ def gravacao():
 def dedupe():
     print("S4 dedupe por conteudo (janela dedup.conteudo_janela_s = %s s)" % CFG["dedup"]["conteudo_janela_s"])
     janela, n = CFG["dedup"]["conteudo_janela_s"], 20
-    base = 100
+    base = 200  # fora de 100-109 (concorrencia)
     for i in range(n):  # pares iguais dentro da janela
         post(evento_texto(base + i, "ok dedupe"))
         post(evento_texto(base + i, "ok dedupe"))
@@ -301,7 +301,8 @@ def dedupe():
 
 
 def redis():
-    print("CA-4 Redis indisponivel (senha invalida so na credencial do workflow de TESTE; Redis compartilhado intocado. Host inalcancavel nao serve: o no reconecta para sempre)")
+    print("S3 Redis pendurado (senha invalida so na credencial do workflow de TESTE; executionTimeout reduzido a 20 s so durante o cenario; Redis compartilhado intocado)")
+    T = 20
     spec = importlib.util.spec_from_file_location("deploy_n8n", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
     d = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(d)
@@ -311,21 +312,37 @@ def redis():
         "host": "redis", "port": 6379, "database": CFG["redis"]["db"], "password": "senha-invalida-smoke", "ssl": False}})["id"]
     try:
         wf = api("GET", f"/workflows/{wid}")
+        wf["settings"]["executionTimeout"] = T
         for n in wf["nodes"]:
             if "redis" in n.get("credentials", {}):
                 n["credentials"]["redis"] = {"id": cid, "name": "Barbearia Vila Redis INVALIDA (smoke)"}
         api("PUT", f"/workflows/{wid}", d.corpo_put(wf))
         api("POST", f"/workflows/{wid}/publish", {})
         time.sleep(2)
-        checar("200 mesmo sem Redis", post(evento_texto(50, "sem redis")) == 200)
-        time.sleep(25)  # janela + folga: com Redis funcionando a entrega ja teria ocorrido
+        t0 = time.time()
+        checar("200 so apos gravar, mesmo sem Redis", post(evento_texto(50, "sem redis")) == 200)
+        vistas = False
+        while time.time() - t0 < T + 15:  # webhook ate a execucao sair de running (canceled)
+            run = [e for e in api("GET", f"/executions?workflowId={wid}&status=running&limit=50").get("data", [])]
+            vistas = vistas or bool(run)
+            if vistas and not run:
+                break
+            time.sleep(0.5)
+        dur = time.time() - t0
+        checar(f"execucao encerrada em <= {T}+2 s", vistas and dur <= T + 2, f"{dur:.1f}s")
         ls = [l for l in linhas() if l["tel"] == tel(50)]
         checar("mensagem gravada e pendente", len(ls) == 1 and not ls[0]["proc"] and not ls[0]["turno"], str(len(ls)))
-        # limite do no Redis do n8n: erro de conexao/auth nao sai pela saida de erro (o no reconecta sem fim), entao
-        # a falha NAO e registrada nesse caso; o registro cobre so erro de comando. Documentado, nao afirmado.
-        print("  info: falhas registradas para o contato:", falhas_de(tel(50)) or "nenhuma (esperado: o no fica pendurado)")
+        cid_c = contato_id(tel(50))
+        checar("tentativa em curso aberta", _vps.psql(BANCO, f"SELECT count(*) FROM tentativas_recepcao t JOIN mensagens m ON m.id=t.mensagem_id WHERE m.contato_id={cid_c};").strip() == "1")
+        # o vigia roda a cada 5 min; envelhece a tentativa (a margem real e execucao.timeout_s + 30 s) e espera o proximo ciclo
+        _vps.psql(BANCO, f"UPDATE tentativas_recepcao SET iniciada_em = now() - interval '1 hour' WHERE mensagem_id IN (SELECT id FROM mensagens WHERE contato_id={cid_c});")
+        esperar_f = time.time() + 330
+        while time.time() < esperar_f and "redis_indisponivel|tempo_esgotado" not in falhas_de(tel(50)):
+            time.sleep(10)
+        checar("vigia registrou redis_indisponivel|tempo_esgotado", "redis_indisponivel|tempo_esgotado" in falhas_de(tel(50)), str(falhas_de(tel(50))))
+        checar("tentativa baixada pelo vigia", _vps.psql(BANCO, f"SELECT count(*) FROM tentativas_recepcao t JOIN mensagens m ON m.id=t.mensagem_id WHERE m.contato_id={cid_c};").strip() == "0")
     finally:
-        rc = d.main(["integracao", "--so", "bv-recepcao"])  # restaura o JSON versionado
+        rc = d.main(["integracao", "--so", "bv-recepcao"])  # restaura o JSON versionado (inclui o executionTimeout)
         for e in api("GET", "/executions?status=running&limit=100").get("data", []):  # presas na credencial invalida
             if e["workflowId"] == wid:
                 api("POST", f"/executions/{e['id']}/stop", {})
@@ -334,6 +351,11 @@ def redis():
             api("DELETE", f"/credentials/{cid}")
         else:
             print("  ATENCAO: credencial invalida mantida (workflow ainda a referencia); restaure e apague a mao.")
+    time.sleep(2)
+    post(evento_texto(50, "de novo"))
+    ls = esperar(lambda ls: len(turnos(ls, tel(50))) >= 1, 60)
+    t = turnos(ls, tel(50))
+    checar("turno seguinte entrega as duas mensagens uma vez", len(t) == 1 and len(next(iter(t.values()))) == 2, str({k: len(v) for k, v in t.items()}))
     checar("400 malformado registrou falha", (post({"acao": "start", "token_origin": TOKEN, "mensagem": [{"type": "text", "text": "x"}]}) == 400)
            and (time.sleep(3) or int(_vps.psql(BANCO, "SELECT count(*) FROM falhas_recepcao WHERE tipo='payload_invalido' AND contato_id IS NULL AND ocorrida_em >= to_timestamp(%d);" % INICIO).strip()) >= 1))
 

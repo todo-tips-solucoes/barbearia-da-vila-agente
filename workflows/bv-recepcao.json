@@ -411,26 +411,54 @@
       ]
     },
     {
-      "parameters": {},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM tentativas_recepcao WHERE mensagem_id = $1::bigint",
+        "options": {
+          "queryReplacement": "={{ [$('Inserir mensagem').first().json.id] }}"
+        }
+      },
       "id": "a7f8e124-ea51-5a31-a56b-da85e688e119",
       "name": "Fim",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
       "position": [
         0,
         400
-      ]
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
-      "parameters": {},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM tentativas_recepcao WHERE mensagem_id = $1::bigint",
+        "options": {
+          "queryReplacement": "={{ [$('Inserir mensagem').first().json.id] }}"
+        }
+      },
       "id": "4cf150c1-cbcd-53b6-8f09-6b604e4c1cff",
       "name": "Fim Redis indisponivel",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
       "position": [
         240,
         400
-      ]
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -607,15 +635,29 @@
       ]
     },
     {
-      "parameters": {},
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM tentativas_recepcao WHERE mensagem_id = $1::bigint",
+        "options": {
+          "queryReplacement": "={{ [$('Inserir mensagem').first().json.id] }}"
+        }
+      },
       "id": "7c33dc3e-4377-536b-b484-7a8c9a828532",
       "name": "Fim sem posse",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
       "position": [
         240,
         600
-      ]
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -947,9 +989,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO falhas_recepcao (tipo, motivo, contato_id) VALUES ($1::text, $2::text, $3::bigint) RETURNING id",
+        "query": "WITH t AS (DELETE FROM tentativas_recepcao WHERE mensagem_id = $4::bigint) INSERT INTO falhas_recepcao (tipo, motivo, contato_id) VALUES ($1::text, $2::text, $3::bigint) RETURNING id",
         "options": {
-          "queryReplacement": "={{ ['entrega', 'entrega_falhou', $('Montar entrega').first().json.contato_id] }}"
+          "queryReplacement": "={{ ['entrega', 'entrega_falhou', $('Montar entrega').first().json.contato_id, $('Inserir mensagem').first().json.id] }}"
         }
       },
       "id": "cbf0788b-c687-5df2-9566-2fd53808416e",
@@ -1146,6 +1188,31 @@
       "position": [
         240,
         400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tentativas_recepcao (mensagem_id) VALUES ($1::bigint) ON CONFLICT (mensagem_id) DO NOTHING",
+        "options": {
+          "queryReplacement": "={{ [$('Inserir mensagem').first().json.id] }}"
+        }
+      },
+      "id": "a89c24ee-66ca-5860-95bd-742c18df8ba0",
+      "name": "Abrir tentativa",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        100
       ],
       "credentials": {
         "postgres": {
@@ -1687,7 +1754,7 @@
       "main": [
         [
           {
-            "node": "Marcar ultima",
+            "node": "Abrir tentativa",
             "type": "main",
             "index": 0
           }
@@ -1710,6 +1777,39 @@
         [
           {
             "node": "Responder 500",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Abrir tentativa": {
+      "main": [
+        [
+          {
+            "node": "Marcar ultima",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Liberar posse": {
+      "main": [
+        [
+          {
+            "node": "Fim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Liberar posse turno vazio": {
+      "main": [
+        [
+          {
+            "node": "Fim",
             "type": "main",
             "index": 0
           }

@@ -121,7 +121,8 @@ class WorkflowRecepcao(unittest.TestCase):
         r = n["Inserir mensagem"]["parameters"]["options"]["queryReplacement"]
         self.assertIn("{{BV:dedup.conteudo_janela_s}}", r)
         self.assertEqual(g["Responder 200 aceita"], [["Limpar marcas"]])
-        self.assertEqual(g["Limpar marcas"], [["Marcar ultima"]])
+        self.assertEqual(g["Limpar marcas"], [["Abrir tentativa"]])
+        self.assertEqual(g["Abrir tentativa"], [["Marcar ultima"]])
         self.assertEqual(n["Limpar marcas"]["onError"], "continueRegularOutput")
         self.assertIn("DELETE FROM marcas_conteudo", n["Limpar marcas"]["parameters"]["query"])
 
@@ -137,6 +138,21 @@ class WorkflowRecepcao(unittest.TestCase):
             self.assertIsInstance(cfg["execucao"]["timeout_s"], int)
             self.assertGreater(cfg["execucao"]["timeout_s"], cfg["buffer"]["teto_s"] + cfg["lock"]["espera_s"] * cfg["lock"]["tentativas"] + cfg["buffer"]["janela_s"])
             self.assertEqual(cfg["dedup"]["conteudo_janela_s"], 10)
+
+    def test_vigia_registra_tentativas_estouradas(self):  # block-003 / dec-025
+        _, wf = carregar("bv-vigia.json")
+        tipos = {n["name"]: n["type"] for n in wf["nodes"]}
+        self.assertIn("n8n-nodes-base.scheduleTrigger", tipos.values())
+        q = [n for n in wf["nodes"] if n["type"] == "n8n-nodes-base.postgres"][0]["parameters"]
+        self.assertIn("DELETE FROM tentativas_recepcao", q["query"])
+        self.assertIn("'tempo_esgotado'", q["query"])
+        self.assertIn("{{BV:execucao.timeout_s}}", q["options"]["queryReplacement"])
+        self.assertNotIn("conteudo", q["query"])  # sem PII
+        _, rc = carregar("bv-recepcao.json")
+        nos = {n["name"]: n for n in rc["nodes"]}
+        for fim in ("Fim", "Fim Redis indisponivel", "Fim sem posse"):
+            self.assertIn("DELETE FROM tentativas_recepcao", nos[fim]["parameters"]["query"])
+        self.assertIn("DELETE FROM tentativas_recepcao", nos["Registrar falha entrega"]["parameters"]["query"])
 
 
 if __name__ == "__main__":
