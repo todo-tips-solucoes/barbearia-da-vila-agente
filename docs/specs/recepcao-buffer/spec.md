@@ -3,7 +3,7 @@
 **Feature**: `recepcao-buffer`
 **Created**: 2026-10-18
 **Status**: Draft
-**Depende de**: `infra-base` (bancos, prefixos Redis por ambiente, deploy)
+**Depende de**: `infra-base` (bancos, prefixos do armazenamento temporário por ambiente, deploy)
 
 ## User Scenarios & Testing
 
@@ -107,14 +107,14 @@ TESTE e PROD têm cada um seu endereço de webhook, identificador e armazenament
 - **FR-001**: O sistema MUST registrar a URL de webhook vigente da conexão 145 antes de qualquer troca e MUST restaurá-la ao fim da captura, verificando a restauração.
 - **FR-002**: O sistema MUST capturar eventos reais da conexão 145 cobrindo ao menos texto, áudio, imagem e rajada de mensagens, e MUST derivar o formato do payload apenas desses eventos.
 - **FR-003**: Os fixtures versionados MUST ser anonimizados (sem telefone, nome ou conteúdo reais) preservando estrutura e tipos.
-- **FR-004**: O formato do payload (campos, identificação do contato, tipo, mídia, direção da mensagem) MUST constar em contrato documentado com fonte nos eventos capturados; nenhum nome de campo pode ser suposto. [NEEDS CLARIFICATION: se a captura não puder ser feita (ex.: owner indisponível para enviar mensagens), a feature aguarda o bloqueio humano ou segue com contrato provisório marcado como não confirmado?]
+- **FR-004**: O formato do payload (campos, identificação do contato, tipo, mídia, direção da mensagem) MUST constar em contrato documentado com fonte nos eventos capturados; nenhum nome de campo pode ser suposto. Se a captura não puder ser feita (ex.: owner indisponível para enviar mensagens), a feature MUST aguardar via bloqueio humano; contrato provisório/suposto é proibido (ver Clarifications).
 - **FR-005**: A recepção MUST autenticar a chamada do webhook e MUST recusar chamadas sem a credencial esperada.
 - **FR-006**: A recepção MUST aceitar apenas eventos de mensagem recebida de um cliente e MUST descartar, sem erro ao remetente e sem acionar o buffer, eventos de outros tipos, mensagens enviadas pela própria loja e tipos não suportados.
 - **FR-007**: A recepção MUST rejeitar payload malformado, registrando o motivo sem conteúdo pessoal.
 - **FR-008**: A recepção MUST normalizar cada mensagem aceita em um formato interno único contendo contato, tipo (texto, áudio ou imagem), conteúdo ou referência da mídia e momento de chegada.
 - **FR-009**: O sistema MUST manter, por contato, um buffer de mensagens com espera de 8 segundos reiniciada a cada nova mensagem do mesmo contato.
 - **FR-010**: Ao fim da espera, o sistema MUST entregar ao estágio seguinte, uma única vez, todas as mensagens acumuladas do contato, em ordem de chegada.
-- **FR-011**: O sistema MUST limitar a espera total máxima de uma rajada a um valor configurável. [NEEDS CLARIFICATION: qual o teto de espera total? Default proposto: 60 s.]
+- **FR-011**: O sistema MUST limitar a espera total máxima de uma rajada a um valor configurável. O teto default é 60 s, configurável (ver Clarifications).
 - **FR-012**: O sistema MUST garantir no máximo um turno em processamento por contato, mantendo mensagens novas para o turno seguinte sem perda nem duplicação.
 - **FR-013**: A posse do contato MUST expirar após um tempo máximo configurável, liberando-o se o processamento falhar ou travar.
 - **FR-014**: O sistema MUST descartar mensagens duplicadas (mesmo evento entregue mais de uma vez) dentro de uma janela configurável.
@@ -149,3 +149,10 @@ TESTE e PROD têm cada um seu endereço de webhook, identificador e armazenament
 - **SC-006**: A URL original do webhook da conexão 145 está restaurada e conferida ao final da captura.
 - **SC-007**: Nenhuma mensagem aceita é perdida em testes de reinício do armazenamento temporário e de falha de processamento (todas entregues ou registradas como falha).
 - **SC-008**: Nenhuma operação de TESTE altera dados ou chaves de PROD.
+
+## Clarifications
+
+### Session 2026-10-18
+
+- Q: Se a captura real não puder ser feita, aguarda ou segue com contrato provisório? -> A: Aguarda via bloqueio humano com o texto exato das mensagens a enviar; NUNCA contrato provisório. Fonte: Constitution VI (zero fabricação) e resposta do owner em block-001 (captura autorizada na conexão 145). Aplicado em FR-004.
+- Q: Teto de espera total da rajada? -> A: 60 s, configurável (default proposto aceito; evita starvation sem cortar rajadas legítimas). Aplicado em FR-011.
