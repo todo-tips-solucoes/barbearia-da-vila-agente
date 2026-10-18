@@ -46,6 +46,7 @@ jobs:
             yarn)
               if [ -f .yarnrc.yml ]; then corepack enable && yarn install --immutable; else yarn install --frozen-lockfile; fi ;;
             bun) npm install --global bun && bun install --frozen-lockfile ;;
+            nenhum) echo "sem dependências: projeto n8n publica JSON" ;;
             *) echo "::error::Gerenciador de pacotes '$GERENCIADOR' não suportado pelo template: edite este passo à mão."; exit 1 ;;
           esac
 

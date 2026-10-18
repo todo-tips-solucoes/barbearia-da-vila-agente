@@ -51,7 +51,7 @@ class T(unittest.TestCase):
     def test_segredo_plantado_detectado(self):
         import tempfile
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
-            f.write("ok\nPASSWORD=abcdefghijklmnopqrstuvwx\n")
+            f.write("ok\nPASSWORD=" + "abcdefghijklmnopqrstuvwx\n")  # concatenado para o varredor nao acusar o proprio fixture
         try:
             achados = vs.varrer([f.name])
         finally:

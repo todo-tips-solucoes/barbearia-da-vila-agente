@@ -39,7 +39,7 @@ Ref: FR-019, checklists/infra.md CHK008
 Ref: research.md P2/P3, FR-021
 
 - [x] 1.3.1 Implementar `verificar-infra.py --acesso` (`CONNECT` publico no database `n8n`, somente leitura) e `--backup` (rotina existente da stack, somente leitura)
-- [!] 1.3.2 Executar e registrar achados em `docs/infra.md`; `CONNECT` publico aberto -> bloqueio humano (decisao do owner, nao alterar a stack sozinho)
+- [x] 1.3.2 Executar e registrar achados em `docs/infra.md`; `CONNECT` publico aberto -> bloqueio humano (decisao do owner, nao alterar a stack sozinho) — resolvido: owner autorizou o REVOKE em 2026-10-18 (block-002), aplicado na fase 2.3
 
 ### 1.4 Sondagem dos ids de credenciais n8n (CHK021, P4/P6) `[A]`
 
