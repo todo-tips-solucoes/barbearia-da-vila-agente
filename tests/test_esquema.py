@@ -61,5 +61,17 @@ class Migracao0002(unittest.TestCase):
         self.assertLess(M2.index("IF NOT EXISTS (SELECT 1"), M2.index("UPDATE mensagens SET processada_em"))
 
 
+M3 = open("db/migrations/0003_falhas_recepcao.sql").read()
+
+
+class Migracao0003(unittest.TestCase):
+    def test_tabela_sem_pii_e_idempotente(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS falhas_recepcao", M3)
+        for c in ("tipo", "motivo", "contato_id", "ocorrida_em"):
+            self.assertIn(c, M3)
+        for proibido in ("telefone", "conteudo", "token"):
+            self.assertNotIn(proibido, M3.lower().split("\n", 1)[1])
+
+
 if __name__ == "__main__":
     unittest.main()

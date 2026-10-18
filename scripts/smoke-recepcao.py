@@ -1,6 +1,6 @@
 """Smoke da recepcao-buffer no TESTE (C2-C5, FR-021). So contatos sinteticos +55000000xxxx; so barbearia_vila_teste e Redis de TESTE.
-Uso: python3 -I scripts/smoke-recepcao.py [recepcao|duplicidade|limite|rajada|posse|concorrencia|teto ...] | --limpar
-Sem argumentos roda tudo (exceto teto, ~80 s: peca por nome) e limpa no fim. Token vem de .env.smoke (nunca impresso).
+Uso: python3 -I scripts/smoke-recepcao.py [recepcao|duplicidade|limite|rajada|posse|concorrencia|falha|redis|ttl|teto ...] | --limpar
+Sem argumentos roda tudo (exceto teto ~80 s e ttl ~5 min: peca por nome) e limpa no fim. Token vem de .env.smoke (nunca impresso).
 Exit 1 se algum cenario falhar."""
 import copy
 import importlib.util
@@ -22,6 +22,7 @@ FIX = os.path.join(RAIZ, "tests", "fixtures", "chatmaster")
 CFG = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
 URL = f"{CFG['n8n_url']}/webhook/{CFG['webhook']['path']}"
 _falhas = []
+INICIO = int(time.time()) - 5
 
 
 def _env(*arquivos):
@@ -198,6 +199,88 @@ def concorrencia():
         print(f"  latencia por turno: min {min(lats):.1f}s max {max(lats):.1f}s; {dentro:.0%} entre 8 e 10,5 s ({len(lats)} turnos)")
 
 
+def falhas_de(telefone):
+    sql = ("SELECT f.tipo||'|'||f.motivo FROM falhas_recepcao f JOIN contatos c ON c.id=f.contato_id "
+           f"WHERE c.telefone='{telefone}' ORDER BY f.id;")
+    return _vps.psql(BANCO, sql).strip().splitlines()
+
+
+def contato_id(telefone):
+    return _vps.psql(BANCO, f"SELECT id FROM contatos WHERE telefone='{telefone}';").strip()
+
+
+def posse_existe(telefone):
+    return _vps.redis(CFG["redis"]["db"], "EXISTS", f"{CFG['redis']['prefixo']}lock:{contato_id(telefone)}").strip() == "1"
+
+
+def falha():
+    print("SC-007 falha forcada de entrega (stub devolve ok:false para __falha__)")
+    post(evento_texto(40, "__falha__ teste"))
+    ls = esperar(lambda x: any(l["tel"] == tel(40) and l["turno_em"] for l in x), 30)
+    fim = time.time() + 30
+    while time.time() < fim and not falhas_de(tel(40)):
+        time.sleep(1.5)
+    ls = [l for l in linhas() if l["tel"] == tel(40)]
+    checar("mensagem volta a pendente", len(ls) == 1 and not ls[0]["proc"] and not ls[0]["turno"], str(len(ls)))
+    checar("falha registrada sem conteudo", falhas_de(tel(40)) == ["entrega|entrega_falhou"], str(falhas_de(tel(40))))
+    checar("posse liberada pelo dono", not posse_existe(tel(40)))
+
+
+def redis():
+    print("CA-4 Redis indisponivel (senha invalida so na credencial do workflow de TESTE; Redis compartilhado intocado. Host inalcancavel nao serve: o no reconecta para sempre)")
+    spec = importlib.util.spec_from_file_location("deploy_n8n", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
+    d = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(d)
+    api = d.Api(os.environ["N8N_API_URL"], os.environ["N8N_API_KEY"])
+    wid = CFG["workflows"]["bv-recepcao"]
+    cid = api("POST", "/credentials", {"name": "Barbearia Vila Redis INVALIDA (smoke)", "type": "redis", "data": {
+        "host": "redis", "port": 6379, "database": CFG["redis"]["db"], "password": "senha-invalida-smoke", "ssl": False}})["id"]
+    try:
+        wf = api("GET", f"/workflows/{wid}")
+        for n in wf["nodes"]:
+            if "redis" in n.get("credentials", {}):
+                n["credentials"]["redis"] = {"id": cid, "name": "Barbearia Vila Redis INVALIDA (smoke)"}
+        api("PUT", f"/workflows/{wid}", d.corpo_put(wf))
+        api("POST", f"/workflows/{wid}/publish", {})
+        time.sleep(2)
+        checar("200 mesmo sem Redis", post(evento_texto(50, "sem redis")) == 200)
+        time.sleep(25)  # janela + folga: com Redis funcionando a entrega ja teria ocorrido
+        ls = [l for l in linhas() if l["tel"] == tel(50)]
+        checar("mensagem gravada e pendente", len(ls) == 1 and not ls[0]["proc"] and not ls[0]["turno"], str(len(ls)))
+        # limite do no Redis do n8n: erro de conexao/auth nao sai pela saida de erro (o no reconecta sem fim), entao
+        # a falha NAO e registrada nesse caso; o registro cobre so erro de comando. Documentado, nao afirmado.
+        print("  info: falhas registradas para o contato:", falhas_de(tel(50)) or "nenhuma (esperado: o no fica pendurado)")
+    finally:
+        rc = d.main(["integracao", "--so", "bv-recepcao"])  # restaura o JSON versionado
+        for e in api("GET", "/executions?status=running&limit=100").get("data", []):  # presas na credencial invalida
+            if e["workflowId"] == wid:
+                api("POST", f"/executions/{e['id']}/stop", {})
+        checar("workflow restaurado", rc == 0)
+        if rc == 0:
+            api("DELETE", f"/credentials/{cid}")
+        else:
+            print("  ATENCAO: credencial invalida mantida (workflow ainda a referencia); restaure e apague a mao.")
+    checar("400 malformado registrou falha", (post({"acao": "start", "token_origin": TOKEN, "mensagem": [{"type": "text", "text": "x"}]}) == 400)
+           and (time.sleep(3) or int(_vps.psql(BANCO, "SELECT count(*) FROM falhas_recepcao WHERE tipo='payload_invalido' AND contato_id IS NULL AND ocorrida_em >= to_timestamp(%d);" % INICIO).strip()) >= 1))
+
+
+def ttl():
+    print("CA-5 posse expirada: turno lento (stub > lock.ttl_s) nao apaga a posse de outro turno (~5 min)")
+    ttl_s = CFG["lock"]["ttl_s"]
+    post(evento_texto(60, "__lento__ a"))
+    t0 = time.time()
+    esperar(lambda x: any(l["tel"] == tel(60) and l["turno_em"] for l in x), 30)
+    time.sleep(max(0, t0 + ttl_s + 15 - time.time()))  # posse do turno A ja expirou, A ainda no stub
+    post(evento_texto(60, "__lento__ b"))
+    esperar(lambda x: len({l["turno"] for l in x if l["tel"] == tel(60) and l["turno"]}) == 1
+            and len([l for l in x if l["tel"] == tel(60) and l["turno"]]) == 2, 40)
+    time.sleep(max(0, t0 + ttl_s + 15 + 8 + 20 + 25 + 10 - time.time()))  # A volta do stub (~ttl+25 apos sua entrega)
+    checar("posse do turno B sobrevive ao retorno do turno A", posse_existe(tel(60)))
+    ls = esperar(lambda x: all(l["proc"] for l in x if l["tel"] == tel(60)) and len([l for l in x if l["tel"] == tel(60)]) == 2, 200, 5)
+    mine = [l for l in ls if l["tel"] == tel(60)]
+    checar("as duas mensagens num unico turno, entregues uma vez", len(turnos(ls, tel(60))) == 1 and len(mine) == 2)
+
+
 def teto():
     print("C3 teto: 1 mensagem a cada 5 s por 70 s")
     for i in range(14):
@@ -211,6 +294,8 @@ def teto():
 
 def limpar():
     print("limpeza (TESTE)")
+    _vps.psql(BANCO, "DELETE FROM falhas_recepcao WHERE contato_id IN (SELECT id FROM contatos "
+                     f"WHERE telefone LIKE '{PREFIXO_TEL}%') OR (contato_id IS NULL AND ocorrida_em >= to_timestamp({INICIO}));")
     _vps.psql(BANCO, f"DELETE FROM contatos WHERE telefone LIKE '{PREFIXO_TEL}%';")  # mensagens caem por CASCADE
     spec = importlib.util.spec_from_file_location("limpar_redis", os.path.join(RAIZ, "scripts", "limpar-redis.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -221,7 +306,7 @@ def limpar():
 
 
 CENARIOS = dict(recepcao=recepcao, duplicidade=duplicidade, limite=limite, rajada=rajada, posse=posse,
-                concorrencia=concorrencia, teto=teto)
+                concorrencia=concorrencia, falha=falha, redis=redis, ttl=ttl, teto=teto)
 
 if __name__ == "__main__":
     _env(".env.smoke", ".env.n8n")
@@ -232,7 +317,7 @@ if __name__ == "__main__":
         sys.exit(0)
     if not TOKEN:
         sys.exit("CHATMASTER_TOKEN_TESTE ausente")
-    nomes = arg or [n for n in CENARIOS if n != "teto"]
+    nomes = arg or [n for n in CENARIOS if n not in ("teto", "ttl")]
     if any(n not in CENARIOS for n in nomes):
         sys.exit("cenario desconhecido")
     try:

@@ -17,7 +17,7 @@
     {
       "parameters": {
         "resume": "timeInterval",
-        "amount": "={{ {{BV:teste.atraso_entrega_s}} }}",
+        "amount": "={{ JSON.stringify($json.itens || []).includes('__lento__') ? {{BV:lock.ttl_s}} + 25 : {{BV:teste.atraso_entrega_s}} }}",
         "unit": "seconds"
       },
       "id": "2577ee19-f12d-5cc1-9636-8340697201c2",
@@ -31,7 +31,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const j = $('Gatilho').first().json;\nreturn [{ json: { ok: true, turno_id: j.turno_id, total: j.total } }];"
+        "jsCode": "const j = $('Gatilho').first().json;\n// so TESTE: marcadores sinteticos forcam falha (SC-007)\nconst ok = !JSON.stringify(j.itens || []).includes('__falha__');\nreturn [{ json: { ok, turno_id: j.turno_id, total: j.total } }];"
       },
       "id": "ab4baa9f-d815-5577-bed1-a955e412c5cf",
       "name": "Responder ok",

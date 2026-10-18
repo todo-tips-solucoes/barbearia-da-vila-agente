@@ -742,7 +742,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE mensagens SET processada_em = now() WHERE turno_id = $1::uuid AND processada_em IS NULL",
+        "query": "WITH u AS (UPDATE mensagens SET processada_em = now() WHERE turno_id = $1::uuid AND processada_em IS NULL RETURNING id) SELECT count(*)::int AS n FROM u",
         "options": {
           "queryReplacement": "={{ [$('Montar entrega').first().json.turno_id] }}"
         }
@@ -765,7 +765,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE mensagens SET turno_id = NULL, turno_em = NULL WHERE turno_id = $1::uuid AND processada_em IS NULL",
+        "query": "WITH u AS (UPDATE mensagens SET turno_id = NULL, turno_em = NULL WHERE turno_id = $1::uuid AND processada_em IS NULL RETURNING id) SELECT count(*)::int AS n FROM u",
         "options": {
           "queryReplacement": "={{ [$('Montar entrega').first().json.turno_id] }}"
         }
@@ -858,6 +858,177 @@
       "typeVersion": 1,
       "position": [
         960,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_recepcao (tipo, motivo, contato_id) VALUES ($1::text, $2::text, $3::bigint) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ ['redis_indisponivel', 'redis_indisponivel', $('Inserir mensagem').first().json.contato_id] }}"
+        }
+      },
+      "id": "40a851e6-2541-540b-a166-1721743b6bbd",
+      "name": "Registrar falha Redis",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_recepcao (tipo, motivo, contato_id) VALUES ($1::text, $2::text, $3::bigint) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ ['payload_invalido', String($('Normalizar').first().json.motivo || 'invalido'), null] }}"
+        }
+      },
+      "id": "6d508c0d-0e91-5cf4-8788-acf003720ccf",
+      "name": "Registrar falha payload",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1440,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "20bc5559-5ada-5c8b-b017-4ea23a2f69b2",
+              "leftValue": "={{ String(Number($json.n) > 0) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f4b1931c-7e5c-58af-93ef-3181276ff327",
+      "name": "Dono apos entrega?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_recepcao (tipo, motivo, contato_id) VALUES ($1::text, $2::text, $3::bigint) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ ['entrega', 'entrega_falhou', $('Montar entrega').first().json.contato_id] }}"
+        }
+      },
+      "id": "cbf0788b-c687-5df2-9566-2fd53808416e",
+      "name": "Registrar falha entrega",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8f8cd301-7e28-566d-bc08-d5ba7f543c7c",
+              "leftValue": "={{ String(Number($('Desmarcar turno').first().json.n) > 0) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7e5751f9-a4d5-56dd-a811-48278992666f",
+      "name": "Dono apos falha?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "49bbada7-95ef-52df-92cc-a377cc1dd844",
+              "leftValue": "={{ String(Date.now() - $('Decidir').first().json.inicioMs < {{BV:lock.ttl_s}} * 1000) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ca81d2ed-1747-52dd-be94-0ef84e718630",
+      "name": "Ainda dono vazio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
         800
       ]
     }
@@ -972,7 +1143,7 @@
         ],
         [
           {
-            "node": "Fim Redis indisponivel",
+            "node": "Registrar falha Redis",
             "type": "main",
             "index": 0
           }
@@ -1001,7 +1172,7 @@
         ],
         [
           {
-            "node": "Fim Redis indisponivel",
+            "node": "Registrar falha Redis",
             "type": "main",
             "index": 0
           }
@@ -1059,7 +1230,7 @@
         ],
         [
           {
-            "node": "Fim Redis indisponivel",
+            "node": "Registrar falha Redis",
             "type": "main",
             "index": 0
           }
@@ -1095,7 +1266,7 @@
         ],
         [
           {
-            "node": "Fim Redis indisponivel",
+            "node": "Registrar falha Redis",
             "type": "main",
             "index": 0
           }
@@ -1186,7 +1357,7 @@
       "main": [
         [
           {
-            "node": "Liberar posse turno vazio",
+            "node": "Ainda dono vazio?",
             "type": "main",
             "index": 0
           }
@@ -1240,7 +1411,7 @@
       "main": [
         [
           {
-            "node": "Liberar posse",
+            "node": "Dono apos entrega?",
             "type": "main",
             "index": 0
           }
@@ -1251,7 +1422,7 @@
       "main": [
         [
           {
-            "node": "Liberar posse apos falha",
+            "node": "Registrar falha entrega",
             "type": "main",
             "index": 0
           }
@@ -1263,6 +1434,93 @@
         [
           {
             "node": "Falha da entrega",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar falha Redis": {
+      "main": [
+        [
+          {
+            "node": "Fim Redis indisponivel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder 400": {
+      "main": [
+        [
+          {
+            "node": "Registrar falha payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dono apos entrega?": {
+      "main": [
+        [
+          {
+            "node": "Liberar posse",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar falha entrega": {
+      "main": [
+        [
+          {
+            "node": "Dono apos falha?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dono apos falha?": {
+      "main": [
+        [
+          {
+            "node": "Liberar posse apos falha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha da entrega",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ainda dono vazio?": {
+      "main": [
+        [
+          {
+            "node": "Liberar posse turno vazio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fim",
             "type": "main",
             "index": 0
           }
