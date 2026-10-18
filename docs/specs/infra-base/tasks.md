@@ -278,6 +278,6 @@ Ref: 5.3 · tipo: `partial` · severidade: `CRITICAL`
 
 A tarefa 5.3.1 exige criar `workflows/bv-verificacao.json` **e validá-lo com as skills de n8n antes do commit** (Princípio XII, MUST). O arquivo existe, foi implantado e funciona no TESTE (deploy idempotente e 403 sem token, `docs/infra.md`), mas não há registro de validação pelo MCP/skills do n8n (`validate_workflow` ou equivalente). Falta só a validação e o registro dela; o JSON pode ficar como está se passar.
 
-- [ ] 9.1.1 Validar `workflows/bv-verificacao.json` com o MCP/skills de n8n (validação de workflow, nós `webhook` 2.2 e `respondToWebhook` 1.1), corrigir erros reais (falsos positivos documentados) e registrar o resultado em `docs/infra.md`
+- [x] 9.1.1 Validar `workflows/bv-verificacao.json` com o MCP/skills de n8n (validação de workflow, nós `webhook` 2.2 e `respondToWebhook` 1.1), corrigir erros reais (falsos positivos documentados) e registrar o resultado em `docs/infra.md`
 
 <!-- converge-key: 4414f9e31428 -->
