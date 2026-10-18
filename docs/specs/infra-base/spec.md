@@ -86,7 +86,7 @@ O mantenedor precisa de um arquivo de configuração por ambiente (sem segredos)
 
 ### Session 2026-10-18
 
-- Q: Prefixos Redis e database lógico? → A: `bv:` (PROD) e `bv:teste:` (TESTE) em DB dedicado ≠ 0 e ≠ 1; DB 2 proposto, a confirmar livre (dec-010).
+- Q: Prefixos Redis e database lógico? → A: `bv:` (PROD) e `bv:teste:` (TESTE) em DB dedicado ≠ 0 e ≠ 1; DB 2 proposto, a confirmar livre (dec-010). **Revisado no plan (2026-10-18)**: `bv:` é prefixo textual de `bv:teste:` e violava FR-008; prefixos passam a `bv:prod:` (PROD) e `bv:teste:` (TESTE), disjuntos (research.md Decision 2).
 - Q: Local e nomes dos segredos? → A: VPS `/root/barbearia_vila/infra.env` (600) com `PG_PASSWORD`/`PG_TESTE_PASSWORD`; local `.env.n8n` do Gold + `.env.smoke` (dec-011).
 - Q: Bancos novos entram no backup atual? → A: Assumir que não; backup `pg_dump -Fc` é requisito, frequência/retenção no plan (dec-012).
 
@@ -113,8 +113,8 @@ O mantenedor precisa de um arquivo de configuração por ambiente (sem segredos)
 - **FR-017**: Todo dado factual dos artefatos desta feature (nomes de credenciais, ids, portas, caminhos) MUST vir de fonte rastreável (documentação do projeto, doc oficial do n8n, leitura da própria VPS ou instância); sem fonte, MUST ser tratado como pendência, nunca suposto (Princípio XVI).
 - **FR-018**: Os scripts de infra MUST ter verificação automatizada de pelo menos: idempotência (segunda execução sem mudança), recusa do PROD sem confirmação e ausência de segredos no repositório.
 
-> Decisões de infraestrutura: backup/restore dos bancos novos e retenção ficam delegados à rotina de backup já existente da stack n8n; este escopo apenas registra se os novos bancos estão cobertos (pendência aberta abaixo). Scheduling, rotação de chaves e refresh de token: N/A (feature de infraestrutura sem scheduler próprio; mensagens agendadas pertencem a `mensagens-agendadas`).
-- **FR-019**: Redis: prefixos `bv:` (PROD) e `bv:teste:` (TESTE) — a verificação de FR-008 MUST considerar que `bv:` é prefixo textual de `bv:teste:` e, portanto, a limpeza de PROD MUST usar um padrão que exclua `bv:teste:`. Ambos MUST usar um database lógico dedicado, distinto de 0 (n8n) e 1 (Gold); DB 2 é o proposto e MUST ser confirmado livre por sondagem somente leitura antes do uso.
+> Decisões de infraestrutura: backup dos bancos novos conforme FR-021 (não se assume cobertura pela rotina existente da stack; frequência e retenção pendentes do owner). Scheduling, rotação de chaves e refresh de token: N/A (feature de infraestrutura sem scheduler próprio; mensagens agendadas pertencem a `mensagens-agendadas`).
+- **FR-019**: Redis: prefixos `bv:prod:` (PROD) e `bv:teste:` (TESTE), disjuntos — nenhum é prefixo textual do outro (FR-008), e a limpeza de um ambiente por `<prefixo>*` nunca atinge o outro. Ambos MUST usar um database lógico dedicado, distinto de 0 (n8n) e 1 (Gold); DB 2 é o proposto e MUST ser confirmado livre por sondagem somente leitura antes do uso. *(Revisado no plan: a versão da clarify usava `bv:` para PROD, que é prefixo de `bv:teste:`.)*
 - **FR-020**: Segredos: na VPS, `/root/barbearia_vila/infra.env` (dono root, modo 600) com `PG_PASSWORD` e `PG_TESTE_PASSWORD`; localmente, reusar o `.env.n8n` do projeto Gold e o `.env.smoke`; nenhum segredo no repositório.
 - **FR-021**: Backup: os bancos novos MUST ser tratados como NÃO cobertos por rotina existente; o sistema MUST fornecer backup `pg_dump -Fc` de `barbearia_vila` e `barbearia_vila_teste`. Frequência e retenção são parâmetros definidos no plan; uma sondagem somente leitura da rotina existente da stack na execução pode reduzir o escopo.
 
