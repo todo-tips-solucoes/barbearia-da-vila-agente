@@ -19,6 +19,11 @@
     "chatmaster": ""
   },
   "workflows": {
-    "bv-verificacao": "uoDF0RFEgzAtKUay"
+    "bv-verificacao": "uoDF0RFEgzAtKUay",
+    "bv-captura": "wXcRwAdqRnGgRzA9"
+  },
+  "captura": {
+    "path": "bv-captura-b889464c-5ec6-4aba-9ff3-5617408bec13",
+    "webhook_id": "36773219-e73a-4a9d-a8d8-25d26afcdeb5"
   }
 }

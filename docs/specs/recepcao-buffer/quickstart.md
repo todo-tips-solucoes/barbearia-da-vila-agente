@@ -7,7 +7,7 @@ Tudo no TESTE. Nenhum cenário toca PROD (SC-008).
 1. `python3 -I scripts/capturar-webhook.py anotar` → lê a conexão 145 em `whatsapp-status` e grava a URL atual em `.captura-145.url` (sem URL na resposta: para e pede ao owner).
 2. `deploy-n8n.sh integracao --so bv-captura` → publica o webhook de captura.
 3. `capturar-webhook.py trocar` → `whatsapp/update` com o webhook de captura.
-4. Owner, do celular de teste, envia ao número da conexão 145: (a) um texto "teste 1"; (b) um áudio curto; (c) uma imagem; (d) três textos seguidos "a", "b", "c" em menos de 8 s. A loja responde uma mensagem pelo painel (evento enviado pela loja).
+4. Owner, do celular de teste, envia ao número da conexão 145: (a) um texto "teste 1"; (b) um áudio curto; (c) uma imagem; (d) três textos seguidos "a", "b", "c" em menos de 8 s. A loja responde uma mensagem pelo painel (evento enviado pela loja); (e) um evento que não é mensagem, se o canal emitir (ex.: mudança de status/presença, sem supor qual); (f) uma mensagem enviada de um grupo em que o celular de teste e a conexão estejam, se existir. O que o canal não emitir é registrado como não observado.
 5. `capturar-webhook.py restaurar` → volta a URL anotada e relê o status.
 6. `capturar-webhook.py fixtures` → lê as execuções, mantém só eventos do celular de teste, anonimiza, grava `tests/fixtures/chatmaster/`, apaga todas as execuções da captura e lista os tipos de evento observados.
 
@@ -35,6 +35,12 @@ Tudo no TESTE. Nenhum cenário toca PROD (SC-008).
 
 1. Posta o mesmo fixture duas vezes → uma linha só.
 2. Confere que nenhuma chave `bv:prod:` nem linha em `barbearia_vila` foi criada; `deploy-n8n.sh producao` sem trava/sem `webhook.path` de PROD → aborta.
+
+## C6 - Gaps de checklist (CA-1 a CA-5 da spec)
+
+1. Redis indisponível após a gravação (CA-4): smoke interrompe o acesso ao Redis de TESTE só pelo tempo da espera; mensagem segue pendente e sai com a próxima do contato.
+2. Posse expirada (CA-5): stub com `teste.atraso_entrega_s` > `lock.ttl_s` em contato sintético; o retorno tardio não marca linhas de outro `turno_id`.
+3. Instante de vencimento (CA-2) e payload acima do limite (CA-3): `rajada.test.js` (puro) e um post de smoke acima de `payload.max_kb`.
 
 ## Limpeza
 

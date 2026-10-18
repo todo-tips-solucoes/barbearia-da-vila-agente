@@ -14,7 +14,9 @@ Sem segredos; valores numéricos em segundos/horas no nome da chave.
 | `lock.espera_s` | 3 | 3 | intervalo entre tentativas |
 | `lock.tentativas` | 45 | 45 | `espera_s × tentativas >= ttl_s` |
 | `redis.ttl.ultima_s` | 120 | 120 | validade do token `ultima` |
-| `midia.retencao_h` | 24 | 24 | só se `midias_recebidas` existir |
+| `midia.retencao_h` | 24 | 24 | só se `midias_recebidas` existir `[PROPOSTA — CHK026 aguarda o owner]` |
+| `dedup.janela_h` | 24 | 24 | janela de deduplicação por id do canal (FR-014/FR-023) `[PROPOSTA]` |
+| `payload.max_kb` | 2048 | 2048 | limite de payload/mídia (FR-022) `[PROPOSTA — sem fonte externa; ajustar após a captura]` |
 | `teste.atraso_entrega_s` | 3 | ausente | stub de entrega no TESTE |
 | `teste.contatos_sinteticos` | lista de telefones fictícios | ausente | smoke; nunca número real |
 | `workflows.bv-recepcao`, `workflows_sub.entregar_rajada`, `workflows.bv-captura` | ids | ids (sem captura) | deploy |

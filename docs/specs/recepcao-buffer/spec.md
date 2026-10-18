@@ -105,7 +105,7 @@ TESTE e PROD têm cada um seu endereço de webhook, identificador e armazenament
 ### Functional Requirements
 
 - **FR-001**: O sistema MUST registrar a URL de webhook vigente da conexão 145 antes de qualquer troca e MUST restaurá-la ao fim da captura, verificando a restauração.
-- **FR-002**: O sistema MUST capturar eventos reais da conexão 145 cobrindo ao menos texto, áudio, imagem e rajada de mensagens, e MUST derivar o formato do payload apenas desses eventos.
+- **FR-002**: O sistema MUST capturar eventos reais da conexão 145 cobrindo ao menos texto, áudio, imagem e rajada de mensagens e, quando o canal os emitir, mensagem enviada pela loja, evento que não é mensagem (ex.: status) e mensagem de grupo (sem supor como serão identificados; a identificação sai da captura), e MUST derivar o formato do payload apenas desses eventos.
 - **FR-003**: Os fixtures versionados MUST ser anonimizados (sem telefone, nome ou conteúdo reais) preservando estrutura e tipos.
 - **FR-004**: O formato do payload (campos, identificação do contato, tipo, mídia, direção da mensagem) MUST constar em contrato documentado com fonte nos eventos capturados; nenhum nome de campo pode ser suposto. Se a captura não puder ser feita (ex.: owner indisponível para enviar mensagens), a feature MUST aguardar via bloqueio humano; contrato provisório/suposto é proibido (ver Clarifications).
 - **FR-005**: A recepção MUST autenticar a chamada do webhook e MUST recusar chamadas sem a credencial esperada.
@@ -125,6 +125,11 @@ TESTE e PROD têm cada um seu endereço de webhook, identificador e armazenament
 - **FR-019**: Logs e registros persistentes MUST NOT conter telefone ou texto de cliente além do estritamente necessário e MUST NOT conter segredos.
 - **FR-020**: O sistema MUST expor ao estágio seguinte (feature 3) um contrato estável de entrega do turno (formato da mensagem normalizada e semântica de liberação do contato ao terminar).
 - **FR-021**: A suíte de testes de TESTE MUST cobrir todos os cenários de aceitação acima usando os fixtures anonimizados e MUST limpar o que criar.
+- **FR-022**: A recepção MUST rejeitar (sem entrar no buffer e sem expor conteúdo) payload ou mídia acima de um limite de tamanho configurável (`payload.max_kb`, valor `[PROPOSTA]` em `contracts/config-recepcao.md`; sem fonte externa que o fixe), evitando abuso de memória com mídia em base64.
+- **FR-023**: A janela de deduplicação (FR-014) MUST ser configurável (`dedup.janela_h`, default `[PROPOSTA]` 24 h) e a duplicata MUST ser decidida pelo identificador da mensagem no canal, com a garantia de unicidade do banco dentro da janela.
+- **FR-024**: Para a mensagem que chega no instante do vencimento da espera, a regra é determinística (ver "Regra do instante de vencimento"): a ordem é a da gravação do token `ultima`; nunca perda nem duplicidade.
+- **FR-025**: Com o armazenamento temporário indisponível ou reiniciado durante a espera, a mensagem já gravada no banco MUST permanecer pendente (nunca descartada) e MUST ser entregue no turno seguinte; a falha MUST ser registrada sem conteúdo pessoal e a chamada ao Chat Master MUST NOT receber erro por isso após a gravação.
+- **FR-026**: A entrega do turno MUST ser idempotente por `turno_id`: se o processamento exceder o TTL da posse e outro turno do mesmo contato iniciar, o estágio seguinte MUST tolerar a repetição (ver `contracts/entrega-turno.md`).
 
 > Decisões de infraestrutura: scheduling não se aplica (reação a eventos); mutex entre execuções = FR-012/FR-013; idempotência = FR-014; backup N/A (armazenamento temporário descartável); rotação de chaves e refresh de token externo N/A.
 
@@ -136,6 +141,21 @@ TESTE e PROD têm cada um seu endereço de webhook, identificador e armazenament
 - **Posse do contato**: marca de que um turno está em processamento, com expiração.
 - **Turno**: conjunto ordenado de mensagens entregue de uma vez ao estágio seguinte.
 - **Fixture**: evento capturado e anonimizado, versionado para testes.
+
+## Regra do instante de vencimento (FR-024)
+
+Cada execução grava a mensagem no banco, depois `SET ultima` com o id dela, espera `buffer.janela_s` e relê `ultima`.
+- `ultima` != id da própria mensagem (há uma posterior): esta execução NÃO entrega; a posterior reinicia a espera.
+- `ultima` == id da própria mensagem (ou teto atingido): a execução obtém a posse e marca o turno com um único UPDATE atômico sobre as pendentes (`turno_id IS NULL AND processada_em IS NULL`). Só as linhas existentes nesse instante entram no turno.
+- Mensagem gravada depois desse UPDATE fica pendente e é entregue pela execução dela, após a posse ser liberada: turno seguinte, sem perda nem duplicidade.
+
+## Cenários de aceite adicionais (gaps de checklist)
+
+- **CA-1 (FR-023)**: Given um evento já gravado, When o mesmo identificador chega de novo dentro da janela, Then nenhuma linha nova e nenhum segundo turno.
+- **CA-2 (FR-024)**: Given a espera de A vencendo, When B chega entre a leitura de `ultima` por A e o UPDATE do turno, Then B não entra no turno de A, é entregue em turno próprio, uma única vez.
+- **CA-3 (FR-022)**: Given payload acima de `payload.max_kb`, When chega, Then é rejeitado (400), sem linha e sem chave Redis.
+- **CA-4 (FR-025)**: Given o Redis indisponível após a gravação, When a espera falha, Then a mensagem continua pendente e é entregue junto com a próxima mensagem do contato; nada é perdido em silêncio (SC-007).
+- **CA-5 (FR-026)**: Given um turno que excedeu o TTL e um segundo turno iniciado, When o primeiro retorna, Then o resultado é ignorado sem marcar outras mensagens e a entrega repetida não duplica efeito.
 
 ## Success Criteria
 

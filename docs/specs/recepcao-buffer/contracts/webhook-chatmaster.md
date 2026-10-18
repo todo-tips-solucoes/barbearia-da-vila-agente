@@ -15,6 +15,9 @@ Respostas: `200` sem corpo para todo evento autenticado (aceito ou descartado, F
 corpo para credencial ausente ou inválida (FR-005); `400` sem corpo para payload malformado (FR-007).
 Autenticação: research D4.
 
+Limite de tamanho: payload acima de `payload.max_kb` (config, `[PROPOSTA]`) é rejeitado com `400`
+sem log de conteúdo (FR-022). A captura mede o tamanho real dos eventos de mídia para calibrar o valor.
+
 ## Hipóteses a confirmar na captura (fonte: documentação, não contrato)
 
 | Pergunta | O que a doc diz | Fonte |

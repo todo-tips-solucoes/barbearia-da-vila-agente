@@ -21,36 +21,36 @@ Escopo: recepcao do webhook do Chat Master Veloz (conexao 145), buffer "ultima m
 
 Ref: checklists/api-seguranca-confiabilidade.md CHK004, CHK012; spec.md FR-002, FR-006
 
-- [ ] 1.1.1 Ajustar spec.md FR-002 para exigir na captura tambem eventos "enviada pela loja", "nao mensagem" (status etc.) e "grupo", quando o canal os emitir
-- [ ] 1.1.2 Acrescentar ao roteiro de captura (quickstart.md) o pedido desses eventos ao owner, sem supor como serao identificados
-- [ ] 1.1.3 Acrescentar requisito de limite de tamanho do payload/midia (valor `[PROPOSTA]` em config, sem inventar fonte) em spec.md e contracts/webhook-chatmaster.md
-- [ ] 1.1.4 Reexecutar o gate de requisitos e marcar CHK004 e CHK012 no checklist
+- [x] 1.1.1 Ajustar spec.md FR-002 para exigir na captura tambem eventos "enviada pela loja", "nao mensagem" (status etc.) e "grupo", quando o canal os emitir
+- [x] 1.1.2 Acrescentar ao roteiro de captura (quickstart.md) o pedido desses eventos ao owner, sem supor como serao identificados
+- [x] 1.1.3 Acrescentar requisito de limite de tamanho do payload/midia (valor `[PROPOSTA]` em config, sem inventar fonte) em spec.md e contracts/webhook-chatmaster.md
+- [x] 1.1.4 Reexecutar o gate de requisitos e marcar CHK004 e CHK012 no checklist
 
 ### 1.2 Deduplicacao e instante de vencimento (CHK017, CHK018) `[A]`
 
 Ref: checklists/api-seguranca-confiabilidade.md CHK017, CHK018; spec.md FR-014, Edge Cases
 
-- [ ] 1.2.1 Definir em contracts/config-recepcao.md a chave e o valor default da janela de deduplicacao (FR-014)
-- [ ] 1.2.2 Especificar a regra deterministica para mensagem no instante do vencimento dos 8 s (corrente ou seguinte) em spec.md e plan.md
-- [ ] 1.2.3 Escrever o criterio de aceite testavel de ambos como cenarios em spec.md
-- [ ] 1.2.4 Marcar CHK017 e CHK018 no checklist
+- [x] 1.2.1 Definir em contracts/config-recepcao.md a chave e o valor default da janela de deduplicacao (FR-014)
+- [x] 1.2.2 Especificar a regra deterministica para mensagem no instante do vencimento dos 8 s (corrente ou seguinte) em spec.md e plan.md
+- [x] 1.2.3 Escrever o criterio de aceite testavel de ambos como cenarios em spec.md
+- [x] 1.2.4 Marcar CHK017 e CHK018 no checklist
 
 ### 1.3 Redis indisponivel e posse expirada (CHK019, CHK022) `[A]`
 
 Ref: checklists/api-seguranca-confiabilidade.md CHK019, CHK022; spec.md FR-013, SC-007; contracts/entrega-turno.md
 
-- [ ] 1.3.1 Definir o comportamento com Redis reiniciado/indisponivel durante a espera (sem perda silenciosa; mensagens ja gravadas no Postgres) em spec.md
-- [ ] 1.3.2 Definir em contracts/entrega-turno.md o que ocorre se a feature 3 exceder o TTL da posse (turno duplicado) e o dever de idempotencia da entrega
-- [ ] 1.3.3 Acrescentar cenarios de teste correspondentes ao plano de smoke
-- [ ] 1.3.4 Marcar CHK019 e CHK022 no checklist
+- [x] 1.3.1 Definir o comportamento com Redis reiniciado/indisponivel durante a espera (sem perda silenciosa; mensagens ja gravadas no Postgres) em spec.md
+- [x] 1.3.2 Definir em contracts/entrega-turno.md o que ocorre se a feature 3 exceder o TTL da posse (turno duplicado) e o dever de idempotencia da entrega
+- [x] 1.3.3 Acrescentar cenarios de teste correspondentes ao plano de smoke
+- [x] 1.3.4 Marcar CHK019 e CHK022 no checklist
 
 ### 1.4 Retencao de midia e eventos brutos (CHK026, pendencia do owner) `[M]`
 
 Ref: checklists/api-seguranca-confiabilidade.md CHK026; contracts/config-recepcao.md `midia.retencao_h`
 
-- [ ] 1.4.1 Registrar a pergunta ao owner (retencao de midia 24 h e de eventos brutos capturados aceitavel?) sem assumir resposta
-- [ ] 1.4.2 Manter `midia.retencao_h` como `[PROPOSTA]` ate a resposta; se a resposta bloquear a tarefa 4.2, registrar bloqueio humano ao executa-la
-- [ ] 1.4.3 Ao receber a resposta, ajustar config/contrato e marcar CHK026
+- [x] 1.4.1 Registrar a pergunta ao owner (retencao de midia 24 h e de eventos brutos capturados aceitavel?) sem assumir resposta
+- [x] 1.4.2 Manter `midia.retencao_h` como `[PROPOSTA]` ate a resposta; se a resposta bloquear a tarefa 4.2, registrar bloqueio humano ao executa-la
+- [!] 1.4.3 (aguarda owner) Ao receber a resposta, ajustar config/contrato e marcar CHK026
 
 ---
 
@@ -60,18 +60,18 @@ Ref: checklists/api-seguranca-confiabilidade.md CHK026; contracts/config-recepca
 
 Ref: spec.md FR-001, FR-002, FR-003; plan.md "Estrutura"
 
-- [ ] 2.1.1 Criar workflows/bv-captura.json (so TESTE): webhook que responde 200 e guarda a execucao, validado pelo MCP do n8n
-- [ ] 2.1.2 Criar scripts/capturar-webhook.py com passos idempotentes: anotar URL atual da conexao 145, trocar, restaurar e gerar fixtures
-- [ ] 2.1.3 Guardar a URL original em `.captura-145.url` (adicionar ao .gitignore) e recusar captura em PROD
-- [ ] 2.1.4 Testes unitarios do script (sem rede) para recusa em PROD e idempotencia da restauracao
+- [x] 2.1.1 Criar workflows/bv-captura.json (so TESTE): webhook que responde 200 e guarda a execucao, validado pelo MCP do n8n (MCP indisponivel nesta sessao: validado por deploy + sonda sintetica real, id wXcRwAdqRnGgRzA9; reconferir pelo MCP quando disponivel)
+- [x] 2.1.2 Criar scripts/capturar-webhook.py com passos idempotentes: anotar URL atual da conexao 145, trocar, restaurar e gerar fixtures
+- [x] 2.1.3 Guardar a URL original em `.captura-145.url` (adicionar ao .gitignore) e recusar captura em PROD
+- [x] 2.1.4 Testes unitarios do script (sem rede) para recusa em PROD e idempotencia da restauracao
 
 ### 2.2 Captura com o owner (bloqueio humano) `[C]`
 
 Ref: spec.md FR-004, Clarifications; research.md D2, D3; block-001
 
-- [ ] 2.2.1 Registrar a URL atual do webhook da 145 (via API; se nao devolver, bloqueio humano pedindo a URL)
-- [ ] 2.2.2 Registrar bloqueio humano com o texto exato das mensagens que o owner deve enviar do celular (texto, audio, imagem, rajada e os eventos de 1.1) e o numero de destino da conexao 145
-- [ ] 2.2.3 Trocar o webhook para o de captura e coletar os eventos enviados pelo owner
+- [x] 2.2.1 Registrar a URL atual do webhook da 145 (via API; se nao devolver, bloqueio humano pedindo a URL)
+- [x] 2.2.2 Registrar bloqueio humano com o texto exato das mensagens que o owner deve enviar do celular (texto, audio, imagem, rajada e os eventos de 1.1) e o numero de destino da conexao 145
+- [~] 2.2.3 (webhook TROCADO e ativo; aguardando mensagens do owner, block pendente) Trocar o webhook para o de captura e coletar os eventos enviados pelo owner
 - [ ] 2.2.4 Restaurar o webhook original e conferir consultando a conexao (SC-006); apagar execucoes brutas do n8n
 
 ### 2.3 Fixtures anonimizados e contrato do webhook `[C]`

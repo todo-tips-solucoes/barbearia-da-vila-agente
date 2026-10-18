@@ -74,6 +74,11 @@ Upsert contato → Inserir mensagem `ON CONFLICT DO NOTHING` (sem linha → fim)
 (vazio: liberar, fim) → Marcar `turno_id`/`turno_em` → Execute `entregar-rajada` → [ok: marcar
 `processada_em`] [falha: desmarcar turno] → `DEL lock` → falha termina em Stop and Error.
 
+## Regra do instante de vencimento
+
+Decidida em `spec.md` (FR-024): ordem do `SET ultima`; o turno é marcado por um único UPDATE atômico
+sobre as pendentes; quem chega depois forma o turno seguinte. Redis indisponível: FR-025.
+
 ## Ordem de entrega
 
 1. Captura e contrato (US1) — bloqueia o resto; inclui bloqueio humano para as mensagens do owner.
