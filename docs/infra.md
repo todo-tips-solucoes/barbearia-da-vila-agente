@@ -89,3 +89,12 @@ Sugestao de hook `PreToolUse` (Bash) em `.claude/settings.json` que recuse coman
 - `bv-recepcao` (TESTE) publicado com `executionTimeout` = 300 s (`execucao.timeout_s`, `[PROPOSTA]`: maior que `buffer.teto_s` + `lock.espera_s` x `lock.tentativas` + `buffer.janela_s`). Smoke: `gravacao` e `dedupe` verdes; regressao (`recepcao duplicidade limite rajada posse concorrencia falha`) verde.
 - Nao medido: cenario `contato_falhou` ao vivo (so teste estatico) e o cancelamento por timeout de 300 s no workflow real.
 
+
+### Validação pelo MCP do n8n (recepcao-robustez, 2026-10-18)
+
+Feita pela sessão coordenadora com `get_workflow_details`:
+
+| Workflow | Id | Nós (n8n = repo) | `executionTimeout` | Ativo | Versão publicada = rascunho |
+|---|---|---|---|---|---|
+| Barbearia Vila - Recepcao [TESTE] | `iaUbATlT7xkZArVd` | 49 = 49 | 300 | sim | sim |
+| Barbearia Vila - Vigia da recepcao [TESTE] | `fzJA2yWESqiPXyib` | 2 = 2 | — | sim | sim |

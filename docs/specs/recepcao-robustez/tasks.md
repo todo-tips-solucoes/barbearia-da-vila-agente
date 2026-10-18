@@ -110,7 +110,7 @@ Ref: spec.md FR-006..FR-009; research.md Decision 3 (sonda 2); contracts/recepca
 
 Ref: spec.md FR-016, FR-018; Constitution XII, XIII
 
-- [!] 5.1.1 (MCP nativo do n8n indisponivel nesta sessao; validado so por deploy/PUT/publish e smoke) Validar `bv-recepcao` pelo MCP nativo do n8n (`validate_workflow`) antes do commit
+- [x] 5.1.1 (validado pelo MCP do n8n na sessao coordenadora em 2026-10-18: `get_workflow_details` de `iaUbATlT7xkZArVd` = 49 nos e `executionTimeout` 300 iguais ao repo, ativo, activeVersion = draft; `fzJA2yWESqiPXyib` (vigia) = 2 nos iguais ao repo. `validate_workflow` do MCP valida codigo do Workflow SDK, nao JSON, por isso nao se aplica) Validar `bv-recepcao` pelo MCP nativo do n8n (`validate_workflow`) antes do commit
 - [x] 5.1.2 Publicar só no TESTE com `scripts/deploy-n8n.sh integracao` e conferir `get_workflow_details` (ativo, versão publicada)
 - [x] 5.1.3 Confirmar que nada foi publicado em PROD
 
