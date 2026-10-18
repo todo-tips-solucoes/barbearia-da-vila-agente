@@ -131,13 +131,13 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 
 ### Session 2026-10-18
 
-(Pendente; três marcadores `[NEEDS CLARIFICATION]` em FR-001, FR-007 e FR-012.)
+(Q1 resolvida (dec-008); pendentes FR-007 (block-001) e FR-012 (block-002).)
 
 ## Requirements
 
 ### Functional Requirements
 
-- **FR-001**: O sistema MUST oferecer ao cliente todos os inícios livres devolvidos pela Graces em que o serviço escolhido cabe inteiro, sem limitar a 3 a 5 sugestões e sem ocultar nenhum, e MUST NOT oferecer início que não tenha vindo da consulta de horários livres feita na mesma conversa. [NEEDS CLARIFICATION: como apresentar muitos inícios quando excedem o tamanho máximo de uma lista do canal (várias listas, agrupamento por período do dia ou por barbeiro)?]
+- **FR-001**: O sistema MUST oferecer ao cliente todos os inícios livres devolvidos pela Graces em que o serviço escolhido cabe inteiro, sem limitar a 3 a 5 sugestões e sem ocultar nenhum, e MUST NOT oferecer início que não tenha vindo da consulta de horários livres feita na mesma conversa. Quando excederem o tamanho máximo de uma lista do canal, MUST enviar várias listas em sequência cronológica até esgotar todos os inícios (clarify Q1, dec-008).
 - **FR-002**: Para "qualquer barbeiro", o sistema MUST consultar cada barbeiro elegível do serviço, excluindo o barbeiro de teste, e unir os inícios identificando o barbeiro de cada um.
 - **FR-003**: Antes da confirmação, quando o cliente tiver seção de pacote aplicável ao serviço, o sistema MUST perguntar, por botão de lista, se ele quer usar a sessão do pacote ou pagar avulso, e MUST NOT escolher por ele. Sem seção aplicável, MUST NOT perguntar.
 - **FR-004**: Havendo mais de uma seção aplicável, o sistema MUST usar a primeira devolvida pela Graces, informando ao cliente que será abatido do pacote. (Regra de `graces-api/05-fluxos-do-agente.md`; a barbearia pode revisar.)
