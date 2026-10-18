@@ -82,6 +82,14 @@ O mantenedor precisa de um arquivo de configuração por ambiente (sem segredos)
 - Deploy apontando para um id de workflow inexistente no ambiente: o script falha sem criar workflow novo às cegas.
 - Dados de clientes (nome, telefone, histórico): a estrutura guarda apenas o necessário (LGPD).
 
+## Clarifications
+
+### Session 2026-10-18
+
+- Q: Prefixos Redis e database lógico? → A: `bv:` (PROD) e `bv:teste:` (TESTE) em DB dedicado ≠ 0 e ≠ 1; DB 2 proposto, a confirmar livre (dec-010).
+- Q: Local e nomes dos segredos? → A: VPS `/root/barbearia_vila/infra.env` (600) com `PG_PASSWORD`/`PG_TESTE_PASSWORD`; local `.env.n8n` do Gold + `.env.smoke` (dec-011).
+- Q: Bancos novos entram no backup atual? → A: Assumir que não; backup `pg_dump -Fc` é requisito, frequência/retenção no plan (dec-012).
+
 ## Requirements
 
 ### Functional Requirements
@@ -106,6 +114,9 @@ O mantenedor precisa de um arquivo de configuração por ambiente (sem segredos)
 - **FR-018**: Os scripts de infra MUST ter verificação automatizada de pelo menos: idempotência (segunda execução sem mudança), recusa do PROD sem confirmação e ausência de segredos no repositório.
 
 > Decisões de infraestrutura: backup/restore dos bancos novos e retenção ficam delegados à rotina de backup já existente da stack n8n; este escopo apenas registra se os novos bancos estão cobertos (pendência aberta abaixo). Scheduling, rotação de chaves e refresh de token: N/A (feature de infraestrutura sem scheduler próprio; mensagens agendadas pertencem a `mensagens-agendadas`).
+- **FR-019**: Redis: prefixos `bv:` (PROD) e `bv:teste:` (TESTE) — a verificação de FR-008 MUST considerar que `bv:` é prefixo textual de `bv:teste:` e, portanto, a limpeza de PROD MUST usar um padrão que exclua `bv:teste:`. Ambos MUST usar um database lógico dedicado, distinto de 0 (n8n) e 1 (Gold); DB 2 é o proposto e MUST ser confirmado livre por sondagem somente leitura antes do uso.
+- **FR-020**: Segredos: na VPS, `/root/barbearia_vila/infra.env` (dono root, modo 600) com `PG_PASSWORD` e `PG_TESTE_PASSWORD`; localmente, reusar o `.env.n8n` do projeto Gold e o `.env.smoke`; nenhum segredo no repositório.
+- **FR-021**: Backup: os bancos novos MUST ser tratados como NÃO cobertos por rotina existente; o sistema MUST fornecer backup `pg_dump -Fc` de `barbearia_vila` e `barbearia_vila_teste`. Frequência e retenção são parâmetros definidos no plan; uma sondagem somente leitura da rotina existente da stack na execução pode reduzir o escopo.
 
 ### Key Entities
 
@@ -134,12 +145,6 @@ O mantenedor precisa de um arquivo de configuração por ambiente (sem segredos)
 - Workflows `[TESTE]` e `[PROD]` coexistem na mesma instância, cada um com path e webhookId próprios (definidos na feature `recepcao-buffer`).
 - A conexão e o número de PROD do Chat Master (item adiado, block-001) não afetam esta feature.
 - Esquema detalhado de colunas, tipos e índices é decisão de plano, não de spec.
-
-## Pendências
-
-- [NEEDS CLARIFICATION: quais prefixos Redis e qual database lógico do Redis a barbearia usa em TESTE e PROD? Sem fonte no projeto; o de referência usa prefixo próprio por projeto num DB dedicado, mas os valores da barbearia não foram decididos.]
-- [NEEDS CLARIFICATION: onde ficam, na VPS, os segredos dos bancos novos e o arquivo de ambiente do n8n local (equivalente ao `infra.env` e ao `.env.n8n` do projeto de referência) e quais nomes de variáveis usar?]
-- [NEEDS CLARIFICATION: os bancos novos entram na rotina de backup atual da stack n8n?] Se não entrarem, criar o backup é requisito desta feature; se entrarem, registrar frequência e retenção.
 
 ## Delta Requirements
 
