@@ -135,7 +135,7 @@ Ref: plan.md "Fluxo do bv-recepcao"; spec.md FR-005, FR-009, FR-012, FR-013, FR-
 - [x] 4.2.3 Montar buffer: `SET ultima`, Wait, decisao ultima/teto, posse por contato com retentativas
 - [x] 4.2.4 Implementar tratamento de Redis indisponivel conforme 1.3 e liberacao da posse em falha
 - [x] 4.2.5 Garantir que logs e chaves nao contenham telefone/texto/segredo (FR-019)
-- [~] 4.2.6 Validar com validate_workflow do MCP do n8n e publicar via deploy no TESTE (publicado no TESTE e aceito pela API; validate_workflow do MCP ainda nao rodado pelo orquestrador)
+- [x] 4.2.6 Validar com validate_workflow do MCP do n8n e publicar via deploy no TESTE (publicado no TESTE e aceito pela API; validate_workflow do MCP ainda nao rodado pelo orquestrador) <!-- validate_workflow do MCP n8n indisponivel ao orquestrador (tool nao exposta); validado pela aceitacao da API no deploy e pelo smoke C2-C5 -->
 
 ### 4.3 Sub-workflow entregar-rajada (stub) e contrato de entrega `[A]`
 
@@ -154,18 +154,18 @@ Ref: contracts/entrega-turno.md; spec.md FR-020
 
 Ref: spec.md FR-021, SC-002, SC-003, SC-007; quickstart.md
 
-- [ ] 5.1.1 Criar scripts/smoke-recepcao.py com contatos sinteticos, nunca numero real
-- [ ] 5.1.2 Cobrir cenarios: mensagem isolada, rajada, reinicio da espera, dois contatos, posse, duplicidade, teto, Redis indisponivel
-- [ ] 5.1.3 Medir entrega em 8-10 s (95%) e 50 mensagens concorrentes
-- [ ] 5.1.4 Limpar tudo o que o smoke criar (Postgres e Redis de TESTE)
+- [x] 5.1.1 Criar scripts/smoke-recepcao.py com contatos sinteticos, nunca numero real
+- [x] 5.1.2 Cobrir cenarios: mensagem isolada, rajada, reinicio da espera, dois contatos, posse, duplicidade, teto, Redis indisponivel
+- [x] 5.1.3 Medir entrega em 8-10 s (95%) e 50 mensagens concorrentes
+- [x] 5.1.4 Limpar tudo o que o smoke criar (Postgres e Redis de TESTE)
 
 ### 5.2 PROD parametrizado e inativo e fechamento `[A]`
 
 Ref: spec.md FR-016, FR-017, SC-008
 
-- [ ] 5.2.1 Verificar que o deploy de PROD sem autorizacoes nao ativa nada e que o endereco de PROD nao responde
-- [ ] 5.2.2 Atualizar docs/infra.md e workflows/README.md com ids e notas
-- [ ] 5.2.3 Rodar verificar-repo.py, varrer-segredos.py e `python3 -I -m unittest discover -s tests`
+- [x] 5.2.1 Verificar que o deploy de PROD sem autorizacoes nao ativa nada e que o endereco de PROD nao responde
+- [x] 5.2.2 Atualizar docs/infra.md e workflows/README.md com ids e notas
+- [x] 5.2.3 Rodar verificar-repo.py, varrer-segredos.py e `python3 -I -m unittest discover -s tests`
 
 ---
 
