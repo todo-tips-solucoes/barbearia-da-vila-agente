@@ -164,24 +164,24 @@ Ref: FR-021, SC-001, checklists/infra.md CHK019/CHK020
 
 Ref: FR-013, FR-014, FR-018, SC-006, contracts/config-ambiente.md §Regras
 
-- [ ] 7.1.1 Criar `scripts/varrer-segredos.py` (varre `git ls-files`, reporta `arquivo:linha` sem o valor, exit 1 se achar)
-- [ ] 7.1.2 Criar `scripts/verificar-repo.py` com as 5 regras do contrato (prefixo termina em `:` e disjuntos, `redis.db` fora de {0,1}, nome do banco por ambiente, ids presentes em `docs/infra.md`, sem chave com nome de segredo)
-- [ ] 7.1.3 Testes `unittest`: segredo plantado e detectado; prefixo `bv:` vs `bv:teste:` rejeitado; id fora do `docs/infra.md` rejeitado
+- [x] 7.1.1 Criar `scripts/varrer-segredos.py` (varre `git ls-files`, reporta `arquivo:linha` sem o valor, exit 1 se achar)
+- [x] 7.1.2 Criar `scripts/verificar-repo.py` com as 5 regras do contrato (prefixo termina em `:` e disjuntos, `redis.db` fora de {0,1}, nome do banco por ambiente, ids presentes em `docs/infra.md`, sem chave com nome de segredo)
+- [x] 7.1.3 Testes `unittest`: segredo plantado e detectado; prefixo `bv:` vs `bv:teste:` rejeitado; id fora do `docs/infra.md` rejeitado
 
 ### 7.2 CI `[A]`
 
 Ref: plan.md §Structure Decision, Principio III
 
-- [ ] 7.2.1 Incluir `python3 -I -m unittest discover tests`, `varrer-segredos.py` e `verificar-repo.py` no CI, respeitando que `ci.yml` e gerado pelo cockpit (passo novo ou extensao de `CMD_LINT` em `cockpit.config`)
+- [x] 7.2.1 Incluir `python3 -I -m unittest discover tests`, `varrer-segredos.py` e `verificar-repo.py` no CI, respeitando que `ci.yml` e gerado pelo cockpit (passo novo ou extensao de `CMD_LINT` em `cockpit.config`)
 - [ ] 7.2.2 Confirmar CI verde com os testes sem rede
 
 ### 7.3 Documentacao de infraestrutura `[A]`
 
 Ref: FR-014, FR-017
 
-- [ ] 7.3.1 Criar `docs/infra.md` sem segredos: VPS, stack, instancia n8n, bancos, prefixos e DB Redis, lista de credenciais (nome e finalidade) e ids reais obtidos nas fases 1 a 5
-- [ ] 7.3.2 Registrar pendencias abertas: CHK010, CHK020/P3, P7 (retencao do historico, LGPD), CONNECT publico no database `n8n` se aberto
-- [ ] 7.3.3 Rodar `verificar-repo.py` e confirmar que todo id do config consta em `docs/infra.md`
+- [x] 7.3.1 Criar `docs/infra.md` sem segredos: VPS, stack, instancia n8n, bancos, prefixos e DB Redis, lista de credenciais (nome e finalidade) e ids reais obtidos nas fases 1 a 5
+- [x] 7.3.2 Registrar pendencias abertas: CHK010, CHK020/P3, P7 (retencao do historico, LGPD), CONNECT publico no database `n8n` se aberto
+- [x] 7.3.3 Rodar `verificar-repo.py` e confirmar que todo id do config consta em `docs/infra.md`
 
 ---
 
@@ -193,7 +193,7 @@ Ref: FR-011, Principio XIII, plan.md §Fluxo de preparacao item 6
 
 - [!] 8.1.1 Owner executa `preparar-bancos.py`, `migrar.py` e `criar-credenciais-n8n.py` com `--alvo producao` e `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim`; o agente autonomo nunca define a variavel
 - [!] 8.1.2 Owner executa backup de PROD e registra ids de PROD em `producao.json` e `docs/infra.md`
-- [ ] 8.1.3 (agente) Recomendar/registrar hook de guarda em `.claude/` bloqueando a string `BV_DEPLOY_PRODUCAO_AUTORIZADO` em comandos do agente, sem aplica-lo sem aprovacao
+- [x] 8.1.3 (agente) Recomendar/registrar hook de guarda em `.claude/` bloqueando a string `BV_DEPLOY_PRODUCAO_AUTORIZADO` em comandos do agente, sem aplica-lo sem aprovacao
 
 ---
 

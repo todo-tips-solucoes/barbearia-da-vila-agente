@@ -57,3 +57,21 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 
 - `scripts/backup-bancos.py --alvo teste|producao|todos --retencao N [--validar]`: `pg_dump -Fc` em `/root/barbearia_vila/backups/bv-<banco>-<UTC>.dump` (modo 600, diretorio 700), arquivo novo por execucao; rotacao so de `bv-<banco>-*.dump`. PROD (inclusive em `todos`) exige a trava. Validado em 2026-10-18 para TESTE (`pg_restore --list` ok).
 - `[PENDENTE-OWNER]` (CHK020/P3, task 6.1.4): frequencia e retencao do backup. Nenhum cron foi instalado e nenhum valor foi escolhido.
+
+## Verificacao do repositorio e CI (fase 7)
+
+- `scripts/verificar-repo.py` (regras de `contracts/config-ambiente.md` + todo id do config consta neste arquivo) e `scripts/varrer-segredos.py` (`git ls-files`, so `arquivo:linha`) rodam no CI junto de `python3 -I -m unittest discover -s tests` (sem rede), via `CMD_LINT` do `cockpit.config` e passo Lint do `ci.yml`.
+- Editar `ci.yml`/`.cockpit/LEIAME.md` a mao diverge de `.cockpit/manifesto.sha256`; ao rodar `configurar.sh --atualizar`, o `CMD_LINT` do `cockpit.config` (ja atualizado) regenera ambos.
+
+## Pendencias abertas
+
+- CHK010: isolamento Redis so por prefixo (risco aceito, dec-030; ver secao Redis).
+- CHK020/P3: frequencia e retencao de backup (owner decide; sem cron instalado).
+- P7: retencao do historico de mensagens (LGPD) `[PENDENTE-OWNER]`, fora desta feature.
+- `CONNECT` no database `n8n`: fechado em 2026-10-18 (REVOKE FROM PUBLIC, dec-025); nada aberto.
+- PROD: `preparar-bancos`, `migrar`, `criar-credenciais-n8n` e backup com `--alvo producao` sao do owner (trava `BV_DEPLOY_PRODUCAO_AUTORIZADO`).
+- Checar o cron do Gold (~03:00 de 19/10) apos o REVOKE no database `n8n`.
+
+## Recomendacao: hook de guarda de PROD (task 8.1.3, NAO aplicada)
+
+Sugestao de hook `PreToolUse` (Bash) em `.claude/settings.json` que recuse comandos do agente contendo a string `BV_DEPLOY_PRODUCAO_AUTORIZADO`, para que so o owner (em terminal proprio) possa liberar PROD. Aplicar depende de aprovacao do owner.
