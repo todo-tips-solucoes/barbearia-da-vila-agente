@@ -1,0 +1,76 @@
+{
+  "name": "Barbearia Vila - Entregar rajada (stub) [{{BV:rotulo}}]",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "741e271a-ab2d-582e-91f1-bd3affabd0e1",
+      "name": "Gatilho",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ {{BV:teste.atraso_entrega_s}} }}",
+        "unit": "seconds"
+      },
+      "id": "2577ee19-f12d-5cc1-9636-8340697201c2",
+      "name": "Atraso do stub",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $('Gatilho').first().json;\nreturn [{ json: { ok: true, turno_id: j.turno_id, total: j.total } }];"
+      },
+      "id": "ab4baa9f-d815-5577-bed1-a955e412c5cf",
+      "name": "Responder ok",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Gatilho": {
+      "main": [
+        [
+          {
+            "node": "Atraso do stub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atraso do stub": {
+      "main": [
+        [
+          {
+            "node": "Responder ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  }
+}

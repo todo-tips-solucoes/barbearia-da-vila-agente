@@ -130,21 +130,21 @@ Ref: spec.md FR-006, FR-007, FR-008, FR-010, FR-011; contracts/webhook-chatmaste
 
 Ref: plan.md "Fluxo do bv-recepcao"; spec.md FR-005, FR-009, FR-012, FR-013, FR-014, FR-015, FR-019
 
-- [ ] 4.2.1 Montar autenticacao (SHA-256 do token; 401), normalizacao (400/200) e resposta 200
-- [ ] 4.2.2 Montar upsert de contato, insercao com `ON CONFLICT DO NOTHING` (dedup) e gravacao de midia conforme retencao (1.4)
-- [ ] 4.2.3 Montar buffer: `SET ultima`, Wait, decisao ultima/teto, posse por contato com retentativas
-- [ ] 4.2.4 Implementar tratamento de Redis indisponivel conforme 1.3 e liberacao da posse em falha
-- [ ] 4.2.5 Garantir que logs e chaves nao contenham telefone/texto/segredo (FR-019)
-- [ ] 4.2.6 Validar com validate_workflow do MCP do n8n e publicar via deploy no TESTE
+- [x] 4.2.1 Montar autenticacao (SHA-256 do token; 401), normalizacao (400/200) e resposta 200
+- [x] 4.2.2 Montar upsert de contato, insercao com `ON CONFLICT DO NOTHING` (dedup) e gravacao de midia conforme retencao (1.4)
+- [x] 4.2.3 Montar buffer: `SET ultima`, Wait, decisao ultima/teto, posse por contato com retentativas
+- [x] 4.2.4 Implementar tratamento de Redis indisponivel conforme 1.3 e liberacao da posse em falha
+- [x] 4.2.5 Garantir que logs e chaves nao contenham telefone/texto/segredo (FR-019)
+- [~] 4.2.6 Validar com validate_workflow do MCP do n8n e publicar via deploy no TESTE (publicado no TESTE e aceito pela API; validate_workflow do MCP ainda nao rodado pelo orquestrador)
 
 ### 4.3 Sub-workflow entregar-rajada (stub) e contrato de entrega `[A]`
 
 Ref: contracts/entrega-turno.md; spec.md FR-020
 
-- [ ] 4.3.1 Criar workflows/sub/entregar-rajada.json como stub com `teste.atraso_entrega_s`
-- [ ] 4.3.2 Marcar `turno_id`/`turno_em` antes e `processada_em` apos sucesso; desmarcar turno em falha
-- [ ] 4.3.3 Tratar excedente do TTL da posse conforme 1.3
-- [ ] 4.3.4 Teste do stub contra o contrato de entrega
+- [x] 4.3.1 Criar workflows/sub/entregar-rajada.json como stub com `teste.atraso_entrega_s`
+- [x] 4.3.2 Marcar `turno_id`/`turno_em` antes e `processada_em` apos sucesso; desmarcar turno em falha
+- [x] 4.3.3 Tratar excedente do TTL da posse conforme 1.3
+- [x] 4.3.4 Teste do stub contra o contrato de entrega
 
 ---
 

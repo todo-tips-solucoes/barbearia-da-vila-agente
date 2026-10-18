@@ -23,7 +23,8 @@
   },
   "workflows": {
     "bv-verificacao": "uoDF0RFEgzAtKUay",
-    "bv-captura": "wXcRwAdqRnGgRzA9"
+    "bv-captura": "wXcRwAdqRnGgRzA9",
+    "bv-recepcao": "iaUbATlT7xkZArVd"
   },
   "captura": {
     "path": "bv-captura-b889464c-5ec6-4aba-9ff3-5617408bec13",
@@ -58,5 +59,8 @@
       "+5500000000002",
       "+5500000000003"
     ]
+  },
+  "workflows_sub": {
+    "entregar_rajada": "ilzXqBWGtcczlGEu"
   }
 }
