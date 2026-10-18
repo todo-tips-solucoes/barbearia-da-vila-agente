@@ -14,7 +14,7 @@ rodada (SC-010) e limpar Postgres/Redis de TESTE do contato.
 
 ## Sondas (antes dos roteiros)
 
-- **S0**: consulta pelo MCP do n8n (nome da tool [A MEDIR S0]) dos tipos usados (agent 3, lmChatOpenAi 1.3, toolWorkflow 2.2) na
+- **S0**: consulta pelo MCP do n8n (medido na onda-007 por leitura dos fontes do n8n 2.43.5; ver research.md "Resultado da sonda S0") dos tipos usados (agent 3, lmChatOpenAi 1.3, toolWorkflow 2.2) na
   instância → **Expected**: tipos e versões existem.
 - **S1**: enviar texto, digitando e lista ao contato de teste real com `whatsappId` 145 → **Expected**:
   2xx e mensagem recebida; senão, bloqueio humano (research Decision 6).

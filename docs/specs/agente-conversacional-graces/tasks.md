@@ -34,14 +34,14 @@ Escopo: o stub `entregar-rajada` vira o agente (nó AI Agent com `gpt-5.6-luna`)
 
 Ref: quickstart.md S0; plan.md Technical Context; research.md Decision 14
 
-- [ ] 1.1.1 Consultar pelo MCP do n8n (`search_nodes`/`get_node_types`, nome a medir) a existência e versão de `@n8n/n8n-nodes-langchain.agent` 3, `lmChatOpenAi` 1.3 e `toolWorkflow` 2.2
-- [ ] 1.1.2 Registrar o resultado e o nome real da tool em research.md (resolve o `[A MEDIR S0]` do quickstart); se faltar versão, abrir bloqueio humano com a alternativa
+- [x] 1.1.1 Consultar pelo MCP do n8n (`search_nodes`/`get_node_types`, nome a medir) a existência e versão de `@n8n/n8n-nodes-langchain.agent` 3, `lmChatOpenAi` 1.3 e `toolWorkflow` 2.2
+- [x] 1.1.2 Registrar o resultado e o nome real da tool em research.md (resolve o `[A MEDIR S0]` do quickstart); se faltar versão, abrir bloqueio humano com a alternativa
 
 ### 1.2 S1: conexão 145 nos envios do Chat Master `[C]`
 
 Ref: quickstart.md S1; research.md Decision 6; `chatmasterveloz-api/endpoints.json`; checklists/api.md CHK009
 
-- [ ] 1.2.1 Ler `chatmasterveloz-api/` e documentar como informar `whatsappId` 145 em texto, digitando e lista (campos e cabeçalhos citando a fonte)
+- [x] 1.2.1 Ler `chatmasterveloz-api/` e documentar como informar `whatsappId` 145 em texto, digitando e lista (campos e cabeçalhos citando a fonte)
 - [ ] 1.2.2 `{humano:P2}` `{humano:S1}` Enviar texto, digitando e lista ao contato de teste real e confirmar 2xx e recebimento; sem forma aceita, registrar bloqueio humano (opções de Decision 6) e seguir só com envio simulado
 - [ ] 1.2.3 Registrar o resultado medido em research.md Decision 6 e marcar CHK009 (parte S1)
 
@@ -61,20 +61,20 @@ Ref: quickstart.md S2; contracts/saida-chatmaster.md "Resposta a uma lista"; con
 
 Ref: data-model.md; plan.md Project Structure; Constitution VII
 
-- [ ] 2.1.1 Criar `db/migrations/0006_agente.sql` idempotente (`IF NOT EXISTS`): `turnos`, `conversas`, `propostas`, `falhas_agente` com FKs `ON DELETE CASCADE` e sem coluna de token/payload bruto/PII
-- [ ] 2.1.2 Estender `tests/test_esquema.py` (tabelas, PKs, CHECKs de estado) e rodar a migração duas vezes em `barbearia_vila_teste` com `scripts/migrar.py --alvo teste`
-- [ ] 2.1.3 Confirmar que a migração não foi aplicada em `barbearia_vila` (PROD inativo)
+- [x] 2.1.1 Criar `db/migrations/0006_agente.sql` idempotente (`IF NOT EXISTS`): `turnos`, `conversas`, `propostas`, `falhas_agente` com FKs `ON DELETE CASCADE` e sem coluna de token/payload bruto/PII
+- [x] 2.1.2 Estender `tests/test_esquema.py` (tabelas, PKs, CHECKs de estado) e rodar a migração duas vezes em `barbearia_vila_teste` com `scripts/migrar.py --alvo teste`
+- [x] 2.1.3 Confirmar que a migração não foi aplicada em `barbearia_vila` (PROD inativo)
 - [ ] 2.1.4 `{humano:LGPD}` Política de retenção por idade do histórico (CHK008): enquanto indefinida, manter "apagado junto com o contato" e registrar a pendência; não criar job de limpeza
 
 ### 2.2 Config de ambiente `[A]`
 
 Ref: contracts/config-agente.md
 
-- [ ] 2.2.1 Acrescentar as chaves `agente.*`, `conversa.*`, `proposta.*`, `saida.*`, `lista.*`, `digitando.*`, `graces.*`, `teste.*`, `textos.*`, `loja.*` em `config/ambientes/integracao.json`
-- [ ] 2.2.2 Acrescentar as mesmas chaves em `config/ambientes/producao.json` (credenciais `""`, `teste.*` ausente)
-- [ ] 2.2.3 `{humano:textos}` Preencher `textos.contingencia/midia/humano/reformular/lista_botao/lista_topo` com a redação `[PROPOSTA]`; a revisão de tom final é do owner (CHK010) e não bloqueia a implementação
-- [ ] 2.2.4 `{humano:P1}` `{humano:P2}` Deixar `teste.cliente_teste_id` e `teste.contatos_escrita` vazios até o owner informar; não inventar valores
-- [ ] 2.2.5 Ajustar `scripts/verificar-repo.py` e testes às chaves novas e rodar `python3 -I -m unittest discover -s tests`
+- [x] 2.2.1 Acrescentar as chaves `agente.*`, `conversa.*`, `proposta.*`, `saida.*`, `lista.*`, `digitando.*`, `graces.*`, `teste.*`, `textos.*`, `loja.*` em `config/ambientes/integracao.json`
+- [x] 2.2.2 Acrescentar as mesmas chaves em `config/ambientes/producao.json` (credenciais `""`, `teste.*` ausente)
+- [x] 2.2.3 `{humano:textos}` Preencher `textos.contingencia/midia/humano/reformular/lista_botao/lista_topo` com a redação `[PROPOSTA]`; a revisão de tom final é do owner (CHK010) e não bloqueia a implementação
+- [x] 2.2.4 `{humano:P1}` `{humano:P2}` Deixar `teste.cliente_teste_id` e `teste.contatos_escrita` vazios até o owner informar; não inventar valores
+- [x] 2.2.5 Ajustar `scripts/verificar-repo.py` e testes às chaves novas e rodar `python3 -I -m unittest discover -s tests`
 
 ### 2.3 Credenciais e deploy `[A]`
 

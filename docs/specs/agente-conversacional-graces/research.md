@@ -126,7 +126,7 @@ simulado.
 **Decision**: sequência desenrolada em até 4 posições fixas (IF "há mensagem i?" → digitando → Wait →
 enviar → gravar saída), com tipos já usados nas fontes (`n8n-nodes-base.if`, `httpRequest` 4.2,
 `wait` 1.1, `postgres` 2.5). Falha de envio numa posição interrompe as seguintes e registra a falha.
-Se a sonda S0 confirmar pelo MCP do n8n (consulta de tipos de nó; nome da tool [A MEDIR S0], `search_nodes` citado em GOLD `docs/specs/infra-base/research.md:54`) um nó de laço por item, ele pode
+Se a sonda S0 confirmar pelo MCP do n8n (consulta de tipos de nó; medido na onda-007, ver "Resultado da sonda S0", `search_nodes` citado em GOLD `docs/specs/infra-base/research.md:54`) um nó de laço por item, ele pode
 substituir o desenrolado, sem mudar o contrato.
 
 **Rationale**: no n8n cada nó processa todos os itens antes do próximo; para "digitando → espera →
@@ -266,3 +266,15 @@ próprio cliente; (c) `cadastrar_cliente` no máximo 1 vez por sessão do contat
 `agente.turnos_max_contato_hora` (20 `[PROPOSTA]`): acima dele o turno recebe `textos.humano` sem
 chamar o modelo e registra `agente|teto_turnos` (LLM10; a cota da OpenAI já se esgotou no GOLD);
 (e) prompt sem segredo nem dado de outro cliente (LLM07); histórico e estado vão marcados como dado.
+
+## Resultado da sonda S0 (onda-007, 2026-10-18)
+
+As tools `mcp__claude_ai_n8n__*` não estavam disponíveis ao orquestrador desta onda. Medição feita por leitura (somente leitura) dos fontes do pacote instalado na stack `n8n` (`docker exec n8n-n8n-1`, n8n 2.43.5), em `/usr/local/lib/node_modules/n8n/node_modules/@n8n/n8n-nodes-langchain/dist/nodes`:
+
+| Tipo | Versões encontradas | Fonte |
+|------|---------------------|-------|
+| `@n8n/n8n-nodes-langchain.agent` | 3 e 3.1 (`defaultVersion: 3.1`) | `agents/Agent/V3/AgentV3.node.js` (`version: [3, 3.1]`), `agents/Agent/Agent.node.js` |
+| `@n8n/n8n-nodes-langchain.lmChatOpenAi` | 1, 1.1, 1.2, 1.3 | `llms/LMChatOpenAi/LmChatOpenAi.node.js` (`version: [1, 1.1, 1.2, 1.3]`) |
+| `@n8n/n8n-nodes-langchain.toolWorkflow` | 2.2 existe (`defaultVersion: 2.2`; pastas v1 e v2) | `tools/ToolWorkflow/ToolWorkflow.node.js` |
+
+Nome real da tool de consulta MCP: `get_node_types` (e `search_nodes`) segue a nomenclatura citada em GOLD `docs/specs/infra-base/research.md:54`; nesta onda não foi invocada, e a conferência equivalente foi a leitura acima. Todas as versões exigidas (agent 3, lmChatOpenAi 1.3, toolWorkflow 2.2) existem; nenhum bloqueio. Pendente (não medido): aceitação do modelo `gpt-5.6-luna` pelo campo de modelo do `lmChatOpenAi` (vem de lista/ID livre da OpenAI; validar no smoke da fase 7).

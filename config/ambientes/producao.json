@@ -46,5 +46,51 @@
   },
   "execucao": {
     "timeout_s": 300
+  },
+  "agente": {
+    "modelo": "gpt-5.6-luna",
+    "raciocinio": "low",
+    "iteracoes_max": 6,
+    "mensagens_contexto": 20,
+    "turnos_max_contato_hora": 20
+  },
+  "conversa": {
+    "janela_recencia_min": 120
+  },
+  "proposta": {
+    "validade_min": 30
+  },
+  "saida": {
+    "max_mensagens": 4,
+    "max_chars_mensagem": 700
+  },
+  "lista": {
+    "max_itens": 10,
+    "max_titulo": 24
+  },
+  "digitando": {
+    "ms_por_char": 40,
+    "min_ms": 800,
+    "max_ms": 4000
+  },
+  "graces": {
+    "host": "api.gracesonline.com.br",
+    "timeout_ms": 15000,
+    "barbeiro_teste_id": "1cee0bb9-e58b-4428-9e9b-1db184db7943"
+  },
+  "textos": {
+    "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho? Se for urgente, chama a loja no (11) 97126-5299.",
+    "midia": "Recebi sua mensagem, mas por aqui eu só consigo ler texto e áudio. Pode me escrever o que você precisa?",
+    "humano": "Vou pedir pra equipe da loja te ajudar. Eles falam com você em seguida, tá?",
+    "reformular": "Não consegui entender direitinho. Pode me explicar de outro jeito?",
+    "lista_botao": "Ver opções",
+    "lista_topo": "Escolha uma das opções"
+  },
+  "loja": {
+    "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
+    "contatos": "Telefone/WhatsApp (11) 97126-5299; contato@barbeariadavila.com.br; Instagram @barbeariadavila_vilamascote"
+  },
+  "workflows_sub": {
+    "bv_graces": ""
   }
 }
