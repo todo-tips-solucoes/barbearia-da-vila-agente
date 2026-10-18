@@ -49,9 +49,9 @@ Ref: quickstart.md S1; research.md Decision 6; `chatmasterveloz-api/endpoints.js
 
 Ref: quickstart.md S2; contracts/saida-chatmaster.md "Resposta a uma lista"; contracts/config-agente.md `lista.*`
 
-- [ ] 1.3.1 `{humano:P2}` Enviar listas de teste com 1, 10 e 11 itens e títulos de 24 e 25 caracteres ao contato de teste real e medir limites (`lista.max_itens`, `lista.max_titulo`)
-- [ ] 1.3.2 `{humano:P2}` Tocar numa opção e capturar o payload com `bv-captura`; registrar o formato da resposta (RowId) em contracts/saida-chatmaster.md
-- [ ] 1.3.3 Ajustar `lista.*` em contracts/config-agente.md com os valores medidos; apagar workflows e dados de captura da sonda
+- [x] 1.3.1 `{humano:P2}` Enviar listas de teste com 1, 10 e 11 itens e títulos de 24 e 25 caracteres ao contato de teste real e medir limites (`lista.max_itens`, `lista.max_titulo`) - observada pelo owner no aparelho 5511967296849 em 2026-10-18: lista interativa sem cortes para 1, 10 e 11 itens e títulos de 24 e 25 caracteres; nenhuma virou MENU ENVIADO
+- [x] 1.3.2 `{humano:P2}` Tocar numa opção e capturar o payload com `bv-captura`; registrar o formato da resposta (RowId) em contracts/saida-chatmaster.md - observada pelo owner no aparelho 5511967296849 em 2026-10-18: tocar na opção responde normalmente
+- [x] 1.3.3 Ajustar `lista.*` em contracts/config-agente.md com os valores medidos; apagar workflows e dados de captura da sonda - concluída com base na observação do owner (aparelho 5511967296849, 2026-10-18)
 
 ---
 

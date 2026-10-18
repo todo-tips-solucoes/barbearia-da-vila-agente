@@ -89,3 +89,6 @@ Criadas ao agendar na Graces; apagadas ao cancelar e recriadas ao reagendar.
 | Retenção (CHK026) | **Confirmada:** mídia recebida fica guardada por 24 h; eventos brutos são apagados depois de virar fixtures. |
 | Duplicadas de texto (dec-031) | **Dedupe por conteúdo:** descartar a mensagem igual (mesmo contato e mesmo texto) recebida em até ~10 s. Risco aceito: um "ok" repetido de propósito pode ser descartado. |
 | Robustez da recepção | **Corrigir antes da feature 3:** (a) não responder 200 antes de gravar no Postgres, ou alertar a falha; (b) Redis indisponível não pode travar o nó e precisa registrar a falha em `falhas_recepcao`. |
+| Cliente de teste na Graces (feature 3, P1) | Usar o cliente **Paulo, 5511967296849**: buscar na Graces e cadastrar só se não existir (o cadastro não tem exclusão pela API). Agendamentos de teste sempre com o barbeiro de teste, cancelando o que criar. |
+| WhatsApp de teste (P2) | **5511967296849** pode receber envios de teste pela conexão 145. |
+| LGPD (base legal e retenção do histórico) | **Fora do escopo por agora**, por decisão do owner. Sem expurgo do histórico até nova decisão. |
