@@ -92,3 +92,5 @@ Criadas ao agendar na Graces; apagadas ao cancelar e recriadas ao reagendar.
 | Cliente de teste na Graces (feature 3, P1) | Usar o cliente **Paulo, 5511967296849**: buscar na Graces e cadastrar só se não existir (o cadastro não tem exclusão pela API). Agendamentos de teste sempre com o barbeiro de teste, cancelando o que criar. |
 | WhatsApp de teste (P2) | **5511967296849** pode receber envios de teste pela conexão 145. |
 | LGPD (base legal e retenção do histórico) | **Fora do escopo por agora**, por decisão do owner. Sem expurgo do histórico até nova decisão. |
+| Terceiro sem celular próprio (feature 4, FR-007) | **Cadastrar com o celular de quem pede**, depois de confirmação explícita do cliente na conversa. |
+| Vários serviços sem barbeiro que faça todos (FR-012) | **Perguntar ao cliente** se prefere barbeiros diferentes (com resumo único) ou agendar cada serviço separado. |
