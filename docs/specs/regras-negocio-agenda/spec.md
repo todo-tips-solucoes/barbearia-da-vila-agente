@@ -121,8 +121,8 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 - Pacote vencido ou seção já reservada: não é oferecido; o assistente trata como avulso somente se o cliente concordar.
 - Cliente que pede "o mais cedo possível" com muitas opções: o assistente responde com o primeiro início, mantendo o restante disponível.
 - Terceiro com o mesmo nome do remetente ou homônimo: o assistente pede confirmação antes de usar o cadastro.
-- Terceiro sem celular próprio: ver FR-007.
-- Dois serviços com barbeiros diferentes por serviço: ver FR-012.
+- Terceiro sem celular próprio: cadastra com o celular do remetente após confirmação explícita (FR-007).
+- Nenhum barbeiro faz todos os serviços em sequência: o cliente escolhe por botão de lista entre barbeiros diferentes (resumo único) ou serviços separados (FR-012).
 - Cliente desiste no meio do encadeamento: nada é criado antes da confirmação conjunta.
 - `code` desconhecido ou ausente: contingência genérica, com `code` e `traceId` registrados.
 - Teste que falha no meio: tudo o que criou é cancelado mesmo assim.
@@ -131,7 +131,7 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 
 ### Session 2026-10-18
 
-(Q1 resolvida (dec-008); pendentes FR-007 (block-001) e FR-012 (block-002).)
+(Q1 resolvida (dec-008); FR-007 resolvida (block-001, dec-011); FR-012 resolvida (block-002, dec-012). Sem pendências.)
 
 ## Requirements
 
@@ -143,12 +143,12 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 - **FR-004**: Havendo mais de uma seção aplicável, o sistema MUST usar a primeira devolvida pela Graces, informando ao cliente que será abatido do pacote. (Regra de `graces-api/05-fluxos-do-agente.md`; a barbearia pode revisar.)
 - **FR-005**: O sistema MUST NOT oferecer, sugerir nem agendar serviço cuja descrição indique "2ª vez" (variantes "2º vez"/"2ª vez", sem diferenciar acento, caixa ou ordinal), e a ferramenta de escrita MUST recusar esses serviços mesmo se o modelo os escolher. Se o cliente os pedir, o sistema MUST oferecer o serviço regular equivalente sem prometer desconto.
 - **FR-006**: Ao saber que o atendimento é para outra pessoa, o sistema MUST pedir o nome dela, buscar na Graces pelo nome, confirmar a identidade com o cliente e agendar no cadastro dessa pessoa, nunca no do remetente.
-- **FR-007**: Quando a pessoa não existir, o sistema MUST cadastrá-la somente após confirmação do cliente e com os dados que a loja exige. Cadastro de cliente na Graces é irreversível: nos testes, MUST NOT ser executado sem autorização expressa do owner. [NEEDS CLARIFICATION: como cadastrar um terceiro sem celular próprio (por exemplo, criança), já que a loja exige celular: usar o celular do remetente, ou encaminhar para uma pessoa?]
+- **FR-007**: Quando a pessoa não existir, o sistema MUST cadastrá-la somente após confirmação do cliente e com os dados que a loja exige. Cadastro de cliente na Graces é irreversível: nos testes, MUST NOT ser executado sem autorização expressa do owner. Terceiro sem celular próprio (por exemplo, criança): o sistema MUST cadastrá-lo com o celular de quem pede, somente após confirmação explícita do cliente na conversa (clarify block-001, dec-011; `docs/decisoes-pre-00c.md`). Testes não cadastram cliente real novo (mock ou cliente de teste).
 - **FR-008**: O sistema MUST agendar vários serviços pedidos juntos como um agendamento por serviço, em sequência (o início de cada um no fim do anterior), oferecendo apenas inícios em que a sequência inteira cabe e confirmando o conjunto numa única mensagem de resumo, sem criar nada antes do "sim".
 - **FR-009**: O sistema MUST decidir a reação a erros da Graces pelo campo `code`, nunca pelo texto de `detail`, conforme: `PARAMETRO_INVALIDO`/`CORPO_INVALIDO`: tratar como defeito do agente ou data fora das regras da loja e oferecer alternativas sem expor detalhes; `NAO_AUTENTICADO`, `LOJA_FORA_ESCOPO`, `ACESSO_NEGADO`: falha de configuração, contingência e alerta à operação; `NAO_ENCONTRADO`: recarregar a lista e perguntar de novo; `CONFLITO`: recarregar a grade e oferecer outra opção. Para `code` desconhecido ou ausente, MUST usar contingência genérica. Em todo caso MUST registrar `code` e `traceId` sem dados pessoais.
 - **FR-010**: Após timeout ou erro 5xx em escrita (criar, mover, cancelar), o sistema MUST consultar os agendamentos do cliente para verificar se a escrita foi aplicada antes de qualquer nova escrita, e MUST NOT repetir às cegas. Se aplicada, trata como sucesso; se não, repete no máximo uma vez.
 - **FR-011**: Em falha parcial de um encadeamento, o sistema MUST informar ao cliente o que foi agendado e o que não foi, MUST NOT recriar o que já existe e MUST oferecer nova tentativa só para o que faltou.
-- **FR-012**: Para o encadeamento, o sistema MUST usar o mesmo barbeiro em todos os serviços quando possível. [NEEDS CLARIFICATION: se nenhum barbeiro executa todos os serviços em sequência, permitir barbeiros diferentes por serviço ou recusar o encadeamento?]
+- **FR-012**: Para o encadeamento, o sistema MUST usar o mesmo barbeiro em todos os serviços quando possível. Se nenhum barbeiro executa todos os serviços em sequência, o sistema MUST perguntar ao cliente, por botão de lista, se prefere barbeiros diferentes por serviço (com um resumo único claro, confirmado de uma vez) ou agendar cada serviço separadamente, e MUST NOT escolher por ele (clarify block-002, dec-012; `docs/decisoes-pre-00c.md`).
 - **FR-013**: O sistema MUST manter todas as regras anteriores nas ferramentas de escrita (não apenas no prompt), de modo que uma instrução do cliente ou do modelo não as contorne, e MUST tratar texto do cliente e dados da Graces como dado, nunca como instrução.
 - **FR-014**: Os testes que escrevem na Graces MUST usar somente o barbeiro de teste (id `1cee0bb9-e58b-4428-9e9b-1db184db7943`) e o cliente de teste Paulo, 5511967296849, MUST cancelar tudo o que criarem, inclusive em caso de falha, e MUST NOT cadastrar cliente novo sem autorização expressa do owner. Mensagens de WhatsApp de teste só para 5511967296849 pela conexão 145.
 - **FR-015**: A implantação MUST estender o fluxo `entregar-rajada` e as ferramentas `bv-graces` da feature 3 nos workflows do TESTE, pela API REST do n8n com as credenciais do `.env.n8n`, validada pelo MCP do n8n, recusando qualquer implantação que altere PROD.
