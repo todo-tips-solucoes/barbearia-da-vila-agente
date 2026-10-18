@@ -24,7 +24,7 @@ migração, Python 3 stdlib nos scripts.
 **Storage**: Postgres 17 `barbearia_vila_teste` (migração 0006: `turnos`, `conversas`, `propostas`,
 `falhas_agente`; `mensagens` e `contatos` existentes). Redis só o da recepção (posse).
 **Testing**: `node tests/agente.test.js`, `python3 -I -m unittest discover -s tests`,
-`scripts/smoke-agente.py` no TESTE, `validate_workflow` do MCP do n8n.
+`scripts/smoke-agente.py` no TESTE, `get_workflow_details` do MCP do n8n após o deploy no TESTE (`validate_workflow` só valida código do Workflow SDK, não JSON: `docs/specs/recepcao-robustez/tasks.md:113`).
 **Target Platform**: `https://n8n2.todo-tips.com`, stack `n8n` da VPS, só TESTE (fonte: briefing e `docs/decisoes-pre-00c.md`).
 **Project Type**: workflows n8n + scripts de deploy/teste.
 **Performance Goals**: primeira mensagem em ≤ 20 s no p90 (SC-009); turno inteiro < `lock.ttl_s` (120 s).
@@ -50,7 +50,7 @@ teste na Graces) e P2 (contato de teste real) bloqueiam só as tarefas que escre
 | IX Graces fonte da verdade | PASS | só dados da Graces na conversa; teste e "2º vez" filtrados em código (Decision 4) |
 | X conversa humanizada | PASS | IA assumida; 4 mensagens/1 pergunta/digitando impostos em código; lista Pro para toda escolha |
 | XI escrita segura | PASS | duas fases (Decision 3); erro por `code`; incerta verificada antes (Decision 9). Pacote: fora desta feature por FR-023 (sempre avulso), entra em `regras-negocio-agenda` |
-| XII skills e validação n8n | PASS | nó AI Agent + sub-workflow como ferramenta; MCP `validate_workflow` antes do commit |
+| XII skills e validação n8n | PASS | nó AI Agent + sub-workflow como ferramenta; conferência pelo MCP `get_workflow_details` após deploy no TESTE (`validate_workflow` não se aplica a JSON, recepcao-robustez `tasks.md:113`) |
 | XIII isolamento | PASS | só TESTE; PROD parametrizado; deploy de PROD recusa chaves `teste.*` |
 | XIV segredos e dado mínimo | PASS | chaves só em credenciais do n8n; `falhas_agente` sem PII; `pedido` só ids e rótulos |
 | XV teste antes de produção | PASS | suíte `smoke-agente.py`; barbeiro de teste e limpeza no `finally` |

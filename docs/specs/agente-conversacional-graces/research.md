@@ -101,7 +101,7 @@ texto diz que há mais.
 (só "o título é a resposta"). A sonda S2 captura um toque real com o `bv-captura` existente.
 
 **Alternatives considered**: `sendInteractive`/`sections` (é da API Oficial,
-`api-oficial-mensagem-de-lista.md:99`, descartada); lista numerada em texto (proibida pela
+`api-oficial-mensagem-de-lista.md:54, 105`, descartada); lista numerada em texto (proibida pela
 constituição X).
 
 ## Decision 6: envio, digitação e a conexão com token da empresa
@@ -115,7 +115,7 @@ constituição X).
 
 **Unknown bloqueante para envio real**: o token é da empresa e precisa informar a conexão em cada
 chamada (C `00-introducao/estrutura-de-api.md:115`), mas nenhuma página de envio diz como
-(`whatsappId` só aparece em agendamentos e APIs de conexão). Sonda S1 (primeira tarefa): enviar a um
+(`whatsappId` só aparece em agendamentos, APIs de conexão e `08-equipe/api-criar-usuario.md`). Sonda S1 (primeira tarefa): enviar a um
 contato de teste real, por cada endpoint, com `whatsappId` = `chatmaster.whatsapp_id` (145) no corpo, e
 registrar a resposta. Se nenhuma forma for aceita ou documentada, bloqueio humano (perguntar ao owner
 ou usar token da conexão 145). Até lá, o caminho de envio é implementado e testado só com envio
@@ -126,7 +126,7 @@ simulado.
 **Decision**: sequência desenrolada em até 4 posições fixas (IF "há mensagem i?" → digitando → Wait →
 enviar → gravar saída), com tipos já usados nas fontes (`n8n-nodes-base.if`, `httpRequest` 4.2,
 `wait` 1.1, `postgres` 2.5). Falha de envio numa posição interrompe as seguintes e registra a falha.
-Se a sonda S0 confirmar pelo MCP do n8n (`get_node_types`) um nó de laço por item, ele pode
+Se a sonda S0 confirmar pelo MCP do n8n (consulta de tipos de nó; nome da tool [A MEDIR S0], `search_nodes` citado em GOLD `docs/specs/infra-base/research.md:54`) um nó de laço por item, ele pode
 substituir o desenrolado, sem mudar o contrato.
 
 **Rationale**: no n8n cada nó processa todos os itens antes do próximo; para "digitando → espera →
@@ -180,7 +180,7 @@ textos nunca mostram o barbeiro de teste (SC-001); só a escrita vai para ele.
 **Pendências do owner** (não bloqueiam o plano; bloqueiam as tarefas que dependem delas):
 
 - **P1 cliente de teste na Graces**: `POST /agenda/clientes` cria um cliente real em produção e não há
-  endpoint de exclusão documentado (G `02`:50). Proposta: o owner autoriza criar **um** cliente de
+  endpoint de exclusão documentado (G `02`:15). Proposta: o owner autoriza criar **um** cliente de
   teste fixo, cujo `idCliente` vai para `teste.cliente_teste_id`; em TESTE, `cadastrar_cliente` e
   `identificar_cliente` de contatos de teste devolvem esse cliente sem chamar a Graces, exceto num
   roteiro único e explícito de cadastro, se o owner autorizar.
@@ -234,8 +234,8 @@ da mesma contingência a cada novo turno; a falha fica registrada.
 `--criar NOME`, recusa de PROD sem `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` + `--confirmar-id`) e
 `scripts/criar-credenciais-n8n.py`, que passa a criar também `openAiApi` (chave `OPENAI_API_KEY`),
 Header Auth da Graces (`X-Api-Key`, G `00`:13) e Header Auth do Chat Master (`Authorization`), lendo
-os segredos de `.env.smoke` e gravando só os ids em `credenciais.*`. Validação de cada workflow pelo
-MCP do n8n (`validate_workflow`) antes do commit (constituição XII). `bv-graces` entra em
+os segredos de `.env.smoke` e gravando só os ids em `credenciais.*`. Validação de cada workflow
+pelo MCP do n8n: `validate_workflow` valida código do Workflow SDK, não JSON, e não se aplica aos workflows em JSON deste repositório (`docs/specs/recepcao-robustez/tasks.md:113`); a validação de fato é publicar no TESTE com `scripts/deploy-n8n.sh integracao` e conferir pelo MCP `get_workflow_details` (número de nós e `executionTimeout` iguais ao repositório, ativo, versão publicada), como fez a recepcao-robustez (constituição XII). `bv-graces` entra em
 `workflows_sub` e é publicado antes de `entregar-rajada` (dependência por placeholder).
 
 ## Decision 15: testes
