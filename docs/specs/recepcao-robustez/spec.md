@@ -131,3 +131,8 @@ O comando de primeira criação de um workflow auxiliar (sub-workflow) registra 
 
 - Tempo máximo de espera do armazenamento temporário (FR-006) e janela de 10 s (FR-010) são políticas de design; o valor de 10 s vem do owner, o de 5 s é `[PROPOSTA]` configurável.
 - "Alertar a falha" (decisão do owner, alternativa à resposta de erro) é atendido por erro ao canal mais registro consultável; notificação ativa externa fica fora de escopo.
+
+### Sessão 2026-10-18 (clarify autônomo)
+
+- Q: O timeout do armazenamento temporário (5 s) tem fonte em `docs/decisoes-pre-00c.md`? → A: Não. O documento só exige que o Redis indisponível não trave o nó e registre em `falhas_recepcao`. O valor de 5 s permanece como `[PROPOSTA]` explícita, configurável (FR-006), a confirmar pelo owner; não bloqueia o plan. Cabe com folga em SC-002 (5 s + 2 s).
+- Q: Mensagem sem identificador e sem texto (mídia)? → A: Fora da dedupe por conteúdo (FR-011), já coberto.
