@@ -207,3 +207,47 @@ flowchart TD
 - Logica de atendimento, transcricao de audio e interpretacao de imagem: feature 3.
 - Ativacao de PROD: depende da conexao e autorizacao do owner.
 - Custo em tokens e observabilidade de escala: nao se aplica a esta feature.
+
+
+---
+
+## FASE 6 - Convergência
+
+> Fase gerada automaticamente pela skill `converge` (reconciliação
+> spec-vs-código). Cada tarefa abaixo corresponde a um achado (`Gap`)
+> entre o que `spec.md`/`plan.md`/`tasks.md` descreveram e o estado
+> presente do código. Tarefas sem o prefixo `[Revisar]` são acionáveis
+> (`missing`/`partial`/`contradicts`); tarefas com `[Revisar]` são item de
+> revisão (`unrequested`, FR-013) — nunca "implementar", o código já
+> existe. Append-only: esta fase nunca reescreve fases/tarefas anteriores
+> do arquivo (FR-009).
+
+### 6.1 Registrar falhas sem conteudo pessoal `[A]`
+
+Ref: FR-025 (e FR-007, plan.md "log sem PII") · tipo: `partial` · severidade: `MEDIUM`
+
+Em `workflows/bv-recepcao.json` as saidas de erro do Redis terminam em `Fim Redis indisponivel` (noOp), o 400 e a falha de entrega nao deixam registro, e o workflow tem `saveDataErrorExecution`/`saveDataSuccessExecution` = `none`. A mensagem fica pendente (correto), mas a falha nao e registrada em lugar nenhum, contra FR-025 ("a falha MUST ser registrada sem conteúdo pessoal") e FR-007.
+
+- [ ] 6.1.1 Implementar em `workflows/bv-recepcao.json` (e, se preciso, `db/migrations/`) um registro de falha sem PII (tipo, motivo, contato_id, instante; nunca telefone/texto/token) para Redis indisponivel, payload malformado e falha de entrega, com teste
+
+<!-- converge-key: 83766c192bee -->
+
+### 6.2 Liberar a posse so pelo dono `[A]`
+
+Ref: FR-012 (FR-013, CA-5) · tipo: `contradicts` · severidade: `MEDIUM`
+
+Em `workflows/bv-recepcao.json`, `Liberar posse`, `Liberar posse apos falha` e `Liberar posse turno vazio` fazem `DEL lock:<contato_id>` incondicional. Um turno que excedeu `lock.ttl_s` apaga, ao voltar, a posse tomada por outro turno do mesmo contato, abrindo espaco para dois turnos simultaneos (contra FR-012). A posse por `INCR` nao carrega o dono, entao o `DEL` precisa ser condicionado (ex.: so liberar se o UPDATE de `processada_em`/desmarcacao afetou linhas do proprio `turno_id`).
+
+- [ ] 6.2.1 Corrigir `workflows/bv-recepcao.json` conforme FR-012: liberar a posse apenas quando o turno ainda e o dono, com teste estatico do workflow
+
+<!-- converge-key: c7515048e0f0 -->
+
+### 6.3 Smoke de falhas: Redis indisponivel, entrega falha e TTL excedido `[A]`
+
+Ref: task 5.1.2 (FR-021, SC-007, CA-4, CA-5) · tipo: `partial` · severidade: `MEDIUM`
+
+`scripts/smoke-recepcao.py` cobre recepcao, duplicidade, limite, rajada, posse, concorrencia e teto, mas nao Redis indisponivel (CA-4), falha forcada de entrega (SC-007) nem posse expirada com o stub acima do TTL (CA-5), embora 5.1.2 cite Redis indisponivel e FR-021 exija todos os cenarios de aceitacao.
+
+- [ ] 6.3.1 Acrescentar a `scripts/smoke-recepcao.py` os cenarios CA-4, SC-007 (falha forcada) e CA-5 so no TESTE, sem derrubar o Redis compartilhado, e rodar com limpeza
+
+<!-- converge-key: b643c80eeee3 -->
