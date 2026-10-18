@@ -1,0 +1,49 @@
+Barbearia da vila
+
+Av mascote, 867
+Vila mascote 
+Sao Paulo SP
+CEP 04363-000
+
+Telefone/WhatsApp (11-97126-5299)
+
+Horário de funcionamento 
+
+Segunda 12:00 às 22:00
+Terça a sexta 8:00 às 22:00
+Sábado 8:00 às 19:30
+Domingo 8:00 às 16:00
+
+(Corrigido em 2026-10-06 por decisão do operador: vale o horário cadastrado na
+Graces, lido por GET /agenda/configuracao em 2026-10-02 — ver
+docs/pendencias-operacionais.md §19. Texto anterior, substituído:
+Segunda 12:00 as 20:00 / Terça a sexta 9:00 as 21:00 / Sabado 9:00 as 19:00 /
+Domingo 9:00 as 15:00.)
+
+E-mail: contato@barbeariadavila.com.br
+ 
+Instagram 
+@barbeariadavila_vilamascote
+
+Cnpj 
+25.340.181/0001-26
+
+Preços 
+
+Corte adulto (18+)
+85,00
+Corte juvenil (13 a 17)
+75,00
+Corte infantil (0 a 12)
+65,00
+Corte raspado (todo na  maquina)
+A partir d 55,00
+Barba desenhada/lisa
+65,00
+Barba express
+40,00
+Depilação orelha/nariz
+20,00
+
+Temos pacotes 
+Adquira 4 serviços com 20% de desconto
