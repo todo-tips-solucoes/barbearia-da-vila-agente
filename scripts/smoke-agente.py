@@ -175,7 +175,7 @@ def _api_deploy():
 def chamador(api):
     """Workflow TEMPORARIO (TESTE, deste projeto) com webhook de path aleatorio que repassa `dados` a um sub-workflow `wf`; apagado no finally."""
     path = "bv-smoke-" + uuid.uuid4().hex
-    wf = api("POST", "/workflows", {"name": "Barbearia Vila - smoke chamador [TESTE]", "settings": {"executionOrder": "v1"}, "nodes": [
+    wf = api("POST", "/workflows", {"name": "Barbearia Vila - smoke chamador [TESTE]", "settings": {"executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all"}, "nodes": [
         {"id": str(uuid.uuid4()), "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 0],
          "webhookId": str(uuid.uuid4()), "parameters": {"httpMethod": "POST", "path": path, "responseMode": "lastNode", "options": {}}},
         {"id": str(uuid.uuid4()), "name": "Montar", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [220, 0],

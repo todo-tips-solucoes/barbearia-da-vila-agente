@@ -728,7 +728,7 @@
     {
       "parameters": {
         "name": "horarios_livres",
-        "description": "Lista todos os inícios livres do serviço num dia, como opções. Informe o barbeiro escolhido ou qualquer=true.",
+        "description": "Lista todos os inícios livres do serviço num dia, como opções. Informe o barbeiro escolhido ou qualquer=true. Para 2 ou 3 serviços em sequência, informe id_opcoes_servicos (sem barbeiro). Se devolver sem_barbeiro_unico, ofereça as opções de modo e, com a resposta do cliente, chame de novo com id_opcao.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -746,7 +746,10 @@
             "id_opcao_servico": "={{ $fromAI('id_opcao_servico', 'id da opção de serviço', 'string') }}",
             "id_opcao_barbeiro": "={{ $fromAI('id_opcao_barbeiro', 'id da opção de barbeiro; vazio se qualquer=true', 'string') }}",
             "qualquer": "={{ $fromAI('qualquer', 'true para qualquer barbeiro; vazio caso contrário', 'string') }}",
-            "data": "={{ $fromAI('data', 'dia no formato AAAA-MM-DD', 'string') }}"
+            "data": "={{ $fromAI('data', 'dia no formato AAAA-MM-DD', 'string') }}",
+            "id_opcoes_servicos": "={{ $fromAI('id_opcoes_servicos', '2 ou 3 ids de opcoes de servico, como oferecidos, separados por virgula, para encadear servicos em sequencia; vazio se for um servico so', 'string') }}",
+            "id_opcao": "={{ $fromAI('id_opcao', 'id da opcao de modo de encadeamento (barbeiros diferentes ou agendar separado) que o cliente escolheu; vazio nos demais casos', 'string') }}",
+            "id_opcao_agendamento": "={{ $fromAI('id_opcao_agendamento', 'id do agendamento a mudar, so para reagendar; vazio nos demais casos', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -825,6 +828,33 @@
             {
               "id": "data",
               "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "id_opcoes_servicos",
+              "displayName": "id_opcoes_servicos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "id_opcao",
+              "displayName": "id_opcao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "id_opcao_agendamento",
+              "displayName": "id_opcao_agendamento",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -1148,7 +1178,7 @@
     {
       "parameters": {
         "name": "cancelar",
-        "description": "Cancelar em duas fases. Fase 1: id_opcao_agendamento devolve proposta_id, resumo e sugerir_remarcar; ofereça remarcar antes de confirmar. Fase 2, num turno posterior: só proposta_id.",
+        "description": "Cancelar em duas fases. Fase 1: id_opcao_agendamento devolve proposta_id, resumo e sugerir_remarcar; ofereça remarcar antes de confirmar. Fase 2, num turno posterior: só proposta_id. Para vários agendamentos de uma vez, id_opcoes_agendamentos.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -1164,7 +1194,8 @@
             "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
             "ambiente": "{{BV:ambiente}}",
             "id_opcao_agendamento": "={{ $fromAI('id_opcao_agendamento', 'fase 1: id do agendamento a cancelar', 'string') }}",
-            "proposta_id": "={{ $fromAI('proposta_id', 'fase 2: proposta_id da fase 1', 'string') }}"
+            "proposta_id": "={{ $fromAI('proposta_id', 'fase 2: proposta_id da fase 1', 'string') }}",
+            "id_opcoes_agendamentos": "={{ $fromAI('id_opcoes_agendamentos', '2 ou 3 ids de agendamentos a cancelar de uma vez, separados por virgula; vazio se for um so', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -1225,6 +1256,15 @@
             {
               "id": "proposta_id",
               "displayName": "proposta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "id_opcoes_agendamentos",
+              "displayName": "id_opcoes_agendamentos",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -2481,6 +2521,296 @@
         }
       },
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "name": "buscar_pessoa",
+        "description": "Busca no cadastro uma pessoa (que não é o remetente) pelo nome e sobrenome, para agendar para ela. Devolve só nomes. Pergunte ao cliente se é essa pessoa antes de escolher_pessoa.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "{{BV:workflows_sub.bv_graces}}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operacao": "buscar_pessoa",
+            "contato_id": "={{ String($('Gatilho').first().json.contato_id) }}",
+            "telefone": "={{ String($('Gatilho').first().json.telefone) }}",
+            "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
+            "ambiente": "{{BV:ambiente}}",
+            "nome": "={{ $fromAI('nome', 'nome e sobrenome da pessoa', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "operacao",
+              "displayName": "operacao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "contato_id",
+              "displayName": "contato_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "turno_id",
+              "displayName": "turno_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ambiente",
+              "displayName": "ambiente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "nome",
+              "displayName": "nome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "f2d7f162-ebf0-599c-8947-416106d14cc1",
+      "name": "Ferramenta buscar_pessoa",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2700,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "name": "escolher_pessoa",
+        "description": "Registra a pessoa confirmada pelo cliente entre as encontradas por buscar_pessoa. Só num turno posterior ao da busca.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "{{BV:workflows_sub.bv_graces}}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operacao": "escolher_pessoa",
+            "contato_id": "={{ String($('Gatilho').first().json.contato_id) }}",
+            "telefone": "={{ String($('Gatilho').first().json.telefone) }}",
+            "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
+            "ambiente": "{{BV:ambiente}}",
+            "id_opcao": "={{ $fromAI('id_opcao', 'id da opcao de pessoa confirmada, como oferecida', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "operacao",
+              "displayName": "operacao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "contato_id",
+              "displayName": "contato_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "turno_id",
+              "displayName": "turno_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ambiente",
+              "displayName": "ambiente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "id_opcao",
+              "displayName": "id_opcao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "572fdbb8-4d13-562f-8f99-99737d7250bc",
+      "name": "Ferramenta escolher_pessoa",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2760,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "name": "cadastrar_terceiro",
+        "description": "Cadastra uma pessoa nova que a busca não achou. Fase 1: nome (e celular se o cliente informar); devolve proposta_id e resumo para confirmar. Fase 2, num turno posterior à confirmação: só proposta_id. Pode estar indisponível; siga a orientação.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "{{BV:workflows_sub.bv_graces}}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operacao": "cadastrar_terceiro",
+            "contato_id": "={{ String($('Gatilho').first().json.contato_id) }}",
+            "telefone": "={{ String($('Gatilho').first().json.telefone) }}",
+            "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
+            "ambiente": "{{BV:ambiente}}",
+            "nome": "={{ $fromAI('nome', 'nome completo da pessoa, fase 1', 'string') }}",
+            "celular": "={{ $fromAI('celular', 'celular com DDD, só dígitos, se o cliente informar; vazio para usar o do cliente', 'string') }}",
+            "proposta_id": "={{ $fromAI('proposta_id', 'fase 2: proposta_id devolvido na fase 1', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "operacao",
+              "displayName": "operacao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "contato_id",
+              "displayName": "contato_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "telefone",
+              "displayName": "telefone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "turno_id",
+              "displayName": "turno_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ambiente",
+              "displayName": "ambiente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "nome",
+              "displayName": "nome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "celular",
+              "displayName": "celular",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposta_id",
+              "displayName": "proposta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "530bb28f-e8b3-5780-bb5b-6badfb6ca321",
+      "name": "Ferramenta cadastrar_terceiro",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2820,
+        560
+      ]
     }
   ],
   "connections": {
@@ -3334,6 +3664,39 @@
           {
             "node": "Concluir falhou",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ferramenta buscar_pessoa": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ferramenta escolher_pessoa": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ferramenta cadastrar_terceiro": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente",
+            "type": "ai_tool",
             "index": 0
           }
         ]

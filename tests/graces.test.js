@@ -399,3 +399,19 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 14);
   assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, { cliente_sem_cadastro: true }), aberto).reqs[0].m, 'POST');
 }
 console.log('graces.test.js ok');
+
+// u20: laco de estagios com teto (FR-015).
+{
+  const p20 = g.bvGPlano(entrada({ operacao: 'identificar_cliente' }), null, cfg);
+  assert.equal(p20.st.estagio, undefined);
+  const esg = g.bvGPasso({ ...p20.st, estagio: 16 }, [ok([])], { ...cfg, graces: { max_estagios: 16 } }).final;
+  assert.equal(esg.resultado.code, 'estagios_esgotados');
+  assert.equal(esg.efeitos.falha.motivo, 'graces|estagios_esgotados');
+  assert.equal(g.bvGPasso({ ...p20.st, estagio: 15 }, [ok([])], { ...cfg, graces: { max_estagios: 16 } }).final.resultado.encontrado, false);
+}
+
+// Normalizar tolera lista do modelo como texto ("1,2" ou JSON) e lista vazia (campo ausente).
+assert.deepEqual(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', id_opcoes_servicos: '1, 2' }, cfg).in.id_opcoes_servicos, ['1', '2']);
+assert.deepEqual(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', id_opcoes_servicos: '["1","2"]' }, cfg).in.id_opcoes_servicos, ['1', '2']);
+assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', qualquer: true, id_opcoes_servicos: [] }, cfg).in.id_opcoes_servicos, undefined);
+assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', id_opcoes_servicos: '1' }, cfg).resultado.code, 'entrada_invalida');

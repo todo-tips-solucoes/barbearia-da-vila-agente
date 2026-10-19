@@ -1,5 +1,5 @@
 // Logica pura das ferramentas da Graces (sem rede). contracts/ferramentas-graces.md. Incluida DEPOIS de shared/agente.js
-// nos Code nodes de bv-graces ({{BV:INCLUDE:...}}). Protocolo: bvGPlano -> chamadas HTTP -> bvGPasso (ate 3 estagios).
+// nos Code nodes de bv-graces ({{BV:INCLUDE:...}}). Protocolo: bvGPlano -> chamadas HTTP -> bvGPasso (em laco, ate graces.max_estagios).
 // Regras duras em codigo: FR-007 (duas fases), FR-012 (barbeiro de teste), FR-020 (idCliente so do pedido/telefone),
 // escrita so em TESTE e sempre redirecionada ao barbeiro de teste (research Decision 10).
 if (typeof module !== 'undefined' && typeof bvFiltrarBarbeiros === 'undefined') Object.assign(globalThis, require('./agente.js'));
@@ -42,6 +42,11 @@ function bvGNormalizar(raw, cfg) {
   if (v.texto !== undefined && String(v.texto).length > 80) return ruim('texto');
   if (v.nome !== undefined && (String(v.nome).length < 2 || String(v.nome).length > 80)) return ruim('nome');
   if (v.celular !== undefined && !/^\d{10,11}$/.test(String(v.celular))) return ruim('celular');
+  for (const k of ['id_opcoes_servicos', 'id_opcoes_agendamentos']) { // o modelo pode mandar "1,2" ou '["1","2"]': aceita e converte; lista vazia = ausente
+    if (typeof v[k] === 'string') { try { const j = JSON.parse(v[k]); v[k] = Array.isArray(j) ? j : v[k]; } catch (e) { /* nao e JSON */ } }
+    if (typeof v[k] === 'string') v[k] = v[k].split(/[\s,;]+/).filter(Boolean);
+    if (Array.isArray(v[k]) && v[k].length === 0) delete v[k];
+  }
   for (const k of ['id_opcoes_servicos', 'id_opcoes_agendamentos']) { // FR-008: lista de 2..max_servicos ids curtos
     if (v[k] !== undefined && !(Array.isArray(v[k]) && v[k].length >= 2 && v[k].length <= ((cfg.encadeamento || {}).max_servicos || 3) && v[k].every((x) => BVG_OPC.test(String(x))))) return ruim(k);
   }
@@ -307,8 +312,17 @@ function bvGErro(resp, op) {
   return { code, status: s, trace, incerto, tipo, orientacao, falha: { motivo: `graces|${tipo}`, operacao: op, code, status: s, trace } };
 }
 
-// Um estagio depois das chamadas HTTP. st vem do estagio anterior; resps alinhado a st.reqs.
+// Laco de estagios (FR-015): conta o estagio e encerra acima de graces.max_estagios sem nova chamada.
 function bvGPasso(st, resps0, cfg) {
+  const n = ((st && st.estagio) || 0) + 1;
+  const teto = (cfg.graces || {}).max_estagios || 16;
+  if (n > teto) return bvgFim({ ok: false, code: 'estagios_esgotados', orientacao: 'a agenda não concluiu a tempo; não repita sozinho, confira com meus_agendamentos ou chame a equipe da loja' }, { falha: { motivo: 'graces|estagios_esgotados', operacao: st && st.meta && st.meta.op, code: 'estagios_esgotados', status: 0, trace: null } });
+  const r = bvgPassoUm({ ...st, estagio: n }, resps0, cfg);
+  return r.reqs ? { ...r, st: { ...r.st, estagio: n } } : r;
+}
+
+// Um estagio depois das chamadas HTTP (bvGPasso conta o estagio e aplica o teto do laco). st vem do estagio anterior; resps alinhado a st.reqs.
+function bvgPassoUm(st, resps0, cfg) {
   const { in: i, ctx, meta } = st;
   const resps = (resps0 || []).map(bvgResp);
   const r0 = resps[0] || { status: 0 };

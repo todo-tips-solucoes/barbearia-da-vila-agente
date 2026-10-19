@@ -136,17 +136,17 @@ Ref: spec.md FR-009 FR-010; research.md Decision 9; quickstart u9-u13
 
 Ref: plan.md Fluxo do bv-graces; spec.md FR-015
 
-- [ ] 4.1.1 Sonda S3: medir ciclo/teto de estagios no n8n (fallback desenrolado)
-- [ ] 4.1.2 Montar laco Planejar -> Tem chamada? -> Graces -> Passo -> volta com teto e `estagios_esgotados`
-- [ ] 4.1.3 Teste u20 e `tests/test_workflows_agente.py`
+- [x] 4.1.1 Sonda S3: medir ciclo/teto de estagios no n8n (fallback desenrolado)
+- [x] 4.1.2 Montar laco Planejar -> Tem chamada? -> Graces -> Passo -> volta com teto e `estagios_esgotados`
+- [x] 4.1.3 Teste u20 e `tests/test_workflows_agente.py`
 
 ### 4.2 Ferramentas e campos em `entregar-rajada` `[A]`
 
 Ref: contracts/ferramentas-graces-regras.md
 
-- [ ] 4.2.1 Expor `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro` e campos novos (incluir `id_opcoes_servicos` e `id_opcao` (modo de encadeamento) na ferramenta `horarios_livres` e no prompt, hoje nao expostos ao modelo)
-- [ ] 4.2.2 Atualizar prompt e textos em `agente.js`
-- [ ] 4.2.3 Deploy no TESTE e conferencia por `get_workflow_details` (MCP)
+- [x] 4.2.1 Expor `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro` e campos novos (incluir `id_opcoes_servicos` e `id_opcao` (modo de encadeamento) na ferramenta `horarios_livres` e no prompt, hoje nao expostos ao modelo)
+- [x] 4.2.2 Atualizar prompt e textos em `agente.js`
+- [x] 4.2.3 Deploy no TESTE e conferencia por `get_workflow_details` (MCP)
 - [ ] 4.2.4 Sonda S4: 4 listas seguidas (humano)
 
 ---
