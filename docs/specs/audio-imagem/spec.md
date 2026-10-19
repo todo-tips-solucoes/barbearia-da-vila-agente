@@ -85,7 +85,8 @@ Qualquer conteúdo de mídia retido (arquivo baixado, transcrição, descrição
 - Texto com instruções dentro da imagem ou do áudio ("ignore as regras"): conteúdo do cliente, nunca instrução ao agente.
 - Falha da transcrição ou da interpretação após a gravação do evento: mensagem permanece pendente, sem erro ao Chat Master (reforça FR-009 da `recepcao-robustez`).
 - Campos de mídia fora das fixtures reais (campos supostos): não são usados; só `fileUrl`, `fileMimeType`, `text`, `caption`, `seconds`, `fileLength` e `PTT` das fixtures.
-- Áudio com `type`, `fileMimeType` e `fileUrl` mascarados na fixture (formato e tipo MIME desconhecidos): reconhecido por `originalData.audioMessage`, sem assumir `type`, formato ou tipo MIME.
+- Áudio cujo `type` ou `fileMimeType` difira do observado em `evento-20.json` (por exemplo outro codec): reconhecido por `originalData.audioMessage`; se o formato não for aceito pela transcrição, vale a resposta natural de mídia sem suporte (FR-007).
+- `fileUrl` de áudio com extensão `.mp3` e conteúdo ogg/opus (divergência observada): o conteúdo é tratado conforme `fileMimeType`, nunca pela extensão.
 - Testes da suíte com fixtures reais usam só o número de teste, o barbeiro `ZZ TESTE`, cancelam o que criarem e não alteram o webhook da 145.
 - Deploy dos workflows alterados pelo script (API REST, `.env.n8n`): nós validados no MCP (`validate_node_config`) antes e conferidos (`get_workflow_details`) depois.
 
@@ -93,12 +94,12 @@ Qualquer conteúdo de mídia retido (arquivo baixado, transcrição, descrição
 
 ### Functional Requirements
 
-- **FR-001**: A recepção MUST reconhecer evento de imagem pelo `type` igual a `image` e pelo bloco `originalData.imageMessage`, e evento de áudio de voz pelo bloco `originalData.audioMessage` (campo `PTT` verdadeiro), conforme as fixtures reais `tests/fixtures/chatmaster/evento-13.json`, `evento-15.json` (imagem) e `evento-17.json` (áudio).
+- **FR-001**: A recepção MUST reconhecer evento de imagem pelo `type` igual a `image` e pelo bloco `originalData.imageMessage`, e evento de áudio de voz pelo bloco `originalData.audioMessage` (campo `PTT` verdadeiro), conforme as fixtures reais `tests/fixtures/chatmaster/evento-13.json`, `evento-15.json` (imagem) e `evento-20.json` (áudio, captura não mascarada; `evento-17.json` é o áudio mascarado anterior). O áudio de voz tem `type` igual a `audio/oga` (valor observado em `evento-20.json`).
 - **FR-002**: Os campos de mídia usados MUST ser somente os presentes em fixtures reais: `fileUrl`, `fileMimeType`, `text` e `originalData.imageMessage.caption` (imagem); `originalData.audioMessage.seconds`, `fileLength` e `PTT` (áudio). Nenhum campo MUST ser suposto fora das fixtures.
-- **FR-003**: A fixture de áudio (`evento-17.json`) tem `type`, `fileUrl` e `fileMimeType` mascarados; portanto o valor de `type`, o formato e o tipo MIME do áudio MUST NOT ser assumidos. O reconhecimento de áudio MUST apoiar-se em `originalData.audioMessage` até haver captura real não mascarada. [NEEDS CLARIFICATION: capturar evento de áudio real com `type`, `fileMimeType` e `fileUrl` visíveis para fixar o valor de `type` e o formato do arquivo.]
+- **FR-003**: A captura real `evento-20.json` (nota de voz pela conexão 145) fixa o formato de áudio observado: `type` = `audio/oga`, `fileMimeType` = `audio/ogg; codecs=opus`, `originalData.audioMessage.PTT` = `true`, `seconds` = 5, `fileLength` = 9694 e `fileUrl` terminando em `.mp3` apesar do MIME ogg/opus. A extensão `.mp3` da `fileUrl` MUST NOT ser usada para decidir o formato: decide `fileMimeType` (e `originalData.audioMessage.mimetype`). O reconhecimento de áudio MUST usar `type` começando por `audio/` OU `originalData.audioMessage`, sem assumir outros valores de `type`. As fixtures de imagem (`evento-13.json`, `evento-15.json`) seguem com `fileMimeType` e `fileUrl` mascarados: o MIME e o host da imagem MUST NOT ser assumidos.
 - **FR-004**: Áudio reconhecido MUST ser transcrito via OpenAI e o texto MUST ser tratado como mensagem de texto do cliente, entrando no buffer e na entrega em rajada existentes, na ordem de chegada.
 - **FR-005**: Imagem reconhecida MUST ser interpretada via OpenAI (modelo de atendimento `gpt-5.6-luna`) e a descrição MUST ser entregue ao agente junto da legenda, quando houver, mantendo ordem de chegada.
-- **FR-006**: O download da mídia pela `fileUrl` MUST ter tempo máximo e limite de tamanho configuráveis; a mídia MUST NOT ser seguida para endereços fora do canal esperado (validação do host da `fileUrl` contra o host do Chat Master observado nas fixtures). [NEEDS CLARIFICATION: limites padrão de duração/tamanho do áudio e da imagem — propostos 120 s de áudio e 10 MB, marcados `[PROPOSTA]`.]
+- **FR-006**: O download da mídia pela `fileUrl` MUST ter tempo máximo e limite de tamanho configuráveis; a mídia MUST NOT ser seguida para endereços fora do canal esperado. A validação MUST ser por lista configurável de hosts permitidos (https apenas, sem seguir redirecionamento para outro host), cujo valor inicial é o host observado em `evento-20.json` (`object.ce1.eveo.com.br`); o host das imagens não foi observado (fixtures mascaradas) e MUST ser confirmado na primeira imagem real em TESTE, falhando fechado (mídia recusada com resposta natural) até lá. Limites padrão `[PROPOSTA]`, configuráveis: 120 s e 10 MB para áudio; 10 MB para imagem.
 - **FR-007**: Mídia não obtida, não compreendida ou sem suporte MUST resultar em uma única resposta natural por turno, em português, pedindo reenvio ou texto, sem jargão técnico e sem inventar conteúdo.
 - **FR-008**: Falha em obter, transcrever ou interpretar MUST ser registrada com tipo e momento, sem arquivo, transcrição, descrição, telefone ou segredo (FR-019 da `recepcao-buffer`), e MUST NOT gerar erro ao Chat Master após a gravação do evento.
 - **FR-009**: Qualquer conteúdo de mídia retido (arquivo, transcrição, descrição) MUST ser apagado em no máximo 24 h do recebimento, por rotina automática, com prazo configurável para teste.
@@ -128,3 +129,10 @@ Qualquer conteúdo de mídia retido (arquivo baixado, transcrição, descrição
 - **SC-004**: Nenhum conteúdo de mídia, transcrição ou descrição existe mais de 24 h após o recebimento.
 - **SC-005**: Resposta a um áudio curto (até 30 s) chega em até 30 s após o fim da janela do buffer em 95% dos testes. [PROPOSTA]
 - **SC-006**: Zero ocorrência de dado factual de payload fora das fixtures reais nos artefatos da feature.
+
+## Clarifications
+
+### Session 2026-10-19
+
+- Q: Qual o `type`/MIME/formato real do áudio recebido? -> A: `audio/oga`, `audio/ogg; codecs=opus`, `fileUrl` com extensão `.mp3` (divergente); fonte `evento-20.json` (block-001/dec-007). FR-001, FR-003 e edge cases atualizados.
+- Q: Limites padrão de áudio/imagem e validação do host? -> A: 120 s / 10 MB de áudio e 10 MB de imagem como `[PROPOSTA]` configurável (política de design, não dado factual externo); host permitido inicial `object.ce1.eveo.com.br` (observado), lista configurável, falha fechada para host de imagem não observado (dec-009).
