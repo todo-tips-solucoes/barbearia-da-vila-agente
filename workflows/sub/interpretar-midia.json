@@ -98,23 +98,23 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        660,
-        0
+        880,
+        -100
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "{{BV:INCLUDE:shared/midia.js}}\n{{BV:INCLUDE:shared/agente.js}}\nconst cfg = { hosts_audio: {{BV:midia.hosts_audio}}, hosts_imagem: {{BV:midia.hosts_imagem}}, prefixos_audio: {{BV:midia.prefixos_audio}}, prefixos_imagem: {{BV:midia.prefixos_imagem}}, mimes_audio: {{BV:midia.mimes_audio}}, mimes_imagem: {{BV:midia.mimes_imagem}}, audio_max_s: {{BV:midia.audio_max_s}}, audio_max_mb: {{BV:midia.audio_max_mb}}, imagem_max_mb: {{BV:midia.imagem_max_mb}}, max_por_turno: {{BV:midia.max_por_turno}}, descricao_max_chars: {{BV:midia.descricao_max_chars}}, imagem_detalhe: '{{BV:midia.imagem_detalhe}}', modelo: '{{BV:agente.modelo}}' };\nconst v = $('Validar').item.json; const st = $json.statusCode;\nconst falha = (motivo, extra) => ({ json: { ...v, ok: false, motivo, ...(extra || {}) } });\nif (!(st >= 200 && st < 300) || !$input.item.binary || !$input.item.binary.data) return falha('download', { status_http: Number.isInteger(st) ? st : null });\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst audio = v.tipo === 'audio';\nif (buf.length === 0) return falha('vazio');\nif (buf.length > (audio ? cfg.audio_max_mb : cfg.imagem_max_mb) * 1024 * 1024) return falha('grande');\nconst mime = bvMimeBase(v.midia_mime); const b = $input.item.binary;\nb.data.mimeType = mime; b.data.fileName = audio ? 'audio.ogg' : 'imagem.' + (mime.split('/')[1] || 'bin');\nconst json = { ...v, ok: true };\nif (!audio) json.corpo_imagem = JSON.stringify({ model: cfg.modelo, input: [{ role: 'user', content: [{ type: 'input_text', text: bvPromptImagem(cfg) }, { type: 'input_image', image_url: 'data:' + mime + ';base64,' + buf.toString('base64'), detail: cfg.imagem_detalhe }] }] });\nreturn { json, binary: b };"
+        "jsCode": "{{BV:INCLUDE:shared/midia.js}}\nconst cfg = { hosts_audio: {{BV:midia.hosts_audio}}, hosts_imagem: {{BV:midia.hosts_imagem}}, prefixos_audio: {{BV:midia.prefixos_audio}}, prefixos_imagem: {{BV:midia.prefixos_imagem}}, mimes_audio: {{BV:midia.mimes_audio}}, mimes_imagem: {{BV:midia.mimes_imagem}}, audio_max_s: {{BV:midia.audio_max_s}}, audio_max_mb: {{BV:midia.audio_max_mb}}, imagem_max_mb: {{BV:midia.imagem_max_mb}}, max_por_turno: {{BV:midia.max_por_turno}}, descricao_max_chars: {{BV:midia.descricao_max_chars}}, imagem_detalhe: '{{BV:midia.imagem_detalhe}}', modelo: '{{BV:agente.modelo}}' };\nconst v = $('Validar').item.json; const st = $json.statusCode;\nconst falha = (motivo, extra) => ({ json: { ...v, ok: false, motivo, ...(extra || {}) } });\nif (!(st >= 200 && st < 300) || !$input.item.binary || !$input.item.binary.data) return falha('download', { status_http: Number.isInteger(st) ? st : null });\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nif (buf.length === 0) return falha('vazio');\nif (buf.length > cfg.audio_max_mb * 1024 * 1024) return falha('grande');\nconst b = $input.item.binary;\nb.data.mimeType = bvMimeBase(v.midia_mime); b.data.fileName = 'audio.ogg';\nreturn { json: { ...v, ok: true }, binary: b };"
       },
       "id": "1beca570-b784-5f6f-9821-362341d8c73d",
       "name": "Conferir",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
-        0
+        1100,
+        -100
       ]
     },
     {
@@ -144,30 +144,6 @@
               },
               "renameOutput": true,
               "outputKey": "audio"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "loose",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "c53b53d0-1d2e-5617-8601-06e3dc7ec95c",
-                    "leftValue": "={{ $json.ok && $json.tipo }}",
-                    "rightValue": "imagem",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "imagem"
             }
           ]
         },
@@ -177,12 +153,12 @@
         }
       },
       "id": "e7f7e4da-8fa8-575e-b5e0-382309acbb8e",
-      "name": "Audio ou imagem?",
+      "name": "Audio ok?",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        1100,
-        0
+        1320,
+        -100
       ]
     },
     {
@@ -226,8 +202,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1320,
-        0
+        1540,
+        -100
       ],
       "credentials": {
         "openAiApi": {
@@ -264,7 +240,7 @@
       "typeVersion": 4.2,
       "position": [
         1320,
-        0
+        200
       ],
       "credentials": {
         "openAiApi": {
@@ -284,14 +260,14 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1540,
-        0
+        1760,
+        -100
       ]
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const v = $('Conferir').item.json; const st = $json.statusCode; const ok = st >= 200 && st < 300;\nconst t = ((($json.body || {}).output || []).filter((o) => o.type === 'message').flatMap((o) => o.content || []).map((c) => c.text || '').join(' ') || '').trim();\nconst r = { idx: v.idx, contato_id: v.contato_id, mensagem_id: v.mensagem_id, tipo: v.tipo, texto: null, motivo: null, status_http: Number.isInteger(st) ? st : null, host: null };\nif (!ok) r.motivo = 'interpretacao'; else if (!t) r.motivo = 'vazio'; else r.texto = t.slice(0, {{BV:midia.descricao_max_chars}});\nreturn { json: r };"
+        "jsCode": "const v = $('Baixar imagem').item.json; const st = $json.statusCode; const ok = st >= 200 && st < 300;\nconst t = ((($json.body || {}).output || []).filter((o) => o.type === 'message').flatMap((o) => o.content || []).map((c) => c.text || '').join(' ') || '').trim();\nconst r = { idx: v.idx, contato_id: v.contato_id, mensagem_id: v.mensagem_id, tipo: v.tipo, texto: null, motivo: null, status_http: Number.isInteger(st) ? st : null, host: null };\nif (!ok) r.motivo = 'interpretacao'; else if (!t) r.motivo = 'vazio'; else r.texto = t.slice(0, {{BV:midia.descricao_max_chars}});\nreturn { json: r };"
       },
       "id": "5e8a3ee3-580f-5801-8e14-c4c40dc45d3d",
       "name": "Texto imagem",
@@ -299,7 +275,7 @@
       "typeVersion": 2,
       "position": [
         1540,
-        0
+        200
       ]
     },
     {
@@ -312,8 +288,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1540,
-        0
+        1760,
+        400
       ]
     },
     {
@@ -325,7 +301,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.1,
       "position": [
-        1760,
+        2200,
         0
       ]
     },
@@ -342,7 +318,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1980,
+        2420,
         0
       ],
       "credentials": {
@@ -366,7 +342,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2200,
+        2640,
         0
       ],
       "credentials": {
@@ -386,8 +362,124 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2420,
+        2860,
         0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ca84629a-122f-562f-b28f-738ba4713523",
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fd368cf9-768a-55df-be4b-2738af1aca8a",
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "imagem",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "imagem"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "falha"
+        }
+      },
+      "id": "7ccdcd6a-76cb-5811-9706-d631a9944040",
+      "name": "Tipo da midia",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "{{BV:INCLUDE:shared/midia.js}}\n{{BV:INCLUDE:shared/agente.js}}\nconst cfg = { hosts_audio: {{BV:midia.hosts_audio}}, hosts_imagem: {{BV:midia.hosts_imagem}}, prefixos_audio: {{BV:midia.prefixos_audio}}, prefixos_imagem: {{BV:midia.prefixos_imagem}}, mimes_audio: {{BV:midia.mimes_audio}}, mimes_imagem: {{BV:midia.mimes_imagem}}, audio_max_s: {{BV:midia.audio_max_s}}, audio_max_mb: {{BV:midia.audio_max_mb}}, imagem_max_mb: {{BV:midia.imagem_max_mb}}, max_por_turno: {{BV:midia.max_por_turno}}, descricao_max_chars: {{BV:midia.descricao_max_chars}}, imagem_detalhe: '{{BV:midia.imagem_detalhe}}', modelo: '{{BV:agente.modelo}}' };\nconst v = $json; const falha = (motivo, extra) => ({ json: { ...v, ok: false, motivo, ...(extra || {}) } });\nlet r; try { r = await this.helpers.httpRequest({ method: 'GET', url: v.midia_url, encoding: 'arraybuffer', returnFullResponse: true, ignoreHttpStatusErrors: true, disableFollowRedirect: true, timeout: {{BV:midia.download_timeout_s}} * 1000 }); } catch (e) { return falha('download'); }\nconst st = r.statusCode; if (!(st >= 200 && st < 300)) return falha('download', { status_http: Number.isInteger(st) ? st : null });\nconst buf = Buffer.from(r.body || []);\nif (buf.length === 0) return falha('vazio');\nif (buf.length > cfg.imagem_max_mb * 1024 * 1024) return falha('grande');\nconst mime = bvMimeBase((r.headers || {})['content-type']);\nif (!cfg.mimes_imagem.map((x) => x.toLowerCase()).includes(mime)) return falha('sem_suporte');\nreturn { json: { ...v, ok: true, corpo_imagem: JSON.stringify({ model: cfg.modelo, input: [{ role: 'user', content: [{ type: 'input_text', text: bvPromptImagem(cfg) }, { type: 'input_image', image_url: 'data:' + mime + ';base64,' + buf.toString('base64'), detail: cfg.imagem_detalhe }] }] }) } };"
+      },
+      "id": "dd368adf-1684-517c-a824-b72ffaa22579",
+      "name": "Baixar imagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9c847c9f-fc36-5d71-969b-d6ded0ddcc47",
+              "leftValue": "={{ String($json.ok) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d0415ef4-4c90-5289-96a2-9a2f15f46377",
+      "name": "Imagem baixada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        200
       ]
     }
   ],
@@ -418,7 +510,7 @@
       "main": [
         [
           {
-            "node": "Baixar",
+            "node": "Tipo da midia",
             "type": "main",
             "index": 0
           }
@@ -447,32 +539,7 @@
       "main": [
         [
           {
-            "node": "Audio ou imagem?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Audio ou imagem?": {
-      "main": [
-        [
-          {
-            "node": "Transcrever",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Descrever",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Falha de entrada",
+            "node": "Audio ok?",
             "type": "main",
             "index": 0
           }
@@ -561,6 +628,78 @@
         [
           {
             "node": "Resumo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo da midia": {
+      "main": [
+        [
+          {
+            "node": "Baixar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Baixar imagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha de entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio ok?": {
+      "main": [
+        [
+          {
+            "node": "Transcrever",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha de entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar imagem": {
+      "main": [
+        [
+          {
+            "node": "Imagem baixada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Imagem baixada?": {
+      "main": [
+        [
+          {
+            "node": "Descrever",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha de entrada",
             "type": "main",
             "index": 0
           }

@@ -65,11 +65,13 @@ mídia da rajada é `grande`.
 
 ```text
 Gatilho -> Validar (Code: https, host do tipo, MIME, limites antes) -> Pode baixar? (IF)
-  sim -> Baixar (HTTP GET, sem auth, maxRedirects 0, timeout, arquivo, neverError)
-      -> Conferir (Code: status, tamanho real, nome/MIME do binário pelo fileMimeType)
-      -> Áudio ou imagem? (Switch)
-           áudio  -> Transcrever (HTTP POST /v1/audio/transcriptions, openAiApi) -> Texto áudio
-           imagem -> Descrever (nó OpenAI nativo ou HTTP, ver research D4)     -> Texto imagem
+  sim -> Tipo da midia (Switch)
+      áudio  -> Baixar (HTTP GET, sem auth, maxRedirects 0, timeout, arquivo, neverError)
+             -> Conferir (Code: status, tamanho real, nome/MIME do binário pelo fileMimeType)
+             -> Audio ok? (Switch) -> Transcrever (HTTP POST /v1/audio/transcriptions, openAiApi) -> Texto áudio
+      imagem -> Baixar imagem (Code, em memória, sem binário n8n: arraybuffer, sem redirect, timeout,
+                tamanho real, MIME pelo content-type; monta corpo_imagem) -> Imagem baixada? (IF)
+             -> Descrever (HTTP JSON /v1/responses, ver research D4/D7) -> Texto imagem
   não -> (motivo já definido)
 -> Juntar (Merge append) -> Gravar (Postgres) -> Registrar falhas (Postgres) -> Resumo (Code)
 ```

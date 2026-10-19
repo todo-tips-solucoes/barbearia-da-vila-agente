@@ -84,9 +84,9 @@ Ref: research.md D4; quickstart.md 10a; checklists/api.md CHK013
 
 Ref: research.md D7; quickstart.md 10; plan.md §Segurança M6
 
-- [!] 2.3.1 Executar o sub de teste com `saveData*` = `none` e baixar um áudio real
-- [ ] 2.3.2 Verificar na stack `n8n` que nenhum arquivo do áudio resta na pasta de binários (somente leitura, via procedimento do `docs/infra.md`)
-- [ ] 2.3.3 Registrar o resultado no `research.md`; arquivo restante abre bloqueio humano
+- [!] 2.3.1 Executar o sub de teste com `saveData*` = `none` e baixar um áudio real (medido 2026-10-19: FALHOU; o binário ficou em disco, ver research.md D7. Imagem resolvida na onda 12 por download em Code sem binário n8n; **segue `[!]` só para o áudio**, que ainda usa `Baixar`/`Transcrever` com binário)
+- [x] 2.3.2 Verificar na stack `n8n` (medido pelo pai: arquivo de 125431 bytes em `/home/node/.n8n/binaryData/workflows/FbQLbUHauxMMIjI4/`, apagado com autorização do owner)
+- [x] 2.3.3 Registrar o resultado no `research.md` (feito; block-005 respondido, decisão a)
 
 ### 2.4 Tarefa bloqueante H4: teto de bytes / Content-Length no nó HTTP `[C]`
 
@@ -101,9 +101,9 @@ Ref: plan.md §Segurança H4 (aceito com tarefa bloqueante, dec-015); checklists
 
 Ref: research.md D5; spec.md FR-006; quickstart.md 14
 
-- [!] 2.5.1 Com a primeira imagem real do número de teste (owner), ler o host da `fileUrl` gravada em `mensagens`
-- [ ] 2.5.2 Owner confirma o host; acrescentar em `midia.hosts_imagem` e o MIME em `midia.mimes_imagem` se divergir
-- [ ] 2.5.3 Registrar a fonte (evento real) no contrato; nenhum campo inventado
+- [x] 2.5.1 Imagem real do número de teste (medido 2026-10-19): host `object.ce1.eveo.com.br`, MIME `image/jpeg`, 90322 bytes; recusada com `host_recusado` como esperado
+- [x] 2.5.2 Host acrescentado em `midia.hosts_imagem` do `config/ambientes/integracao.json` (fonte: evento real 2026-10-19 + confirmação do owner); MIME já estava na lista; PROD segue `[]`
+- [x] 2.5.3 Fonte registrada no `research.md` (nenhum campo inventado)
 
 ---
 

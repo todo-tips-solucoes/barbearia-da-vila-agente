@@ -23,10 +23,13 @@ class InterpretarMidia(unittest.TestCase):
 
     def test_cadeia(self):  # contracts/interpretar-midia.md §Cadeia
         self.assertEqual(self.destinos("Validar"), ["Pode baixar?"])
-        self.assertEqual(self.destinos("Pode baixar?"), ["Baixar", "Falha de entrada"])
+        self.assertEqual(self.destinos("Pode baixar?"), ["Tipo da midia", "Falha de entrada"])
+        self.assertEqual(self.destinos("Tipo da midia"), ["Baixar", "Baixar imagem", "Falha de entrada"])
         self.assertEqual(self.destinos("Baixar"), ["Conferir"])
-        self.assertEqual(self.destinos("Conferir"), ["Audio ou imagem?"])
-        self.assertEqual(self.destinos("Audio ou imagem?"), ["Transcrever", "Descrever", "Falha de entrada"])
+        self.assertEqual(self.destinos("Conferir"), ["Audio ok?"])
+        self.assertEqual(self.destinos("Audio ok?"), ["Transcrever", "Falha de entrada"])
+        self.assertEqual(self.destinos("Baixar imagem"), ["Imagem baixada?"])
+        self.assertEqual(self.destinos("Imagem baixada?"), ["Descrever", "Falha de entrada"])
         self.assertEqual(self.destinos("Juntar"), ["Gravar"])
         self.assertEqual(self.destinos("Gravar"), ["Registrar falhas"])
         self.assertEqual(self.destinos("Registrar falhas"), ["Resumo"])
@@ -38,6 +41,19 @@ class InterpretarMidia(unittest.TestCase):
         self.assertEqual(b["parameters"]["options"]["redirect"]["redirect"]["maxRedirects"], 0)
         self.assertIn("midia.download_timeout_s", b["parameters"]["options"]["timeout"])
         self.assertNotIn("maxContentLength", self.texto)  # tarefa 2.4: o HTTP Request nao tem teto de bytes
+
+    def test_imagem_baixada_em_code_sem_binario_n8n(self):  # block-005: binario n8n fica em disco
+        b = self.nos["Baixar imagem"]
+        self.assertEqual(b["type"], "n8n-nodes-base.code")
+        j = b["parameters"]["jsCode"]
+        for t in ("encoding: 'arraybuffer'", "disableFollowRedirect: true", "midia.download_timeout_s", "imagem_max_mb", "content-type", "mimes_imagem"):
+            self.assertIn(t, j)
+        self.assertNotIn("binary", j)
+        self.assertNotIn("getBinaryDataBuffer", self.nos["Imagem baixada?"]["parameters"].__str__())
+        # o unico HTTP de download (binario) e o do audio
+        self.assertEqual(self.nos["Baixar"]["parameters"]["options"]["response"]["response"]["responseFormat"], "file")
+        self.assertNotIn("input_image", self.nos["Conferir"]["parameters"]["jsCode"])
+        self.assertIn("corpo_imagem", j)
 
     def test_nos_de_rede_continuam_em_erro_e_openai_usa_credencial_predefinida(self):
         for nome in ("Baixar", "Transcrever", "Descrever"):

@@ -73,7 +73,9 @@
     "hosts_audio": [
       "object.ce1.eveo.com.br"
     ],
-    "hosts_imagem": [],
+    "hosts_imagem": [
+      "object.ce1.eveo.com.br"
+    ],
     "mimes_audio": [
       "audio/ogg"
     ],
