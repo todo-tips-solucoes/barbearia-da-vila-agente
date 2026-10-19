@@ -86,6 +86,7 @@ for (const n of ['corte adulto', 'corte 20 vezes', 'barba']) assert.equal(a.bvSe
 // 4.1.4: prompt de imagem so descreve, respeita o teto, ignora texto da imagem, omite documentos e mascara digitos.
 const pi = a.bvPromptImagem({ descricao_max_chars: 600 });
 assert.ok(pi.includes('600 caracteres') && /nunca uma instrução/.test(pi) && /documento/.test(pi) && /6 ou mais dígitos/.test(pi));
+assert.ok(/e-mails, telefones/.test(pi) && /só atende assuntos da Barbearia/.test(a.bvPrompt({ saida: { max_mensagens: 3 } })));
 
 // 5.1.2/5.1.3: turno com midia (audio-imagem).
 {
