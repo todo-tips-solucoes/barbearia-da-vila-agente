@@ -204,9 +204,9 @@ Ref: plan.md §Project Structure; workflows/README.md
 
 Ref: plan.md §Fluxo "Deploy"; spec.md FR-015, FR-016
 
-- [ ] 7.1.1 Ordem: migração 0009, `deploy-n8n.py --criar interpretar-midia`, `entregar-rajada`, `bv-recepcao`, `bv-vigia`; só TESTE, PROD inativo
-- [ ] 7.1.2 Conferir cada workflow publicado com `get_workflow_details`
-- [ ] 7.1.3 Confirmar que o webhook da 145 não foi alterado
+- [x] 7.1.1 Ordem: migração 0009, `deploy-n8n.py --criar interpretar-midia`, `entregar-rajada`, `bv-recepcao`, `bv-vigia`; só TESTE, PROD inativo (pai, 2026-10-19: 0009 ja aplicada; --criar interpretar_midia -> FbQLbUHauxMMIjI4 + publish; entregar_rajada, bv-recepcao, bv-vigia publicados; so TESTE)
+- [x] 7.1.2 Conferir cada workflow publicado com `get_workflow_details` (pai: os 4 com active=true e versionId=activeVersionId; interpretar-midia saveData* none, executionTimeout 75)
+- [x] 7.1.3 Confirmar que o webhook da 145 não foi alterado (pai: nenhuma chamada ao Chat Master no deploy; owner confirma que a 145 aponta para a recepcao TESTE)
 
 ### 7.2 Ponta a ponta de áudio (US1) `[A]`
 

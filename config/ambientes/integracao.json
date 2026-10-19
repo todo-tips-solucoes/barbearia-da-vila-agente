@@ -70,10 +70,19 @@
     "contatos_escrita": []
   },
   "midia": {
-    "hosts_audio": ["object.ce1.eveo.com.br"],
+    "hosts_audio": [
+      "object.ce1.eveo.com.br"
+    ],
     "hosts_imagem": [],
-    "mimes_audio": ["audio/ogg"],
-    "mimes_imagem": ["image/png", "image/jpeg", "image/webp", "image/gif"],
+    "mimes_audio": [
+      "audio/ogg"
+    ],
+    "mimes_imagem": [
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif"
+    ],
     "prefixos_audio": [],
     "prefixos_imagem": [],
     "descricao_max_chars": 600,
@@ -91,7 +100,7 @@
   "workflows_sub": {
     "entregar_rajada": "ilzXqBWGtcczlGEu",
     "bv_graces": "mjhd7O0AzrqNVrf0",
-    "interpretar_midia": ""
+    "interpretar_midia": "FbQLbUHauxMMIjI4"
   },
   "execucao": {
     "timeout_s": 300
