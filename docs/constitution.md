@@ -1,15 +1,16 @@
 <!--
 Sync Impact Report
-- Version: 1.1.0 → 2.0.0 (MAJOR)
-- Princípios modificados: X (Conversa humanizada e identidade) redefinido. Múltipla escolha passa a ser
-  sempre por botão de lista (decisão do owner em 2026-10-18), no lugar de "conversa, não menus" e
-  "botão somente na confirmação".
+- Version: 2.0.0 → 3.0.0 (MAJOR)
+- Princípios modificados: XI (Escrita segura na agenda) redefinido. O agente deixa de perguntar
+  "pacote ou avulso" e não trata de pacote: abatimento é feito pela equipe na Graces (decisão do
+  owner em 2026-10-19). X perde "pacote ou avulso" da lista de exemplos.
 - Seções adicionadas: nenhuma
 - Seções removidas: nenhuma
-- Artefatos que precisam atualização: docs/briefing.md e docs/roadmap.md (atualizados nesta mesma PR);
-  specs futuras de agente-conversacional-graces e regras-negocio-agenda
+- Artefatos que precisam atualização: docs/briefing.md, docs/roadmap.md e docs/decisoes-pre-00c.md
+  (atualizados nesta mesma PR); spec de regras-negocio-agenda (em andamento)
 - TODOs pendentes: nenhum
-- Histórico: 1.0.0 → 1.1.0 (MINOR) acrescentou os princípios IX-XVI
+- Histórico: 1.0.0 → 1.1.0 (MINOR) acrescentou os princípios IX-XVI; 1.1.0 → 2.0.0 (MAJOR) redefiniu
+  o X para múltipla escolha sempre por botão de lista
 -->
 
 # Constituição de Barbearia da Vila - Agente
@@ -165,7 +166,7 @@ repositório são código como qualquer outro.
 - O agente MUST assumir que é IA (assistente virtual da Barbearia da Vila), com tom humanizado.
 - O agente MUST responder em até 4 mensagens curtas, com "digitando…" proporcional e uma pergunta
   por mensagem.
-- Toda múltipla escolha (horários, barbeiros, serviços, pacote ou avulso etc.) MUST ser enviada como
+- Toda múltipla escolha (horários, barbeiros, serviços etc.) MUST ser enviada como
   botão de lista (mensagem de lista da biblioteca Pro), acompanhada de um texto curto e humano. Se o
   cliente responder escrevendo em vez de tocar, o agente MUST entender a resposta do mesmo jeito.
   A confirmação de presença usa botão Quick Reply.
@@ -178,7 +179,8 @@ repositório são código como qualquer outro.
 - O agente MUST confirmar com o cliente antes de agendar, reagendar ou cancelar.
 - Erros da Graces MUST ser tratados pelo campo `code`; uma escrita MUST NOT ser repetida às cegas
   após timeout, e sim verificada antes.
-- Havendo pacote, o agente MUST perguntar se o cliente usa a sessão do pacote ou paga avulso.
+- O agente MUST NOT tratar de pacote nem de abatimento de sessão: isso é feito pela equipe da
+  barbearia dentro da Graces. O agente agenda o serviço normalmente, sem perguntar sobre pacote.
 
 ### XII. Skills e validação de n8n
 
@@ -231,4 +233,4 @@ de um humano registrada no corpo da PR; a versão segue SemVer (MAJOR: princípi
 redefinido; MINOR: princípio ou regra adicionada; PATCH: redação). A primeira versão é a 1.0.0,
 ratificada no merge da PR que adota esta constituição.
 
-**Version**: 2.0.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-10-18
+**Version**: 3.0.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-10-19
