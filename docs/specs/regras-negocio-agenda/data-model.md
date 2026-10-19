@@ -11,7 +11,7 @@ Nenhuma coluna guarda celular, documento ou corpo de resposta da Graces (constit
 |-------|---------|
 | `acao` | `CHECK` passa a aceitar também `agendar_conjunto`, `cancelar_conjunto`, `cadastrar_terceiro` |
 | `estado` | `CHECK` passa a aceitar também `parcial` |
-| `dados` | `agendar`: + `pagamento` (`avulso`\|`pacote`). `agendar_conjunto`: `{idCliente, itens:[{ordem, idServico, servico, idProfissional, barbeiro, data, hora, minutos, valor, pagamento}]}`. `cancelar_conjunto`: `{itens:[{ordem, idAgenda, horaInicio, recorrente, servico}]}`. `cadastrar_terceiro`: `{nome, celular, celular_do_remetente}` (`celular` só dígitos, DDD + número; é o do remetente quando o terceiro não tem, FR-007; apagado de `dados` quando a proposta termina) |
+| `dados` | `agendar_conjunto`: `{idCliente, itens:[{ordem, idServico, servico, idProfissional, barbeiro, data, hora, minutos, valor}]}`. `cancelar_conjunto`: `{itens:[{ordem, idAgenda, horaInicio, recorrente, servico}]}`. `cadastrar_terceiro`: `{nome, celular, celular_do_remetente}` (`celular` só dígitos, DDD + número; é o do remetente quando o terceiro não tem, FR-007; apagado de `dados` quando a proposta termina) |
 | `resultado` | + `itens:[{ordem, estado, idAgenda?, code?, trace_id?}]`, `tentativas` (0..1 repetição), `verificada` (bool) |
 
 A migração troca o `CHECK` por `ALTER TABLE ... DROP CONSTRAINT IF EXISTS` + `ADD CONSTRAINT` com os
@@ -24,7 +24,7 @@ Transições (acréscimos ao F3 `data-model.md`):
 executando -> executada   (todos os itens criados/cancelados, inclusive após verificação)
 executando -> parcial     (algum item criado e um item seguinte falhou; só agendar_conjunto/cancelar_conjunto)
 executando -> incerta     (escrita sem resposta, verificada sem conclusão ou repetição também incerta)
-executando -> falhou      (nenhum item aplicado; inclui pacote_indisponivel e servico_nao_oferecido)
+executando -> falhou      (nenhum item aplicado; inclui servico_nao_oferecido)
 ```
 
 Item de conjunto: `pendente -> criado | falhou | incerto`; depois de um `falhou`, os seguintes ficam
@@ -40,8 +40,7 @@ Chaves novas no jsonb `pedido` (só ids e rótulos curtos vindos da Graces ou do
 
 | Chave | Conteúdo |
 |-------|----------|
-| `horario` | início escolhido aguardando a pergunta pacote/avulso: `{data, hora, idServico, servico, idProfissional, apelido, minutos, valor}` |
-| `pacote_aplicavel` | `true` quando a fase 1 achou seção aplicável para `horario` (ids da seção não ficam aqui; a fase 2 reconsulta) |
+| `handoff` | `true` após `encaminhar_equipe` e transferência ao setor 78; o agente não responde mais nessa conversa |
 | `servicos` | encadeamento: `[{opcao_id, idServico, nome, preco}]` em ordem |
 | `modo_encadeamento` | `mesmo_barbeiro` \| `barbeiros_diferentes` \| `separados` |
 | `faltantes` | serviços de um conjunto `parcial` que não foram criados |
@@ -55,7 +54,7 @@ Chaves novas no jsonb `pedido` (só ids e rótulos curtos vindos da Graces ou do
 `pedido` volta a `{}` (com `pedido_anterior`) ao abrir sessão nova, como na F3; `para_terceiro` não
 sobrevive à sessão.
 
-Tipos novos de `opcoes.tipo`: `pagamento` (itens `pacote`, `avulso`), `pessoa` (`valor =
+Tipos novos de `opcoes.tipo`: `pessoa` (`valor =
 {idCliente, nome, mesmo_celular}`; `mesmo_celular` é calculado na busca e o celular em si não é guardado), `modo_encadeamento` (`barbeiros_diferentes`, `separados`), `sequencia` (início de
 um encadeamento: `valor = {data, itens:[{idServico, idProfissional, apelido, hora, minutos, valor}]}`).
 A oferta de horários ganha `completa: true`.
@@ -65,15 +64,12 @@ A oferta de horários ganha `completa: true`.
 Motivos novos (texto livre já aceito): `configuracao`, `parametro_invalido`, `nao_encontrado`,
 `conflito`, `sem_resposta`, `code_desconhecido`, `escrita_incerta`, `escrita_repetida`,
 `estagios_esgotados`, `conjunto_parcial`, `encaminhar_equipe|terceiro_outro_celular`,
-`encaminhar_equipe|nome_outro_celular` (ponto de integração com `crm-etiquetas-handoff`, research
-Decision 6; sem nome nem celular). Sempre com `code` e `trace_id` quando houver; nunca `detail`.
+`encaminhar_equipe|nome_outro_celular` (research Decision 6; sem nome nem celular), `handoff_falhou` (transferência ao setor 78 falhou). Sempre com `code` e `trace_id` quando houver; nunca `detail`.
 
-## Entity: Serviço, Seção de pacote, Pessoa atendida (só Graces)
+## Entity: Serviço, Pessoa atendida (só Graces)
 
 Não são persistidos: vêm da Graces a cada consulta. Serviço "2ª vez" = `descricaoAgenda` (ou
-`descricaoAgendaOnline` da seção) que casa `BV_SEGUNDA_VEZ` (`workflows/shared/agente.js:7`). Seção
-aplicável = item de `secoes` de um pacote com `dataValidade` nula ou ≥ data do agendamento
-(G `04`:164). Pessoa atendida = `pedido.idCliente` (remetente ou terceiro).
+`descricaoAgendaOnline` da seção) que casa `BV_SEGUNDA_VEZ` (`workflows/shared/agente.js:7`). Pessoa atendida = `pedido.idCliente` (remetente ou terceiro).
 
 Primeiro contato: `identificar_cliente` (F3) acha o remetente pelo celular do WhatsApp; sem cadastro,
 `pedido.cliente_sem_cadastro = true` e `cadastrar_cliente` só cria se a busca pelo nome não achar o

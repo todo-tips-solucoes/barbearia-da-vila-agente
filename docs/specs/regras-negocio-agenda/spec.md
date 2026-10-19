@@ -4,7 +4,7 @@
 **Created**: 2026-10-18
 **Status**: Draft
 **Depende de**: `agente-conversacional-graces` (estende o fluxo `entregar-rajada` e as ferramentas `bv-graces` da feature 3)
-**Origem**: roadmap (feature 4), `docs/decisoes-pre-00c.md` (seção Regras de negócio), `graces-api/` e `alteracoes_clientes/transcricoes.md`. FR-023 da feature 3 adiou para cá: pacote, terceiros, encadeamento e oferta de todos os inícios.
+**Origem**: roadmap (feature 4), `docs/decisoes-pre-00c.md` (seção Regras de negócio), `graces-api/` e `alteracoes_clientes/transcricoes.md`. FR-023 da feature 3 adiou para cá: terceiros, encadeamento e oferta de todos os inícios.
 **Escopo de ambiente**: somente TESTE; PROD fica parametrizado e inativo (decisão do owner).
 
 > Decisões de infraestrutura: N/A (esta feature não cria agendador, rotação de chave nem backup). Idempotência de escrita: ver FR-009 e FR-010.
@@ -28,21 +28,9 @@ Ao pedir um horário, o cliente recebe todos os inícios livres do dia (e do bar
 
 ---
 
-### User Story 2 - Pacote ou avulso: perguntar antes (Priority: P1)
+### User Story 2 - Removida
 
-Quando o cliente tem sessão de pacote aplicável ao serviço, o assistente pergunta se ele quer usar a sessão do pacote ou pagar avulso, e agenda conforme a resposta. Nunca decide sozinho.
-
-**Why this priority**: decisão do owner; usar o pacote sem perguntar consome algo que o cliente pode querer guardar.
-
-**Independent Test**: para um cliente com seção de pacote aplicável, conferir que a pergunta é feita antes do resumo de confirmação e que o agendamento reflete a escolha; para um cliente sem pacote, conferir que a pergunta não aparece.
-
-**Acceptance Scenarios**:
-
-1. **Given** o cliente tem seção de pacote aplicável ao serviço, **When** o serviço, o barbeiro e o horário já estão escolhidos, **Then** o assistente oferece "usar a sessão do pacote" ou "pagar avulso" por botão de lista antes de confirmar.
-2. **Given** o cliente escolhe o pacote, **When** o agendamento é criado, **Then** ele abate a seção do pacote e o resumo de confirmação diz "abatido do pacote".
-3. **Given** o cliente escolhe avulso, **When** o agendamento é criado, **Then** o serviço é cobrado como avulso e o resumo mostra o valor.
-4. **Given** o cliente não tem seção aplicável, **When** ele agenda, **Then** nada sobre pacote é perguntado.
-5. **Given** o cliente tem mais de uma seção aplicável, **When** escolhe usar o pacote, **Then** vale a regra definida em FR-004.
+Pacote e abatimento não são tratados pelo agente: a equipe faz isso na Graces (constituição 3.0.0, princípio XI; decisão do owner em 2026-10-19, block-004). O agente agenda o serviço normalmente, sem perguntar pacote ou avulso. Numeração de US/FR/SC mantida.
 
 ---
 
@@ -118,7 +106,6 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 
 - Serviço com tempo próprio do barbeiro: a duração usada é a que a Graces devolve para aquele barbeiro e serviço, nunca um tempo suposto.
 - Início que cabe no fim do expediente: só aparece se a Graces o devolve; o assistente não calcula fechamento por conta própria.
-- Pacote vencido ou seção já reservada: não é oferecido; o assistente trata como avulso somente se o cliente concordar.
 - Cliente que pede "o mais cedo possível" com muitas opções: o assistente responde com o primeiro início, mantendo o restante disponível.
 - Terceiro com o mesmo nome do remetente ou homônimo: o assistente pede confirmação antes de usar o cadastro.
 - Terceiro sem celular próprio: cadastra com o celular do remetente após confirmação explícita (FR-007).
@@ -139,10 +126,10 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 
 - **FR-001**: O sistema MUST oferecer ao cliente todos os inícios livres devolvidos pela Graces em que o serviço escolhido cabe inteiro, sem limitar a 3 a 5 sugestões e sem ocultar nenhum, e MUST NOT oferecer início que não tenha vindo da consulta de horários livres feita na mesma conversa. Quando excederem o tamanho máximo de uma lista do canal, MUST enviar várias listas em sequência cronológica até esgotar todos os inícios (clarify Q1, dec-008).
 - **FR-002**: Para "qualquer barbeiro", o sistema MUST consultar cada barbeiro elegível do serviço, excluindo o barbeiro de teste, e unir os inícios identificando o barbeiro de cada um.
-- **FR-003**: Antes da confirmação, quando o cliente tiver seção de pacote aplicável ao serviço, o sistema MUST perguntar, por botão de lista, se ele quer usar a sessão do pacote ou pagar avulso, e MUST NOT escolher por ele. Sem seção aplicável, MUST NOT perguntar.
-- **FR-004**: Havendo mais de uma seção aplicável, o sistema MUST usar a primeira devolvida pela Graces, informando ao cliente que será abatido do pacote. (Regra de `graces-api/05-fluxos-do-agente.md`; a barbearia pode revisar.)
+- **FR-003**: Removido (princípio XI): o agente MUST NOT perguntar pacote ou avulso, consultar `/agenda/pacotes` nem usar `idClienteItemPacote`; agenda sempre pelo `idServico`.
+- **FR-004**: Removido (princípio XI; CHK014 deixa de existir).
 - **FR-005**: O sistema MUST NOT oferecer, sugerir nem agendar serviço cuja descrição indique "2ª vez" (variantes "2º vez"/"2ª vez", sem diferenciar acento, caixa ou ordinal), e a ferramenta de escrita MUST recusar esses serviços mesmo se o modelo os escolher. Se o cliente os pedir, o sistema MUST oferecer o serviço regular equivalente sem prometer desconto.
-- **FR-006**: Ao saber que o atendimento é para outra pessoa, o sistema MUST pedir o nome dela, buscar na Graces pelo nome, confirmar a identidade com o cliente e agendar no cadastro dessa pessoa, nunca no do remetente. Terceiro cujo celular no cadastro difere do celular do remetente (inclusive sem celular no cadastro) MUST NOT virar `idCliente`: o sistema não permite ver, remarcar, cancelar, usar pacote nem agendar para ele, e MUST encaminhar o pedido à equipe (`encaminhar_equipe`, motivo `terceiro_outro_celular`). A busca MUST exigir nome completo de ao menos 2 palavras; "mesmo nome" é a igualdade após normalizar caixa, acentos e espaços repetidos.
+- **FR-006**: Ao saber que o atendimento é para outra pessoa, o sistema MUST pedir o nome dela, buscar na Graces pelo nome, confirmar a identidade com o cliente e agendar no cadastro dessa pessoa, nunca no do remetente. Terceiro cujo celular no cadastro difere do celular do remetente (inclusive sem celular no cadastro) MUST NOT virar `idCliente`: o sistema não permite ver, remarcar, cancelar, nem agendar para ele, e MUST encaminhar o pedido à equipe (`encaminhar_equipe`, motivo `terceiro_outro_celular`). A busca MUST exigir nome completo de ao menos 2 palavras; "mesmo nome" é a igualdade após normalizar caixa, acentos e espaços repetidos.
 - **FR-007**: Quando a pessoa não existir, o sistema MUST cadastrá-la somente após confirmação do cliente e com os dados que a loja exige. Cadastro de cliente na Graces é irreversível: nos testes, MUST NOT ser executado sem autorização expressa do owner. Terceiro sem celular próprio (por exemplo, criança): o sistema MUST cadastrá-lo com o celular de quem pede, somente após confirmação explícita do cliente na conversa (clarify block-001, dec-011; `docs/decisoes-pre-00c.md`). Testes não cadastram cliente real novo (mock ou cliente de teste). Primeiro contato cujo nome completo (2+ palavras, normalizado como em FR-006) já existe na Graces com outro celular MUST ser encaminhado à equipe (`encaminhar_equipe`, motivo `nome_outro_celular`), sem cadastrar, mesclar nem duplicar.
 - **FR-008**: O sistema MUST agendar vários serviços pedidos juntos como um agendamento por serviço, em sequência (o início de cada um no fim do anterior), oferecendo apenas inícios em que a sequência inteira cabe e confirmando o conjunto numa única mensagem de resumo, sem criar nada antes do "sim".
 - **FR-009**: O sistema MUST decidir a reação a erros da Graces pelo campo `code`, nunca pelo texto de `detail`, conforme: `PARAMETRO_INVALIDO`/`CORPO_INVALIDO`: tratar como defeito do agente ou data fora das regras da loja e oferecer alternativas sem expor detalhes; `NAO_AUTENTICADO`, `LOJA_FORA_ESCOPO`, `ACESSO_NEGADO`: falha de configuração, contingência e alerta à operação; `NAO_ENCONTRADO`: recarregar a lista e perguntar de novo; `CONFLITO`: recarregar a grade e oferecer outra opção. Para `code` desconhecido ou ausente, MUST usar contingência genérica. Em todo caso MUST registrar `code` e `traceId` sem dados pessoais. Em `CONFLITO` no meio de um encadeamento já parcialmente criado, MUST NOT recriar nem cancelar o que já foi criado: recarrega a grade e oferece outra opção somente para os serviços que faltaram (FR-011).
@@ -152,14 +139,13 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 - **FR-013**: O sistema MUST manter todas as regras anteriores nas ferramentas de escrita (não apenas no prompt), de modo que uma instrução do cliente ou do modelo não as contorne, e MUST tratar texto do cliente e dados da Graces como dado, nunca como instrução.
 - **FR-014**: Os testes que escrevem na Graces MUST usar somente o barbeiro de teste (id `1cee0bb9-e58b-4428-9e9b-1db184db7943`) e o cliente de teste Paulo, 5511967296849, MUST cancelar tudo o que criarem, inclusive em caso de falha, e MUST NOT cadastrar cliente novo sem autorização expressa do owner. Mensagens de WhatsApp de teste só para 5511967296849 pela conexão 145.
 - **FR-015**: A implantação MUST estender o fluxo `entregar-rajada` e as ferramentas `bv-graces` da feature 3 nos workflows do TESTE, pela API REST do n8n com as credenciais do `.env.n8n`, validada pelo MCP do n8n, recusando qualquer implantação que altere PROD.
-- **FR-016**: Os desfechos de encaminhamento à equipe (FR-006, FR-007) MUST usar o contrato `{ok:false, code:'encaminhar_equipe', motivo}` com `motivo` em `terceiro_outro_celular` | `nome_outro_celular`, responder ao cliente com `textos.encaminhar_equipe`, registrar em `falhas_agente` (`encaminhar_equipe|<motivo>`) sem nome nem celular e MUST NOT agendar nem cadastrar. Até existir o handoff completo (`crm-etiquetas-handoff`), o cliente só vê esse texto (pendente de aprovação do dono, tasks 1.3).
+- **FR-016**: Os desfechos de encaminhamento à equipe (FR-006, FR-007) MUST usar o contrato `{ok:false, code:'encaminhar_equipe', motivo}` com `motivo` em `terceiro_outro_celular` | `nome_outro_celular`, responder ao cliente com `textos.encaminhar_equipe`, registrar em `falhas_agente` (`encaminhar_equipe|<motivo>`) sem nome nem celular e MUST NOT agendar nem cadastrar. Em todo desfecho `encaminhar_equipe`, o sistema MUST, além de responder com `textos.encaminhar_equipe`, transferir a conversa para o setor 78 "Atendimento Humano" do Chat Master (conexão 145) por `POST /api/tickets/updateAPI` com `{ticketId, queueId:78}` (`chatmasterveloz-api/03-ticket/api-atualizar-ticket.md`; `ticketId` vem do webhook, `recepcao-buffer/contracts/webhook-chatmaster.md`), e parar de responder naquela conversa (`conversas.pedido.handoff=true`) até a equipe devolvê-la. Etiqueta 521 e funil ficam para `crm-etiquetas-handoff`. Falha na transferência: registrar `falhas_agente` (`handoff_falhou`) e manter o agente calado, sem inventar outro endpoint. NÃO usar `/api/tickets/changequeue`: ele move todos os atendimentos da conexão. O texto aprovado pelo owner é curto e humano; proposta: "Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?".
 - **FR-017**: O celular lido na resposta da busca de pessoa MUST NOT chegar ao modelo nem a qualquer mensagem; só é usado internamente para comparar com o celular do remetente.
 - **FR-018**: A busca de pessoa e o cadastro MUST respeitar tetos configuráveis por sessão e por dia (`terceiro.buscas_max_sessao`, `terceiro.buscas_max_dia`, `terceiro.cadastros_max_dia`), recusando além do teto.
 
 ### Key Entities
 
 - **Serviço**: item da agenda com duração própria por barbeiro; variantes "2ª vez" são marcadas como não oferecíveis.
-- **Seção de pacote**: sessão em aberto do cliente, aplicável a um serviço; consumida só se o cliente escolher.
 - **Pessoa atendida**: o cliente titular do agendamento, que pode ser o remetente ou um terceiro cadastrado na Graces.
 - **Pedido composto**: conjunto ordenado de serviços pedidos juntos, com um agendamento por serviço e estado de cada um (criado, pendente, falho).
 - **Resultado de escrita**: desfecho de uma criação, movimentação ou cancelamento, com `code` e `traceId` quando erro, e verificação de aplicação após timeout.
@@ -169,7 +155,7 @@ Cada erro da Graces é tratado pelo campo `code`, nunca pelo texto da mensagem. 
 ### Measurable Outcomes
 
 - **SC-001**: Em 100% dos testes de oferta, o conjunto de inícios apresentados é idêntico ao conjunto de inícios livres devolvidos pela Graces para o serviço.
-- **SC-002**: Em 100% dos casos com seção de pacote aplicável, a pergunta pacote ou avulso é feita antes da confirmação; em 0% dos casos sem seção ela aparece.
+- **SC-002**: Removido (princípio XI). Em 100% dos agendamentos nos testes, nenhuma pergunta de pacote é feita e nenhuma chamada a `/agenda/pacotes` ocorre.
 - **SC-003**: Em 0 de N tentativas de oferecer ou agendar serviço "2ª vez" (incluindo pedido direto pelo nome) o sistema avança; em 100% elas são recusadas.
 - **SC-004**: Em 100% dos agendamentos para terceiros nos testes, o agendamento fica no cadastro da pessoa informada e não no do remetente.
 - **SC-005**: Em 100% dos pedidos de dois ou mais serviços confirmados, existe um agendamento por serviço, em sequência, e nenhum duplicado.

@@ -1,6 +1,6 @@
 # Tarefas Barbearia da Vila - regras-negocio-agenda
 
-Escopo: regras de negocio sobre a agenda da Graces (oferta completa, pacote, "2a vez", terceiros, encadeamento, erros por `code`, escrita incerta) e fechamento dos gaps do checklist. Somente TESTE.
+Escopo: regras de negocio sobre a agenda da Graces (oferta completa, "2a vez", terceiros, encadeamento, erros por `code`, escrita incerta) e fechamento dos gaps do checklist. Somente TESTE.
 
 **Legenda de status:**
 - `[ ]` Pendente
@@ -40,9 +40,9 @@ Ref: checklists/api.md CHK007 CHK008; checklists/security.md CHK032
 
 Ref: checklists/api.md CHK014 CHK015; checklists/ux.md CHK024 CHK025
 
-- [ ] 1.3.1 Dono aprova regra "primeira secao devolvida pela Graces" (CHK014)
-- [ ] 1.3.2 Dono aprova a redacao `[PROPOSTA]` de `textos.encaminhar_equipe` (CHK015, CHK024)
-- [ ] 1.3.3 Definir o que o cliente ve enquanto o handoff completo (crm-etiquetas-handoff) nao existe (CHK025)
+- [x] 1.3.1 Regra de secao de pacote removida: o agente nao trata de pacote (CHK014 deixa de existir; block-004)
+- [x] 1.3.2 Texto curto e humano de `textos.encaminhar_equipe` aprovado (CHK015, CHK024; block-004)
+- [x] 1.3.3 Handoff minimo definido: transferir ticket ao setor 78 por `updateAPI` e parar de responder (CHK025; block-004)
 
 ### 1.4 Re-rodar gates documentais e de seguranca `[A]`
 
@@ -85,14 +85,9 @@ Ref: spec.md FR-001 FR-002; quickstart u1-u3
 - [ ] 3.1.3 `Compor` em varias listas (10 por lista) respeitando limite de 4 mensagens
 - [ ] 3.1.4 Testes u1-u3 em `tests/graces.test.js` e `tests/agente.test.js`
 
-### 3.2 Pacote ou avulso `[A]`
+### 3.2 Removida (pacote)
 
-Ref: spec.md FR-003 FR-004; quickstart u4-u7
-
-- [ ] 3.2.1 Consultar secoes de pacote em codigo e filtrar por `dataValidade`
-- [ ] 3.2.2 Retornar `pergunta_pacote` na fase 1 quando ha secao aplicavel
-- [ ] 3.2.3 Fase 2 `pacote`: POST com `idClienteItemPacote` = primeira secao; reconsulta vazia gera `pacote_indisponivel`
-- [ ] 3.2.4 Testes u4-u7
+O agente nao trata de pacote (constituicao 3.0.0, principio XI; block-004). Sem tarefas; numeracao mantida.
 
 ### 3.3 Recusa de servico "2a vez" `[C]`
 
@@ -108,6 +103,7 @@ Ref: spec.md FR-006 FR-007; research.md Decision 6; quickstart u17-u24
 
 - [ ] 3.4.1 Implementar `buscar_pessoa` (rotulos so com nome e sobrenome, nome minimo 2 palavras, tetos por sessao/dia)
 - [ ] 3.4.2 Implementar `escolher_pessoa` com confirmacao em turno posterior e `encaminhar_equipe` (`terceiro_outro_celular`)
+- [ ] 3.4.2b Handoff: `updateAPI` `{ticketId, queueId:78}` (conexao 145), `pedido.handoff=true`, agente calado; falha => `handoff_falhou`. Sonda S5 antes (bloqueia se a fonte nao bastar)
 - [ ] 3.4.3 Implementar `cadastrar_terceiro` em duas fases, desligado no TESTE (`cadastro_desabilitado`), teto `cadastros_max_dia`
 - [ ] 3.4.4 Primeiro contato com nome existente e outro celular: `encaminhar_equipe` (`nome_outro_celular`)
 - [ ] 3.4.5 Garantir que celular da busca nao chega ao modelo nem a mensagem
@@ -162,7 +158,7 @@ Ref: quickstart.md; spec.md FR-014 SC-001..SC-008
 
 - [ ] 5.1.1 Implementar roteiros em `scripts/smoke-agente.py` com barbeiro de teste e cliente Paulo
 - [ ] 5.1.2 Limpeza de itens de conjunto no `finally` (SC-008)
-- [ ] 5.1.3 Executar roteiros um por vez e registrar resultado; caminho `pacote` limitado por P3
+- [ ] 5.1.3 Executar roteiros um por vez e registrar resultado
 - [ ] 5.1.4 Medir p90 e latencia do encadeamento
 
 ### 5.2 Documentacao `[M]`
@@ -198,7 +194,7 @@ flowchart TD
 |------|---------|------------|-------------|
 | 1 - Requisitos | 4 | 15 | C |
 | 2 - Fundacao | 2 | 6 | A |
-| 3 - Dominio | 6 | 25 | C |
+| 3 - Dominio | 5 | 21 | C |
 | 4 - Workflows | 2 | 7 | A |
 | 5 - E2E e Docs | 2 | 7 | A |
 | **Total** | **16** | **60** | - |
@@ -208,7 +204,7 @@ flowchart TD
 | Item | Descricao | Fase |
 |------|-----------|------|
 | FR-001..FR-002 | Oferta completa e uniao de barbeiros | 3 |
-| FR-003..FR-004 | Pacote ou avulso | 3 |
+| FR-003..FR-004 | Removidos (pacote, principio XI) | - |
 | FR-005 | Recusa de "2a vez" | 3 |
 | FR-006..FR-007 | Terceiros e cadastro | 1, 3 |
 | FR-008, FR-011, FR-012 | Encadeamento | 3 |
@@ -222,5 +218,5 @@ flowchart TD
 |------|-----------|--------|
 | PROD | Deploy em producao | Decisao do owner: somente TESTE nesta feature |
 | Cadastro real de terceiros | Criar clientes reais na Graces | FR-014; `cadastroLiberado` desligado no TESTE |
-| Handoff completo | Etiquetas/CRM de encaminhamento | Feature crm-etiquetas-handoff; so o texto provisorio aqui |
+| Handoff completo | Etiqueta 521 e funil | Feature crm-etiquetas-handoff; aqui so a transferencia ao setor 78 |
 | Tier de entrega | Divisao nuvem/nao-nuvem | Nao citado nos args; backlog completo |

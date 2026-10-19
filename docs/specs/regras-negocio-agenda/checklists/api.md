@@ -22,8 +22,8 @@
 - [x] CHK011 - As regras valem nas ferramentas de escrita, não só no prompt? [Completude, Spec §FR-013] {auto}
 - [x] CHK012 - Implantação restrita ao TESTE e recusa de alteração em PROD estão especificadas? [Spec §FR-015] {auto}
 - [x] CHK013 - A premissa "Graces só em produção" está tratada via barbeiro/cliente de teste e cancelamento garantido? [Assumption, Spec §FR-014, SC-008] {auto}
-- [ ] CHK014 - A regra "primeira seção devolvida pela Graces" (FR-004) é aceita pela barbearia? [Assumption, Spec §FR-004] {humano}
-- [ ] CHK015 - A redação `[PROPOSTA]` de `textos.encaminhar_equipe` foi aprovada pelo dono? [Assumption, contracts/config-regras.md] {humano}
+- [x] CHK014 - A regra "primeira seção devolvida pela Graces" (FR-004) é aceita pela barbearia? [Assumption, Spec §FR-004] {humano} Resolvido pelo owner em 2026-10-19 (block-004) — item removido: agente não trata de pacote (princípio XI)
+- [x] CHK015 - A redação `[PROPOSTA]` de `textos.encaminhar_equipe` foi aprovada pelo dono? [Assumption, contracts/config-regras.md] {humano} Resolvido pelo owner em 2026-10-19 (block-004)
 
 ## Notes
 

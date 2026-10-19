@@ -19,10 +19,6 @@ Cobertura obrigatória em `tests/graces.test.js` (respostas no formato de `grace
 | u1 | `horarios_livres` com 14 inícios | oferta com os 14, `completa:true`, sem `orientacao` de filtro |
 | u2 | `Compor` com oferta de 23 horários e modelo citando 2 ids | 3 listas (10, 10, 3), em ordem cronológica |
 | u3 | "qualquer barbeiro", 2 barbeiros com inícios sobrepostos | união por início; cada um com barbeiro; nunca o de teste |
-| u4 | `agendar` fase 1, pacotes com seção válida | `pergunta_pacote`, sem proposta |
-| u5 | idem com seção de `dataValidade` anterior à data | proposta avulsa, sem pergunta |
-| u6 | fase 2 `pacote`, duas seções | POST com `idClienteItemPacote` = `secoes[0]` e sem `idServico` |
-| u7 | fase 2 `pacote`, reconsulta vazia | `falhou`, `pacote_indisponivel`, nenhum POST |
 | u8 | `agendar`/`reagendar` com serviço "corte adulto 2º vez", "BARBA 2a VEZ", "2ª vez" | `servico_nao_oferecido` nas fases 1 e 2 |
 | u9 | POST status 0, agendamentos com o item novo | `executada`, `verificada:true`, 1 POST só |
 | u10 | POST status 0, agendamentos sem o item, repetição 200 | `executada`, exatamente 2 POST |
@@ -37,7 +33,7 @@ Cobertura obrigatória em `tests/graces.test.js` (respostas no formato de `grace
 | u19 | `cadastrar_terceiro` liberado (mock), sem `celular` | POST com o celular do remetente, só na fase 2 em turno posterior |
 | u20 | laço com 17 estágios | `estagios_esgotados` |
 | u21 | terceiro escolhido com celular diferente do remetente (e sem celular no cadastro) | `escolher_pessoa` → `encaminhar_equipe` `terceiro_outro_celular`; `pedido.idCliente` continua o do remetente; `agendar` seguinte age no remetente, nunca no terceiro; `falhas_agente` sem nome nem celular |
-| u22 | terceiro com o mesmo celular do remetente | `escolher_pessoa` `{ok}`; `meus_agendamentos`, `reagendar`, `cancelar` e pacote aceitos |
+| u22 | terceiro com o mesmo celular do remetente | `escolher_pessoa` `{ok}`; `meus_agendamentos`, `reagendar` e `cancelar` aceitos |
 | u23 | primeiro contato, `cadastroLiberado` (mock), busca pelo nome acha mesmo nome completo com outro celular | `encaminhar_equipe` `nome_outro_celular`; nenhum `POST /agenda/clientes` |
 | u24 | primeiro contato (mock), busca sem homônimo exato ou nome de uma palavra | `POST /agenda/clientes` com o celular do WhatsApp |
 
@@ -59,8 +55,8 @@ Cobertura obrigatória em `tests/graces.test.js` (respostas no formato de `grace
    lista; nenhum horário inventado.
 3. **r3 horário tomado**: proposta criada, o smoke ocupa o horário no barbeiro de teste, cliente diz
    "sim" → **Expected**: proposta `falhou` com novas opções; a ocupação do smoke é cancelada.
-4. **r4 sem pacote**: Paulo agenda → **Expected**: nenhuma pergunta de pacote; proposta avulsa;
-   agendamento criado e cancelado (SC-002, parte "0%").
+4. **r4 sem pacote**: Paulo agenda → **Expected**: nenhuma pergunta de pacote e nenhuma chamada a `/agenda/pacotes`;
+   agendamento criado pelo `idServico` e cancelado (SC-002).
 5. **r5 2ª vez pelo nome**: "quero corte adulto 2ª vez" → **Expected**: nenhuma oferta "2º vez";
    chamada direta `agendar` com o id dessa variante recusada (SC-003).
 6. **r6 terceiro existente**: "é para o Paulo" (busca pelo nome do próprio cliente de teste) → "sim"
@@ -76,6 +72,6 @@ Cobertura obrigatória em `tests/graces.test.js` (respostas no formato de `grace
 10. **r10 limpeza**: ao fim de toda rodada → **Expected**: 0 agendamentos futuros do Paulo no barbeiro
     de teste (SC-008).
 
-Caminho `pacote` real e cadastro real de terceiro: fora do smoke até P3 e autorização expressa do
-owner (research Decisions 4 e 6). Celular diferente, primeiro contato e encaminhamento à equipe só
+Cadastro real de terceiro: fora do smoke até autorização expressa do
+owner (research Decision 6). Celular diferente, primeiro contato e encaminhamento à equipe só
 nos testes u21–u24 (mock): nenhum cliente real novo é cadastrado.

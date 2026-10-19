@@ -7,8 +7,7 @@
 Estende o agente da F3 sem peça nova de arquitetura: as regras de negócio entram em
 `workflows/shared/graces.js` e `agente.js` (código puro, testado por `node tests/*.test.js`) e são
 impostas pelas ferramentas do `bv-graces`, não pelo prompt (FR-013). Oferta de horários sem corte e
-enviada em várias listas pelo `Compor`; pacote consultado em código antes de cada proposta, com a
-pergunta obrigatória por lista; "2ª vez" recusado também na escrita; terceiros por busca de nome com
+enviada em várias listas pelo `Compor`; "2ª vez" recusado também na escrita; terceiros por busca de nome com
 confirmação em turno posterior e cadastro em duas fases (desligado no TESTE); terceiro ou nome de
 primeiro contato já cadastrado com outro celular é encaminhado à equipe, sem agendar nem cadastrar
 (block-003); encadeamento só com
@@ -37,8 +36,7 @@ serviço; medir encadeamento.
 mensagens (constituição X); sem PII em `falhas_agente`.
 **Scale/Scope**: uma loja; até 3 serviços encadeados; até 40 inícios por turno.
 **NEEDS CLARIFICATION**: nenhum. Desconhecidos factuais viram sondas: S3 (laço de estágios no n8n) e
-S4 (4 listas seguidas, humano). Pendência P3 (cliente de teste com pacote) só limita o teste real
-do caminho `pacote`.
+S4 (4 listas seguidas, humano) e S5 (transferência do ticket para o setor 78 por `updateAPI`, no TESTE).
 
 ## Constitution Check
 
@@ -52,13 +50,13 @@ do caminho `pacote`.
 | VII idempotência | PASS | migração com `DROP CONSTRAINT IF EXISTS`/`ADD`; trava de proposta inalterada |
 | VIII parametrização | PASS | limites novos em config ([contracts/config-regras.md](contracts/config-regras.md)) |
 | IX Graces fonte da verdade | PASS | inícios e sequências só das grades; "2ª vez" fora da oferta e da escrita; barbeiro de teste filtrado |
-| X conversa humanizada | PASS | toda escolha nova (pacote, pessoa, modo) por lista; listas contam no limite de 4 mensagens |
-| XI escrita segura | PASS | confirmação em turno posterior para escrita e cadastro; `code`; verificação antes de repetir; pacote sempre perguntado |
+| X conversa humanizada | PASS | toda escolha nova (pessoa, modo) por lista; listas contam no limite de 4 mensagens |
+| XI escrita segura | PASS | confirmação em turno posterior para escrita e cadastro; `code`; verificação antes de repetir; sem pacote (princípio XI) |
 | XII skills e validação n8n | PASS | mesmo nó AI Agent; conferência pelo MCP após deploy no TESTE |
 | XIII isolamento | PASS | só TESTE; deploy de PROD continua recusando `teste.*` |
 | XIV segredos e dado mínimo | PASS | busca de pessoa mostra só nome; celular do terceiro só em `propostas.dados` até terminar |
 | XV teste antes de produção | PASS | roteiros r1–r10 com barbeiro de teste e limpeza no `finally` |
-| XVI zero fabricação | PASS | S3/S4 medem o que a fonte não diz; regras de pacote citam G `04`:148-168 |
+| XVI zero fabricação | PASS | S3/S4/S5 medem o que a fonte não diz |
 
 Re-check pós-design: PASS. Peças novas: uma migração (só `CHECK`), três ferramentas no mesmo
 `bv-graces` e a ligação de volta no laço. Nenhum serviço, credencial ou workflow novo.
@@ -67,7 +65,7 @@ Re-check pós-design: PASS. Peças novas: uma migração (só `CHECK`), três fe
 
 ```text
 docs/specs/regras-negocio-agenda/{plan,research,data-model,quickstart}.md, contracts/
-workflows/shared/graces.js        # pacote, 2ª vez na escrita, terceiros, encadeamento, verificação, code
+workflows/shared/graces.js        # 2ª vez na escrita, terceiros, encadeamento, verificação, code
 workflows/shared/agente.js        # Compor com várias listas, prompt, textos novos
 workflows/sub/bv-graces.json      # laço de estágios (Planejar -> Tem chamada? -> Graces -> Passo -> volta)
 workflows/sub/entregar-rajada.json  # ferramentas buscar_pessoa, escolher_pessoa, cadastrar_terceiro; campos novos
@@ -95,8 +93,8 @@ um com o mesmo ramo de verificação.
 | Camada | Estilo | Validação | Fonte da verdade |
 |--------|--------|-----------|------------------|
 | Colunas Postgres | snake_case | migração + `test_esquema.py` | `db/migrations/0006_agente.sql`, `0007_regras_agenda.sql` |
-| Payload Graces | camelCase da API (`idClienteItemPacote`, `secoes`, `busca`) | `bvGPasso` | `graces-api/` |
-| Entradas/saídas das ferramentas | snake_case (`id_opcao_pagamento`, `id_opcoes_servicos`) | `bvGNormalizar` recusa campo desconhecido | [contracts/ferramentas-graces-regras.md](contracts/ferramentas-graces-regras.md) |
+| Payload Graces | camelCase da API (`busca`) | `bvGPasso` | `graces-api/` |
+| Entradas/saídas das ferramentas | snake_case (`id_opcoes_servicos`) | `bvGNormalizar` recusa campo desconhecido | [contracts/ferramentas-graces-regras.md](contracts/ferramentas-graces-regras.md) |
 | jsonb `pedido`/`opcoes`/`dados` | chaves mistas herdadas da F3 (ids da Graces em camelCase, controle em snake_case) | só escritos pelo `bv-graces` | [data-model.md](data-model.md) |
 | Config | snake_case | `verificar-repo.py` | [contracts/config-regras.md](contracts/config-regras.md) |
 | Datas | `AAAA-MM-DD`, `HH:mm`, `AAAA-MM-DDTHH:mm:ss` sem offset | `bvGNormalizar` | G `05`:108 |
@@ -111,5 +109,5 @@ Sem violações.
 ## Riscos
 
 Ver [research.md](research.md#riscos): turno longo no pior caso de verificação, latência do
-encadeamento com "qualquer barbeiro", caminho `pacote` sem teste real até P3, nomes de homônimos
+encadeamento com "qualquer barbeiro", nomes de homônimos
 exibidos na busca de pessoa.

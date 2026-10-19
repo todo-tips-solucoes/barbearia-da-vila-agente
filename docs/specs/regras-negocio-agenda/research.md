@@ -16,7 +16,7 @@ migração `0007`. Nenhum workflow, credencial ou serviço novo.
 **Rationale**: FR-015 manda estender `entregar-rajada` e `bv-graces`; a feature 3 já impõe em código
 as regras que esta feature amplia (F3 `contracts/ferramentas-graces.md` "Regras impostas em código").
 
-**Alternatives considered**: sub-workflow novo por regra (pacote, terceiros, encadeamento): duplica
+**Alternatives considered**: sub-workflow novo por regra (terceiros, encadeamento): duplica
 `Contexto`/`Persistir` do `bv-graces` e o trava de proposta; rejeitado.
 
 ## Decision 2: estágios do `bv-graces` em laço com teto, medido na sonda S3
@@ -79,34 +79,9 @@ owner (F3 `tasks.md:52`), mas não 4 listas seguidas.
 **Alternatives considered**: uma linha por par início × barbeiro (até 5× mais itens, estoura a
 capacidade com "qualquer barbeiro"); `lista.max_itens` maior sem medição (S2 só mediu até 11).
 
-## Decision 4: pacote ou avulso decidido em código (FR-003, FR-004)
+## Decision 4: removida (pacote)
 
-**Decision**:
-
-- Na fase 1 de `agendar`, antes de criar a proposta, o `bv-graces` consulta
-  `GET /agenda/pacotes?idCliente=&idServico=` (G `04`:148-168). Seção aplicável = existe em `secoes`
-  e o pacote tem `dataValidade` nula ou ≥ a data do agendamento (G `04`:71, :164).
-- Com seção aplicável e sem escolha: não cria proposta; devolve `{ok:true, pergunta_pacote:true}` e
-  grava a oferta `pagamento` com dois itens (`pacote`, `avulso`; `textos.pacote_*` `[PROPOSTA]`). O
-  horário escolhido fica em `conversas.pedido.horario`. O modelo pergunta pela lista (US2-1).
-- O modelo chama `agendar` de novo com `id_opcao_pagamento`. `pacote` → proposta com
-  `pagamento:'pacote'`; resumo "abatido do pacote" (US2-2). `avulso` → resumo com o valor (US2-3).
-- Sem seção aplicável: a proposta nasce avulsa e `id_opcao_pagamento` é recusado
-  (`pacote_inexistente`), então a pergunta não pode aparecer (US2-4, SC-002).
-- Fase 2 com `pacote`: reconsulta `/agenda/pacotes` e usa `secoes[0].idClienteItemPacote`, a primeira
-  devolvida, sem reordenar (FR-004; G `04`:165, G `05`:53). Sem seção nesse momento: proposta
-  `falhou`, `code:'pacote_indisponivel'`, orientação "pergunte se agenda avulso" (edge case de pacote
-  vencido/reservado: nunca vira avulso sem o cliente concordar).
-- `POST /agenda` com `idClienteItemPacote` e **sem** `idServico` (exatamente um dos dois,
-  G `04`:58-70). A revalidação de horário continua com o `idServico` do horário.
-
-**Pendência P3 (owner, não bloqueia o plano)**: o cliente de teste Paulo provavelmente não tem pacote;
-um teste real do caminho `pacote` precisa de um cliente de teste com pacote e da confirmação de que
-cancelar o agendamento devolve a seção (a fonte não diz, G `04`:71). Até lá o caminho `pacote` é
-coberto por `node tests/graces.test.js` com respostas no formato documentado e o smoke real cobre só
-"sem pacote".
-
-**Rationale**: FR-003 proíbe escolher pelo cliente; a regra vai para a ferramenta (FR-013).
+O agente não trata de pacote nem de abatimento (constituição 3.0.0, princípio XI; owner, block-004). Agenda sempre por `idServico`, sem consultar `/agenda/pacotes`. Numeração de Decisions mantida.
 
 ## Decision 5: "2ª vez" recusado também na escrita (FR-005)
 
@@ -146,11 +121,11 @@ Na fase de `escolher_pessoa`, o `bv-graces` compara o celular do cadastro escolh
 de `busca`, nunca mostrado ao modelo) com o celular do remetente, ambos só em dígitos e sem o DDI 55:
 
 - **mesmo celular** (família no mesmo número, G `02`:46): acesso total, igual ao do titular
-  (`meus_agendamentos`, `reagendar`, `cancelar`, pacote);
+  (`meus_agendamentos`, `reagendar`, `cancelar`);
 - **celular diferente**: o agente **não agenda**. `escolher_pessoa` devolve
   `{ok:false, code:'encaminhar_equipe', motivo:'terceiro_outro_celular'}`, não grava
   `pedido.idCliente` nem `para_terceiro` e nenhuma ferramenta age sobre essa pessoa (ver, remarcar,
-  cancelar, usar pacote ou agendar). O modelo responde com `textos.encaminhar_equipe` e o pedido é
+  cancelar ou agendar). O modelo responde com `textos.encaminhar_equipe` e o pedido é
   encaminhado à equipe, que cadastra o número correto para os próximos agendamentos.
 
 Fail-closed: celular ausente no cadastro escolhido conta como diferente.
@@ -167,11 +142,7 @@ segue para o cadastro normal. Continua sujeito a `cfg.cadastroLiberado` (falso n
 **Terceiro sem cadastro e sem celular próprio** (block-001, mantido): cadastra com o celular de quem
 pede, após confirmação, pelo `cadastrar_terceiro` acima.
 
-**Encaminhamento à equipe (ponto de integração)**: o handoff completo (setor 78, etiqueta 521, CRM)
-é da feature `crm-etiquetas-handoff`. Aqui o mínimo é: (a) a saída `code:'encaminhar_equipe'` com
-`motivo`; (b) o texto `textos.encaminhar_equipe` ao cliente; (c) registro em `falhas_agente` com
-motivo `encaminhar_equipe|<motivo>`, sem nome nem celular. A `crm-etiquetas-handoff` consome esse
-`code` para transferir a conversa; até lá, a equipe vê o registro pela operação.
+**Encaminhamento à equipe (transferência já nesta feature; owner, block-004, 2026-10-19)**: em todo `encaminhar_equipe` o `bv-graces` (a) devolve `code` e `motivo`; (b) o modelo responde com `textos.encaminhar_equipe`; (c) registra em `falhas_agente` `encaminhar_equipe|<motivo>`, sem nome nem celular; (d) transfere o ticket por `POST /api/tickets/updateAPI` com `{ticketId, queueId:78}` (`chatmasterveloz-api/03-ticket/api-atualizar-ticket.md`, fonte do `ticketId`: webhook, `recepcao-buffer/contracts/webhook-chatmaster.md`); (e) grava `conversas.pedido.handoff=true` e o agente para de responder nessa conversa. `/api/tickets/changequeue` é proibido: move todos os atendimentos da conexão. Etiqueta 521 e funil são da `crm-etiquetas-handoff`. Sonda S5 (TESTE, conexão 145): confirmar que `updateAPI` só com `queueId` não altera status/operador e que a conversa aparece no setor 78; a doc não diz. Sem confirmação, bloqueio humano.
 
 Tetos contra varredura e lixo irreversível (F-SEC-2): `terceiro.buscas_max_dia` (5) e
 `terceiro.cadastros_max_dia` (1) por contato, contados em `falhas_agente`/`propostas` do dia, além do
@@ -202,7 +173,7 @@ busca e escolha com o Paulo (mesmo celular); celular diferente, primeiro contato
   serviço (primeiro barbeiro, na ordem de `listar_barbeiros`, que tem o próximo início livre);
   `separados` volta ao fluxo de um serviço por vez.
 - Proposta `agendar_conjunto`: `dados.itens[]` em ordem, cada um com serviço, barbeiro, data, hora,
-  valor ou pacote (Decision 4, perguntado por serviço com seção). Resumo único com cada serviço,
+  valor. Resumo único com cada serviço,
   horário e valor (US5-2). Nada é criado antes do "sim" (fase 2 em turno posterior).
 
 **Rationale**: as durações da loja variam (30, 40, 60 e 80 min, G `06`:19-48) e a grade observada anda
@@ -220,7 +191,7 @@ cliente pedir exatamente aquele par (`[PROPOSTA]`).
 1. A revalidação (fase 2) também lê `GET /agenda/agendamentos?idCliente=&proximos=true`
    (G `04`:33-49) como linha de base.
 2. Timeout ou 5xx na escrita → próximo estágio relê os agendamentos e compara:
-   POST = agendamento novo (fora da linha de base) com mesmo serviço (ou `servicoPacote`), barbeiro
+   POST = agendamento novo (fora da linha de base) com mesmo serviço , barbeiro
    escrito e `horaInicio = data + hora`; PUT = `idAgenda` com `horaInicio` novo; DELETE = `idAgenda`
    ausente (G `04`:31, inferência marcada na própria fonte; confirmar no smoke r9).
 3. Aplicada → sucesso. Não aplicada → repete **uma** vez. Nova incerteza → nova verificação; se ainda
@@ -249,8 +220,7 @@ Todo registro guarda `code` e `traceId`, nunca `detail` nem dados pessoais (F3 `
 Teste com `detail` em inglês e em português para o mesmo `code` (SC-007).
 
 "Alerta à operação": o registro em `falhas_agente` com `motivo='configuracao'`. Canal de alerta
-fora de banda não existe no projeto; o handoff para humano é da feature `crm-etiquetas-handoff`
-(`docs/roadmap.md:16`). Fica registrado como limite, não como pendência desta feature.
+fora de banda não existe no projeto; a transferência para humano é o handoff do ticket (Decision 6). Fica registrado como limite, não como pendência desta feature.
 
 ## Decision 10: falha parcial e cancelamento de conjunto (FR-011, US5-5)
 
@@ -284,6 +254,5 @@ listar horários no texto (o código manda as listas). `agente.iteracoes_max` pa
 - Turno longo: 13 estágios × `graces.timeout_ms` no pior caso passa de `lock.ttl_s` (120 s). Coberto
   pela trava da proposta (sem escrita dupla), mas o turno pode terminar em contingência.
 - Encadeamento com "qualquer barbeiro": até 3 × 5 consultas num estágio; latência a medir.
-- Caminho `pacote` sem teste real até P3.
 - Lista de pessoas por nome mostra nomes de outros clientes (homônimos) ao remetente: limitado a
   nome e sobrenome, teto de buscas e de resultados; aceito por US4-3.
