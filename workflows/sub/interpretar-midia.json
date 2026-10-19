@@ -1,0 +1,578 @@
+{
+  "name": "Barbearia Vila - Interpretar midia [{{BV:rotulo}}]",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "contato_id"
+            },
+            {
+              "name": "itens"
+            }
+          ]
+        }
+      },
+      "id": "3e43b32a-bf57-53c8-a93a-747e6790ebea",
+      "name": "Gatilho",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/midia.js}}\nconst cfg = { hosts_audio: {{BV:midia.hosts_audio}}, hosts_imagem: {{BV:midia.hosts_imagem}}, prefixos_audio: {{BV:midia.prefixos_audio}}, prefixos_imagem: {{BV:midia.prefixos_imagem}}, mimes_audio: {{BV:midia.mimes_audio}}, mimes_imagem: {{BV:midia.mimes_imagem}}, audio_max_s: {{BV:midia.audio_max_s}}, audio_max_mb: {{BV:midia.audio_max_mb}}, imagem_max_mb: {{BV:midia.imagem_max_mb}}, max_por_turno: {{BV:midia.max_por_turno}}, descricao_max_chars: {{BV:midia.descricao_max_chars}}, imagem_detalhe: '{{BV:midia.imagem_detalhe}}', modelo: '{{BV:agente.modelo}}' };\nconst e = $input.first().json; const itens = Array.isArray(e.itens) ? e.itens : [];\nreturn itens.map((it, idx) => {\n  const base = { idx, contato_id: e.contato_id, mensagem_id: it.mensagem_id, tipo: it.tipo, midia_url: it.midia_url, midia_mime: it.midia_mime };\n  if (idx >= cfg.max_por_turno) return { json: { ...base, ok: false, motivo: 'excedente' } };\n  const v = bvValidarMidia(it, cfg);\n  return { json: v.ok ? { ...base, ok: true } : { ...base, ok: false, motivo: v.motivo, host: v.motivo === 'host_recusado' ? bvHostRecusado(it.midia_url) : null } };\n});"
+      },
+      "id": "000ee4c7-fc65-527a-bbf3-2ee0eab4573f",
+      "name": "Validar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3e202386-1cf8-582d-9b5f-7872d2602182",
+              "leftValue": "={{ String($json.ok) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "eaa2b236-7cda-5265-b550-57c3205125b5",
+      "name": "Pode baixar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.midia_url }}",
+        "authentication": "none",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false,
+              "maxRedirects": 0
+            }
+          },
+          "timeout": "={{ {{BV:midia.download_timeout_s}} * 1000 }}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "60c1ec2b-6b16-5099-bb4d-80d7184cc5a5",
+      "name": "Baixar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "{{BV:INCLUDE:shared/midia.js}}\n{{BV:INCLUDE:shared/agente.js}}\nconst cfg = { hosts_audio: {{BV:midia.hosts_audio}}, hosts_imagem: {{BV:midia.hosts_imagem}}, prefixos_audio: {{BV:midia.prefixos_audio}}, prefixos_imagem: {{BV:midia.prefixos_imagem}}, mimes_audio: {{BV:midia.mimes_audio}}, mimes_imagem: {{BV:midia.mimes_imagem}}, audio_max_s: {{BV:midia.audio_max_s}}, audio_max_mb: {{BV:midia.audio_max_mb}}, imagem_max_mb: {{BV:midia.imagem_max_mb}}, max_por_turno: {{BV:midia.max_por_turno}}, descricao_max_chars: {{BV:midia.descricao_max_chars}}, imagem_detalhe: '{{BV:midia.imagem_detalhe}}', modelo: '{{BV:agente.modelo}}' };\nconst v = $('Validar').item.json; const st = $json.statusCode;\nconst falha = (motivo, extra) => ({ json: { ...v, ok: false, motivo, ...(extra || {}) } });\nif (!(st >= 200 && st < 300) || !$input.item.binary || !$input.item.binary.data) return falha('download', { status_http: Number.isInteger(st) ? st : null });\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst audio = v.tipo === 'audio';\nif (buf.length === 0) return falha('vazio');\nif (buf.length > (audio ? cfg.audio_max_mb : cfg.imagem_max_mb) * 1024 * 1024) return falha('grande');\nconst mime = bvMimeBase(v.midia_mime); const b = $input.item.binary;\nb.data.mimeType = mime; b.data.fileName = audio ? 'audio.ogg' : 'imagem.' + (mime.split('/')[1] || 'bin');\nconst json = { ...v, ok: true };\nif (!audio) json.corpo_imagem = JSON.stringify({ model: cfg.modelo, input: [{ role: 'user', content: [{ type: 'input_text', text: bvPromptImagem(cfg) }, { type: 'input_image', image_url: 'data:' + mime + ';base64,' + buf.toString('base64'), detail: cfg.imagem_detalhe }] }] });\nreturn { json, binary: b };"
+      },
+      "id": "1beca570-b784-5f6f-9821-362341d8c73d",
+      "name": "Conferir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b6401e7a-0fda-5328-b4f9-b5415646c0aa",
+                    "leftValue": "={{ $json.ok && $json.tipo }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c53b53d0-1d2e-5617-8601-06e3dc7ec95c",
+                    "leftValue": "={{ $json.ok && $json.tipo }}",
+                    "rightValue": "imagem",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "imagem"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "falha"
+        }
+      },
+      "id": "e7f7e4da-8fa8-575e-b5e0-382309acbb8e",
+      "name": "Audio ou imagem?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "model",
+              "value": "{{BV:midia.transcricao_modelo}}"
+            },
+            {
+              "name": "language",
+              "value": "pt"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{ {{BV:midia.openai_timeout_s}} * 1000 }}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "aea4e5b4-9168-5990-b01c-99b66153cfb1",
+      "name": "Transcrever",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "{{BV:credenciais.openai}}",
+          "name": "Barbearia Vila OpenAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.corpo_imagem }}",
+        "options": {
+          "timeout": "={{ {{BV:midia.openai_timeout_s}} * 1000 }}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "1ddcee3f-b506-5328-b107-b0a83cef91f6",
+      "name": "Descrever",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "{{BV:credenciais.openai}}",
+          "name": "Barbearia Vila OpenAI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const v = $('Conferir').item.json; const st = $json.statusCode; const ok = st >= 200 && st < 300;\nconst t = (typeof ($json.body || {}).text === 'string' ? $json.body.text : '' || '').trim();\nconst r = { idx: v.idx, contato_id: v.contato_id, mensagem_id: v.mensagem_id, tipo: v.tipo, texto: null, motivo: null, status_http: Number.isInteger(st) ? st : null, host: null };\nif (!ok) r.motivo = 'transcricao'; else if (!t) r.motivo = 'vazio'; else r.texto = t.slice(0, 4000);\nreturn { json: r };"
+      },
+      "id": "bc17012c-e28a-5265-8d6d-c6053147a02a",
+      "name": "Texto audio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const v = $('Conferir').item.json; const st = $json.statusCode; const ok = st >= 200 && st < 300;\nconst t = ((($json.body || {}).output || []).filter((o) => o.type === 'message').flatMap((o) => o.content || []).map((c) => c.text || '').join(' ') || '').trim();\nconst r = { idx: v.idx, contato_id: v.contato_id, mensagem_id: v.mensagem_id, tipo: v.tipo, texto: null, motivo: null, status_http: Number.isInteger(st) ? st : null, host: null };\nif (!ok) r.motivo = 'interpretacao'; else if (!t) r.motivo = 'vazio'; else r.texto = t.slice(0, {{BV:midia.descricao_max_chars}});\nreturn { json: r };"
+      },
+      "id": "5e8a3ee3-580f-5801-8e14-c4c40dc45d3d",
+      "name": "Texto imagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const v = $json; return { json: { idx: v.idx, contato_id: v.contato_id, mensagem_id: v.mensagem_id, tipo: v.tipo, texto: null, motivo: v.motivo, status_http: v.status_http || null, host: v.host || null } };"
+      },
+      "id": "c5016931-85ff-5659-9a41-f480ff369e7c",
+      "name": "Falha de entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "b69d4326-4383-5f57-8def-c1af35536c0a",
+      "name": "Juntar",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE mensagens SET conteudo_derivado = $2::text, midia_falha = $3::text WHERE id = $1::bigint",
+        "options": {
+          "queryReplacement": "={{ [$json.mensagem_id, $json.texto, $json.motivo] }}"
+        }
+      },
+      "id": "3215c141-c3b9-512a-98ef-97f621168aac",
+      "name": "Gravar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1980,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'midia', $1::text, $2::text, $3::text, $4::int, $5::bigint WHERE $1::text IS NOT NULL",
+        "options": {
+          "queryReplacement": "={{ [$('Juntar').item.json.motivo, $('Juntar').item.json.tipo, $('Juntar').item.json.host, $('Juntar').item.json.status_http, $('Juntar').item.json.contato_id] }}"
+        }
+      },
+      "id": "4dd8a490-64f6-5888-9e09-63d07fa958a3",
+      "name": "Registrar falhas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const rs = $('Juntar').all().map((i) => i.json).sort((a, b) => a.idx - b.idx).map((r) => ({ mensagem_id: r.mensagem_id, texto: r.texto, motivo: r.motivo }));\nreturn [{ json: { resultados: rs } }];"
+      },
+      "id": "898ae7cc-5cba-56e2-b595-35781729bb47",
+      "name": "Resumo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Gatilho": {
+      "main": [
+        [
+          {
+            "node": "Validar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar": {
+      "main": [
+        [
+          {
+            "node": "Pode baixar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pode baixar?": {
+      "main": [
+        [
+          {
+            "node": "Baixar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha de entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar": {
+      "main": [
+        [
+          {
+            "node": "Conferir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir": {
+      "main": [
+        [
+          {
+            "node": "Audio ou imagem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio ou imagem?": {
+      "main": [
+        [
+          {
+            "node": "Transcrever",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Descrever",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha de entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcrever": {
+      "main": [
+        [
+          {
+            "node": "Texto audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descrever": {
+      "main": [
+        [
+          {
+            "node": "Texto imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Texto audio": {
+      "main": [
+        [
+          {
+            "node": "Juntar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Texto imagem": {
+      "main": [
+        [
+          {
+            "node": "Juntar",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Falha de entrada": {
+      "main": [
+        [
+          {
+            "node": "Juntar",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Juntar": {
+      "main": [
+        [
+          {
+            "node": "Gravar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar": {
+      "main": [
+        [
+          {
+            "node": "Registrar falhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar falhas": {
+      "main": [
+        [
+          {
+            "node": "Resumo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": "{{BV:NUM:midia.execucao_timeout_s}}"
+  }
+}

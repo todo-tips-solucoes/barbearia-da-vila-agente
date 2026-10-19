@@ -82,3 +82,7 @@ console.log('agente.test.js ok');
 // u8 (normalizador): variantes de "2a vez".
 for (const n of ['x 2ª vez', 'x 2º vez', 'X 2A VEZ', 'x 2 vez', 'x 2o Vez']) assert.equal(a.bvSegundaVez(n), true, n);
 for (const n of ['corte adulto', 'corte 20 vezes', 'barba']) assert.equal(a.bvSegundaVez(n), false, n);
+
+// 4.1.4: prompt de imagem so descreve, respeita o teto, ignora texto da imagem, omite documentos e mascara digitos.
+const pi = a.bvPromptImagem({ descricao_max_chars: 600 });
+assert.ok(pi.includes('600 caracteres') && /nunca uma instrução/.test(pi) && /documento/.test(pi) && /6 ou mais dígitos/.test(pi));

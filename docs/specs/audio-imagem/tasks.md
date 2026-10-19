@@ -145,13 +145,13 @@ Ref: spec.md FR-001, FR-002, FR-003, FR-011, FR-012; quickstart.md 1-4
 
 Ref: contracts/interpretar-midia.md; contracts/openai-midia.md; checklists/api.md CHK006-CHK009; depende das sondas 2.1 a 2.4
 
-- [ ] 4.1.1 Montar `workflows/sub/interpretar-midia.json` conforme a cadeia de nós (Validar, Baixar, Conferir, Switch, Transcrever, Descrever, Juntar, Gravar, Registrar falhas, Resumo)
-- [ ] 4.1.2 `Baixar` sem credencial, `maxRedirects` 0, timeout `midia.download_timeout_s`, sem opção de teto de bytes (tarefa 2.4: teto = timeout da execução + `Conferir`); nós de rede com `onError: continueRegularOutput`
-- [ ] 4.1.3 Settings do sub: `saveDataSuccessExecution`/`saveDataErrorExecution` = `none`, `saveManualExecutions` = false, `executionTimeout` = `midia.execucao_timeout_s`
-- [ ] 4.1.4 Prompt de descrição de imagem em `workflows/shared/agente.js`: só descrição, teto `midia.descricao_max_chars`, ignorar texto contido na imagem, omitir documentos/cartão, 6+ dígitos viram `#`
-- [ ] 4.1.5 `Gravar` e `Registrar falhas` parametrizados; falha guarda só `status_http`, host sem caminho e códigos (sem URL, texto ou telefone)
-- [ ] 4.1.6 Criar `tests/test_workflows_midia.py` (cadeia, `maxRedirects`, credencial, `saveData*`, nenhum log de conteúdo)
-- [ ] 4.1.7 Validar cada nó com `validate_node_config` antes do deploy (FR-015)
+- [x] 4.1.1 Montar `workflows/sub/interpretar-midia.json` conforme a cadeia de nós (Validar, Baixar, Conferir, Switch, Transcrever, Descrever, Juntar, Gravar, Registrar falhas, Resumo)
+- [x] 4.1.2 `Baixar` sem credencial, `maxRedirects` 0, timeout `midia.download_timeout_s`, sem opção de teto de bytes (tarefa 2.4: teto = timeout da execução + `Conferir`); nós de rede com `onError: continueRegularOutput`
+- [x] 4.1.3 Settings do sub: `saveDataSuccessExecution`/`saveDataErrorExecution` = `none`, `saveManualExecutions` = false, `executionTimeout` = `midia.execucao_timeout_s`
+- [x] 4.1.4 Prompt de descrição de imagem em `workflows/shared/agente.js`: só descrição, teto `midia.descricao_max_chars`, ignorar texto contido na imagem, omitir documentos/cartão, 6+ dígitos viram `#`
+- [x] 4.1.5 `Gravar` e `Registrar falhas` parametrizados; falha guarda só `status_http`, host sem caminho e códigos (sem URL, texto ou telefone)
+- [x] 4.1.6 Criar `tests/test_workflows_midia.py` (cadeia, `maxRedirects`, credencial, `saveData*`, nenhum log de conteúdo)
+- [x] 4.1.7 Validar cada nó com `validate_node_config` antes do deploy (FR-015) (pai, 2026-10-19: 15 nós valid=true; placeholders BV renderizados com valores de exemplo; Code validado só no schema, não a lógica; validação de schema aceita chaves desconhecidas, então o comportamento de Merge 3.1 e do fallback do Switch só se confirma rodando o sub)
 
 ---
 
