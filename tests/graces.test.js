@@ -266,6 +266,27 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 14);
   // idem quando ha comuns mas nenhuma sequencia cabe
   const n2 = g.bvGPasso(e1.st, [ok({ minutos: 40, horarios: ['10:00'] }), ok({ minutos: 30, horarios: ['11:00'] }), ok({ minutos: 40, horarios: [] }), ok({ minutos: 30, horarios: [] })], cfg).final;
   assert.equal(n2.resultado.sem_barbeiro_unico, true);
+  // u15b (block-002 C): "barbeiros diferentes" -> sequencia com barbeiro por servico, resumo unico; "separados" -> um servico por vez
+  const ctxM = ctxOp(n1.efeitos.opcoes, n1.efeitos.pedido);
+  const idModo = (v) => n1.efeitos.opcoes.itens.find((x) => x.valor === v).id;
+  const sep = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: idModo('separados'), data: '2026-10-20' }), ctxM, cfg).final;
+  assert.equal(sep.resultado.modo, 'separados');
+  assert.equal(sep.efeitos.pedido.servico.idServico, 's1');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: '9', data: '2026-10-20' }), ctxM, cfg).final.resultado.code, 'opcao_desconhecida');
+  const dp = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: idModo('barbeiros_diferentes'), data: '2026-10-20' }), ctxM, cfg);
+  assert.equal(dp.reqs.length, 2);
+  const dg = g.bvGPasso(dp.st, [profs(['b1', TESTE]), profs(['b2'])], cfg);
+  assert.equal(dg.reqs.length, 2); // b1 p/ corte, b2 p/ barba (sem o de teste)
+  const dr = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00', '11:00'] }), ok({ minutos: 30, horarios: ['10:40'] })], cfg).final;
+  assert.deepEqual(dr.resultado.opcoes.map((o) => `${o.hora} ${o.barbeiros.join('+')}`), ['10:00 B1+B2']);
+  assert.equal(dr.efeitos.opcoes.itens[0].valor.itens[1].idProfissional, 'b2');
+  const dsem = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00'] }), ok({ minutos: 30, horarios: ['12:00'] })], cfg).final;
+  assert.equal(dsem.resultado.total, 0);
+  const dd = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxOp(dr.efeitos.opcoes, { idCliente: 'c1' }), cfg).final;
+  assert.match(dd.resultado.resumo, /corte adulto às 10:00 com B1.*\+ barba às 10:40 com B2/);
+  // no TESTE toda escrita do conjunto vai ao barbeiro de teste, mesmo com barbeiros diferentes na proposta
+  const pP = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: PID }), prop('agendar_conjunto', dd.efeitos.proposta_nova.dados), cfg);
+  assert.deepEqual(pP.reqs.map((q) => q.qs.idProfissional), [TESTE, TESTE]);
   // u16: conjunto: 1o POST 200, 2o 409 -> parcial, sem 3a chamada
   const ctxC = ctxOp(e2.efeitos.opcoes, { idCliente: 'c1' });
   const fase1 = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxC, cfg).final;

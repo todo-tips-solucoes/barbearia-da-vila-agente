@@ -124,7 +124,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND criada_em > now() - make_interval(mins => $4::int) RETURNING id::text AS id, acao, dados), i AS (SELECT estado, turno_id::text = $3::text AS mesmo_turno FROM propostas WHERE id::text = $2::text AND contato_id = $1::bigint) SELECT c.pedido, c.opcoes, (SELECT to_jsonb(k) FROM k) AS proposta, (SELECT to_jsonb(i) FROM i) AS info FROM (SELECT $1::bigint AS cid) x LEFT JOIN conversas c ON c.contato_id = x.cid",
+        "query": "WITH k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND criada_em > now() - make_interval(mins => $4::int) RETURNING id::text AS id, acao, dados), i AS (SELECT estado, turno_id::text = $3::text AS mesmo_turno FROM propostas WHERE id::text = $2::text AND contato_id = $1::bigint) SELECT c.pedido, c.opcoes, (SELECT to_jsonb(k) FROM k) AS proposta, (SELECT to_jsonb(i) FROM i) AS info, (SELECT ticket_id FROM contatos WHERE id = x.cid) AS ticket_id FROM (SELECT $1::bigint AS cid) x LEFT JOIN conversas c ON c.contato_id = x.cid",
         "options": {
           "queryReplacement": "={{ [$json.in.contato_id, $json.in.proposta_id || '', $json.in.turno_id, {{BV:proposta.validade_min}}, {\"agendar\": \"agendar,trocar_servico\", \"reagendar\": \"reagendar\", \"cancelar\": \"cancelar\"}[$json.in.operacao] || ''] }}"
         }
@@ -409,7 +409,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nconst j = $input.first().json;\nreturn [{ json: { params: bvGParams(j.st.in, j.final.efeitos), resultado: j.final.resultado, nova: !!(j.final.efeitos || {}).proposta_nova } }];"
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nconst j = $input.first().json;\nreturn [{ json: { params: bvGParams(j.st.in, j.final.efeitos), resultado: j.final.resultado, nova: !!(j.final.efeitos || {}).proposta_nova,\n  handoff: (j.final.efeitos || {}).handoff ? { queueId: j.final.efeitos.handoff.queueId, ticketId: $('Contexto').first().json.ticket_id || null } : null } }];"
       },
       "id": "6f16f52f-d55e-52a4-8e2c-c86cc2d2089a",
       "name": "Efeitos",
@@ -470,14 +470,14 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $('Efeitos').first().json.resultado;\nconst id = $input.first().json.proposta_id;\nreturn [{ json: id ? { ...r, proposta_id: id } : r }];"
+        "jsCode": "const r = $('Efeitos').first().json.resultado;\nconst id = $('Persistir').first().json.proposta_id;\nreturn [{ json: id ? { ...r, proposta_id: id } : r }];"
       },
       "id": "7855bf2e-5e10-5694-9fbb-aa85bddf23bc",
       "name": "Saida",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4080,
+        5040,
         0
       ]
     },
@@ -709,6 +709,133 @@
         2640,
         0
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a401ca30-b6ce-54c1-9bd5-a06e66cea483",
+              "leftValue": "={{ String(!!$('Efeitos').first().json.handoff) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3cbe7d46-d83e-5b8f-b615-fe7e0cefdff0",
+      "name": "Handoff?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "addd44b6-d19f-573b-aee8-11ed6ccc77ed",
+              "leftValue": "={{ String(!!$('Efeitos').first().json.handoff.ticketId) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9ed5bc5c-9737-549f-88ef-a78bc87c49e3",
+      "name": "Ticket conhecido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chatmasterveloz.com{{ '/api/tickets/updateAPI' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ticketId: String($('Efeitos').first().json.handoff.ticketId), queueId: String($('Efeitos').first().json.handoff.queueId) }) }}",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "b408b90b-f1b8-5616-bc90-0193c5fb7cc2",
+      "name": "Transferir ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4560,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'handoff_falhou', 'updateAPI', 'handoff_falhou', $2::int, $1::bigint WHERE $2::int IS NULL OR $2::int NOT BETWEEN 200 AND 299",
+        "options": {
+          "queryReplacement": "={{ [$('Efeitos').first().json.params[0], $json.statusCode || null] }}"
+        }
+      },
+      "id": "076616bf-a2ab-5c1f-8e1a-b5f0232b3fcd",
+      "name": "Registrar handoff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -920,7 +1047,7 @@
       "main": [
         [
           {
-            "node": "Saida",
+            "node": "Handoff?",
             "type": "main",
             "index": 0
           }
@@ -1008,6 +1135,64 @@
         [
           {
             "node": "Passo E2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff?": {
+      "main": [
+        [
+          {
+            "node": "Ticket conhecido?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket conhecido?": {
+      "main": [
+        [
+          {
+            "node": "Transferir ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transferir ticket": {
+      "main": [
+        [
+          {
+            "node": "Registrar handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar handoff": {
+      "main": [
+        [
+          {
+            "node": "Saida",
             "type": "main",
             "index": 0
           }

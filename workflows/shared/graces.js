@@ -49,7 +49,7 @@ function bvGNormalizar(raw, cfg) {
   const falta = {
     escolher_cliente: !v.id_opcao,
     listar_barbeiros: !v.id_opcao_servico,
-    horarios_livres: !v.data || !(v.id_opcao_barbeiro || v.qualquer || v.id_opcoes_servicos),
+    horarios_livres: !v.data || !(v.id_opcao_barbeiro || v.qualquer || v.id_opcoes_servicos || v.id_opcao),
     cadastrar_cliente: !v.nome,
     buscar_pessoa: !v.nome || v.nome.length < 3,
     escolher_pessoa: !v.id_opcao,
@@ -152,6 +152,15 @@ function bvGPlano(i, ctx0, cfg) {
       return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { servico: { ...s, opcao_id: i.id_opcao_servico } });
     }
     case 'horarios_livres': {
+      if (i.id_opcao) { // FR-012: resposta do cliente a modo_encadeamento (barbeiros diferentes | separados); nunca escolhida pelo modelo
+        const modo = bvgResolver(i.id_opcao, 'modo_encadeamento', ctx);
+        const ss = ctx.pedido.servicos;
+        if (!modo || !Array.isArray(ss) || !ss.length) return bvgFim(bvgOpcaoInvalida());
+        if (modo === 'separados') {
+          return bvgFim({ ok: true, modo: 'separados', servicos: ss.map((x) => ({ id: x.opcao_id, nome: x.nome })), orientacao: `agende um serviço por vez: comece por ${ss[0].nome} (listar_barbeiros com id_opcao_servico ${ss[0].opcao_id}) e, depois de confirmado, siga para o próximo` }, { opcoes: {}, pedido: { modo_encadeamento: 'separados', servico: ss[0] } });
+        }
+        return chamar(ss.map((x) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: x.idServico } })), { enc: true, etapa: 'dif_prof', servicos: ss, data: i.data });
+      }
       if (i.id_opcoes_servicos) {
         const ss = i.id_opcoes_servicos.map((x) => bvgResolver(x, 'servico', ctx));
         if (ss.some((x) => !x)) return bvgFim(bvgOpcaoInvalida());
@@ -186,7 +195,9 @@ function bvgFase1(i, ctx, cfg) {
     if (i.substitui_id_opcao_agendamento || sq.itens.some((x) => x.idProfissional === cfg.testeId)) return bvgFim(bvgOpcaoInvalida());
     if (sq.itens.some((x) => bvSegundaVez(x.servico))) return bvgFim(bvgNaoOferecido());
     const itens = sq.itens.map((x, k) => ({ ordem: k + 1, idServico: x.idServico, servico: x.servico, idProfissional: x.idProfissional, barbeiro: x.apelido, data: sq.data, hora: x.hora, minutos: x.minutos, valor: x.valor }));
-    const resumo = `${itens.map((x) => `${x.servico} às ${x.hora}${bvgReais(x.valor)}`).join(' + ')} com ${itens[0].barbeiro} em ${bvgDia(sq.data)}`;
+    const mesmo = itens.every((x) => x.idProfissional === itens[0].idProfissional);
+    const resumo = mesmo ? `${itens.map((x) => `${x.servico} às ${x.hora}${bvgReais(x.valor)}`).join(' + ')} com ${itens[0].barbeiro} em ${bvgDia(sq.data)}`
+      : `${itens.map((x) => `${x.servico} às ${x.hora} com ${x.barbeiro}${bvgReais(x.valor)}`).join(' + ')} em ${bvgDia(sq.data)}`;
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo }, { proposta_nova: { acao: 'agendar_conjunto', dados: { idCliente: ctx.pedido.idCliente, itens }, resumo } });
   }
   if (i.operacao === 'cancelar' && i.id_opcoes_agendamentos) {
@@ -240,16 +251,16 @@ function bvgFase2(i, ctx, cfg, chamar) {
   const d = p.dados || {};
   if (p.acao !== 'cancelar' && bvSegundaVez(d.servico)) return bvgFim(bvgNaoOferecido(), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'servico_nao_oferecido' } } });
   const prof = cfg.redirecionar ? cfg.testeId : d.idProfissional; // research Decision 10: toda escrita vai ao barbeiro de teste
-  const meta = { fase2: true, proposta: p, prof };
+  const meta = { fase2: true, proposta: p, prof, redir: !!cfg.redirecionar };
   if (p.acao === 'cadastrar_terceiro') {
     if (!cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'cadastro_desabilitado' } } });
     return chamar([{ m: 'POST', path: '/agenda/clientes', body: { nomeCliente: d.nome, ddiCelular: '55', celular: d.celular } }], { ...meta, etapa: 'cadastro' });
   }
   if (p.acao === 'agendar_conjunto') {
     if ((d.itens || []).some((x) => bvSegundaVez(x.servico))) return bvgFim(bvgNaoOferecido(), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'servico_nao_oferecido' } } });
-    return chamar(d.itens.map((x) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: x.idServico, idProfissional: prof, data: x.data } })), { ...meta, etapa: 'reval_c', res: [] });
+    return chamar(d.itens.map((x) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: x.idServico, idProfissional: bvgProfDe(x, meta), data: x.data } })), { ...meta, etapa: 'reval_c', res: [] });
   }
-  if (p.acao === 'cancelar_conjunto') return chamar([bvgReqItem(p, 0, prof)], { ...meta, etapa: 'escrita_c', k: 0, res: [] });
+  if (p.acao === 'cancelar_conjunto') return chamar([bvgReqItem(p, 0, meta)], { ...meta, etapa: 'escrita_c', k: 0, res: [] });
   if (p.acao === 'cancelar') {
     return chamar([{ m: 'DELETE', path: `/agenda/${d.idAgenda}`, qs: d.recorrente ? { data: String(d.horaInicio).slice(0, 10) } : {} }], { ...meta, etapa: 'escrita' });
   }
@@ -261,10 +272,12 @@ function bvgFase2(i, ctx, cfg, chamar) {
 }
 
 // Requisicao do item k de um conjunto (POST por servico ou DELETE por agendamento).
-function bvgReqItem(p, k, prof) {
+// Barbeiro do item: redirecionado (TESTE) vai ao de teste; senao o do proprio item (barbeiros diferentes por servico, FR-012).
+const bvgProfDe = (x, meta) => (meta.redir ? meta.prof : (x.idProfissional || meta.prof));
+function bvgReqItem(p, k, meta) {
   const x = p.dados.itens[k];
   if (p.acao === 'cancelar_conjunto') return { m: 'DELETE', path: `/agenda/${x.idAgenda}`, qs: x.recorrente ? { data: String(x.horaInicio).slice(0, 10) } : {} };
-  return { m: 'POST', path: '/agenda', body: { idCliente: p.dados.idCliente, idServico: x.idServico, idProfissional: prof, data: x.data, horaInicio: x.hora, idIntegracao: `bv-${String(p.id).slice(0, 8)}-${x.ordem}` } };
+  return { m: 'POST', path: '/agenda', body: { idCliente: p.dados.idCliente, idServico: x.idServico, idProfissional: bvgProfDe(x, meta), data: x.data, horaInicio: x.hora, idIntegracao: `bv-${String(p.id).slice(0, 8)}-${x.ordem}` } };
 }
 
 const bvgResp = (r) => ({ status: Number((r && r.status) || 0), body: r && r.body });
@@ -396,6 +409,8 @@ function bvgPassoEnc(st, resps, cfg) {
     const reqs = comuns.flatMap((b) => meta.servicos.map((s) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.id, data: meta.data } })));
     return { reqs, st: { ...st, meta: { ...meta, etapa: 'enc_grade', barbeiros: comuns } } };
   }
+  if (meta.etapa === 'dif_prof') return bvgDifProf(st, resps, cfg);
+  if (meta.etapa === 'dif_grade') return bvgDifGrade(st, resps, cfg);
   const seqs = [];
   meta.barbeiros.forEach((b, bi) => {
     const gr = meta.servicos.map((_, k) => resps[bi * n + k].body || {});
@@ -418,6 +433,41 @@ function bvgPassoEnc(st, resps, cfg) {
     { opcoes: of, pedido: { ...pedido, modo_encadeamento: 'mesmo_barbeiro' } });
 }
 
+// Barbeiros diferentes por servico (FR-012): primeiro barbeiro, na ordem de listar_barbeiros, que tem o inicio exato (fim do anterior) na grade.
+function bvgDifProf(st, resps, cfg) {
+  const { meta } = st;
+  const n = meta.servicos.length;
+  const teto = Math.max(1, Math.floor(((cfg.graces || {}).max_consultas_estagio || 20) / n));
+  const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId).slice(0, teto));
+  if (sets.some((x) => !x.length)) return bvgFim(bvgRecusa('sem_barbeiro_servico', 'nenhum barbeiro disponível para um dos serviços; ofereça chamar a equipe da loja'));
+  const reqs = sets.flatMap((bs, k) => bs.map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: meta.servicos[k].idServico, idProfissional: b.id, data: meta.data } })));
+  return { reqs, st: { ...st, meta: { ...meta, etapa: 'dif_grade', sets } } };
+}
+
+function bvgDifGrade(st, resps, cfg) {
+  const { meta } = st;
+  const pedido = { servicos: meta.servicos.map((s, k) => ({ opcao_id: String(k + 1), idServico: s.idServico, nome: s.nome, preco: s.preco })), modo_encadeamento: 'barbeiros_diferentes' };
+  let o = 0;
+  const grades = meta.sets.map((bs) => bs.map((b) => { const r = resps[o++].body || {}; return { b, horarios: Array.isArray(r.horarios) ? r.horarios : [], minutos: Number(r.minutos) }; }));
+  const inicios = [...new Set(grades[0].flatMap((g) => g.horarios))].sort();
+  const seqs = [];
+  inicios.forEach((ini) => {
+    let t = ini;
+    const itens = [];
+    for (let k = 0; k < meta.servicos.length; k++) {
+      const g = grades[k].find((x) => x.minutos > 0 && x.horarios.includes(t));
+      if (!g) break;
+      const s = meta.servicos[k];
+      itens.push({ idServico: s.idServico, servico: s.nome, idProfissional: g.b.id, apelido: g.b.apelido, hora: t, minutos: g.minutos, valor: s.preco });
+      t = bvgSomaMin(t, g.minutos);
+    }
+    if (itens.length === meta.servicos.length) seqs.push({ hora: ini, apelidos: [...new Set(itens.map((x) => x.apelido))], valor: { data: meta.data, itens } });
+  });
+  if (!seqs.length) return bvgFim({ ok: true, data: meta.data, total: 0, completa: true, opcoes: [], orientacao: 'nenhuma sequência cabe nesse dia, nem com barbeiros diferentes; ofereça outro dia ou agendar cada serviço separado' }, { pedido });
+  const of = bvMontarOferta('sequencia', seqs.map((q) => ({ rotulo: `${q.hora} ${q.apelidos.join(' e ')}`, valor: q.valor })), cfg, true);
+  return bvgFim({ ok: true, data: meta.data, total: seqs.length, completa: true, barbeiros_diferentes: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.itens[0].hora, barbeiros: x.valor.itens.map((i) => i.apelido) })) }, { opcoes: of, pedido });
+}
+
 // Conjunto (Decision 10): escrita em ordem; para no primeiro item que falha; nunca recria item criado.
 // shortcut: item incerto de conjunto nao e verificado nem repetido (vira `incerta`); upgrade: reusar a verificacao da Decision 8 por item.
 function bvgPassoConjunto(st, r0, cfg) {
@@ -427,7 +477,7 @@ function bvgPassoConjunto(st, r0, cfg) {
   const ok = r0.status >= 200 && r0.status < 300 && !(r0.body && r0.body.sucesso === false);
   const e = ok ? null : bvGErro(r0, p.acao);
   const res = [...meta.res, ok ? { ordem: k + 1, estado: 'criado', idAgenda: (r0.body && r0.body.idAgenda) || itens[k].idAgenda } : { ordem: k + 1, estado: e.incerto ? 'incerto' : 'falhou', code: e.code, trace_id: e.trace }];
-  if (ok && k + 1 < itens.length) return { reqs: [bvgReqItem(p, k + 1, meta.prof)], st: { ...st, meta: { ...meta, k: k + 1, res } } };
+  if (ok && k + 1 < itens.length) return { reqs: [bvgReqItem(p, k + 1, meta)], st: { ...st, meta: { ...meta, k: k + 1, res } } };
   const hora = (x) => (cancela ? String(x.horaInicio).slice(11, 16) : x.hora);
   const criados = itens.filter((_, j) => res[j] && res[j].estado === 'criado').map((x) => ({ servico: x.servico, hora: hora(x) }));
   const faltaram = itens.filter((_, j) => !res[j] || res[j].estado !== 'criado').map((x) => ({ servico: x.servico }));
@@ -476,7 +526,7 @@ function bvgPassoEscrita(st, resps, cfg) {
     if (ruim >= 0) { const { e, f } = err('horarios_livres', resps[ruim]); return termina(e.incerto ? 'incerta' : 'falhou', { ok: false, code: e.incerto ? 'incerta' : e.code, orientacao: e.orientacao }, { falha: f }); }
     const livre = itens.every((x, j) => resps[j].body && Array.isArray(resps[j].body.horarios) && resps[j].body.horarios.includes(x.hora));
     if (!livre) return termina('falhou', { ok: false, code: 'horario_indisponivel', orientacao: 'a sequência não está mais livre; consulte horarios_livres de novo e ofereça outras opções' }, { opcoes: {} });
-    return prox('escrita_c', [bvgReqItem(p, 0, meta.prof)], { k: 0, res: [] });
+    return prox('escrita_c', [bvgReqItem(p, 0, meta)], { k: 0, res: [] });
   }
   if (meta.etapa === 'escrita_c') return bvgPassoConjunto(st, r0, cfg);
   if (meta.etapa === 'reval') {

@@ -23,6 +23,18 @@ class BvGraces(unittest.TestCase):
                 for d in saida:
                     self.assertIn(d["node"], self.nos)
 
+    def test_handoff_transfere_ticket_apos_persistir_e_registra_falha(self):  # 3.4.2b, sonda S5
+        c = self.wf["connections"]
+        self.assertEqual(c["Persistir"]["main"][0][0]["node"], "Handoff?")
+        self.assertEqual(c["Handoff?"]["main"][1][0]["node"], "Saida")  # sem handoff segue direto
+        h = self.nos["Transferir ticket"]
+        self.assertEqual(h["parameters"]["url"], "=https://api.chatmasterveloz.com{{ '/api/tickets/updateAPI' }}")
+        self.assertIn("ticketId", h["parameters"]["jsonBody"])
+        self.assertIn("queueId", h["parameters"]["jsonBody"])
+        self.assertNotIn("changequeue", self.texto)
+        self.assertIn("handoff_falhou", self.nos["Registrar handoff"]["parameters"]["query"])
+        self.assertIn("ticket_id", self.nos["Contexto"]["parameters"]["query"])  # ticketId vem do estado, nunca do modelo
+
     def test_gatilho_so_aceita_campos_do_contrato(self):
         g = self.nos["Gatilho"]
         self.assertEqual(g["type"], "n8n-nodes-base.executeWorkflowTrigger")
@@ -33,7 +45,7 @@ class BvGraces(unittest.TestCase):
         self.assertIn("bvGNormalizar", self.nos["Normalizar"]["parameters"]["jsCode"])
 
     def test_http_graces_com_timeout_neverError_e_credencial(self):
-        https = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.httpRequest"]
+        https = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.httpRequest" and n["name"] != "Transferir ticket"]
         self.assertEqual(len(https), 6)  # 3 sem corpo + 3 com corpo
         for n in https:
             p = n["parameters"]
@@ -68,7 +80,7 @@ class BvGraces(unittest.TestCase):
 
     def test_sql_so_com_parametros(self):
         qs = {n: x for n, x in self.nos.items() if x["type"] == "n8n-nodes-base.postgres"}
-        self.assertEqual(set(qs), {"Contexto", "Substituir pendente", "Persistir"})
+        self.assertEqual(set(qs), {"Contexto", "Substituir pendente", "Persistir", "Registrar handoff"})
         for nome, n in qs.items():
             q = n["parameters"]["query"]
             self.assertIn("$1", q, nome)

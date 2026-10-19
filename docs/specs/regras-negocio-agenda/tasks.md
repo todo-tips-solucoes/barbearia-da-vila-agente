@@ -103,7 +103,7 @@ Ref: spec.md FR-006 FR-007; research.md Decision 6; quickstart u17-u24
 
 - [x] 3.4.1 Implementar `buscar_pessoa` (rotulos so com nome e sobrenome, nome minimo 2 palavras, tetos por sessao/dia)
 - [x] 3.4.2 Implementar `escolher_pessoa` com confirmacao em turno posterior e `encaminhar_equipe` (`terceiro_outro_celular`)
-- [ ] 3.4.2b Handoff: `updateAPI` `{ticketId, queueId:78}` (conexao 145), `pedido.handoff=true`, agente calado; falha => `handoff_falhou`. Sonda S5 antes (bloqueia se a fonte nao bastar) (parcial: `pedido.handoff=true`, `efeitos.handoff.queueId` e `handoff_ativo` prontos em `bvgEncaminhar`; a chamada `updateAPI` no Code node espera a S5, bloqueada: block-006)
+- [x] 3.4.2b Handoff: `updateAPI` `{ticketId, queueId:78}` (conexao 145), `pedido.handoff=true`, agente calado; falha => `handoff_falhou`. Sonda S5 feita (block-006): `ticketId` vem de `contatos.ticket_id` (migracao 0008, `chamadoId` do webhook); nos `bv-graces`: `Handoff?` -> `Ticket conhecido?` -> `Transferir ticket` -> `Registrar handoff` (apos `Persistir`)
 - [x] 3.4.3 Implementar `cadastrar_terceiro` em duas fases, desligado no TESTE (`cadastro_desabilitado`), teto `cadastros_max_dia`
 - [x] 3.4.4 Primeiro contato com nome existente e outro celular: `encaminhar_equipe` (`nome_outro_celular`)
 - [x] 3.4.5 Garantir que celular da busca nao chega ao modelo nem a mensagem
@@ -116,6 +116,7 @@ Ref: spec.md FR-008 FR-011 FR-012; quickstart u14-u16
 - [x] 3.5.1 Calcular inicios em sequencia presentes nas grades de cada servico para o mesmo barbeiro
 - [x] 3.5.2 `sem_barbeiro_unico` com oferta `modo_encadeamento`
 - [x] 3.5.3 Escrita em conjunto: um POST por servico, `parcial` com `criados`/`faltaram`, sem recriar
+- [x] 3.5.6 Modo "barbeiros diferentes por servico" (block-002 C, FR-012): `horarios_livres` com `id_opcao` (modo_encadeamento) -> `separados` (um servico por vez) ou `barbeiros_diferentes` (sequencia com barbeiro por item, resumo unico, escrita por item); testes u15b
 - [x] 3.5.4 Tratar `CONFLITO` no meio do encadeamento conforme spec atualizada (1.2.1)
 - [x] 3.5.5 Testes u14-u16
 
@@ -143,7 +144,7 @@ Ref: plan.md Fluxo do bv-graces; spec.md FR-015
 
 Ref: contracts/ferramentas-graces-regras.md
 
-- [ ] 4.2.1 Expor `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro` e campos novos
+- [ ] 4.2.1 Expor `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro` e campos novos (incluir `id_opcoes_servicos` e `id_opcao` (modo de encadeamento) na ferramenta `horarios_livres` e no prompt, hoje nao expostos ao modelo)
 - [ ] 4.2.2 Atualizar prompt e textos em `agente.js`
 - [ ] 4.2.3 Deploy no TESTE e conferencia por `get_workflow_details` (MCP)
 - [ ] 4.2.4 Sonda S4: 4 listas seguidas (humano)

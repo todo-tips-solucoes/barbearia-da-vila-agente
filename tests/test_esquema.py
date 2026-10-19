@@ -128,3 +128,12 @@ class Migracao0007(unittest.TestCase):
         for v in ("'agendar_conjunto'", "'cancelar_conjunto'", "'cadastrar_terceiro'", "'parcial'"):
             self.assertIn(v, M7)
         self.assertNotIn("CREATE TABLE", M7)
+
+
+M8 = open("db/migrations/0008_ticket_contato.sql").read()
+
+
+class Migracao0008(unittest.TestCase):
+    def test_ticket_id_idempotente(self):
+        self.assertIn("ADD COLUMN IF NOT EXISTS ticket_id bigint", M8)
+        self.assertNotIn("CREATE TABLE", M8)

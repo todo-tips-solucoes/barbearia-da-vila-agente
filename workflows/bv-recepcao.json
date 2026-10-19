@@ -232,9 +232,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO contatos (telefone) VALUES ($1::text) ON CONFLICT (telefone) DO UPDATE SET atualizado_em = now() RETURNING id AS contato_id",
+        "query": "INSERT INTO contatos (telefone, ticket_id) VALUES ($1::text, $2::bigint) ON CONFLICT (telefone) DO UPDATE SET atualizado_em = now(), ticket_id = COALESCE($2::bigint, contatos.ticket_id) RETURNING id AS contato_id",
         "options": {
-          "queryReplacement": "={{ [$('Normalizar').first().json.msg.telefone] }}"
+          "queryReplacement": "={{ [$('Normalizar').first().json.msg.telefone, $('Normalizar').first().json.msg.ticketId] }}"
         }
       },
       "id": "0d640761-5846-5242-8280-4dff871ad3da",
