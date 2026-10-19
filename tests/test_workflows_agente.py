@@ -183,7 +183,26 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertIn("ON CONFLICT (turno_id) DO NOTHING", q)
         self.assertEqual(self._destinos("Ja tratado?")[0], ["Responder repetido"])
         self.assertIn("Concluir turno", self._destinos("Pos 4?")[0] + self._destinos("Pos 4?")[1])
-        self.assertIn("{{BV:textos.midia}}", self.nos["Compor midia"]["parameters"]["jsCode"])
+        cm = self.nos["Compor midia"]["parameters"]["jsCode"]  # 5.1.3: precedencia grande x nao entendida
+        self.assertIn("{{BV:textos.midia_grande}}", cm)
+        self.assertIn("{{BV:textos.midia_nao_entendida}}", cm)
+        self.assertNotIn("{{BV:textos.midia}}", cm)
+
+    def test_ramo_de_midia_no_turno(self):  # 5.1.1, 5.1.4
+        self.assertEqual(self._destinos("Ler contexto")[0], ["Tem midia?"])
+        self.assertEqual(self._destinos("Tem midia?"), {0: ["Itens de midia"], 1: ["Preparar"]})
+        self.assertEqual(self._destinos("Itens de midia")[0], ["Interpretar midia"])
+        self.assertEqual(self._destinos("Interpretar midia")[0], ["Preparar"])
+        c = self.nos["Interpretar midia"]
+        self.assertEqual(c["parameters"]["workflowId"]["value"], "{{BV:workflows_sub.interpretar_midia}}")
+        self.assertEqual((c["onError"], c["alwaysOutputData"]), ("continueRegularOutput", True))
+        self.assertTrue(c["parameters"]["options"]["waitForSubWorkflow"])
+        prep = self.nos["Preparar"]["parameters"]["jsCode"]
+        self.assertIn("bvMontarTurno(itens, res)", prep)  # saida ausente/erro => res indefinido => 'interpretacao'
+        q = self.nos["Ler contexto"]["parameters"]["query"]
+        self.assertIn("conteudo_derivado", q)
+        self.assertIn("'audio','imagem'", q)
+        self.assertNotIn("console.log", prep)
 
     def test_agente_modelo_e_treze_ferramentas_sem_memoria(self):  # 5.1.2
         ag = self.nos["Agente"]

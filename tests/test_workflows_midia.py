@@ -75,3 +75,30 @@ class InterpretarMidia(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetencaoVigia(unittest.TestCase):
+    """6.1.3: retencao de midia no bv-vigia (FR-009)."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(RAIZ, "workflows/bv-vigia.json"), encoding="utf-8") as f:
+            cls.wf = json.load(f)
+        cls.no = {n["name"]: n for n in cls.wf["nodes"]}["Reter midia"]
+
+    def test_gatilho_dispara_a_retencao(self):
+        self.assertIn("Reter midia", [d["node"] for d in self.wf["connections"]["A cada 5 minutos"]["main"][0]])
+
+    def test_query_parametrizada_e_idempotente(self):
+        q = self.no["parameters"]["query"]
+        self.assertIn("{{BV:midia.retencao_h}}", self.no["parameters"]["options"]["queryReplacement"])
+        self.assertIn("$1::float8", q)
+        self.assertNotIn("midia.retencao_h", q)  # valor entra so como parametro
+        self.assertIn("tipo IN ('audio','imagem','outro')", q)
+        for c in ("midia_url = NULL", "midia_mime = NULL", "conteudo = NULL", "conteudo_derivado = NULL"):
+            self.assertIn(c, q)
+        self.assertIn("'sha256:' || encode(sha256(convert_to(mensagem_id_canal, 'UTF8')), 'hex')", q)
+        # 2a rodada: a linha ja expurgada tem sha256: no canal e sai do filtro => 0 linhas
+        self.assertIn("mensagem_id_canal NOT LIKE 'sha256:%'", q)
+        self.assertTrue(self.no["alwaysOutputData"])
+        self.assertIn("RETURNING id", q)  # so o id; nenhum conteudo volta para a execucao

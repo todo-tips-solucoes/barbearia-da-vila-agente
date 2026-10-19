@@ -82,7 +82,8 @@
   },
   "textos": {
     "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho? Se for urgente, chama a loja no (11) 97126-5299.",
-    "midia": "Recebi sua mensagem, mas por aqui eu só consigo ler texto e áudio. Pode me escrever o que você precisa?",
+    "midia_nao_entendida": "Não consegui entender o que você mandou. Pode mandar de novo ou me escrever?",
+    "midia_grande": "Esse áudio ficou um pouco longo pra mim 😅 Consegue mandar um mais curtinho ou me escrever?",
     "humano": "Vou pedir pra equipe da loja te ajudar. Eles falam com você em seguida, tá?",
     "reformular": "Não consegui entender direitinho. Pode me explicar de outro jeito?",
     "lista_botao": "Ver opções",
@@ -96,8 +97,28 @@
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
     "contatos": "Telefone/WhatsApp (11) 97126-5299; contato@barbeariadavila.com.br; Instagram @barbeariadavila_vilamascote"
   },
+  "midia": {
+    "hosts_audio": ["object.ce1.eveo.com.br"],
+    "hosts_imagem": [],
+    "mimes_audio": ["audio/ogg"],
+    "mimes_imagem": ["image/png", "image/jpeg", "image/webp", "image/gif"],
+    "prefixos_audio": [],
+    "prefixos_imagem": [],
+    "descricao_max_chars": 600,
+    "audio_max_s": 120,
+    "audio_max_mb": 10,
+    "imagem_max_mb": 10,
+    "max_por_turno": 2,
+    "download_timeout_s": 10,
+    "openai_timeout_s": 25,
+    "execucao_timeout_s": 75,
+    "transcricao_modelo": "whisper-1",
+    "imagem_detalhe": "auto",
+    "retencao_h": 23.9
+  },
   "workflows_sub": {
-    "bv_graces": ""
+    "bv_graces": "",
+    "interpretar_midia": ""
   },
   "encadeamento": {
     "max_servicos": 3

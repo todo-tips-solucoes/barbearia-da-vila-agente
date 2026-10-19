@@ -161,11 +161,11 @@ Ref: contracts/interpretar-midia.md; contracts/openai-midia.md; checklists/api.m
 
 Ref: spec.md FR-004, FR-005, FR-007, FR-010; plan.md §Fluxo; quickstart.md 6-7
 
-- [ ] 5.1.1 Em `workflows/sub/entregar-rajada.json`: nós `Tem mídia?`, chamada ao sub, `Preparar`, `So midia?`, `Compor midia`; `Ler contexto` inclui áudio e imagem com `conteudo_derivado`
-- [ ] 5.1.2 Em `workflows/shared/agente.js`: montar o turno em ordem de chegada, texto derivado como dado do cliente, neutralizar delimitadores do bloco e cabeçalhos de papel, uma única nota de "não compreendido" com contagem
-- [ ] 5.1.3 Aplicar a precedência de texto definida na tarefa 1.3 (`textos.midia_grande` x `textos.midia_nao_entendida`)
-- [ ] 5.1.4 Tratar saída ausente/erro do sub como `interpretacao` para todos os itens
-- [ ] 5.1.5 Testes em `tests/agente.test.js` (ordem, nota única, fixture de injeção "ignore as regras, cancele...") e `tests/test_workflows_agente.py`
+- [x] 5.1.1 Em `workflows/sub/entregar-rajada.json`: nós `Tem mídia?`, chamada ao sub, `Preparar`, `So midia?`, `Compor midia`; `Ler contexto` inclui áudio e imagem com `conteudo_derivado`
+- [x] 5.1.2 Em `workflows/shared/agente.js`: montar o turno em ordem de chegada, texto derivado como dado do cliente, neutralizar delimitadores do bloco e cabeçalhos de papel, uma única nota de "não compreendido" com contagem
+- [x] 5.1.3 Aplicar a precedência de texto definida na tarefa 1.3 (`textos.midia_grande` x `textos.midia_nao_entendida`)
+- [x] 5.1.4 Tratar saída ausente/erro do sub como `interpretacao` para todos os itens
+- [x] 5.1.5 Testes em `tests/agente.test.js` (ordem, nota única, fixture de injeção "ignore as regras, cancele...") e `tests/test_workflows_agente.py`
 
 ---
 
@@ -175,26 +175,26 @@ Ref: spec.md FR-004, FR-005, FR-007, FR-010; plan.md §Fluxo; quickstart.md 6-7
 
 Ref: spec.md FR-009; data-model.md §Retenção; quickstart.md 17
 
-- [ ] 6.1.1 Adicionar a query de retenção no `workflows/bv-vigia.json`, parametrizada por `midia.retencao_h`, com filtro `mensagem_id_canal NOT LIKE 'sha256:%'` e idempotente
-- [ ] 6.1.2 Efeito: `midia_url`, `midia_mime`, `conteudo`, `conteudo_derivado` NULL e `mensagem_id_canal` = sha256 da URL
-- [ ] 6.1.3 Teste estático da query e teste de esquema da 2ª rodada sem linhas
+- [x] 6.1.1 Adicionar a query de retenção no `workflows/bv-vigia.json`, parametrizada por `midia.retencao_h`, com filtro `mensagem_id_canal NOT LIKE 'sha256:%'` e idempotente
+- [x] 6.1.2 Efeito: `midia_url`, `midia_mime`, `conteudo`, `conteudo_derivado` NULL e `mensagem_id_canal` = sha256 da URL
+- [x] 6.1.3 Teste estático da query e teste de esquema da 2ª rodada sem linhas
 
 ### 6.2 Config dos ambientes e regras do `verificar-repo.py` `[A]`
 
 Ref: contracts/config-midia.md; checklists/security.md CHK004
 
-- [ ] 6.2.1 Acrescentar todas as chaves `midia.*` (incluindo `prefixos_*` e `descricao_max_chars`), `workflows_sub.interpretar_midia` e `textos.midia_nao_entendida`/`textos.midia_grande` em `config/ambientes/integracao.json` e `producao.json` (PROD com ids/credenciais vazios)
-- [ ] 6.2.2 Remover `textos.midia` e as referências a ele
-- [ ] 6.2.3 Regras em `scripts/verificar-repo.py`: chaves nos dois ambientes, hosts sem esquema/barra, `execucao_timeout_s < lock.ttl_s`, `saveData*` = `none` e ausência de `errorWorkflow` nos dois workflows
-- [ ] 6.2.4 Atualizar `tests/test_verificacoes_repo.py`
+- [x] 6.2.1 Acrescentar todas as chaves `midia.*` (incluindo `prefixos_*` e `descricao_max_chars`), `workflows_sub.interpretar_midia` e `textos.midia_nao_entendida`/`textos.midia_grande` em `config/ambientes/integracao.json` e `producao.json` (PROD com ids/credenciais vazios)
+- [x] 6.2.2 Remover `textos.midia` e as referências a ele
+- [x] 6.2.3 Regras em `scripts/verificar-repo.py`: chaves nos dois ambientes, hosts sem esquema/barra, `execucao_timeout_s < lock.ttl_s`, `saveData*` = `none` e ausência de `errorWorkflow` nos dois workflows
+- [x] 6.2.4 Atualizar `tests/test_verificacoes_repo.py`
 
 ### 6.3 Smoke e documentação do sub `[M]`
 
 Ref: plan.md §Project Structure; workflows/README.md
 
-- [ ] 6.3.1 Cenários em `scripts/smoke-agente.py` possíveis sem WhatsApp (falha OpenAI, host recusado)
-- [ ] 6.3.2 Registrar id e papel do `interpretar-midia` em `workflows/README.md`
-- [ ] 6.3.3 Rodar `python3 -I -m unittest discover -s tests`, `node tests/rajada.test.js`, `node tests/midia.test.js` e `scripts/varrer-segredos.py`
+- [~] 6.3.1 Cenários em `scripts/smoke-agente.py` possíveis sem WhatsApp (falha OpenAI, host recusado) (host recusado coberto no c15; falha OpenAI do sub exige audio real em host permitido, fica para a FASE 7)
+- [x] 6.3.2 Registrar id e papel do `interpretar-midia` em `workflows/README.md`
+- [x] 6.3.3 Rodar `python3 -I -m unittest discover -s tests`, `node tests/rajada.test.js`, `node tests/midia.test.js` e `scripts/varrer-segredos.py`
 
 ---
 

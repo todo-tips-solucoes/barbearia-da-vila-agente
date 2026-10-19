@@ -341,7 +341,8 @@ def c15():
     semear(507, {"idCliente": FANTASMA})
     t = turno(507, evento_audio(507))
     checar("turno concluido", bool(t) and t["estado"] == "concluido", str(t)[:120])
-    checar("resposta e o pedido para escrever (textos.midia)", bool(t) and CFG["textos"]["midia"] in t["saidas"], str(t and t["saidas"])[:160])
+    checar("resposta e o aviso de nao entendido (textos.midia_nao_entendida ou midia_grande)", bool(t) and any(CFG["textos"][k] in t["saidas"] for k in ("midia_nao_entendida", "midia_grande")), str(t and t["saidas"])[:160])
+    checar("falhas_agente midia|host_recusado, sem URL", any(x.startswith("midia|host_recusado") and "exemplo.invalid" not in x for x in falhas(507)), str(falhas(507)))
 
 
 def _trocar_credencial(api, d, wid, tipo, falsa):
