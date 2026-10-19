@@ -21,13 +21,13 @@ chamadas à Graces, Constitution Check IX).
 - [x] CHK007 - Os códigos de falha estão enumerados com condição de disparo? [Completude, data-model.md Falha de mídia; contracts/interpretar-midia.md `excedente`] {auto}
 - [x] CHK008 - O comportamento quando o sub falha ou não devolve saída está definido? [Cobertura, contracts/interpretar-midia.md §Saída: todos `interpretacao`] {auto}
 - [x] CHK009 - Os timeouts estão quantificados e cabem no `lock.ttl_s`? [Mensurabilidade, contracts/config-midia.md `download/openai/execucao_timeout_s`; plan.md §Technical Context] {auto}
-- [ ] CHK010 - O tempo do agente depois da mídia (que pode estourar `lock.ttl_s`) tem requisito ou critério de medida, além de "a medir no TESTE"? [Gap, plan.md §Riscos "Orçamento de tempo", §Segurança M5] {auto}
+- [x] CHK010 - O tempo do agente depois da mídia (que pode estourar `lock.ttl_s`) tem requisito ou critério de medida, além de "a medir no TESTE"? [Gap, plan.md §Riscos "Orçamento de tempo", §Segurança M5] {auto} Resolvido: plan.md §Riscos (N = 10, limiar `lock.ttl_s`) e quickstart 19.
 
 ## OpenAI
 
 - [x] CHK011 - Os modelos de transcrição e de imagem estão definidos com fonte? [Completude, Spec §FR-005; contracts/config-midia.md `transcricao_modelo`, `agente.modelo`] {auto}
 - [x] CHK012 - As premissas não medidas (Ogg aceito D3, forma da chamada de imagem D4) estão marcadas como sondas bloqueantes? [Dependência, plan.md §Technical Context; §Riscos] {auto}
-- [ ] CHK013 - O formato da chamada de imagem (nó nativo ou HTTP) está fixado no contrato, ou só depois da sonda D4? [Ambiguity, contracts/interpretar-midia.md §Cadeia "ver research D4"] {auto}
+- [x] CHK013 - O formato da chamada de imagem (nó nativo ou HTTP) está fixado no contrato, ou só depois da sonda D4? [Ambiguity, contracts/interpretar-midia.md §Cadeia "ver research D4"] {auto}
 
 ## Deploy e ambiente
 

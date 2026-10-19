@@ -25,6 +25,8 @@ criado. O webhook da 145 não é alterado.
    `openAiApi`; `saveData*` = `none` no sub; nenhum nó loga `conteudo_derivado`/`midia_url`;
    query de retenção no `bv-vigia` parametrizada por `midia.retencao_h`; migração 0009 idempotente.
 
+7a. Rajada com mídia `grande` e outra `host_recusado` → uma única resposta, com `textos.midia_grande`.
+
 ## Sondas no TESTE (primeira tarefa, antes de construir)
 
 9. Transcrição Ogg: baixar o áudio real da `fileUrl` de uma nova nota de voz do número de teste e
@@ -36,9 +38,12 @@ criado. O webhook da 145 não é alterado.
     pela forma escolhida (nó nativo ou HTTP, com a página oficial citada). **Expected**: 200 com
     descrição. Falha → bloqueio humano.
 
+19. Medida de tempo (plan §Riscos): ler `get_workflow_details`/execuções da `entregar-rajada` no
+    TESTE (N = 10 turnos com mídia), só durações, sem gravar conteúdo; comparar com `lock.ttl_s`.
+
 ## Ponta a ponta no TESTE (owner manda do número de teste)
 
-11. **Roundtrip áudio (US1)**: nota de voz "quero cortar o cabelo amanhã de tarde" → resposta com
+11. **Roundtrip áudio (US1)** (repetir ≥ 20 vezes para medir o percentil de SC-005): nota de voz "quero cortar o cabelo amanhã de tarde" → resposta com
     horários do barbeiro de teste em até 30 s após a janela. **Expected**: payload real do evento
     gravado em `mensagens` confere com a fixture `evento-20.json` (campos de FR-002).
 12. Áudio + texto na janela (US1-2) → um turno, ordem de chegada.

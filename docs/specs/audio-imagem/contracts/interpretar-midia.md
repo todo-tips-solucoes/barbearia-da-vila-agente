@@ -47,6 +47,13 @@ Os valores de exemplo de áudio vêm de `tests/fixtures/chatmaster/evento-20.jso
 - Saída ausente ou erro do sub (nó chamador com `continueRegularOutput`): o `entregar-rajada`
   trata todos os itens de mídia como `motivo = 'interpretacao'` sem gravar nada.
 
+## Precedência do texto de resposta
+
+Uma resposta por turno (FR-007). Se a rajada tiver mídia `grande` (`longo`/`pesado`) e outra
+`host_recusado` (ou qualquer outro motivo), vence `textos.midia_grande`, por ser a que orienta uma
+ação concreta (mandar mais curto ou escrever); `textos.midia_nao_entendida` só vale quando nenhuma
+mídia da rajada é `grande`.
+
 ## Efeitos
 
 - `UPDATE mensagens SET conteudo_derivado = $2, midia_falha = NULL WHERE id = $1` para cada
@@ -69,3 +76,7 @@ Gatilho -> Validar (Code: https, host do tipo, MIME, limites antes) -> Pode baix
 
 Todos os nós de rede: `onError: continueRegularOutput`. Nós validados por `validate_node_config`
 antes do deploy e conferidos por `get_workflow_details` depois (FR-015).
+
+## Cadeia: forma da chamada de imagem (sonda 2.2)
+
+Nó `Descrever` = HTTP Request `POST /v1/responses` (credencial `openAiApi`), corpo em `contracts/openai-midia.md` §Imagem; saída lida em `output[].content[].text`.

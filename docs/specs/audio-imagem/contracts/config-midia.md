@@ -15,6 +15,9 @@ fonte está indicada.
 | `midia.hosts_imagem` | `[]` | host de imagem não observado: falha fechada (FR-006) |
 | `midia.mimes_audio` | `["audio/ogg"]` | `fileMimeType` de `evento-20.json` sem parâmetros; comparação pelo tipo antes do `;` |
 | `midia.mimes_imagem` | `["image/png","image/jpeg","image/webp","image/gif"]` | tipos aceitos em https://developers.openai.com/api/docs/guides/images-vision |
+| `midia.prefixos_audio` | `[]` | prefixos de caminho (começam com `/`) por host de áudio; vazio = qualquer caminho do host (H1) |
+| `midia.prefixos_imagem` | `[]` | idem para imagem; vazio = qualquer caminho |
+| `midia.descricao_max_chars` | `600` | `[PROPOSTA]`; teto da descrição de imagem (H2) |
 | `midia.audio_max_s` | `120` | `[PROPOSTA]` |
 | `midia.audio_max_mb` | `10` | `[PROPOSTA]`; teto oficial 25 MB (guia speech-to-text) |
 | `midia.imagem_max_mb` | `10` | `[PROPOSTA]` |
@@ -30,7 +33,8 @@ fonte está indicada.
 | `textos.midia_grande` | texto natural | áudio longo ou arquivo grande: pedir mais curto ou por escrito |
 
 Regras novas em `verificar-repo.py`: as chaves acima existem nos dois ambientes; hosts sem esquema
-nem barra; `midia.execucao_timeout_s < lock.ttl_s`; `textos.midia` deixa de existir.
+nem barra; `midia.execucao_timeout_s < lock.ttl_s`; `textos.midia` deixa de existir; `midia.prefixos_*` existem e cada prefixo começa com `/`;
+`midia.descricao_max_chars` é inteiro > 0.
 
 O modelo de visão é `agente.modelo` (já existe, `gpt-5.6-luna`, spec FR-005). A credencial é
 `credenciais.openai` (já existe, FR-013).

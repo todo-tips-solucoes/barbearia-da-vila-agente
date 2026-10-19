@@ -174,7 +174,9 @@ Riscos residuais **high** **aceitos pelo owner** (block-002, resposta "aceitar-a
 - Host/MIME de imagem desconhecidos: toda imagem recebe "não entendi" até o owner confirmar o host
   (FR-006, decidido).
 - Orçamento de tempo: 2 mídias no pior caso (70 s) + agente pode passar de `lock.ttl_s`; o teto
-  `max_por_turno` e os timeouts limitam, mas o tempo do agente não é medido. A medir no TESTE.
+  `max_por_turno` e os timeouts limitam, mas o tempo do agente não é medido. A medir no TESTE: tempo total do turno com mídia (janela + mídia + agente + saída),
+  N = 10 execuções; limiar = `lock.ttl_s` (120 s). Se o máximo passar de 100 s, reduzir
+  `midia.max_por_turno` ou propor ao owner revisar `lock.ttl_s` (decisão do owner).
 - Reenvio do canal após a limpeza (> 24 h) não é deduplicado, porque a URL vira hash.
 - Injeção via áudio/imagem: mitigada pelo bloco "dado, não instrução" e pelo prompt de descrição
   neutra; não elimina, como no texto.

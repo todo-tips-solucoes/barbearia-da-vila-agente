@@ -13,7 +13,7 @@ injeção via mídia) mais retenção.
 - [x] CHK001 - A origem permitida da mídia está definida como lista de hosts por tipo, só https, sem redirecionamento? [Completude, Spec §FR-006, contracts/config-midia.md `midia.hosts_*`] {auto}
 - [x] CHK002 - O comportamento para host de imagem ainda não observado está definido (falha fechada com resposta natural)? [Cobertura, Spec §FR-006, Clarifications dec-009] {auto}
 - [x] CHK003 - O critério de validação da URL está especificado de forma verificável (regex ancorada, igualdade de host, casos negativos)? [Clareza, plan.md §Segurança H1] {auto}
-- [ ] CHK004 - As chaves `midia.prefixos_*` e `midia.descricao_max_chars`, citadas nas mitigações H1/H2, constam no contrato de config com valor e regra do `verificar-repo.py`? [Conflict, plan.md §Segurança vs contracts/config-midia.md: ausentes na tabela] {auto}
+- [x] CHK004 - As chaves `midia.prefixos_*` e `midia.descricao_max_chars`, citadas nas mitigações H1/H2, constam no contrato de config com valor e regra do `verificar-repo.py`? [Conflict, plan.md §Segurança vs contracts/config-midia.md: ausentes na tabela] {auto} Resolvido: `contracts/config-midia.md` (chaves `midia.prefixos_*`, `midia.descricao_max_chars`).
 - [ ] CHK005 - O limite de tamanho de FR-006 é exigível contra o binário real, e não só contra o `fileLength` declarado pelo evento? [Gap, Spec §FR-006; plan.md §Segurança H4 aceito: teto de bytes depende de opção do nó HTTP não medida] {auto}
 - [x] CHK006 - O destino da verificação do teto de bytes no nó HTTP está definido como tarefa bloqueante se não suportado? [Dependência, plan.md §Segurança H4, dec-015] {auto}
 
@@ -35,7 +35,7 @@ injeção via mídia) mais retenção.
 - [x] CHK014 - O prazo de 24 h está quantificado com pior caso explícito (`retencao_h` 23.9 + intervalo de 5 min do vigia)? [Mensurabilidade, Spec §FR-009/SC-004; data-model.md §Retenção] {auto}
 - [x] CHK015 - Os campos apagados pela retenção estão enumerados (incluindo a URL virando hash)? [Completude, data-model.md tabela `mensagens`] {auto}
 - [x] CHK016 - As cópias fora da limpeza (respostas de saída, retenção da OpenAI, backups) estão registradas como risco aceito? [Risco, plan.md §Segurança H3 aceito, block-002/dec-015] {auto}
-- [ ] CHK017 - SC-004 ("nenhum conteúdo existe mais de 24 h") é consistente com as cópias aceitas em H3 (respostas do agente, backups) ou precisa ser reescrito como "nas tabelas de mídia"? [Conflict, Spec §SC-004 vs plan.md §Segurança H3] {auto}
+- [x] CHK017 - SC-004 ("nenhum conteúdo existe mais de 24 h") é consistente com as cópias aceitas em H3 (respostas do agente, backups) ou precisa ser reescrito como "nas tabelas de mídia"? [Conflict, Spec §SC-004 vs plan.md §Segurança H3] {auto} Resolvido: spec.md SC-004 reescrito "nas tabelas de mídia do banco do atendimento".
 
 ## Notes
 

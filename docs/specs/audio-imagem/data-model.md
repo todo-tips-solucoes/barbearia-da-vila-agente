@@ -76,5 +76,7 @@ Query nova no `bv-vigia` (a cada 5 min):
 - filtro inclui `mensagem_id_canal NOT LIKE 'sha256:%'`;
 - idempotente: a segunda rodada não encontra linha.
 
+Escopo do apagamento (FR-009/SC-004): só as colunas de mídia de `mensagens`; respostas de saída, retenção da OpenAI e backups do Postgres ficam fora.
+
 `midia.retencao_h` padrão `23.9` `[PROPOSTA]` (24 h menos o intervalo do vigia); em TESTE pode
 ser reduzido para o teste do US4.

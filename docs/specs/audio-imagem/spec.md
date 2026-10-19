@@ -100,9 +100,9 @@ Qualquer conteúdo de mídia retido (arquivo baixado, transcrição, descrição
 - **FR-004**: Áudio reconhecido MUST ser transcrito via OpenAI e o texto MUST ser tratado como mensagem de texto do cliente, entrando no buffer e na entrega em rajada existentes, na ordem de chegada.
 - **FR-005**: Imagem reconhecida MUST ser interpretada via OpenAI (modelo de atendimento `gpt-5.6-luna`) e a descrição MUST ser entregue ao agente junto da legenda, quando houver, mantendo ordem de chegada.
 - **FR-006**: O download da mídia pela `fileUrl` MUST ter tempo máximo e limite de tamanho configuráveis; a mídia MUST NOT ser seguida para endereços fora do canal esperado. A validação MUST ser por lista configurável de hosts permitidos (https apenas, sem seguir redirecionamento para outro host), cujo valor inicial é o host observado em `evento-20.json` (`object.ce1.eveo.com.br`); o host das imagens não foi observado (fixtures mascaradas) e MUST ser confirmado na primeira imagem real em TESTE, falhando fechado (mídia recusada com resposta natural) até lá. Limites padrão `[PROPOSTA]`, configuráveis: 120 s e 10 MB para áudio; 10 MB para imagem.
-- **FR-007**: Mídia não obtida, não compreendida ou sem suporte MUST resultar em uma única resposta natural por turno, em português, pedindo reenvio ou texto, sem jargão técnico e sem inventar conteúdo.
+- **FR-007**: Mídia não obtida, não compreendida ou sem suporte MUST resultar em uma única resposta natural por turno, em português, pedindo reenvio ou texto, sem jargão técnico e sem inventar conteúdo. Com mídia grande e não compreendida na mesma rajada, vale o texto de mídia grande (`contracts/interpretar-midia.md` §Precedência).
 - **FR-008**: Falha em obter, transcrever ou interpretar MUST ser registrada com tipo e momento, sem arquivo, transcrição, descrição, telefone ou segredo (FR-019 da `recepcao-buffer`), e MUST NOT gerar erro ao Chat Master após a gravação do evento.
-- **FR-009**: Qualquer conteúdo de mídia retido (arquivo, transcrição, descrição) MUST ser apagado em no máximo 24 h do recebimento, por rotina automática, com prazo configurável para teste.
+- **FR-009**: Qualquer conteúdo de mídia retido (arquivo, transcrição, descrição) MUST ser apagado em no máximo 24 h do recebimento, por rotina automática, com prazo configurável para teste. O apagamento vale para as tabelas de mídia do banco do atendimento (`mensagens`); não cobre respostas de saída, retenção da OpenAI nem backups do Postgres.
 - **FR-010**: Conteúdo vindo de áudio ou imagem MUST ser tratado como dado do cliente, nunca como instrução ao agente (injeção via mídia).
 - **FR-011**: Deduplicação por identificador do canal MUST valer também para mídia; a deduplicação por conteúdo (FR-010 da `recepcao-robustez`) MUST NOT afetar mídia.
 - **FR-012**: Mensagens `fromMe` e de grupo MUST manter o comportamento atual, sem transcrição nem interpretação.
@@ -126,8 +126,8 @@ Qualquer conteúdo de mídia retido (arquivo baixado, transcrição, descrição
 - **SC-001**: 100% dos áudios de teste inteligíveis geram resposta coerente com o pedido falado, como se digitado.
 - **SC-002**: 0 mídias sem resposta: todo áudio ou imagem recebido gera resposta ao cliente ou fica pendente para o turno seguinte, nunca em silêncio.
 - **SC-003**: Em rajada com várias mídias ilegíveis, o cliente recebe no máximo 1 resposta de "não entendi" por turno.
-- **SC-004**: Nenhum conteúdo de mídia, transcrição ou descrição existe mais de 24 h após o recebimento.
-- **SC-005**: Resposta a um áudio curto (até 30 s) chega em até 30 s após o fim da janela do buffer em 95% dos testes. [PROPOSTA]
+- **SC-004**: Nenhum conteúdo de mídia, transcrição ou descrição existe mais de 24 h após o recebimento nas tabelas de mídia do banco do atendimento (`mensagens`). Ficam fora do critério as respostas de saída, a retenção da OpenAI e os backups do Postgres.
+- **SC-005**: Resposta a um áudio curto (até 30 s) chega em até 30 s após o fim da janela do buffer em 95% dos testes, com no mínimo 20 áudios curtos de teste (n ≥ 20, gerados por nota de voz do número de teste). [PROPOSTA]
 - **SC-006**: Zero ocorrência de dado factual de payload fora das fixtures reais nos artefatos da feature.
 
 ## Clarifications

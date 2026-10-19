@@ -179,3 +179,11 @@ campo além de `type` e `fileUrl` é lido (FR-002).
 **Compatibilidade**: o caso mutado `{ type: 'sticker' }` de `tests/rajada.test.js:19` não tem
 `fileUrl` e continua descartado. Não há captura real de sticker, vídeo ou documento: quando houver,
 vira fixture e o teste passa a usá-la.
+
+## Resultados medidos das sondas (FASE 2)
+
+- **2.2 / D4 (2026-10-19)**: `gpt-5.6-luna` aceitou PNG 64x64 gerado no teste via `/v1/responses`
+  (`input_image` data URL, `detail: auto`) → 200, "Um quadrado vermelho sólido."; `/v1/chat/completions`
+  também 200. Fonte da forma: https://developers.openai.com/api/docs/guides/images-vision.
+- **2.1 / D3, 2.3 / D7, 2.5 / D5**: pendentes de mídia real do número de teste (owner); ver bloqueio humano.
+- **2.4 / H4**: pendente (ver bloqueio humano).

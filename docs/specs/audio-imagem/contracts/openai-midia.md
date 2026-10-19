@@ -19,7 +19,16 @@ o resto está marcado "não medido".
 - Autenticação: credencial n8n `openAiApi` "Barbearia Vila OpenAI" (`predefinedCredentialType`);
   a chave nunca aparece no workflow.
 
-## Imagem `[PROPOSTA — a validar na implementacao]` (forma da chamada)
+## Imagem (forma da chamada medida em 2026-10-19, sonda 2.2)
+
+- **Medido**: `POST https://api.openai.com/v1/responses` com `model = gpt-5.6-luna` e
+  `input = [{"role":"user","content":[{"type":"input_text","text":"<prompt>"},{"type":"input_image","image_url":"data:image/png;base64,<...>","detail":"auto"}]}]`
+  → 200; texto em `output[].content[].text` do item `type = message`. PNG 64x64 gerado no teste
+  (sem dado de cliente). `POST /v1/chat/completions` com `image_url: {url, detail}` também → 200.
+- **Escolha para o sub**: nó HTTP Request na Responses API (credencial `openAiApi`
+  predefinida); o nó OpenAI nativo do n8n não foi testado.
+
+### Não medido antes da sonda (histórico)
 
 - Entrada documentada: `{"type": "input_image", "image_url": "data:<mime>;base64,<...>",
   "detail": "<low|high|original|auto>"}`. Fonte:

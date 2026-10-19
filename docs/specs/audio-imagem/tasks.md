@@ -23,41 +23,41 @@ Escopo: entrada de áudio e imagem no atendimento WhatsApp (recepção grava e r
 
 Ref: checklists/security.md CHK004; plan.md §Segurança H1/H2; contracts/config-midia.md
 
-- [ ] 1.1.1 Acrescentar a `contracts/config-midia.md` as chaves `midia.prefixos_audio`, `midia.prefixos_imagem` (lista de prefixos de caminho por host; vazio = qualquer caminho) e `midia.descricao_max_chars` (`[PROPOSTA]` 600), cada uma com valor inicial e fonte/nota
-- [ ] 1.1.2 Acrescentar à seção "Regras novas em `verificar-repo.py`" as regras das 3 chaves (existem nos dois ambientes; prefixos começam com `/`; `descricao_max_chars` inteiro > 0)
-- [ ] 1.1.3 Conferir que as chaves citadas em `plan.md` §Segurança H1/H2 existem todas no contrato (grep `midia\.` nos dois arquivos) e que a ordem de uso bate com `research.md`
+- [x] 1.1.1 Acrescentar a `contracts/config-midia.md` as chaves `midia.prefixos_audio`, `midia.prefixos_imagem` (lista de prefixos de caminho por host; vazio = qualquer caminho) e `midia.descricao_max_chars` (`[PROPOSTA]` 600), cada uma com valor inicial e fonte/nota
+- [x] 1.1.2 Acrescentar à seção "Regras novas em `verificar-repo.py`" as regras das 3 chaves (existem nos dois ambientes; prefixos começam com `/`; `descricao_max_chars` inteiro > 0)
+- [x] 1.1.3 Conferir que as chaves citadas em `plan.md` §Segurança H1/H2 existem todas no contrato (grep `midia\.` nos dois arquivos) e que a ordem de uso bate com `research.md`
 
 ### 1.2 Reconciliar SC-004 com as cópias aceitas em H3 `[A]`
 
 Ref: checklists/security.md CHK017; spec.md SC-004; plan.md §Segurança H3 (block-002/dec-015)
 
-- [ ] 1.2.1 Reescrever SC-004 em `spec.md` para valer "nas tabelas de mídia do banco do atendimento" (`mensagens`), declarando fora do critério as respostas de saída, a retenção da OpenAI e os backups do Postgres
-- [ ] 1.2.2 Alinhar FR-009 e `data-model.md` §Retenção ao mesmo recorte, sem ampliar a promessa de apagamento
-- [ ] 1.2.3 Remover a linha de conflito do `checklists/security.md` (CHK017 vira `[x]` com citação da nova redação)
+- [x] 1.2.1 Reescrever SC-004 em `spec.md` para valer "nas tabelas de mídia do banco do atendimento" (`mensagens`), declarando fora do critério as respostas de saída, a retenção da OpenAI e os backups do Postgres
+- [x] 1.2.2 Alinhar FR-009 e `data-model.md` §Retenção ao mesmo recorte, sem ampliar a promessa de apagamento
+- [x] 1.2.3 Remover a linha de conflito do `checklists/security.md` (CHK017 vira `[x]` com citação da nova redação)
 
 ### 1.3 Definir qual texto vence quando a rajada mistura `grande` e `host_recusado` `[M]`
 
 Ref: checklists/ux.md CHK004; spec.md FR-007; plan.md §Fluxo "Compor midia"
 
-- [ ] 1.3.1 Decidir a precedência (uma resposta por turno) e registrá-la em `contracts/interpretar-midia.md` e `spec.md` FR-007, sem texto novo além dos dois já existentes
-- [ ] 1.3.2 Incluir o caso (grande + host_recusado na mesma rajada) em `quickstart.md` como cenário estático
-- [ ] 1.3.3 Marcar CHK004 do `ux.md` como `[x]` com citação
+- [x] 1.3.1 Decidir a precedência (uma resposta por turno) e registrá-la em `contracts/interpretar-midia.md` e `spec.md` FR-007, sem texto novo além dos dois já existentes
+- [x] 1.3.2 Incluir o caso (grande + host_recusado na mesma rajada) em `quickstart.md` como cenário estático
+- [x] 1.3.3 Marcar CHK004 do `ux.md` como `[x]` com citação
 
 ### 1.4 Dar critério de medida ao tempo do agente após a mídia `[A]`
 
 Ref: checklists/api.md CHK010; plan.md §Riscos "Orçamento de tempo", §Segurança M5; lock.ttl_s = 120 s
 
-- [ ] 1.4.1 Definir em `plan.md`/`quickstart.md` o critério: tempo total do turno com mídia (janela + mídia + agente + saída) medido em N execuções no TESTE e comparado a `lock.ttl_s`; limiar e ação se estourar (reduzir `max_por_turno` ou revisar `lock.ttl_s` por decisão do owner)
-- [ ] 1.4.2 Acrescentar ao quickstart o passo de medida (leitura de `get_workflow_details`/execuções da `entregar-rajada`, sem gravar conteúdo)
-- [ ] 1.4.3 Marcar CHK010 do `api.md` como `[x]` com citação
+- [x] 1.4.1 Definir em `plan.md`/`quickstart.md` o critério: tempo total do turno com mídia (janela + mídia + agente + saída) medido em N execuções no TESTE e comparado a `lock.ttl_s`; limiar e ação se estourar (reduzir `max_por_turno` ou revisar `lock.ttl_s` por decisão do owner)
+- [x] 1.4.2 Acrescentar ao quickstart o passo de medida (leitura de `get_workflow_details`/execuções da `entregar-rajada`, sem gravar conteúdo)
+- [x] 1.4.3 Marcar CHK010 do `api.md` como `[x]` com citação
 
 ### 1.5 Fixar a quantidade mínima de testes para SC-005 `[M]`
 
 Ref: checklists/ux.md CHK012; spec.md SC-005 `[PROPOSTA]`
 
-- [ ] 1.5.1 Definir em `spec.md` SC-005 (ou no quickstart) o mínimo de áudios de teste para medir 95% (ex.: n ≥ 20, para o percentil ter sentido) e como a amostra é gerada
-- [ ] 1.5.2 Refletir a quantidade no cenário 11 do `quickstart.md`
-- [ ] 1.5.3 Marcar CHK012 do `ux.md` como `[x]` com citação
+- [x] 1.5.1 Definir em `spec.md` SC-005 (ou no quickstart) o mínimo de áudios de teste para medir 95% (ex.: n ≥ 20, para o percentil ter sentido) e como a amostra é gerada
+- [x] 1.5.2 Refletir a quantidade no cenário 11 do `quickstart.md`
+- [x] 1.5.3 Marcar CHK012 do `ux.md` como `[x]` com citação
 
 ---
 
@@ -67,7 +67,7 @@ Ref: checklists/ux.md CHK012; spec.md SC-005 `[PROPOSTA]`
 
 Ref: research.md D3; quickstart.md 9; contracts/openai-midia.md
 
-- [ ] 2.1.1 Com uma nota de voz nova do número de teste (owner), baixar do host permitido e enviar à OpenAI como `audio.ogg` (`whisper-1`), sem gravar o binário no repositório
+- [!] 2.1.1 Com uma nota de voz nova do número de teste (owner), baixar do host permitido e enviar à OpenAI como `audio.ogg` (`whisper-1`), sem gravar o binário no repositório
 - [ ] 2.1.2 Registrar status e campo `text` (sem a transcrição inteira) no `research.md` como resultado medido
 - [ ] 2.1.3 Se recusado, abrir bloqueio humano e parar a FASE 4
 
@@ -75,16 +75,16 @@ Ref: research.md D3; quickstart.md 9; contracts/openai-midia.md
 
 Ref: research.md D4; quickstart.md 10a; checklists/api.md CHK013
 
-- [ ] 2.2.1 Enviar uma imagem PNG gerada no teste (sem dado de cliente) ao `gpt-5.6-luna` pela forma candidata (nó nativo ou HTTP), citando a página oficial lida
-- [ ] 2.2.2 Registrar status e forma do corpo realmente aceito, só o que foi observado
-- [ ] 2.2.3 Fixar em `contracts/interpretar-midia.md` §Cadeia o nó/forma escolhidos e em `contracts/openai-midia.md` o corpo da imagem, fechando CHK013 do `api.md`
-- [ ] 2.2.4 Se falhar, abrir bloqueio humano e parar a FASE 4
+- [x] 2.2.1 Enviar uma imagem PNG gerada no teste (sem dado de cliente) ao `gpt-5.6-luna` pela forma candidata (nó nativo ou HTTP), citando a página oficial lida
+- [x] 2.2.2 Registrar status e forma do corpo realmente aceito, só o que foi observado
+- [x] 2.2.3 Fixar em `contracts/interpretar-midia.md` §Cadeia o nó/forma escolhidos e em `contracts/openai-midia.md` o corpo da imagem, fechando CHK013 do `api.md`
+- [x] 2.2.4 Se falhar, abrir bloqueio humano e parar a FASE 4 (não falhou)
 
 ### 2.3 Sonda D7: binário não retido em disco `[C]`
 
 Ref: research.md D7; quickstart.md 10; plan.md §Segurança M6
 
-- [ ] 2.3.1 Executar o sub de teste com `saveData*` = `none` e baixar um áudio real
+- [!] 2.3.1 Executar o sub de teste com `saveData*` = `none` e baixar um áudio real
 - [ ] 2.3.2 Verificar na stack `n8n` que nenhum arquivo do áudio resta na pasta de binários (somente leitura, via procedimento do `docs/infra.md`)
 - [ ] 2.3.3 Registrar o resultado no `research.md`; arquivo restante abre bloqueio humano
 
@@ -92,7 +92,7 @@ Ref: research.md D7; quickstart.md 10; plan.md §Segurança M6
 
 Ref: plan.md §Segurança H4 (aceito com tarefa bloqueante, dec-015); checklists/security.md CHK005, CHK006; spec.md FR-006
 
-- [ ] 2.4.1 Consultar `validate_node_config` (MCP nativo do n8n) para o nó HTTP Request da versão 2.43.5: existe opção de recusar por `Content-Length` ou impor teto de bytes antes de ler o corpo
+- [!] 2.4.1 Consultar `validate_node_config` (MCP nativo do n8n) para o nó HTTP Request da versão 2.43.5: existe opção de recusar por `Content-Length` ou impor teto de bytes antes de ler o corpo
 - [ ] 2.4.2 Se existir, definir a opção no nó `Baixar` e validar de novo com `validate_node_config`; a verificação de tamanho real no `Conferir` fica como segunda barreira
 - [ ] 2.4.3 Se NÃO existir, marcar a tarefa `[!]`, registrar bloqueio humano e voltar ao owner antes da publicação; FR-006 deve declarar o teto como "declarado pelo evento + timeout" até decisão
 - [ ] 2.4.4 Registrar o resultado em `research.md` e ajustar FR-006/`contracts/interpretar-midia.md` (fecha CHK005 do `security.md`)
@@ -101,7 +101,7 @@ Ref: plan.md §Segurança H4 (aceito com tarefa bloqueante, dec-015); checklists
 
 Ref: research.md D5; spec.md FR-006; quickstart.md 14
 
-- [ ] 2.5.1 Com a primeira imagem real do número de teste (owner), ler o host da `fileUrl` gravada em `mensagens`
+- [!] 2.5.1 Com a primeira imagem real do número de teste (owner), ler o host da `fileUrl` gravada em `mensagens`
 - [ ] 2.5.2 Owner confirma o host; acrescentar em `midia.hosts_imagem` e o MIME em `midia.mimes_imagem` se divergir
 - [ ] 2.5.3 Registrar a fonte (evento real) no contrato; nenhum campo inventado
 

@@ -11,7 +11,7 @@ Suposições: o "UX" aqui é a conversa (sem tela). Profundidade Standard, públ
 - [x] CHK001 - A resposta para mídia não compreendida é única por turno e sem jargão técnico? [Completude, Spec §FR-007, US3-2, SC-003] {auto}
 - [x] CHK002 - O caso de mídia ilegível junto de texto compreensível está definido (atende o texto, cita só a parte não compreendida)? [Cobertura, Spec US3-3] {auto}
 - [x] CHK003 - Há texto distinto para áudio longo ou arquivo grande (pedir mais curto ou por escrito)? [Clareza, Spec Edge Cases; contracts/config-midia.md `textos.midia_grande`] {auto}
-- [ ] CHK004 - Está definido qual texto vence quando a mesma rajada tem uma mídia `grande` e outra `host_recusado` (só uma resposta por turno)? [Ambiguity, Spec §FR-007; plan.md §Fluxo "Compor midia (nao_entendida | grande)"] {auto}
+- [x] CHK004 - Está definido qual texto vence quando a mesma rajada tem uma mídia `grande` e outra `host_recusado` (só uma resposta por turno)? [Ambiguity, Spec §FR-007; plan.md §Fluxo "Compor midia (nao_entendida | grande)"] {auto} Resolvido: `contracts/interpretar-midia.md` §Precedência: vence `textos.midia_grande`.
 - [ ] CHK005 - O texto final de `textos.midia_nao_entendida` e `textos.midia_grande` (tom, persona IA) está aprovado pelo owner? [Tom, contracts/config-midia.md exemplo] {humano}
 
 ## Áudio e imagem
@@ -25,7 +25,7 @@ Suposições: o "UX" aqui é a conversa (sem tela). Profundidade Standard, públ
 ## Critérios de aceite
 
 - [x] CHK011 - SC-001 e SC-003 são mensuráveis com o roteiro de teste no TESTE? [Mensurabilidade, Spec §SC-001/SC-003; plan.md §Technical Context quickstart] {auto}
-- [ ] CHK012 - O alvo de SC-005 (30 s, 95%) tem quantidade mínima de testes para medir o percentil? [Gap, Spec §SC-005 `[PROPOSTA]`] {auto}
+- [x] CHK012 - O alvo de SC-005 (30 s, 95%) tem quantidade mínima de testes para medir o percentil? [Gap, Spec §SC-005 `[PROPOSTA]`] {auto} Resolvido: spec.md SC-005 (n ≥ 20) e quickstart 11.
 
 ## Notes
 
