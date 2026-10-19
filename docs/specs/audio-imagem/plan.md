@@ -140,7 +140,7 @@ Achados: 0 critical, 4 high, 6 medium, 4 low. Mitigações incorporadas ao desen
   `agente.test.js`.
 - **H4 mídia grande**: rejeição antes do download por `fileLength`/`seconds` do evento (já no
   desenho) + timeout de 10 s como teto. Recusa por `Content-Length` antes do corpo: depende de
-  opção do nó HTTP Request do n8n **não medida**; conferida com `validate_node_config` na tarefa.
+  opção do nó HTTP Request do n8n: **medido, não existe** (research.md §2.4). Camadas: pré-check do evento, teto de tempo = `midia.execucao_timeout_s`, tamanho real no `Conferir`.
 - **M1**: o webhook já exige o token do canal (`Hash do token`, sha256 de `token_origin`, no
   `bv-recepcao`); o achado de "só path" não procede.
 - **M2**: teto por contato já existe para turnos (`agente.turnos_max_contato_hora` = 20); mídia

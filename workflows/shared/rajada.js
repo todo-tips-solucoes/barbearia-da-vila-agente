@@ -14,12 +14,17 @@ function bvNormalizar(evento, opcoes) {
   if (typeof b.sender !== 'string' || !b.sender || !m || typeof m !== 'object') {
     return { status: 'invalida', motivo: 'campos_ausentes' };
   }
+  const od = m.originalData && typeof m.originalData === 'object' ? m.originalData : {};
+  const eAudio = (typeof m.type === 'string' && m.type.startsWith('audio/')) || !!od.audioMessage;
+  const bloco = eAudio ? od.audioMessage : od.imageMessage;
   let tipo;
   if (m.type === 'text' && typeof m.text === 'string') tipo = 'texto';
-  else if (m.type === 'image' && m.fileUrl) tipo = 'imagem';
-  else if (m.originalData && m.originalData.audioMessage && m.fileUrl) tipo = 'audio'; // tipo do audio nao confirmado: usa a estrutura observada
-  else return { status: 'descartada', motivo: 'tipo_nao_suportado' };
+  else if (!m.fileUrl) return { status: 'descartada', motivo: 'tipo_nao_suportado' };
+  else if (eAudio) tipo = 'audio'; // FR-003: type audio/* OU audioMessage; formato decidido por fileMimeType, nunca pela extensao
+  else if (m.type === 'image' && od.imageMessage) tipo = 'imagem';
+  else tipo = 'outro'; // video/documento/etc: gravado e respondido (D10), nenhum outro campo lido
   const midiaUrl = tipo === 'texto' ? null : String(m.fileUrl);
+  const num = (x) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : null);
   return {
     status: 'aceita',
     msg: {
@@ -29,6 +34,9 @@ function bvNormalizar(evento, opcoes) {
       conteudo: typeof m.text === 'string' && m.text !== '' ? m.text : null,
       midiaUrl,
       mimetype: m.fileMimeType || null,
+      midiaMime: tipo === 'texto' ? null : (typeof m.fileMimeType === 'string' ? m.fileMimeType : null),
+      midiaSegundos: tipo === 'audio' && bloco ? num(bloco.seconds) : null,
+      midiaBytes: (tipo === 'audio' || tipo === 'imagem') && bloco ? num(bloco.fileLength) : null,
       // shortcut: o evento `start` nao traz id de mensagem; fileUrl identifica midia, texto fica sem id, so ate o owner informar o id do canal
       idCanal: midiaUrl,
     },

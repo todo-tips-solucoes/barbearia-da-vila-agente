@@ -14,7 +14,7 @@ injeção via mídia) mais retenção.
 - [x] CHK002 - O comportamento para host de imagem ainda não observado está definido (falha fechada com resposta natural)? [Cobertura, Spec §FR-006, Clarifications dec-009] {auto}
 - [x] CHK003 - O critério de validação da URL está especificado de forma verificável (regex ancorada, igualdade de host, casos negativos)? [Clareza, plan.md §Segurança H1] {auto}
 - [x] CHK004 - As chaves `midia.prefixos_*` e `midia.descricao_max_chars`, citadas nas mitigações H1/H2, constam no contrato de config com valor e regra do `verificar-repo.py`? [Conflict, plan.md §Segurança vs contracts/config-midia.md: ausentes na tabela] {auto} Resolvido: `contracts/config-midia.md` (chaves `midia.prefixos_*`, `midia.descricao_max_chars`).
-- [ ] CHK005 - O limite de tamanho de FR-006 é exigível contra o binário real, e não só contra o `fileLength` declarado pelo evento? [Gap, Spec §FR-006; plan.md §Segurança H4 aceito: teto de bytes depende de opção do nó HTTP não medida] {auto}
+- [x] CHK005 - O limite de tamanho de FR-006 é exigível contra o binário real, e não só contra o `fileLength` declarado pelo evento? [Gap, Spec §FR-006; plan.md §Segurança H4 aceito: teto de bytes depende de opção do nó HTTP não medida] {auto} Resolvido: camadas (evento, timeout de execucao, tamanho real no Conferir), research.md §2.4.
 - [x] CHK006 - O destino da verificação do teto de bytes no nó HTTP está definido como tarefa bloqueante se não suportado? [Dependência, plan.md §Segurança H4, dec-015] {auto}
 
 ## Injeção via mídia

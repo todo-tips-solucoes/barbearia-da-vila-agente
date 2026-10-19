@@ -256,9 +256,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH marca AS (INSERT INTO marcas_conteudo (contato_id, hash_conteudo) SELECT $1::bigint, sha256(convert_to($4::text, 'UTF8')) WHERE $2::text IS NULL AND $3::text = 'texto' ON CONFLICT (contato_id, hash_conteudo) DO UPDATE SET visto_em = now() WHERE marcas_conteudo.visto_em < now() - make_interval(secs => $6::int) RETURNING 1), ins AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, midia_url) SELECT $1::bigint, $2::text, 'entrada', $3::text, $4::text, $5::text WHERE $3::text <> 'texto' OR $2::text IS NOT NULL OR EXISTS (SELECT 1 FROM marca) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id) SELECT (SELECT id FROM ins) AS id, $1::bigint AS contato_id",
+        "query": "WITH marca AS (INSERT INTO marcas_conteudo (contato_id, hash_conteudo) SELECT $1::bigint, sha256(convert_to($4::text, 'UTF8')) WHERE $2::text IS NULL AND $3::text = 'texto' ON CONFLICT (contato_id, hash_conteudo) DO UPDATE SET visto_em = now() WHERE marcas_conteudo.visto_em < now() - make_interval(secs => $6::int) RETURNING 1), ins AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, midia_url, midia_mime, midia_segundos, midia_bytes) SELECT $1::bigint, $2::text, 'entrada', $3::text, $4::text, $5::text, $7::text, $8::int, $9::bigint WHERE $3::text <> 'texto' OR $2::text IS NOT NULL OR EXISTS (SELECT 1 FROM marca) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id) SELECT (SELECT id FROM ins) AS id, $1::bigint AS contato_id",
         "options": {
-          "queryReplacement": "={{ [$json.contato_id, $('Normalizar').first().json.msg.idCanal, $('Normalizar').first().json.msg.tipo, $('Normalizar').first().json.msg.conteudo, $('Normalizar').first().json.msg.midiaUrl, {{BV:dedup.conteudo_janela_s}}] }}"
+          "queryReplacement": "={{ [$json.contato_id, $('Normalizar').first().json.msg.idCanal, $('Normalizar').first().json.msg.tipo, $('Normalizar').first().json.msg.conteudo, $('Normalizar').first().json.msg.midiaUrl, {{BV:dedup.conteudo_janela_s}}, $('Normalizar').first().json.msg.midiaMime, $('Normalizar').first().json.msg.midiaSegundos, $('Normalizar').first().json.msg.midiaBytes] }}"
         }
       },
       "id": "a98210a4-c806-554d-8323-11dc01ab3cbb",
@@ -662,7 +662,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH t AS (SELECT gen_random_uuid() AS u), alvo AS (SELECT id FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'entrada' AND processada_em IS NULL AND (turno_id IS NULL OR turno_em < now() - interval '{{BV:lock.ttl_s}} seconds') ORDER BY criado_em, id FOR UPDATE SKIP LOCKED) UPDATE mensagens m SET turno_id = t.u, turno_em = now() FROM alvo, t WHERE m.id = alvo.id RETURNING m.id, m.tipo, m.conteudo, m.midia_url, m.criado_em, m.turno_id",
+        "query": "WITH t AS (SELECT gen_random_uuid() AS u), alvo AS (SELECT id FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'entrada' AND processada_em IS NULL AND (turno_id IS NULL OR turno_em < now() - interval '{{BV:lock.ttl_s}} seconds') ORDER BY criado_em, id FOR UPDATE SKIP LOCKED) UPDATE mensagens m SET turno_id = t.u, turno_em = now() FROM alvo, t WHERE m.id = alvo.id RETURNING m.id, m.tipo, m.conteudo, m.midia_url, m.midia_mime, m.midia_segundos, m.midia_bytes, m.criado_em, m.turno_id",
         "options": {
           "queryReplacement": "={{ [$('Inserir mensagem').first().json.contato_id] }}"
         }
@@ -685,7 +685,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\nconst linhas = $input.all().map(i => i.json).filter(j => j.id != null);\nif (!linhas.length) return [{ json: { vazio: true } }];\nconst ord = consolidar(linhas);\nreturn [{ json: { vazio: false, turno_id: ord[0].turno_id, contato_id: $('Inserir mensagem').first().json.contato_id,\n  telefone: $('Normalizar').first().json.msg.telefone, total: ord.length,\n  itens: ord.map(l => ({ mensagem_id: Number(l.id), tipo: l.tipo, conteudo: l.conteudo, midia_url: l.midia_url, recebida_em: new Date(l.criado_em).toISOString() })) } }];"
+        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\nconst linhas = $input.all().map(i => i.json).filter(j => j.id != null);\nif (!linhas.length) return [{ json: { vazio: true } }];\nconst ord = consolidar(linhas);\nreturn [{ json: { vazio: false, turno_id: ord[0].turno_id, contato_id: $('Inserir mensagem').first().json.contato_id,\n  telefone: $('Normalizar').first().json.msg.telefone, total: ord.length,\n  itens: ord.map(l => ({ mensagem_id: Number(l.id), tipo: l.tipo, conteudo: l.conteudo, midia_url: l.midia_url, midia_mime: l.midia_mime, midia_segundos: l.midia_segundos == null ? null : Number(l.midia_segundos), midia_bytes: l.midia_bytes == null ? null : Number(l.midia_bytes), recebida_em: new Date(l.criado_em).toISOString() })) } }];"
       },
       "id": "8c476cf2-ca8f-51ae-98d2-bfe0042c144f",
       "name": "Montar entrega",

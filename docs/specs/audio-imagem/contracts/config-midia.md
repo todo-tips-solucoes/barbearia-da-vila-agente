@@ -30,7 +30,7 @@ fonte está indicada.
 | `midia.retencao_h` | `23.9` | `[PROPOSTA]`; 24 h menos o intervalo de 5 min do `bv-vigia` |
 | `workflows_sub.interpretar_midia` | id | gravado por `deploy-n8n.py --criar interpretar-midia` |
 | `textos.midia_nao_entendida` | texto natural | substitui `textos.midia`; ex.: "Não consegui entender o que você mandou. Pode mandar de novo ou me escrever?" |
-| `textos.midia_grande` | texto natural | áudio longo ou arquivo grande: pedir mais curto ou por escrito |
+| `textos.midia_grande` | texto natural | áudio longo ou arquivo grande; valor: "Esse áudio ficou um pouco longo pra mim 😅 Consegue mandar um mais curtinho ou me escrever?" (owner, block-004) |
 
 Regras novas em `verificar-repo.py`: as chaves acima existem nos dois ambientes; hosts sem esquema
 nem barra; `midia.execucao_timeout_s < lock.ttl_s`; `textos.midia` deixa de existir; `midia.prefixos_*` existem e cada prefixo começa com `/`;

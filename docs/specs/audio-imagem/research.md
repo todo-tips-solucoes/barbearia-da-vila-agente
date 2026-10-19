@@ -186,4 +186,9 @@ vira fixture e o teste passa a usá-la.
   (`input_image` data URL, `detail: auto`) → 200, "Um quadrado vermelho sólido."; `/v1/chat/completions`
   também 200. Fonte da forma: https://developers.openai.com/api/docs/guides/images-vision.
 - **2.1 / D3, 2.3 / D7, 2.5 / D5**: pendentes de mídia real do número de teste (owner); ver bloqueio humano.
-- **2.4 / H4**: pendente (ver bloqueio humano).
+- **2.4 / H4 (2026-10-19, block-004/dec-025)**: no nó HTTP Request v4.5 (`get_node_types` do MCP n8n) não há opção de teto de
+  bytes nem de recusa por `Content-Length`. `options.timeout` (padrão 10000) é o tempo de espera pelos *cabeçalhos* da resposta
+  e não limita o download. `validate_node_config` aceita chaves desconhecidas (ex.: `maxContentLength`), então passar na
+  validação não prova suporte; não usar. **Decisão (a), em camadas, sem HEAD**: (1) pré-check por `fileLength`/`seconds` do
+  evento; (2) teto de tempo real do download = `midia.execucao_timeout_s` do sub `interpretar-midia`; (3) tamanho real
+  verificado no `Conferir` antes de enviar à OpenAI. Residual aceito: o binário pode ser lido até o timeout da execução.

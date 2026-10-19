@@ -92,10 +92,10 @@ Ref: research.md D7; quickstart.md 10; plan.md §Segurança M6
 
 Ref: plan.md §Segurança H4 (aceito com tarefa bloqueante, dec-015); checklists/security.md CHK005, CHK006; spec.md FR-006
 
-- [!] 2.4.1 Consultar `validate_node_config` (MCP nativo do n8n) para o nó HTTP Request da versão 2.43.5: existe opção de recusar por `Content-Length` ou impor teto de bytes antes de ler o corpo
-- [ ] 2.4.2 Se existir, definir a opção no nó `Baixar` e validar de novo com `validate_node_config`; a verificação de tamanho real no `Conferir` fica como segunda barreira
-- [ ] 2.4.3 Se NÃO existir, marcar a tarefa `[!]`, registrar bloqueio humano e voltar ao owner antes da publicação; FR-006 deve declarar o teto como "declarado pelo evento + timeout" até decisão
-- [ ] 2.4.4 Registrar o resultado em `research.md` e ajustar FR-006/`contracts/interpretar-midia.md` (fecha CHK005 do `security.md`)
+- [x] 2.4.1 Consultar `validate_node_config` (MCP nativo do n8n) para o nó HTTP Request da versão 2.43.5: existe opção de recusar por `Content-Length` ou impor teto de bytes antes de ler o corpo
+- [x] 2.4.2 (n/a: não existe) Se existir, definir a opção no nó `Baixar` e validar de novo com `validate_node_config`; a verificação de tamanho real no `Conferir` fica como segunda barreira
+- [x] 2.4.3 (decidido pelo owner: camadas sem HEAD, block-004) Se NÃO existir, marcar a tarefa `[!]`, registrar bloqueio humano e voltar ao owner antes da publicação; FR-006 deve declarar o teto como "declarado pelo evento + timeout" até decisão
+- [x] 2.4.4 Registrar o resultado em `research.md` e ajustar FR-006/`contracts/interpretar-midia.md` (fecha CHK005 do `security.md`)
 
 ### 2.5 Confirmar host e MIME reais de imagem (D5) `[A]`
 
@@ -113,29 +113,29 @@ Ref: research.md D5; spec.md FR-006; quickstart.md 14
 
 Ref: data-model.md; db/migrations/0002, 0006
 
-- [ ] 3.1.1 Criar `db/migrations/0009_midia.sql`: colunas `midia_mime`, `midia_segundos`, `midia_bytes`, `conteudo_derivado`, `midia_falha` com `IF NOT EXISTS`
-- [ ] 3.1.2 Trocar o CHECK de `tipo` para incluir `'outro'` e o de `falhas_agente.tipo` para incluir `'midia'`, de forma idempotente
-- [ ] 3.1.3 Estender `tests/test_esquema.py` (colunas e CHECKs novos, segunda aplicação sem erro)
-- [ ] 3.1.4 Aplicar no TESTE por `scripts/migrar.py` (nunca em PROD)
+- [x] 3.1.1 Criar `db/migrations/0009_midia.sql`: colunas `midia_mime`, `midia_segundos`, `midia_bytes`, `conteudo_derivado`, `midia_falha` com `IF NOT EXISTS`
+- [x] 3.1.2 Trocar o CHECK de `tipo` para incluir `'outro'` e o de `falhas_agente.tipo` para incluir `'midia'`, de forma idempotente
+- [x] 3.1.3 Estender `tests/test_esquema.py` (colunas e CHECKs novos, segunda aplicação sem erro)
+- [x] 3.1.4 Aplicar no TESTE por `scripts/migrar.py` (nunca em PROD)
 
 ### 3.2 Validação pura de mídia (`workflows/shared/midia.js`) `[C]`
 
 Ref: plan.md §Segurança H1/H3; contracts/config-midia.md; quickstart.md 5
 
-- [ ] 3.2.1 Implementar regex ancorada (`https://`, host `[a-z0-9.-]+`, sem `@`, `\`, porta, ponto final ou `%` no host), igualdade de host com a lista do tipo e prefixo de caminho opcional
-- [ ] 3.2.2 Implementar checagem de MIME (tipo antes do `;`), `audio_max_s` e limite de bytes por tipo, devolvendo os códigos de `data-model.md`
-- [ ] 3.2.3 Criar `tests/midia.test.js` com casos positivos e negativos (http, `@`, porta, `%`, ponto final, host fora da lista, `hosts_imagem` vazio, `seconds` 121, MIME fora)
-- [ ] 3.2.4 Garantir que a função do host recusado devolve só o host (sem caminho) para registro
+- [x] 3.2.1 Implementar regex ancorada (`https://`, host `[a-z0-9.-]+`, sem `@`, `\`, porta, ponto final ou `%` no host), igualdade de host com a lista do tipo e prefixo de caminho opcional
+- [x] 3.2.2 Implementar checagem de MIME (tipo antes do `;`), `audio_max_s` e limite de bytes por tipo, devolvendo os códigos de `data-model.md`
+- [x] 3.2.3 Criar `tests/midia.test.js` com casos positivos e negativos (http, `@`, porta, `%`, ponto final, host fora da lista, `hosts_imagem` vazio, `seconds` 121, MIME fora)
+- [x] 3.2.4 Garantir que a função do host recusado devolve só o host (sem caminho) para registro
 
 ### 3.3 Reconhecimento e gravação de mídia na recepção `[A]`
 
 Ref: spec.md FR-001, FR-002, FR-003, FR-011, FR-012; quickstart.md 1-4
 
-- [ ] 3.3.1 Estender `bvNormalizar` em `workflows/shared/rajada.js`: `tipo` audio|imagem|outro, `midia_mime`, `midia_segundos`, `midia_bytes`, usando só os campos de FR-002 e decidindo o formato por `fileMimeType`, nunca pela extensão
-- [ ] 3.3.2 Manter `fromMe`/grupo descartados e a dedupe por `fileUrl`, sem dedupe por conteúdo para mídia
-- [ ] 3.3.3 Atualizar `Inserir mensagem` e `Montar turno` em `workflows/bv-recepcao.json` para gravar/devolver os campos novos
-- [ ] 3.3.4 Testar em `tests/rajada.test.js` com `evento-20.json`, `evento-13.json`, `evento-15.json` e eventos mutados (`video`, `fromMe`, `isGroup`)
-- [ ] 3.3.5 Atualizar `tests/test_workflows_recepcao.py`
+- [x] 3.3.1 Estender `bvNormalizar` em `workflows/shared/rajada.js`: `tipo` audio|imagem|outro, `midia_mime`, `midia_segundos`, `midia_bytes`, usando só os campos de FR-002 e decidindo o formato por `fileMimeType`, nunca pela extensão
+- [x] 3.3.2 Manter `fromMe`/grupo descartados e a dedupe por `fileUrl`, sem dedupe por conteúdo para mídia
+- [x] 3.3.3 Atualizar `Inserir mensagem` e `Montar turno` em `workflows/bv-recepcao.json` para gravar/devolver os campos novos
+- [x] 3.3.4 Testar em `tests/rajada.test.js` com `evento-20.json`, `evento-13.json`, `evento-15.json` e eventos mutados (`video`, `fromMe`, `isGroup`)
+- [x] 3.3.5 Atualizar `tests/test_workflows_recepcao.py`
 
 ---
 
@@ -146,7 +146,7 @@ Ref: spec.md FR-001, FR-002, FR-003, FR-011, FR-012; quickstart.md 1-4
 Ref: contracts/interpretar-midia.md; contracts/openai-midia.md; checklists/api.md CHK006-CHK009; depende das sondas 2.1 a 2.4
 
 - [ ] 4.1.1 Montar `workflows/sub/interpretar-midia.json` conforme a cadeia de nós (Validar, Baixar, Conferir, Switch, Transcrever, Descrever, Juntar, Gravar, Registrar falhas, Resumo)
-- [ ] 4.1.2 `Baixar` sem credencial, `maxRedirects` 0, timeout `midia.download_timeout_s`, opção de teto de bytes da tarefa 2.4; nós de rede com `onError: continueRegularOutput`
+- [ ] 4.1.2 `Baixar` sem credencial, `maxRedirects` 0, timeout `midia.download_timeout_s`, sem opção de teto de bytes (tarefa 2.4: teto = timeout da execução + `Conferir`); nós de rede com `onError: continueRegularOutput`
 - [ ] 4.1.3 Settings do sub: `saveDataSuccessExecution`/`saveDataErrorExecution` = `none`, `saveManualExecutions` = false, `executionTimeout` = `midia.execucao_timeout_s`
 - [ ] 4.1.4 Prompt de descrição de imagem em `workflows/shared/agente.js`: só descrição, teto `midia.descricao_max_chars`, ignorar texto contido na imagem, omitir documentos/cartão, 6+ dígitos viram `#`
 - [ ] 4.1.5 `Gravar` e `Registrar falhas` parametrizados; falha guarda só `status_http`, host sem caminho e códigos (sem URL, texto ou telefone)
