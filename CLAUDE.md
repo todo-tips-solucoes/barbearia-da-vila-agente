@@ -21,6 +21,7 @@ A lista completa, e as pendências, estão em **`docs/decisoes-pre-00c.md`**. O 
 
 ## Fontes de referência
 
+- `docs/referencia.md` (**só local, no `.gitignore`: contém credenciais, nunca versionar**): parâmetros de desenvolvimento num só lugar (VPS, stack n8n, bancos, Redis, credenciais, ids do Chat Master e dos workflows). Consulte antes de usar qualquer endereço. A instância é `n8n2.todo-tips.com`; o `n8n.todo-tips.com` não é do projeto.
 - `graces-api/README.md`: API da Graces, com endpoints, divergências entre portal e API real e lacunas. Os fluxos de agendar, reagendar e cancelar estão em `graces-api/05-fluxos-do-agente.md`, e os IDs reais de serviços e barbeiros em `graces-api/06-dados-da-loja.md` (snapshot; em runtime, leia da API).
 - `chatmasterveloz-api/README.md`: API do WhatsApp (Chat Master Veloz). Para gerar código, use `endpoints.json`; para atualizar, `python3 -I _tools/sync.py`.
 - `alteracoes_clientes/transcricoes.md`: feedback do dono sobre a **versão anterior** do agente. São requisitos de produto:
