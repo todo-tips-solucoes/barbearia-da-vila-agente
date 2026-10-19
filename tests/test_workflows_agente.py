@@ -23,6 +23,18 @@ class BvGraces(unittest.TestCase):
                 for d in saida:
                     self.assertIn(d["node"], self.nos)
 
+    def test_handoff_transfere_ticket_apos_persistir_e_registra_falha(self):  # 3.4.2b, sonda S5
+        c = self.wf["connections"]
+        self.assertEqual(c["Persistir"]["main"][0][0]["node"], "Handoff?")
+        self.assertEqual(c["Handoff?"]["main"][1][0]["node"], "Saida")  # sem handoff segue direto
+        h = self.nos["Transferir ticket"]
+        self.assertEqual(h["parameters"]["url"], "=https://api.chatmasterveloz.com{{ '/api/tickets/updateAPI' }}")
+        self.assertIn("ticketId", h["parameters"]["jsonBody"])
+        self.assertIn("queueId", h["parameters"]["jsonBody"])
+        self.assertNotIn("changequeue", self.texto)
+        self.assertIn("handoff_falhou", self.nos["Registrar handoff"]["parameters"]["query"])
+        self.assertIn("ticket_id", self.nos["Contexto"]["parameters"]["query"])  # ticketId vem do estado, nunca do modelo
+
     def test_gatilho_so_aceita_campos_do_contrato(self):
         g = self.nos["Gatilho"]
         self.assertEqual(g["type"], "n8n-nodes-base.executeWorkflowTrigger")
@@ -33,8 +45,8 @@ class BvGraces(unittest.TestCase):
         self.assertIn("bvGNormalizar", self.nos["Normalizar"]["parameters"]["jsCode"])
 
     def test_http_graces_com_timeout_neverError_e_credencial(self):
-        https = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.httpRequest"]
-        self.assertEqual(len(https), 6)  # 3 sem corpo + 3 com corpo
+        https = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.httpRequest" and n["name"] != "Transferir ticket"]
+        self.assertEqual(len(https), 2)  # laco: 1 sem corpo + 1 com corpo
         for n in https:
             p = n["parameters"]
             self.assertTrue(p["url"].startswith("=https://{{BV:graces.host}}/public/v1"))
@@ -63,12 +75,12 @@ class BvGraces(unittest.TestCase):
         s = corpo("listar_servicos")
         self.assertLess(s.index("bvFiltrarServicos"), s.index("bvMontarOferta"))
         self.assertIn(".trim()", b)  # apelido com espaco no final
-        for nome in ("Planejar", "Passo A", "Passo E1", "Passo E2"):
+        for nome in ("Planejar", "Passo"):
             self.assertIn("{{BV:INCLUDE:shared/agente.js}}", self.nos[nome]["parameters"]["jsCode"])
 
     def test_sql_so_com_parametros(self):
         qs = {n: x for n, x in self.nos.items() if x["type"] == "n8n-nodes-base.postgres"}
-        self.assertEqual(set(qs), {"Contexto", "Substituir pendente", "Persistir"})
+        self.assertEqual(set(qs), {"Contexto", "Substituir pendente", "Persistir", "Registrar handoff"})
         for nome, n in qs.items():
             q = n["parameters"]["query"]
             self.assertIn("$1", q, nome)
@@ -86,7 +98,14 @@ class BvGraces(unittest.TestCase):
             self.assertIn(trecho, q)
         self.assertIn("{{BV:proposta.validade_min}}", self.nos["Contexto"]["parameters"]["options"]["queryReplacement"])
         # revalida antes de escrever e o POST/PUT so nasce depois da revalidacao
-        self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda'"))
+        self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda', body: { idCliente: d.idCliente"))
+
+    def test_fase2_reivindica_propostas_de_conjunto_e_de_terceiro(self):  # achado do roteiro r7/r9: conjunto e cadastro nunca eram reivindicados
+        rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
+        i = self.js.index("const BVG_ACOES")
+        for acao in ("agendar_conjunto", "cancelar_conjunto", "cadastrar_terceiro"):
+            self.assertIn(acao, rep)
+            self.assertIn(acao, self.js[i:i + 300])
 
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
         self.assertIn("cfg.ambiente === 'producao' || !cfg.redirecionar", self.js)
@@ -94,6 +113,21 @@ class BvGraces(unittest.TestCase):
         self.assertIn("escrita_fora_do_teste", self.js)
         self.assertIn("'{{BV:teste.redirecionar_escrita}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
         self.assertIn("cadastroLiberado: false", self.nos["Planejar"]["parameters"]["jsCode"])  # 4.2.6: sem P1 nao cadastra
+
+    def test_contador_diario_terceiros_alimentado(self):  # SC-011: ctx.dia vem do banco, nunca fica vazio
+        q = self.nos["Contexto"]["parameters"]["query"]
+        self.assertRegex(q, r"AS dia FROM")
+        self.assertIn("'buscas'", q)
+        self.assertIn("'cadastros'", q)
+        self.assertIn("busca_pessoa", q)
+        self.assertIn("America/Sao_Paulo", q)
+
+    def test_cadastro_terceiro_configuravel_por_ambiente(self):
+        self.assertIn("terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
+        import json, pathlib
+        amb = pathlib.Path(__file__).resolve().parent.parent / "config" / "ambientes"
+        self.assertIs(json.loads((amb / "producao.json").read_text())["terceiro"]["cadastro_liberado"], True)
+        self.assertIs(json.loads((amb / "integracao.json").read_text())["terceiro"]["cadastro_liberado"], False)
 
     def test_sem_segredo_nem_log(self):
         self.assertNotIn("console.log", self.texto)
@@ -109,6 +143,15 @@ class BvGraces(unittest.TestCase):
             r = subprocess.run(["node", os.path.join(RAIZ, "tests", t)], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr[-800:])
 
+
+    def test_laco_de_estagios(self):  # FR-015 / u20: um so HTTP em laco, Passo volta a "Tem chamada?"
+        con = self.wf["connections"]
+        self.assertEqual(con["Passo"]["main"][0][0]["node"], "Tem chamada?")
+        self.assertEqual(con["Tem chamada?"]["main"][0][0]["node"], "Corpo?")
+        self.assertEqual(con["Tem chamada?"]["main"][1][0]["node"], "Efeitos")
+        self.assertEqual({n for n in self.nos if n.startswith("Graces")}, {"Graces", "Graces corpo"})
+        self.assertIn("graces: { max_estagios: {{BV:graces.max_estagios}}", self.nos["Passo"]["parameters"]["jsCode"])
+        self.assertIn("estagios_esgotados", self.js)
 
 if __name__ == "__main__":
     unittest.main()
@@ -142,7 +185,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertIn("Concluir turno", self._destinos("Pos 4?")[0] + self._destinos("Pos 4?")[1])
         self.assertIn("{{BV:textos.midia}}", self.nos["Compor midia"]["parameters"]["jsCode"])
 
-    def test_agente_modelo_e_dez_ferramentas_sem_memoria(self):  # 5.1.2
+    def test_agente_modelo_e_treze_ferramentas_sem_memoria(self):  # 5.1.2
         ag = self.nos["Agente"]
         self.assertEqual((ag["type"], ag["typeVersion"]), ("@n8n/n8n-nodes-langchain.agent", 3))
         self.assertEqual(ag["parameters"]["options"]["maxIterations"], "{{BV:NUM:agente.iteracoes_max}}")
@@ -153,7 +196,8 @@ class EntregarRajadaAgente(unittest.TestCase):
         tools = [n for n in self.wf["nodes"] if n["type"] == "@n8n/n8n-nodes-langchain.toolWorkflow"]
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
-            "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar"})
+            "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",
+            "buscar_pessoa", "escolher_pessoa", "cadastrar_terceiro"})
         campos_graces = set(re.search(r"BVG_CAMPOS = \[(.*?)\]", ler("workflows/shared/graces.js"), re.S).group(1).replace("'", "").replace("\n", "").replace(" ", "").split(","))
         for t in tools:
             self.assertEqual(t["typeVersion"], 2.2)

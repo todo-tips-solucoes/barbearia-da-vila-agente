@@ -6,6 +6,7 @@ const fx = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/chat
 
 let r = bvNormalizar(fx('02'));
 assert.equal(r.status, 'aceita'); assert.equal(r.msg.tipo, 'texto'); assert.equal(r.msg.midiaUrl, null);
+assert.equal(r.msg.ticketId, 125529); // chamadoId do webhook alimenta o handoff (updateAPI)
 r = bvNormalizar(fx('13'));
 assert.equal(r.status, 'aceita'); assert.equal(r.msg.tipo, 'imagem'); assert.ok(r.msg.midiaUrl && r.msg.idCanal);
 r = bvNormalizar(fx('17'));

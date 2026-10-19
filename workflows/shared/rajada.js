@@ -24,6 +24,7 @@ function bvNormalizar(evento, opcoes) {
     status: 'aceita',
     msg: {
       telefone: b.sender,
+      ticketId: Number.isInteger(b.chamadoId) ? b.chamadoId : null,
       tipo,
       conteudo: typeof m.text === 'string' && m.text !== '' ? m.text : null,
       midiaUrl,

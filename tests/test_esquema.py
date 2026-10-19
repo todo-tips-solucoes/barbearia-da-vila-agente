@@ -115,3 +115,25 @@ class Migracao0006(unittest.TestCase):
                 self.assertIn("IF NOT EXISTS", l)
         for proibido in ("token", "payload", "telefone", "email", "cpf"):
             self.assertNotIn(proibido, "\n".join(l for l in M6.lower().splitlines() if not l.startswith("--")))
+
+
+M7 = open("db/migrations/0007_regras_agenda.sql").read()
+
+
+class Migracao0007(unittest.TestCase):
+    def test_amplia_checks_de_forma_idempotente(self):
+        for c in ("propostas_acao_check", "propostas_estado_check"):
+            self.assertIn(f"DROP CONSTRAINT IF EXISTS {c}", M7)
+            self.assertIn(f"ADD CONSTRAINT {c}", M7)
+        for v in ("'agendar_conjunto'", "'cancelar_conjunto'", "'cadastrar_terceiro'", "'parcial'"):
+            self.assertIn(v, M7)
+        self.assertNotIn("CREATE TABLE", M7)
+
+
+M8 = open("db/migrations/0008_ticket_contato.sql").read()
+
+
+class Migracao0008(unittest.TestCase):
+    def test_ticket_id_idempotente(self):
+        self.assertIn("ADD COLUMN IF NOT EXISTS ticket_id bigint", M8)
+        self.assertNotIn("CREATE TABLE", M8)

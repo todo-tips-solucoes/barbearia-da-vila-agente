@@ -53,6 +53,15 @@
             },
             {
               "name": "nome"
+            },
+            {
+              "name": "celular"
+            },
+            {
+              "name": "id_opcoes_servicos"
+            },
+            {
+              "name": "id_opcoes_agendamentos"
             }
           ]
         }
@@ -68,7 +77,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nreturn [{ json: bvGNormalizar($input.first().json, cfg) }];"
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} } };\nreturn [{ json: bvGNormalizar($input.first().json, cfg) }];"
       },
       "id": "3da5809e-751c-57c5-8b21-b733b63ed7c9",
       "name": "Normalizar",
@@ -115,9 +124,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND criada_em > now() - make_interval(mins => $4::int) RETURNING id::text AS id, acao, dados), i AS (SELECT estado, turno_id::text = $3::text AS mesmo_turno FROM propostas WHERE id::text = $2::text AND contato_id = $1::bigint) SELECT c.pedido, c.opcoes, (SELECT to_jsonb(k) FROM k) AS proposta, (SELECT to_jsonb(i) FROM i) AS info FROM (SELECT $1::bigint AS cid) x LEFT JOIN conversas c ON c.contato_id = x.cid",
+        "query": "WITH k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND criada_em > now() - make_interval(mins => $4::int) RETURNING id::text AS id, acao, dados), i AS (SELECT estado, turno_id::text = $3::text AS mesmo_turno FROM propostas WHERE id::text = $2::text AND contato_id = $1::bigint) SELECT c.pedido, c.opcoes, (SELECT to_jsonb(k) FROM k) AS proposta, (SELECT to_jsonb(i) FROM i) AS info, (SELECT ticket_id FROM contatos WHERE id = x.cid) AS ticket_id, jsonb_build_object('buscas', (SELECT count(*)::int FROM falhas_agente WHERE contato_id = x.cid AND motivo = 'busca_pessoa' AND (criado_em AT TIME ZONE 'America/Sao_Paulo')::date = (now() AT TIME ZONE 'America/Sao_Paulo')::date), 'cadastros', (SELECT count(*)::int FROM propostas WHERE contato_id = x.cid AND acao = 'cadastrar_terceiro' AND estado = 'executada' AND (atualizada_em AT TIME ZONE 'America/Sao_Paulo')::date = (now() AT TIME ZONE 'America/Sao_Paulo')::date)) AS dia FROM (SELECT $1::bigint AS cid) x LEFT JOIN conversas c ON c.contato_id = x.cid",
         "options": {
-          "queryReplacement": "={{ [$json.in.contato_id, $json.in.proposta_id || '', $json.in.turno_id, {{BV:proposta.validade_min}}, {\"agendar\": \"agendar,trocar_servico\", \"reagendar\": \"reagendar\", \"cancelar\": \"cancelar\"}[$json.in.operacao] || ''] }}"
+          "queryReplacement": "={{ [$json.in.contato_id, $json.in.proposta_id || '', $json.in.turno_id, {{BV:proposta.validade_min}}, {\"agendar\": \"agendar,trocar_servico,agendar_conjunto\", \"reagendar\": \"reagendar\", \"cancelar\": \"cancelar,cancelar_conjunto\", \"cadastrar_terceiro\": \"cadastrar_terceiro\"}[$json.in.operacao] || ''] }}"
         }
       },
       "id": "686d55b9-7190-5401-9c23-fe210d5459dc",
@@ -138,7 +147,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nconst i = $('Normalizar').first().json.in;\nconst p = bvGPlano(i, $input.first().json, cfg);\nif (p.final) return [{ json: { final: p.final, st: { in: i } } }];\nreturn p.reqs.map((req, k) => ({ json: k === 0 ? { req, st: p.st } : { req } }));"
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} } };\nconst i = $('Normalizar').first().json.in;\nconst p = bvGPlano(i, $input.first().json, cfg);\nif (p.final) return [{ json: { final: p.final, st: { in: i } } }];\nreturn p.reqs.map((req, k) => ({ json: k === 0 ? { req, st: p.st } : { req } }));"
       },
       "id": "ecf7ba7f-be38-52d9-ad95-31354c6dc012",
       "name": "Planejar",
@@ -204,203 +213,37 @@
         }
       },
       "id": "56c8a1a8-ffef-5efd-b6d0-8d6af65eee07",
-      "name": "Graces A",
+      "name": "Graces",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1440,
-        0
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "{{BV:credenciais.graces}}",
-          "name": "Barbearia Vila Graces"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nconst st = $('Planejar').first().json.st;\nconst r = bvGPasso(st, $input.all().map((x) => ({ status: x.json.statusCode, body: x.json.body })), cfg);\nreturn [{ json: r.final ? { final: r.final, st: { in: st.in } } : { req: r.reqs[0], st: r.st } }];"
-      },
-      "id": "aa2f1cfa-2541-5fe6-b75c-d21136e193ed",
-      "name": "Passo A",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
       "position": [
         1680,
-        0
-      ]
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "9d20576f-c728-525c-8fcb-2f42cca28a12",
-              "leftValue": "={{ String(!!$json.req) }}",
-              "rightValue": "true",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} }, graces: { max_estagios: {{BV:graces.max_estagios}}, max_consultas_estagio: {{BV:graces.max_consultas_estagio}} } };\nconst st = $('Tem chamada?').all(0)[0].json.st;\nconst r = bvGPasso(st, $input.all().map((x) => ({ status: x.json.statusCode, body: x.json.body })), cfg);\nif (r.final) return [{ json: { final: r.final, st: { in: st.in } } }];\nreturn r.reqs.map((req, k) => ({ json: k === 0 ? { req, st: r.st } : { req } }));"
       },
-      "id": "f153078e-ce09-50d4-9be5-0492b3aad9e7",
-      "name": "Escrita 1?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "aa2f1cfa-2541-5fe6-b75c-d21136e193ed",
+      "name": "Passo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1920,
-        0
+        200
       ]
     },
     {
       "parameters": {
-        "method": "={{ $json.req.m }}",
-        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "specifyQuery": "json",
-        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
-        "sendBody": false,
-        "options": {
-          "timeout": "{{BV:NUM:graces.timeout_ms}}",
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": true,
-              "responseFormat": "json"
-            }
-          }
-        }
-      },
-      "id": "9944300a-d6cd-572f-93d7-e287857904fa",
-      "name": "Graces E1",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2160,
-        0
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "{{BV:credenciais.graces}}",
-          "name": "Barbearia Vila Graces"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nconst st = $('Passo A').first().json.st;\nconst r = bvGPasso(st, $input.all().map((x) => ({ status: x.json.statusCode, body: x.json.body })), cfg);\nreturn [{ json: r.final ? { final: r.final, st: { in: st.in } } : { req: r.reqs[0], st: r.st } }];"
-      },
-      "id": "efc47b4d-2732-5400-b1fd-54fb89fe5f5f",
-      "name": "Passo E1",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2400,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "d8cc0349-0526-5c70-8efa-26310dc1f181",
-              "leftValue": "={{ String(!!$json.req) }}",
-              "rightValue": "true",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "8e526dcc-0ffd-502c-a482-cfbc76ee7f8f",
-      "name": "Escrita 2?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        2640,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "={{ $json.req.m }}",
-        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "specifyQuery": "json",
-        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
-        "sendBody": false,
-        "options": {
-          "timeout": "{{BV:NUM:graces.timeout_ms}}",
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": true,
-              "responseFormat": "json"
-            }
-          }
-        }
-      },
-      "id": "da56b57d-20d9-58bc-a14c-a4ed4f29d27c",
-      "name": "Graces E2",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2880,
-        0
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "{{BV:credenciais.graces}}",
-          "name": "Barbearia Vila Graces"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nconst st = $('Passo E1').first().json.st;\nconst r = bvGPasso(st, $input.all().map((x) => ({ status: x.json.statusCode, body: x.json.body })), cfg);\nreturn [{ json: { final: r.final, st: { in: st.in } } }];"
-      },
-      "id": "fb4ac874-292e-5509-a547-220a9b48722c",
-      "name": "Passo E2",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3120,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} } };\nconst j = $input.first().json;\nreturn [{ json: { params: bvGParams(j.st.in, j.final.efeitos), resultado: j.final.resultado, nova: !!(j.final.efeitos || {}).proposta_nova } }];"
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} } };\nconst j = $input.first().json;\nreturn [{ json: { params: bvGParams(j.st.in, j.final.efeitos), resultado: j.final.resultado, nova: !!(j.final.efeitos || {}).proposta_nova,\n  handoff: (j.final.efeitos || {}).handoff ? { queueId: j.final.efeitos.handoff.queueId, ticketId: $('Contexto').first().json.ticket_id || null } : null } }];"
       },
       "id": "6f16f52f-d55e-52a4-8e2c-c86cc2d2089a",
       "name": "Efeitos",
@@ -461,14 +304,14 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $('Efeitos').first().json.resultado;\nconst id = $input.first().json.proposta_id;\nreturn [{ json: id ? { ...r, proposta_id: id } : r }];"
+        "jsCode": "const r = $('Efeitos').first().json.resultado;\nconst id = $('Persistir').first().json.proposta_id;\nreturn [{ json: id ? { ...r, proposta_id: id } : r }];"
       },
       "id": "7855bf2e-5e10-5694-9fbb-aa85bddf23bc",
       "name": "Saida",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4080,
+        5040,
         0
       ]
     },
@@ -509,12 +352,12 @@
         "jsonBody": "={{ JSON.stringify($json.req.body) }}"
       },
       "id": "88d976db-11d1-5db7-86de-d8df4bf16da5",
-      "name": "Graces A corpo",
+      "name": "Graces corpo",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1440,
-        200
+        1680,
+        300
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -549,52 +392,13 @@
         "options": {}
       },
       "id": "ea2f80ab-a7d4-591a-9a14-7d34a4594509",
-      "name": "Corpo A?",
+      "name": "Corpo?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1200,
+        1440,
         0
       ]
-    },
-    {
-      "parameters": {
-        "method": "={{ $json.req.m }}",
-        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "specifyQuery": "json",
-        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
-        "sendBody": true,
-        "options": {
-          "timeout": "{{BV:NUM:graces.timeout_ms}}",
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": true,
-              "responseFormat": "json"
-            }
-          }
-        },
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
-      },
-      "id": "5d3ccc2d-8daf-568d-9fbf-0285415e6382",
-      "name": "Graces E1 corpo",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2160,
-        200
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "{{BV:credenciais.graces}}",
-          "name": "Barbearia Vila Graces"
-        }
-      },
-      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -607,8 +411,8 @@
           },
           "conditions": [
             {
-              "id": "30b304c3-1b4b-5719-bcfc-ea817e9fcf6e",
-              "leftValue": "={{ String(!!$json.req.body) }}",
+              "id": "a401ca30-b6ce-54c1-9bd5-a06e66cea483",
+              "leftValue": "={{ String(!!$('Efeitos').first().json.handoff) }}",
               "rightValue": "true",
               "operator": {
                 "type": "string",
@@ -620,53 +424,14 @@
         },
         "options": {}
       },
-      "id": "137851ee-4642-5641-ac09-c2a41b5b4c13",
-      "name": "Corpo E1?",
+      "id": "3cbe7d46-d83e-5b8f-b615-fe7e0cefdff0",
+      "name": "Handoff?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1920,
+        4080,
         0
       ]
-    },
-    {
-      "parameters": {
-        "method": "={{ $json.req.m }}",
-        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "specifyQuery": "json",
-        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
-        "sendBody": true,
-        "options": {
-          "timeout": "{{BV:NUM:graces.timeout_ms}}",
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": true,
-              "responseFormat": "json"
-            }
-          }
-        },
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
-      },
-      "id": "fc280b7d-6577-5d84-ab0b-1bde83637a75",
-      "name": "Graces E2 corpo",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2880,
-        200
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "{{BV:credenciais.graces}}",
-          "name": "Barbearia Vila Graces"
-        }
-      },
-      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -679,8 +444,8 @@
           },
           "conditions": [
             {
-              "id": "0c6936eb-aa98-5336-9411-8b1541d4e059",
-              "leftValue": "={{ String(!!$json.req.body) }}",
+              "id": "addd44b6-d19f-573b-aee8-11ed6ccc77ed",
+              "leftValue": "={{ String(!!$('Efeitos').first().json.handoff.ticketId) }}",
               "rightValue": "true",
               "operator": {
                 "type": "string",
@@ -692,14 +457,75 @@
         },
         "options": {}
       },
-      "id": "86c78ac6-470f-528b-bd59-aa26c2f70860",
-      "name": "Corpo E2?",
+      "id": "9ed5bc5c-9737-549f-88ef-a78bc87c49e3",
+      "name": "Ticket conhecido?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2640,
+        4320,
         0
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chatmasterveloz.com{{ '/api/tickets/updateAPI' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ticketId: String($('Efeitos').first().json.handoff.ticketId), queueId: String($('Efeitos').first().json.handoff.queueId) }) }}",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "b408b90b-f1b8-5616-bc90-0193c5fb7cc2",
+      "name": "Transferir ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4560,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'handoff_falhou', 'updateAPI', 'handoff_falhou', $2::int, $1::bigint WHERE $2::int IS NULL OR $2::int NOT BETWEEN 200 AND 299",
+        "options": {
+          "queryReplacement": "={{ [$('Efeitos').first().json.params[0], $json.statusCode || null] }}"
+        }
+      },
+      "id": "076616bf-a2ab-5c1f-8e1a-b5f0232b3fcd",
+      "name": "Registrar handoff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -769,113 +595,11 @@
       "main": [
         [
           {
-            "node": "Corpo A?",
+            "node": "Corpo?",
             "type": "main",
             "index": 0
           }
         ],
-        [
-          {
-            "node": "Efeitos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Graces A": {
-      "main": [
-        [
-          {
-            "node": "Passo A",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Passo A": {
-      "main": [
-        [
-          {
-            "node": "Escrita 1?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Escrita 1?": {
-      "main": [
-        [
-          {
-            "node": "Corpo E1?",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Efeitos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Graces E1": {
-      "main": [
-        [
-          {
-            "node": "Passo E1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Passo E1": {
-      "main": [
-        [
-          {
-            "node": "Escrita 2?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Escrita 2?": {
-      "main": [
-        [
-          {
-            "node": "Corpo E2?",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Efeitos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Graces E2": {
-      "main": [
-        [
-          {
-            "node": "Passo E2",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Passo E2": {
-      "main": [
         [
           {
             "node": "Efeitos",
@@ -911,6 +635,24 @@
       "main": [
         [
           {
+            "node": "Handoff?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff?": {
+      "main": [
+        [
+          {
+            "node": "Ticket conhecido?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Saida",
             "type": "main",
             "index": 0
@@ -918,87 +660,91 @@
         ]
       ]
     },
-    "Corpo A?": {
+    "Ticket conhecido?": {
       "main": [
         [
           {
-            "node": "Graces A corpo",
+            "node": "Transferir ticket",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Graces A",
+            "node": "Registrar handoff",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Graces A corpo": {
+    "Transferir ticket": {
       "main": [
         [
           {
-            "node": "Passo A",
+            "node": "Registrar handoff",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Corpo E1?": {
+    "Registrar handoff": {
       "main": [
         [
           {
-            "node": "Graces E1 corpo",
+            "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Corpo?": {
+      "main": [
+        [
+          {
+            "node": "Graces corpo",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Graces E1",
+            "node": "Graces",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Graces E1 corpo": {
+    "Graces": {
       "main": [
         [
           {
-            "node": "Passo E1",
+            "node": "Passo",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Corpo E2?": {
+    "Graces corpo": {
       "main": [
         [
           {
-            "node": "Graces E2 corpo",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Graces E2",
+            "node": "Passo",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Graces E2 corpo": {
+    "Passo": {
       "main": [
         [
           {
-            "node": "Passo E2",
+            "node": "Tem chamada?",
             "type": "main",
             "index": 0
           }

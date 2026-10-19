@@ -1,7 +1,7 @@
 """Smoke do agente no TESTE (quickstart cenarios 2, 3, 5, 9-15). So contatos SIMULADOS +5500000000xxx (teste.contatos_simulados);
 a saida e conferida em `mensagens` (nenhum envio real ao Chat Master: teste.contatos_escrita vazio, conferido no config e no workflow implantado).
 Chama a OpenAI e le a Graces de verdade. Nao confirma nenhuma proposta; se alguma ficar `executada`, o finally cancela na Graces (SC-010).
-Uso: python3 -I scripts/smoke-agente.py [--so NOME ...] | --limpar. NOMES: c2 c3 c5 c9 c10 c11 c14 c15 c12 c13 (c12/c13 trocam credencial so no TESTE).
+Uso: python3 -I scripts/smoke-agente.py [--so NOME ...] | --limpar. NOMES: c2 c3 c5 c9 c10 c11 c14 c15 c12 c13 (c12/c13 trocam credencial so no TESTE); roteiros r1-r10 (quickstart, chamada direta ao bv-graces, escrita real no barbeiro de teste) so por nome.
 Segredos vem de .env.smoke/.env.n8n (nunca impressos). Exit 1 se algum cenario falhar."""
 import contextlib
 import importlib.util
@@ -175,7 +175,7 @@ def _api_deploy():
 def chamador(api):
     """Workflow TEMPORARIO (TESTE, deste projeto) com webhook de path aleatorio que repassa `dados` a um sub-workflow `wf`; apagado no finally."""
     path = "bv-smoke-" + uuid.uuid4().hex
-    wf = api("POST", "/workflows", {"name": "Barbearia Vila - smoke chamador [TESTE]", "settings": {"executionOrder": "v1"}, "nodes": [
+    wf = api("POST", "/workflows", {"name": "Barbearia Vila - smoke chamador [TESTE]", "settings": {"executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all"}, "nodes": [
         {"id": str(uuid.uuid4()), "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0, 0],
          "webhookId": str(uuid.uuid4()), "parameters": {"httpMethod": "POST", "path": path, "responseMode": "lastNode", "options": {}}},
         {"id": str(uuid.uuid4()), "name": "Montar", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [220, 0],
@@ -563,6 +563,313 @@ def p2():
     checar("mensagens de saida gravadas (enviadas pelo Chat Master)", n_out >= 1, f"n={n_out}")
 
 
+# ---------------------------------------------------------------- roteiros r1-r10 (quickstart; chamada direta ao bv-graces, escrita so no barbeiro de teste, Paulo)
+_lat_enc = []  # latencia (s) das consultas de encadeamento (horarios_livres com id_opcoes_servicos)
+
+
+def _del(a):
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"https://{os.environ['GRACES_BASE_URL_PROD']}/public/v1/agenda/{a}", method="DELETE", headers={"X-Api-Key": os.environ["GRACES_API_KEY"]}), timeout=30)
+    except urllib.error.HTTPError as err:
+        print(f"  cancelamento de {a}: HTTP {err.code}")
+
+
+def limpar_paulo():
+    for a in _agendas_paulo():
+        _del(a["idAgenda"])
+
+
+def G(chamar, c, n, **kw):
+    s, r = chamar(CFG["workflows_sub"]["bv_graces"], {"contato_id": c, "telefone": tel(n), "turno_id": str(uuid.uuid4()), "ambiente": CFG["ambiente"], **kw})
+    return r if isinstance(r, dict) else {"http": s, "corpo": r}
+
+
+def ini(n, opcoes=None):
+    sql(f"DELETE FROM contatos WHERE telefone='{PAULO_TEL}';")
+    return semear(n, {"idCliente": PAULO, "cliente_nome": "Paulo"}, opcoes)
+
+
+def _seg_vez(s):
+    import re
+    return bool(re.search(r"\b2\s*[ao]?\s*vez\b", s.lower().replace("ª", "a").replace("º", "o")))
+
+
+def servico(texto, excluir=()):
+    return next(x for x in graces_get(f"/agenda/servicos?texto={texto}") if x.get("ativo", True) and not _seg_vez(x["descricaoAgenda"]) and x["idServico"] not in excluir)
+
+
+def grade(sv, prof, dia):
+    return graces_get(f"/agenda/horarios-livres?idServico={sv}&idProfissional={prof}&data={dia}")
+
+
+def dias(k=21):
+    return [time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 3600 + 86400 * i)) for i in range(1, k + 1)]
+
+
+def reais(sv):
+    return [b for b in graces_get(f"/servicos/profissionais?idServico={sv}") if b["idProfissional"] != TESTE_ID and "TESTE" not in json.dumps(b).upper()]
+
+
+def uniao(sv, dia):
+    return {h for b in reais(sv) for h in grade(sv, b["idProfissional"], dia).get("horarios", [])}
+
+
+def dia_util(sv):
+    """Primeiro dia com vaga para o barbeiro de teste e para algum barbeiro real."""
+    for d in dias():
+        if len(grade(sv, TESTE_ID, d).get("horarios", [])) >= 4 and uniao(sv, d):
+            return d
+    raise SystemExit("nenhum dia com vaga nos proximos 21 dias")
+
+
+def ofertar(chamar, c, n, sv, texto, dia):
+    """listar_servicos -> listar_barbeiros -> horarios_livres(qualquer): devolve (resposta, itens da oferta)."""
+    G(chamar, c, n, operacao="listar_servicos", texto=texto)
+    it = next((i for i in estado(n)["opcoes"].get("itens", []) if i["valor"].get("idServico") == sv), None)
+    if not it:
+        return {"ok": False, "code": "servico_nao_ofertado"}, []
+    G(chamar, c, n, operacao="listar_barbeiros", id_opcao_servico=it["id"])
+    r = G(chamar, c, n, operacao="horarios_livres", qualquer=True, data=dia)
+    return r, estado(n)["opcoes"].get("itens", [])
+
+
+def propor_e_confirmar(chamar, c, n, **kw):
+    """Fase 1 (proposta) e, em turno posterior, fase 2 ('sim'). Devolve (fase1, fase2)."""
+    r1_ = G(chamar, c, n, **kw)
+    pid = r1_.get("proposta_id")
+    return r1_, (G(chamar, c, n, operacao=kw["operacao"], proposta_id=pid) if pid else None)
+
+
+def _horario_do_teste(sv, dia, itens):
+    g = set(grade(sv, TESTE_ID, dia).get("horarios", []))
+    return next((i for i in itens if i["valor"]["hora"] in g), None)
+
+
+def r1():
+    print("r1 todos os inicios (SC-001): oferta completa = uniao das grades dos barbeiros reais da Graces")
+    s0 = servico("corte")
+    dia = dia_util(s0["idServico"])
+    c = ini(530)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        r, itens = ofertar(chamar, c, 530, s0["idServico"], "corte", dia)
+    got = {i["valor"]["hora"] for i in itens}
+    esp = uniao(s0["idServico"], dia)
+    checar("oferta == uniao das grades da Graces (SC-001)", bool(esp) and got == esp, f"dia={dia} oferta={len(got)} graces={len(esp)} faltam={sorted(esp - got)[:5]} sobram={sorted(got - esp)[:5]}")
+    checar("0 ofertas com TESTE ou o barbeiro de teste", "TESTE" not in json.dumps(itens).upper() and TESTE_ID not in json.dumps(itens))
+
+
+def r2():
+    print("r2 dia lotado: barbeiro real sem vaga no dia (a loja abre todo dia, nao ha dia lotado para todos) -> texto sugere outro dia, nenhuma lista")
+    s0 = servico("corte")
+    alvo = next(((bb, d) for d in dias(21) for bb in reais(s0["idServico"]) if not grade(s0["idServico"], bb["idProfissional"], d).get("horarios")), None)
+    if not alvo:
+        checar("achou barbeiro real sem vaga em algum dia dos proximos 21", False)
+        return
+    bb, vazio = alvo
+    c = ini(531)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        G(chamar, c, 531, operacao="listar_servicos", texto="corte")
+        it = next(i for i in estado(531)["opcoes"]["itens"] if i["valor"]["idServico"] == s0["idServico"])
+        G(chamar, c, 531, operacao="listar_barbeiros", id_opcao_servico=it["id"])
+        ib = next(i for i in estado(531)["opcoes"]["itens"] if bb["idProfissional"] in json.dumps(i["valor"]))
+        r = G(chamar, c, 531, operacao="horarios_livres", id_opcao_barbeiro=ib["id"], data=vazio)
+    checar("sem horarios: nenhuma lista, nenhum horario inventado", not estado(531)["opcoes"].get("itens") and not r.get("opcoes"), f"dia={vazio} {str(r)[:160]}")
+    checar("orientacao sugere outro dia", "dia" in json.dumps(r, ensure_ascii=False).lower(), str(r)[:160])
+
+
+def r3():
+    print("r3 horario tomado: ocupar entre proposta e 'sim' -> proposta falhou, 0 duplicado, ocupacao cancelada")
+    s0 = servico("corte")
+    dia = dia_util(s0["idServico"])
+    c = ini(532)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        r, itens = ofertar(chamar, c, 532, s0["idServico"], "corte", dia)
+        it = _horario_do_teste(s0["idServico"], dia, itens)
+        if not it:
+            checar("achou horario comum ao barbeiro de teste", False)
+            return
+        f1 = G(chamar, c, 532, operacao="agendar", id_opcao_horario=it["id"])
+        checar("fase 1 devolveu proposta", bool(f1.get("proposta_id")), str(f1)[:160])
+        ocup = graces_post("/agenda", {"idCliente": PAULO, "idServico": s0["idServico"], "idProfissional": TESTE_ID, "data": dia, "horaInicio": it["valor"]["hora"]})
+        checar("smoke ocupou o horario", bool(ocup.get("idAgenda")), str(ocup)[:160])
+        f2 = G(chamar, c, 532, operacao="agendar", proposta_id=f1.get("proposta_id"))
+    ps = propostas(532)
+    checar("proposta falhou (horario tomado) e nao executou", bool(ps) and ps[-1]["estado"] == "falhou" and f2.get("ok") is not True, f"{[p['estado'] for p in ps]} {str(f2)[:160]}")
+    checar("so a ocupacao do smoke existe (0 duplicado)", len(_agendas_paulo()) == 1, str(len(_agendas_paulo())))
+    limpar_paulo()  # cancela a ocupacao
+
+
+def r4():
+    print("r4 sem pacote (SC-002): agenda pelo idServico, sem pergunta de pacote e sem /agenda/pacotes")
+    cod = open(os.path.join(RAIZ, "workflows", "shared", "graces.js"), encoding="utf-8").read() + open(os.path.join(RAIZ, "workflows", "sub", "bv-graces.json"), encoding="utf-8").read()
+    checar("nenhuma referencia a /agenda/pacotes no bv-graces", "pacotes" not in cod.lower())
+    s0 = servico("corte")
+    dia = dia_util(s0["idServico"])
+    c = ini(533)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        r, itens = ofertar(chamar, c, 533, s0["idServico"], "corte", dia)
+        it = _horario_do_teste(s0["idServico"], dia, itens)
+        f1, f2 = propor_e_confirmar(chamar, c, 533, operacao="agendar", id_opcao_horario=it["id"]) if it else ({}, None)
+    checar("agendamento criado e proposta executada", bool(f2) and f2.get("ok") is True and any(p["estado"] == "executada" for p in propostas(533)), str(f2)[:160])
+    checar("nenhuma pergunta de pacote no resumo/resultado", "pacote" not in json.dumps([f1, f2], ensure_ascii=False).lower())
+    ag = _agendas_paulo()
+    checar("agendamento no barbeiro de teste pelo idServico", len(ag) == 1 and ag[0]["idServico"] == s0["idServico"], str([a.get("idServico") for a in ag]))
+    limpar_paulo()
+
+
+def r5():
+    print("r5 2a vez pelo nome (SC-003): nenhuma oferta '2a vez'; agendar com a variante recusado")
+    c = ini(534)
+    d, api = _api_deploy()
+    seg = next((x for x in graces_get("/agenda/servicos") if _seg_vez(x["descricaoAgenda"])), None)
+    with chamador(api) as chamar:
+        G(chamar, c, 534, operacao="listar_servicos", texto="corte adulto 2ª vez")
+        itens = estado(534)["opcoes"].get("itens", [])
+        checar("nenhuma oferta '2a vez'", bool(itens) and not any(_seg_vez(json.dumps(i, ensure_ascii=False)) for i in itens), str([i.get("rotulo") for i in itens]))
+        semear(534, {"idCliente": PAULO, "cliente_nome": "Paulo"}, {"tipo": "horario", "itens": [{"id": "1", "rotulo": "15:00", "valor": {
+            "idServico": (seg or {}).get("idServico", FANTASMA), "servico": (seg or {}).get("descricaoAgenda", "Corte Adulto 2ª vez"), "idProfissional": FANTASMA,
+            "apelido": "Fulano", "data": dias(1)[0], "hora": "15:00", "preco": 50}}]})
+        r = G(chamar, c, 534, operacao="agendar", id_opcao_horario="1")
+    checar("agendar variante '2a vez' recusado (servico_nao_oferecido), sem proposta", r.get("code") == "servico_nao_oferecido" and not propostas(534), str(r)[:160])
+
+
+def r6():
+    print("r6 terceiro existente (SC-004): busca pelo nome do proprio cliente de teste -> mesmo celular -> agendado no idCliente achado")
+    paulo = next(x for x in graces_get(f"/agenda/clientes?celular={PAULO_TEL[1:]}") if x["idCliente"] == PAULO)
+    nome = f"{paulo['nomeCliente']} {paulo.get('sobrenomeCliente') or ''}".strip()
+    s0 = servico("corte")
+    dia = dia_util(s0["idServico"])
+    c = ini(535)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        b = G(chamar, c, 535, operacao="buscar_pessoa", nome=nome)
+        it = next((i for i in estado(535)["opcoes"].get("itens", []) if PAULO in json.dumps(i["valor"])), None)
+        checar("nenhum celular na resposta ao modelo", PAULO_TEL[3:] not in json.dumps(b))
+        if not it:  # a Graces de PROD devolve [] para QUALQUER `busca=` (verificado 2026-10-19: Paulo, Ana, Silva...): semeia a oferta no formato que buscar_pessoa grava
+            _info.append("r6: GET /agenda/clientes?busca= devolve [] na Graces de PROD (totalItemCount 0, qualquer termo); a oferta 'pessoa' foi semeada com o formato de buscar_pessoa (mesmo_celular calculado do celular real do cadastro)")
+            checar("busca sem resultado orienta cadastrar, sem gravar idCliente", b.get("pessoas") == [] and "cadastrar" in str(b.get("orientacao")), str(b)[:160])
+            mesmo = "".join(ch for ch in str(paulo["celular"]) if ch.isdigit())[-9:] == PAULO_TEL[-9:]
+            semear(535, {"idCliente": PAULO, "cliente_nome": "Paulo"}, {"tipo": "pessoa", "itens": [{"id": "1", "rotulo": nome[:24], "valor": {"idCliente": PAULO, "nome": nome, "mesmo_celular": mesmo}}]})
+            it = estado(535)["opcoes"]["itens"][0]
+        e = G(chamar, c, 535, operacao="escolher_pessoa", id_opcao=it["id"])
+        checar("escolher_pessoa ok (mesmo celular)", e.get("ok") is True and estado(535)["pedido"].get("idCliente") == PAULO, str(e)[:160])
+        r, itens = ofertar(chamar, c, 535, s0["idServico"], "corte", dia)
+        h = _horario_do_teste(s0["idServico"], dia, itens)
+        f1, f2 = propor_e_confirmar(chamar, c, 535, operacao="agendar", id_opcao_horario=h["id"]) if h else ({}, None)
+    ps = [p for p in propostas(535) if p["acao"] == "agendar"]
+    checar("agendado no idCliente da pessoa escolhida", bool(f2) and f2.get("ok") is True and bool(ps) and ps[-1]["dados"].get("idCliente") == PAULO, str(f2)[:160])
+    checar("nenhum cadastro de terceiro (POST /agenda/clientes)", not any(p["acao"] == "cadastrar_terceiro" for p in propostas(535)))
+    limpar_paulo()
+
+
+def _dois_servicos():
+    a = servico("corte")
+    return a, servico("barba", {a["idServico"]})
+
+
+def _dia_dois(a):
+    return next((x for x in dias() if len(grade(a["idServico"], TESTE_ID, x).get("horarios", [])) >= 4), dias(1)[0])
+
+
+def _sequencia(chamar, c, n, s_a, s_b, dia):
+    semear(n, {"idCliente": PAULO, "cliente_nome": "Paulo"}, {"tipo": "servico", "itens": [
+        {"id": str(k + 1), "rotulo": s["descricaoAgenda"][:24], "valor": {"idServico": s["idServico"], "nome": s["descricaoAgenda"], "preco": s.get("valorPadrao"), "minutos": s.get("tempoPadrao")}} for k, s in enumerate((s_a, s_b))]})
+    t0 = time.time()
+    r = G(chamar, c, n, operacao="horarios_livres", id_opcoes_servicos=["1", "2"], data=dia)
+    _lat_enc.append(time.time() - t0)
+    op = estado(n)["opcoes"]
+    itens = op.get("itens", []) if op.get("tipo") == "sequencia" else []
+    ga = set(grade(s_a["idServico"], TESTE_ID, dia).get("horarios", []))
+    gb = set(grade(s_b["idServico"], TESTE_ID, dia).get("horarios", []))
+    ok = [i for i in itens if i["valor"]["itens"][0]["hora"] in ga and i["valor"]["itens"][1]["hora"] in gb]  # a escrita vai ao barbeiro de teste (TESTE)
+    return r, (ok[0] if ok else None)
+
+
+def r7():
+    print("r7 dois servicos (SC-005): 2 agendamentos, o 2o comecando em horaInicio do 1o + minutos")
+    a, b = _dois_servicos()
+    c = ini(536)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        r, it = _sequencia(chamar, c, 536, a, b, _dia_dois(a))
+        checar("oferta de sequencias (encadeamento)", bool(it), str(r)[:200])
+        if not it:
+            return
+        f1, f2 = propor_e_confirmar(chamar, c, 536, operacao="agendar", id_opcao_horario=it["id"])
+    ag = sorted(_agendas_paulo(), key=lambda x: x["horaInicio"])
+    checar("proposta agendar_conjunto executada com 2 criados", bool(f2) and f2.get("ok") is True and len(f2.get("criados", [])) == 2, str(f2)[:200])
+    m = it["valor"]["itens"][0]["minutos"]
+    esp = None
+    if len(ag) == 2:
+        h, mi = int(ag[0]["horaInicio"][11:13]), int(ag[0]["horaInicio"][14:16])
+        t = h * 60 + mi + m
+        esp = f"{t // 60:02d}:{t % 60:02d}"
+    checar("2 agendamentos, o 2o = horaInicio do 1o + minutos", len(ag) == 2 and ag[1]["horaInicio"][11:16] == esp, str([(x["descricaoServico"], x["horaInicio"]) for x in ag]) + f" minutos={m}")
+    limpar_paulo()
+
+
+def r8():
+    print("r8 conjunto parcial: ocupar o horario do 2o servico entre a proposta e o 'sim'")
+    a, b = _dois_servicos()
+    c = ini(537)
+    d, api = _api_deploy()
+    dia = _dia_dois(a)
+    with chamador(api) as chamar:
+        r, it = _sequencia(chamar, c, 537, a, b, dia)
+        if not it:
+            checar("oferta de sequencias", False, str(r)[:200])
+            return
+        f1 = G(chamar, c, 537, operacao="agendar", id_opcao_horario=it["id"])
+        i2 = it["valor"]["itens"][1]
+        ocup = graces_post("/agenda", {"idCliente": PAULO, "idServico": i2["idServico"], "idProfissional": TESTE_ID, "data": dia, "horaInicio": i2["hora"]})
+        checar("smoke ocupou o horario do 2o servico", bool(ocup.get("idAgenda")), str(ocup)[:160])
+        f2 = G(chamar, c, 537, operacao="agendar", proposta_id=f1.get("proposta_id"))
+    st = [p["estado"] for p in propostas(537)]
+    n_ag = len(_agendas_paulo())
+    if f2.get("code") == "conjunto_parcial":
+        checar("parcial: diz o que foi e o que faltou", bool(f2.get("criados")) and bool(f2.get("faltaram")), str(f2)[:200])
+    else:  # a revalidacao de TODOS os itens antes de escrever barra o conjunto: nada criado (mais seguro que parcial)
+        _info.append("r8: com a ocupacao previa a revalidacao barrou o conjunto (horario_indisponivel, 0 criados); 'parcial' so ocorre em corrida entre a revalidacao e o POST (coberto pelo teste unitario)")
+        checar("conjunto barrado sem escrita: so a ocupacao existe", f2.get("ok") is not True and st[-1] == "falhou" and n_ag == 1, f"{st} ag={n_ag} {str(f2)[:160]}")
+    limpar_paulo()
+
+
+def r9():
+    print("r9 cancelar conjunto: 2 agendamentos, 'cancela os dois' -> 2 DELETE, resultado por item")
+    a, b = _dois_servicos()
+    dia = _dia_dois(a)
+    ga = grade(a["idServico"], TESTE_ID, dia)["horarios"]
+    gb = grade(b["idServico"], TESTE_ID, dia)["horarios"]
+    mins = lambda h: int(h[:2]) * 60 + int(h[3:])
+    h2 = next(h for h in gb if abs(mins(h) - mins(ga[0])) >= 90)
+    for sv, h in ((a, ga[0]), (b, h2)):
+        r = graces_post("/agenda", {"idCliente": PAULO, "idServico": sv["idServico"], "idProfissional": TESTE_ID, "data": dia, "horaInicio": h})
+        checar("semeou agendamento", bool(r.get("idAgenda")), str(r)[:120])
+    c = ini(538)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        G(chamar, c, 538, operacao="meus_agendamentos")
+        ids = [i["id"] for i in estado(538)["opcoes"].get("itens", [])]
+        checar("2 agendamentos listados", len(ids) >= 2, str(ids))
+        f1, f2 = propor_e_confirmar(chamar, c, 538, operacao="cancelar", id_opcoes_agendamentos=ids[:2]) if len(ids) >= 2 else ({}, None)
+    checar("cancelar_conjunto executada: 2 cancelados, 0 faltaram", bool(f2) and f2.get("ok") is True and len(f2.get("criados", [])) == 2 and not f2.get("faltaram"), str(f2)[:200])
+    checar("0 agendamentos do Paulo no barbeiro de teste", not _agendas_paulo())
+    limpar_paulo()
+
+
+def r10():
+    print("r10 limpeza (SC-008): 0 agendamentos futuros do Paulo no barbeiro de teste ao fim da rodada")
+    limpar_paulo()
+    checar("0 agendamentos futuros do Paulo no barbeiro de teste", not _agendas_paulo())
+
+
+ROTEIROS = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+
+
 # ---------------------------------------------------------------- limpeza e SC-010
 def encerrar():
     print("encerramento (TESTE): SC-010, cancelamento do que ficou executado, limpeza de Postgres/Redis")
@@ -582,6 +889,8 @@ def encerrar():
             print(f"  cancelado (barbeiro de teste): {a}")
         except urllib.error.HTTPError as err:
             print(f"  cancelamento de {a}: HTTP {err.code}")
+    if os.environ.get("GRACES_API_KEY"):
+        checar("SC-008: 0 agendamentos futuros do Paulo no barbeiro de teste", not _agendas_paulo())
     checar("SC-010: 0 agendamentos criados pela rodada ficaram ativos (propostas executadas a cancelar)", not ex, f"cancelados={len(ex)}")
     lista = CFG["teste"]
     checar("nenhum envio real: contatos_escrita vazio e todos os contatos do smoke simulados", lista["contatos_escrita"] in ([], [PAULO_TEL]) and tel(500)[:11] == "+5500000000")
@@ -603,7 +912,8 @@ def verificar_implantado():
     checar("entregar-rajada implantado: lista de envio real vazia", "const escrita = [].map(dig);" in cod.replace("[ ]", "[]"))
 
 
-CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13)
+CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13,
+                r1=r1, r2=r2, r3=r3, r4=r4, r5=r5, r6=r6, r7=r7, r8=r8, r9=r9, r10=r10)
 
 if __name__ == "__main__":
     _env(".env.smoke", ".env.n8n")
@@ -612,7 +922,7 @@ if __name__ == "__main__":
     if arg == ["--limpar"]:
         encerrar()
         sys.exit(0)
-    nomes = arg[1:] if arg[:1] == ["--so"] else (arg or list(CENARIOS))
+    nomes = arg[1:] if arg[:1] == ["--so"] else (arg or [k for k in CENARIOS if k not in ROTEIROS])
     if not TOKEN or any(n not in CENARIOS for n in nomes):
         sys.exit("CHATMASTER_TOKEN_TESTE ausente ou cenario desconhecido")
     try:
@@ -627,5 +937,8 @@ if __name__ == "__main__":
     if _lat:
         q = sorted(_lat)
         print(f"latencia SC-009: n={len(q)} p50={q[len(q)//2]:.1f}s p90={q[min(len(q)-1, int(len(q)*0.9))]:.1f}s max={q[-1]:.1f}s")
+    if _lat_enc:
+        q = sorted(_lat_enc)
+        print(f"latencia encadeamento: n={len(q)} p90={q[min(len(q)-1, int(len(q)*0.9))]:.1f}s max={q[-1]:.1f}s")
     print("FALHAS:", _falhas or "nenhuma")
     sys.exit(1 if _falhas else 0)
