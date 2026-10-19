@@ -154,11 +154,18 @@ Achados: 0 critical, 4 high, 6 medium, 4 low. Mitigações incorporadas ao desen
   workflows.
 - **L3**: só `status_http` vai para a falha; corpo e `statusMessage` descartados.
 
-Riscos residuais **high** que dependem do owner (bloqueio humano desta onda): H3 (cópias do
-conteúdo fora da limpeza de 24 h: as respostas do agente em `mensagens` de saída, que seguem a
-decisão "sem expurgo do histórico" de `docs/decisoes-pre-00c.md:95`; o que a OpenAI retém das
-requisições, sem página oficial lida nesta onda; backups do Postgres) e H4 (sem teto de bytes
-medido no download).
+Riscos residuais **high** **aceitos pelo owner** (block-002, resposta "aceitar-ambos", dec-015,
+2026-10-19):
+
+- **H3, aceito**: o conteúdo da mídia tem cópias fora da limpeza de 24 h. São as respostas do
+  agente em `mensagens` de saída, que seguem a decisão "sem expurgo do histórico" de
+  `docs/decisoes-pre-00c.md:95`, o que a OpenAI retém das requisições (nenhuma página oficial foi
+  lida) e os backups do Postgres. Não há mitigação extra nesta feature.
+- **H4, aceito com tarefa bloqueante**: não há teto de bytes medido no download. Fica a rejeição
+  por `fileLength`/`seconds` mais o timeout de 10 s. Uma **tarefa** confere com
+  `validate_node_config` se o nó HTTP Request do n8n permite recusar por `Content-Length` ou impor
+  um teto de bytes antes de ler o corpo. Se permitir, a opção entra no nó de download. Se **não**
+  permitir, a tarefa é **bloqueante** e volta ao owner antes da publicação.
 
 ## Riscos
 
