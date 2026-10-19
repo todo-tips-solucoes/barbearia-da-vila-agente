@@ -100,6 +100,13 @@ class BvGraces(unittest.TestCase):
         # revalida antes de escrever e o POST/PUT so nasce depois da revalidacao
         self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda', body: { idCliente: d.idCliente"))
 
+    def test_fase2_reivindica_propostas_de_conjunto_e_de_terceiro(self):  # achado do roteiro r7/r9: conjunto e cadastro nunca eram reivindicados
+        rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
+        i = self.js.index("const BVG_ACOES")
+        for acao in ("agendar_conjunto", "cancelar_conjunto", "cadastrar_terceiro"):
+            self.assertIn(acao, rep)
+            self.assertIn(acao, self.js[i:i + 300])
+
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
         self.assertIn("cfg.ambiente === 'producao' || !cfg.redirecionar", self.js)
         self.assertIn("cfg.redirecionar ? cfg.testeId", self.js)

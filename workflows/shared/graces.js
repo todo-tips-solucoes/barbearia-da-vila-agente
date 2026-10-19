@@ -11,7 +11,7 @@ const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente',
   'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro'];
 const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BVG_OPC = /^[A-Za-z0-9_-]{1,12}$/;
-const BVG_ACOES = { agendar: 'agendar,trocar_servico', reagendar: 'reagendar', cancelar: 'cancelar' };
+const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto', cadastrar_terceiro: 'cadastrar_terceiro' };
 
 const bvgRecusa = (code, orientacao) => ({ ok: false, code, orientacao });
 const bvgFim = (resultado, efeitos = {}) => ({ final: { resultado, efeitos } });

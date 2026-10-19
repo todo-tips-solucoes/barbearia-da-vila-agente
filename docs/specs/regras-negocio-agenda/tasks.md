@@ -147,7 +147,7 @@ Ref: contracts/ferramentas-graces-regras.md
 - [x] 4.2.1 Expor `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro` e campos novos (incluir `id_opcoes_servicos` e `id_opcao` (modo de encadeamento) na ferramenta `horarios_livres` e no prompt, hoje nao expostos ao modelo)
 - [x] 4.2.2 Atualizar prompt e textos em `agente.js`
 - [x] 4.2.3 Deploy no TESTE e conferencia por `get_workflow_details` (MCP)
-- [~] 4.2.4 Sonda S4: 4 listas seguidas (humano) - enviadas em 2026-10-19 (ids 6830373-6830376, conexao 145); aguarda o owner confirmar ordem e toque (block aberto)
+- [x] 4.2.4 Sonda S4: 4 listas seguidas (humano) - owner (2026-10-19, block-008): as 4 listas chegaram na ordem 1 a 4 (ordem OK). Retorno do toque ao agente NAO verificado ponta a ponta (webhook da conexao 145 aponta ao destino original e `teste.contatos_escrita` esta vazio, como esperado). Decisao do owner: teste real com webhook (toque ao agente, transferencia ao setor 78) fica para a feature `suite-validacao`, em janela combinada; webhook da 145 NAO alterado aqui. Caminho do toque coberto pelos testes com payload real capturado.
 
 ### 4.3 Limites diarios de terceiros e trava de cadastro por ambiente `[A]`
 
@@ -165,10 +165,10 @@ Ref: spec.md SC-011; owner (2026-10-19, block-007)
 
 Ref: quickstart.md; spec.md FR-014 SC-001..SC-008
 
-- [ ] 5.1.1 Implementar roteiros em `scripts/smoke-agente.py` com barbeiro de teste e cliente Paulo
-- [ ] 5.1.2 Limpeza de itens de conjunto no `finally` (SC-008)
-- [ ] 5.1.3 Executar roteiros um por vez e registrar resultado
-- [ ] 5.1.4 Medir p90 e latencia do encadeamento
+- [x] 5.1.1 Implementar roteiros em `scripts/smoke-agente.py` com barbeiro de teste e cliente Paulo (`--so r1 ... r10`)
+- [x] 5.1.2 Limpeza de itens de conjunto no `finally` (SC-008): `encerrar()` cancela tudo do Paulo no barbeiro de teste e confere 0 restantes
+- [x] 5.1.3 Executar roteiros um por vez e registrar resultado: r1-r10 verdes (2026-10-19). Achados: (a) BUG real corrigido: a fase 2 de `agendar_conjunto`/`cancelar_conjunto`/`cadastrar_terceiro` nunca era reivindicada (mapa de acoes do `Contexto` omitia as tres; resultado `proposta_expirada`), teste de regressao e redeploy do `bv_graces` no TESTE; (b) r2: a loja abre todo dia (nao ha dia lotado para todos), usado barbeiro real sem vaga no dia; (c) r6: `GET /agenda/clientes?busca=` devolve `[]` na Graces de PROD para qualquer termo, oferta `pessoa` semeada no formato de `buscar_pessoa` (busca por nome segue nao verificada na Graces real); (d) r8: com a ocupacao previa a revalidacao barra o conjunto (`horario_indisponivel`, 0 criados); `parcial` so em corrida entre revalidacao e POST (coberto por teste unitario)
+- [x] 5.1.4 Medir p90 e latencia do encadeamento: consulta encadeada `horarios_livres` (2 servicos) n=2, p90 1,0 s, max 1,0 s (rodada final); 0,8 a 1,7 s nas rodadas isoladas
 
 ### 5.2 Documentacao `[M]`
 
