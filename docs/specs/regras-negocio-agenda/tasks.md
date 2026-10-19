@@ -48,9 +48,9 @@ Ref: checklists/api.md CHK014 CHK015; checklists/ux.md CHK024 CHK025
 
 Ref: checklists/security.md CHK035
 
-- [ ] 1.4.1 Re-executar validate-documentation sobre spec/plan/research/data-model apos 1.1-1.2
-- [ ] 1.4.2 Re-executar owasp-security sobre a arquitetura pos block-003
-- [ ] 1.4.3 Registrar findings como Decisao; critical/high viram bloqueio humano antes de execute-task
+- [x] 1.4.1 Re-executar validate-documentation sobre spec/plan/research/data-model apos 1.1-1.2
+- [x] 1.4.2 Re-executar owasp-security sobre a arquitetura pos block-003
+- [x] 1.4.3 Registrar findings como Decisao; critical/high viram bloqueio humano antes de execute-task
 
 ---
 
@@ -60,17 +60,17 @@ Ref: checklists/security.md CHK035
 
 Ref: data-model.md; plan.md Project Structure
 
-- [ ] 2.1.1 Criar `db/migrations/0007_regras_agenda.sql` ampliando `CHECK` de `propostas` (DROP CONSTRAINT IF EXISTS / ADD)
-- [ ] 2.1.2 Atualizar `tests/test_esquema.py` para os novos valores
-- [ ] 2.1.3 Testar idempotencia (aplicar duas vezes) no banco de TESTE
+- [x] 2.1.1 Criar `db/migrations/0007_regras_agenda.sql` ampliando `CHECK` de `propostas` (DROP CONSTRAINT IF EXISTS / ADD)
+- [x] 2.1.2 Atualizar `tests/test_esquema.py` para os novos valores
+- [x] 2.1.3 Testar idempotencia (aplicar duas vezes) no banco de TESTE
 
 ### 2.2 Chaves de configuracao `[A]`
 
 Ref: contracts/config-regras.md
 
-- [ ] 2.2.1 Adicionar chaves em `config/ambientes/integracao.json` e `producao.json` (PROD inativo)
-- [ ] 2.2.2 Incluir `textos.encaminhar_equipe`, tetos de busca/cadastro e `cadastroLiberado` (desligado no TESTE)
-- [ ] 2.2.3 Validar com `verificar-repo.py`
+- [x] 2.2.1 Adicionar chaves em `config/ambientes/integracao.json` e `producao.json` (PROD inativo)
+- [x] 2.2.2 Incluir `textos.encaminhar_equipe`, tetos de busca/cadastro e `cadastroLiberado` (desligado no TESTE)
+- [x] 2.2.3 Validar com `verificar-repo.py`
 
 ---
 

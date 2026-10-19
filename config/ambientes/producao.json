@@ -50,7 +50,7 @@
   "agente": {
     "modelo": "gpt-5.6-luna",
     "raciocinio": "low",
-    "iteracoes_max": 6,
+    "iteracoes_max": 8,
     "mensagens_contexto": 20,
     "turnos_max_contato_hora": 20
   },
@@ -76,7 +76,9 @@
   "graces": {
     "host": "api.gracesonline.com.br",
     "timeout_ms": 15000,
-    "barbeiro_teste_id": "1cee0bb9-e58b-4428-9e9b-1db184db7943"
+    "barbeiro_teste_id": "1cee0bb9-e58b-4428-9e9b-1db184db7943",
+    "max_estagios": 16,
+    "max_consultas_estagio": 20
   },
   "textos": {
     "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho? Se for urgente, chama a loja no (11) 97126-5299.",
@@ -84,7 +86,11 @@
     "humano": "Vou pedir pra equipe da loja te ajudar. Eles falam com você em seguida, tá?",
     "reformular": "Não consegui entender direitinho. Pode me explicar de outro jeito?",
     "lista_botao": "Ver opções",
-    "lista_topo": "Escolha uma das opções"
+    "lista_topo": "Escolha uma das opções",
+    "lista_continua": "Seguem mais opções:",
+    "modo_diferentes": "Vou marcar cada serviço com um barbeiro diferente, no melhor horário de cada um.",
+    "modo_separados": "Vou marcar cada serviço separado, em horários independentes.",
+    "encaminhar_equipe": "Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?"
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
@@ -92,5 +98,18 @@
   },
   "workflows_sub": {
     "bv_graces": ""
+  },
+  "encadeamento": {
+    "max_servicos": 3
+  },
+  "terceiro": {
+    "buscas_max_sessao": 3,
+    "buscas_max_dia": 5,
+    "cadastros_max_dia": 1,
+    "cadastro_liberado": false
+  },
+  "handoff": {
+    "setor_id": 78,
+    "whatsapp_id": "145"
   }
 }
