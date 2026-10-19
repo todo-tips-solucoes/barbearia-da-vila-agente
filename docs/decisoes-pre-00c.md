@@ -31,7 +31,7 @@ Insumo do briefing e da constituição. Tudo aqui foi respondido pelo owner nest
 | LLM | OpenAI **`gpt-5.6-luna`**, com **chave própria da barbearia** (credencial n8n separada da do Gold). |
 | Persona | **Assume que é IA** (assistente virtual da Barbearia da Vila), com tom muito humanizado. |
 | Cadência | Igual ao Gold, mais "digitando": buffer de 8 s para juntar rajadas, até 4 mensagens curtas, "digitando…" proporcional entre elas, uma pergunta por mensagem. |
-| Múltipla escolha | **Sempre botão de lista** (mensagem de lista da biblioteca Pro) quando o agente oferecer opções: horários, barbeiros, serviços, pacote ou avulso etc. Decisão do owner em 2026-10-18; **prevalece** sobre "conversa em vez de menus" e "botão só na confirmação" do feedback abaixo. A confirmação de presença continua com botão Quick Reply. Se o cliente responder escrevendo em vez de tocar, o agente entende a resposta do mesmo jeito. |
+| Múltipla escolha | **Sempre botão de lista** (mensagem de lista da biblioteca Pro) quando o agente oferecer opções: horários, barbeiros, serviços etc. Decisão do owner em 2026-10-18; **prevalece** sobre "conversa em vez de menus" e "botão só na confirmação" do feedback abaixo. A confirmação de presença continua com botão Quick Reply. Se o cliente responder escrevendo em vez de tocar, o agente entende a resposta do mesmo jeito. |
 | Feedback do dono | `alteracoes_clientes/transcricoes.md` é requisito, exceto onde a linha acima prevalece: sugerir remarcar ao cancelar, contexto da conversa, áudio, todos os inícios em que o serviço cabe, não retomar coleta antiga, esconder o barbeiro de teste. |
 
 ## Regras de negócio
@@ -40,7 +40,7 @@ Insumo do briefing e da constituição. Tudo aqui foi respondido pelo owner nest
 |---|---|
 | Fonte da verdade | **Graces**, inclusive para faixas de idade e preços (não `informacaoes_barbearia.txt`). |
 | Testes | Só em produção da Graces, **sempre com o barbeiro de teste** (o que tem "TESTE" no nome). |
-| Pacotes | **Perguntar antes** se quer usar a sessão do pacote ou pagar avulso. |
+| Pacotes | ~~Perguntar antes se quer usar a sessão do pacote ou pagar avulso.~~ **Revisto em 2026-10-19:** o agente **não trata de pacote**. Informações e abatimento de pacote ficam com a equipe da barbearia, dentro da Graces; o agente agenda o serviço normalmente (constituição 3.0.0, princípio XI). |
 | Serviços "2º vez" | **Nunca** oferecer nem agendar. |
 | Terceiros | **Permitido** agendar para outra pessoa (filho, amigo): pedir o nome e buscar ou cadastrar a pessoa na Graces. |
 | Vários serviços | **Permitido**: um agendamento por serviço, com horários encadeados. |
