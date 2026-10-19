@@ -94,3 +94,5 @@ Criadas ao agendar na Graces; apagadas ao cancelar e recriadas ao reagendar.
 | LGPD (base legal e retenção do histórico) | **Fora do escopo por agora**, por decisão do owner. Sem expurgo do histórico até nova decisão. |
 | Terceiro sem celular próprio (feature 4, FR-007) | **Cadastrar com o celular de quem pede**, depois de confirmação explícita do cliente na conversa. |
 | Vários serviços sem barbeiro que faça todos (FR-012) | **Perguntar ao cliente** se prefere barbeiros diferentes (com resumo único) ou agendar cada serviço separado. |
+| Terceiro já cadastrado com celular diferente do de quem pede (block-003) | **Encaminhar para a equipe da barbearia**, que cadastra o número correto para os próximos agendamentos. O agente não vê, não remarca, não cancela e não usa o pacote dessa pessoa. Mesmo celular (ex.: pai e filho no mesmo número) = acesso total. |
+| Primeiro contato | Buscar o número do WhatsApp na Graces; se não existir, pedir o nome e cadastrar com esse número (acesso total ao próprio cadastro). Se o nome já existir na Graces com outro celular, **não mesclar nem duplicar**: encaminhar para a equipe atualizar o número. |
