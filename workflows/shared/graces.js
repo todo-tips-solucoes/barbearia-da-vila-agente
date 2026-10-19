@@ -132,7 +132,7 @@ function bvGPlano(i, ctx0, cfg) {
     }
     case 'cadastrar_terceiro': {
       if (i.proposta_id) return bvgFase2(i, ctx, cfg, chamar);
-      if (!cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'));
+      if (!cfg.terceiroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'));
       if (!idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
       if (ctx.pedido.cadastro_terceiro_feito || (ctx.dia.cadastros || 0) >= (ter.cadastros_max_dia ?? 1)) return bvgFim(bvgRecusa('limite_cadastros', 'limite de cadastros atingido; chame a equipe da loja'));
       if (!ctx.pedido.terceiro_sem_cadastro || bvgNomeNorm(ctx.pedido.terceiro_sem_cadastro) !== bvgNomeNorm(i.nome)) return bvgFim(bvgRecusa('busque_primeiro', 'busque a pessoa pelo nome (buscar_pessoa) antes de cadastrar'));
@@ -258,7 +258,7 @@ function bvgFase2(i, ctx, cfg, chamar) {
   const prof = cfg.redirecionar ? cfg.testeId : d.idProfissional; // research Decision 10: toda escrita vai ao barbeiro de teste
   const meta = { fase2: true, proposta: p, prof, redir: !!cfg.redirecionar };
   if (p.acao === 'cadastrar_terceiro') {
-    if (!cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'cadastro_desabilitado' } } });
+    if (!cfg.terceiroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'cadastro_desabilitado' } } });
     return chamar([{ m: 'POST', path: '/agenda/clientes', body: { nomeCliente: d.nome, ddiCelular: '55', celular: d.celular } }], { ...meta, etapa: 'cadastro' });
   }
   if (p.acao === 'agendar_conjunto') {

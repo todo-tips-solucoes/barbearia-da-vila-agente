@@ -107,6 +107,21 @@ class BvGraces(unittest.TestCase):
         self.assertIn("'{{BV:teste.redirecionar_escrita}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
         self.assertIn("cadastroLiberado: false", self.nos["Planejar"]["parameters"]["jsCode"])  # 4.2.6: sem P1 nao cadastra
 
+    def test_contador_diario_terceiros_alimentado(self):  # SC-011: ctx.dia vem do banco, nunca fica vazio
+        q = self.nos["Contexto"]["parameters"]["query"]
+        self.assertRegex(q, r"AS dia FROM")
+        self.assertIn("'buscas'", q)
+        self.assertIn("'cadastros'", q)
+        self.assertIn("busca_pessoa", q)
+        self.assertIn("America/Sao_Paulo", q)
+
+    def test_cadastro_terceiro_configuravel_por_ambiente(self):
+        self.assertIn("terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
+        import json, pathlib
+        amb = pathlib.Path(__file__).resolve().parent.parent / "config" / "ambientes"
+        self.assertIs(json.loads((amb / "producao.json").read_text())["terceiro"]["cadastro_liberado"], True)
+        self.assertIs(json.loads((amb / "integracao.json").read_text())["terceiro"]["cadastro_liberado"], False)
+
     def test_sem_segredo_nem_log(self):
         self.assertNotIn("console.log", self.texto)
         self.assertNotRegex(self.texto, r"[0-9a-f]{64}")

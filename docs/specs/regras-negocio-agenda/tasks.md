@@ -147,7 +147,15 @@ Ref: contracts/ferramentas-graces-regras.md
 - [x] 4.2.1 Expor `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro` e campos novos (incluir `id_opcoes_servicos` e `id_opcao` (modo de encadeamento) na ferramenta `horarios_livres` e no prompt, hoje nao expostos ao modelo)
 - [x] 4.2.2 Atualizar prompt e textos em `agente.js`
 - [x] 4.2.3 Deploy no TESTE e conferencia por `get_workflow_details` (MCP)
-- [ ] 4.2.4 Sonda S4: 4 listas seguidas (humano)
+- [~] 4.2.4 Sonda S4: 4 listas seguidas (humano) - enviadas em 2026-10-19 (ids 6830373-6830376, conexao 145); aguarda o owner confirmar ordem e toque (block aberto)
+
+### 4.3 Limites diarios de terceiros e trava de cadastro por ambiente `[A]`
+
+Ref: spec.md SC-011; owner (2026-10-19, block-007)
+
+- [x] 4.3.1 Bug: `ctx.dia` nunca era preenchido (limites `buscas_max_dia`/`cadastros_max_dia` inertes); `Contexto` passa a devolver `dia` (contagem do dia de SP em `falhas_agente` e `propostas`), com teste
+- [x] 4.3.2 `cadastrar_terceiro` com trava propria `terceiroLiberado` (config `terceiro.cadastro_liberado`: PROD true, TESTE false), com teste
+- [x] 4.3.3 Deploy do `bv_graces` no TESTE
 
 ---
 
@@ -166,9 +174,9 @@ Ref: quickstart.md; spec.md FR-014 SC-001..SC-008
 
 Ref: plan.md Project Structure
 
-- [ ] 5.2.1 Atualizar `docs/infra.md` (laco, limites, politica de teste)
-- [ ] 5.2.2 Atualizar `workflows/README.md`
-- [ ] 5.2.3 Rodar `CMD_LINT` do cockpit.config
+- [x] 5.2.1 Atualizar `docs/infra.md` (laco, limites, politica de teste)
+- [x] 5.2.2 Atualizar `workflows/README.md`
+- [x] 5.2.3 Rodar `CMD_LINT` do cockpit.config
 
 ---
 

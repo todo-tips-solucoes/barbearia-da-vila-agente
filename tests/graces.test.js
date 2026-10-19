@@ -34,7 +34,7 @@ assert.equal(g.bvGPlano(entrada({ operacao: 'escolher_cliente', id_opcao: '9' })
 
 // cadastrar_cliente: desligado por padrao; so mock com a trava aberta (4.2.6).
 assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, { cliente_sem_cadastro: true }), cfg).final.resultado.code, 'cadastro_desabilitado');
-const aberto = { ...cfg, cadastroLiberado: true };
+const aberto = { ...cfg, cadastroLiberado: true, terceiroLiberado: true };
 assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, {}), aberto).final.resultado.code, 'identifique_primeiro');
 p = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, { cliente_sem_cadastro: true }), aberto);
 assert.deepEqual(p.reqs[0].body, { nomeCliente: 'Novo', ddiCelular: '55', celular: '11999998888' });
@@ -415,3 +415,14 @@ assert.deepEqual(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '
 assert.deepEqual(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', id_opcoes_servicos: '["1","2"]' }, cfg).in.id_opcoes_servicos, ['1', '2']);
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', qualquer: true, id_opcoes_servicos: [] }, cfg).in.id_opcoes_servicos, undefined);
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', id_opcoes_servicos: '1' }, cfg).resultado.code, 'entrada_invalida');
+
+// SC-011: cadastrar_terceiro usa a trava propria (terceiroLiberado), independente de cadastroLiberado; limites diarios vem de ctx.dia.
+{
+  const ped = { idCliente: 'c1', terceiro_sem_cadastro: 'Paulo Souza' };
+  const e = { operacao: 'cadastrar_terceiro', nome: 'Paulo Souza' };
+  const so = { ...cfg, cadastroLiberado: true };
+  assert.equal(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped }, so).final.resultado.code, 'cadastro_desabilitado');
+  const so2 = { ...cfg, terceiroLiberado: true };
+  assert.ok(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped }, so2).final.efeitos.proposta_nova);
+  assert.equal(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped, dia: { cadastros: 1 } }, so2).final.resultado.code, 'limite_cadastros');
+}

@@ -106,7 +106,7 @@
     "buscas_max_sessao": 3,
     "buscas_max_dia": 5,
     "cadastros_max_dia": 1,
-    "cadastro_liberado": false
+    "cadastro_liberado": true
   },
   "handoff": {
     "setor_id": 78,
