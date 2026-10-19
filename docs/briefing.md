@@ -34,10 +34,10 @@
 
 1. Infra: banco `barbearia_vila` / `barbearia_vila_teste`, prefixos Redis distintos por ambiente, script de deploy via API pública do n8n.
 2. Recepção do webhook do Chat Master, com buffer de 8 s para juntar rajadas e lock por contato.
-3. Agente (nó AI Agent, `gpt-5.6-luna`) com ferramentas Graces: identificar/cadastrar cliente, serviços, barbeiros, horários livres, agendar, reagendar, cancelar, pacotes. Múltipla escolha sempre por botão de lista (decisão do owner, 2026-10-18), com texto humano; contexto da conversa; sugerir remarcar ao cancelar; oferecer todos os inícios em que o serviço cabe; não retomar coleta antiga num "Oi"; nunca expor o barbeiro de teste.
+3. Agente (nó AI Agent, `gpt-5.6-luna`) com ferramentas Graces: identificar/cadastrar cliente, serviços, barbeiros, horários livres, agendar, reagendar, cancelar. Múltipla escolha sempre por botão de lista (decisão do owner, 2026-10-18), com texto humano; contexto da conversa; sugerir remarcar ao cancelar; oferecer todos os inícios em que o serviço cabe; não retomar coleta antiga num "Oi"; nunca expor o barbeiro de teste.
 4. Cadência humana: até 4 mensagens curtas, "digitando…" proporcional, uma pergunta por mensagem.
 5. Áudio (transcrição) e imagem (interpretação) de entrada.
-6. Regras de negócio: pacotes (perguntar se usa a sessão ou paga avulso), serviços "2ª vez" nunca oferecidos, agendamento para terceiros, vários serviços encadeados (um agendamento por serviço).
+6. Regras de negócio: pacotes ficam com a equipe na Graces (o agente não trata deles; revisto em 2026-10-19), serviços "2ª vez" nunca oferecidos, agendamento para terceiros, vários serviços encadeados (um agendamento por serviço).
 7. Mensagens agendadas pelo módulo de agendamento do Chat Master (`POST/DELETE /api/schedules`): confirmação na véspera às 18:00 com botão Quick Reply (resposta vira `POST /agenda/confirmacao`), lembrete 2 h antes, pós-atendimento 1 h depois do término; apagadas ao cancelar e recriadas ao reagendar.
 8. CRM e etiquetas: funil existente "Funil Agendamento Barbearia" (id 5): Novo Contato → Em Atendimento → Agendado → Confirmação → Atendido (laterais Cancelado, Não compareceu); handoff por setor 78 + etiqueta 521; etiquetas por categoria de serviço, por barbeiro e "Cliente novo".
 9. Handoff: transferir para fila/setor do Chat Master e parar de responder.
