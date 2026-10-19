@@ -14,6 +14,7 @@ lidas por placeholders `{{BV:...}}` (F3 `contracts/config-agente.md`). Valor aus
 | `textos.pacote_usar` / `textos.pacote_avulso` | redação `[PROPOSTA]` | idem | ajustável pelo owner |
 | `textos.lista_continua` | redação `[PROPOSTA]` | idem | Desc das listas 2..4 |
 | `textos.modo_diferentes` / `textos.modo_separados` | redação `[PROPOSTA]` | idem | FR-012 |
+| `textos.encaminhar_equipe` | redação `[PROPOSTA]` | idem | block-003: pedido passado à equipe para atualizar o número |
 
 Sem mudança: `lista.max_itens` 10 e `saida.max_mensagens` 4 (capacidade de 40 inícios por turno,
 research Decision 3); `cadastroLiberado` continua o literal `false` dos Code nodes do `bv-graces` (F3); liberar exige autorização expressa do owner (FR-007, FR-014).

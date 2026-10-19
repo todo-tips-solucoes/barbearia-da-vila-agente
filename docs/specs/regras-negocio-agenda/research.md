@@ -140,24 +140,49 @@ busca o regular e devolve orientação "ofereça o serviço regular, sem falar e
   `cadastro_desabilitado` enquanto `cfg.cadastroLiberado` for falso (TESTE: falso; FR-014). Uma vez
   por sessão.
 
-**Escopo do terceiro (gate owasp-security, F-SEC-1, A01/API1)**: escolher uma pessoa pelo nome não
-prova vínculo com ela. Por isso, quando `pedido.para_terceiro` é verdadeiro e o celular do cadastro
-escolhido (lido da resposta de `busca`, nunca mostrado ao modelo) **difere** do celular do remetente,
-o `bv-graces` só permite `horarios_livres` e `agendar` avulso para essa pessoa; `meus_agendamentos`,
-`reagendar`, `cancelar` e o uso de pacote dela ficam recusados (`terceiro_sem_vinculo`), salvo
-agendamentos criados nesta conversa (`idAgenda` presente em `propostas.resultado` do contato).
-Mesmo celular (família no mesmo número, G `02`:46) = acesso igual ao do titular. Fail-closed,
-`[PROPOSTA]` até o owner confirmar a política (bloqueio humano do gate).
+**Escopo do terceiro (gate owasp-security, F-SEC-1, A01/API1; decidido pelo owner em block-003,
+dec-022, `docs/decisoes-pre-00c.md:97`)**: escolher uma pessoa pelo nome não prova vínculo com ela.
+Na fase de `escolher_pessoa`, o `bv-graces` compara o celular do cadastro escolhido (lido da resposta
+de `busca`, nunca mostrado ao modelo) com o celular do remetente, ambos só em dígitos e sem o DDI 55:
+
+- **mesmo celular** (família no mesmo número, G `02`:46): acesso total, igual ao do titular
+  (`meus_agendamentos`, `reagendar`, `cancelar`, pacote);
+- **celular diferente**: o agente **não agenda**. `escolher_pessoa` devolve
+  `{ok:false, code:'encaminhar_equipe', motivo:'terceiro_outro_celular'}`, não grava
+  `pedido.idCliente` nem `para_terceiro` e nenhuma ferramenta age sobre essa pessoa (ver, remarcar,
+  cancelar, usar pacote ou agendar). O modelo responde com `textos.encaminhar_equipe` e o pedido é
+  encaminhado à equipe, que cadastra o número correto para os próximos agendamentos.
+
+Fail-closed: celular ausente no cadastro escolhido conta como diferente.
+
+**Primeiro contato (mesma resposta do owner)**: `identificar_cliente` (F3) busca pelo número do
+WhatsApp; achou → acesso total ao próprio cadastro. Não achou → o modelo pede o nome e
+`cadastrar_cliente` cadastra com esse número. Antes do `POST`, o `bv-graces` faz
+`GET /agenda/clientes?busca=<nome>` (G `02`:17-26): se algum resultado tiver o mesmo nome completo
+(nome + sobrenome, sem acento, caixa e espaços extras) e celular diferente, **não cadastra** (nem
+mescla nem duplica) e devolve `{ok:false, code:'encaminhar_equipe', motivo:'nome_outro_celular'}`,
+para a equipe atualizar o número. Nome com uma palavra só não bloqueia (casaria homônimos demais);
+segue para o cadastro normal. Continua sujeito a `cfg.cadastroLiberado` (falso no TESTE).
+
+**Terceiro sem cadastro e sem celular próprio** (block-001, mantido): cadastra com o celular de quem
+pede, após confirmação, pelo `cadastrar_terceiro` acima.
+
+**Encaminhamento à equipe (ponto de integração)**: o handoff completo (setor 78, etiqueta 521, CRM)
+é da feature `crm-etiquetas-handoff`. Aqui o mínimo é: (a) a saída `code:'encaminhar_equipe'` com
+`motivo`; (b) o texto `textos.encaminhar_equipe` ao cliente; (c) registro em `falhas_agente` com
+motivo `encaminhar_equipe|<motivo>`, sem nome nem celular. A `crm-etiquetas-handoff` consome esse
+`code` para transferir a conversa; até lá, a equipe vê o registro pela operação.
+
 Tetos contra varredura e lixo irreversível (F-SEC-2): `terceiro.buscas_max_dia` (5) e
 `terceiro.cadastros_max_dia` (1) por contato, contados em `falhas_agente`/`propostas` do dia, além do
 teto por sessão; a busca exige ao menos duas palavras no nome.
 
 Homônimo do remetente: aparece na oferta como qualquer pessoa e passa pela confirmação. Testes:
-busca e escolha com o Paulo; cadastro só por `node tests/graces.test.js` (mock), nunca real sem
-autorização expressa do owner (FR-014).
+busca e escolha com o Paulo (mesmo celular); celular diferente, primeiro contato e cadastro só por
+`node tests/graces.test.js` (mock), nunca cadastro real sem autorização expressa do owner (FR-014).
 
-**Rationale**: G `05`:45 deixa a regra para a barbearia; decidida em block-001 e
-`docs/decisoes-pre-00c.md:45`. O cadastro é irreversível (G `02`:15).
+**Rationale**: G `05`:45 deixa a regra para a barbearia; decidida em block-001, block-003 e
+`docs/decisoes-pre-00c.md` (linhas 45, 97 e 98). O cadastro é irreversível (G `02`:15).
 
 ## Decision 7: encadeamento de serviços (FR-008, FR-012)
 

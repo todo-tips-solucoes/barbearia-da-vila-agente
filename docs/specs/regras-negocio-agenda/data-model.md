@@ -45,7 +45,7 @@ Chaves novas no jsonb `pedido` (só ids e rótulos curtos vindos da Graces ou do
 | `servicos` | encadeamento: `[{opcao_id, idServico, nome, preco}]` em ordem |
 | `modo_encadeamento` | `mesmo_barbeiro` \| `barbeiros_diferentes` \| `separados` |
 | `faltantes` | serviços de um conjunto `parcial` que não foram criados |
-| `para_terceiro` | `true` quando `idCliente` é de um terceiro |
+| `para_terceiro` | `true` quando `idCliente` é de um terceiro com o **mesmo** celular do remetente (acesso total); terceiro com outro celular nunca vira `idCliente` (block-003) |
 | `idCliente_remetente` | `idCliente` do remetente, guardado ao trocar para o terceiro |
 | `terceiro_sem_cadastro` | nome buscado sem resultado (habilita `cadastrar_terceiro` com esse nome) |
 | `buscas_pessoa` | contador de `buscar_pessoa` na sessão (teto `terceiro.buscas_max_sessao`) |
@@ -56,7 +56,7 @@ Chaves novas no jsonb `pedido` (só ids e rótulos curtos vindos da Graces ou do
 sobrevive à sessão.
 
 Tipos novos de `opcoes.tipo`: `pagamento` (itens `pacote`, `avulso`), `pessoa` (`valor =
-{idCliente, nome}`), `modo_encadeamento` (`barbeiros_diferentes`, `separados`), `sequencia` (início de
+{idCliente, nome, mesmo_celular}`; `mesmo_celular` é calculado na busca e o celular em si não é guardado), `modo_encadeamento` (`barbeiros_diferentes`, `separados`), `sequencia` (início de
 um encadeamento: `valor = {data, itens:[{idServico, idProfissional, apelido, hora, minutos, valor}]}`).
 A oferta de horários ganha `completa: true`.
 
@@ -64,7 +64,9 @@ A oferta de horários ganha `completa: true`.
 
 Motivos novos (texto livre já aceito): `configuracao`, `parametro_invalido`, `nao_encontrado`,
 `conflito`, `sem_resposta`, `code_desconhecido`, `escrita_incerta`, `escrita_repetida`,
-`estagios_esgotados`, `conjunto_parcial`. Sempre com `code` e `trace_id` quando houver; nunca `detail`.
+`estagios_esgotados`, `conjunto_parcial`, `encaminhar_equipe|terceiro_outro_celular`,
+`encaminhar_equipe|nome_outro_celular` (ponto de integração com `crm-etiquetas-handoff`, research
+Decision 6; sem nome nem celular). Sempre com `code` e `trace_id` quando houver; nunca `detail`.
 
 ## Entity: Serviço, Seção de pacote, Pessoa atendida (só Graces)
 
@@ -72,3 +74,7 @@ Não são persistidos: vêm da Graces a cada consulta. Serviço "2ª vez" = `des
 `descricaoAgendaOnline` da seção) que casa `BV_SEGUNDA_VEZ` (`workflows/shared/agente.js:7`). Seção
 aplicável = item de `secoes` de um pacote com `dataValidade` nula ou ≥ data do agendamento
 (G `04`:164). Pessoa atendida = `pedido.idCliente` (remetente ou terceiro).
+
+Primeiro contato: `identificar_cliente` (F3) acha o remetente pelo celular do WhatsApp; sem cadastro,
+`pedido.cliente_sem_cadastro = true` e `cadastrar_cliente` só cria se a busca pelo nome não achar o
+mesmo nome completo com outro celular; achando, `encaminhar_equipe` e `pedido.idCliente` fica nulo.

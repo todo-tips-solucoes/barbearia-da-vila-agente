@@ -16,6 +16,7 @@ em `BVG_OPS`: `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro`.
 
 | Ferramenta | Mudança | Graces |
 |------------|---------|--------|
+| `cadastrar_cliente` (primeiro contato) | antes do `POST`, busca pelo `nome`; mesmo nome completo (2+ palavras, normalizado) com celular diferente do WhatsApp → `{ok:false, code:'encaminhar_equipe', motivo:'nome_outro_celular'}`, sem `POST` (research Decision 6) | `GET /agenda/clientes?busca=` (G `02`:17-39), depois `POST /agenda/clientes` (G `02`:50-68) |
 | `listar_servicos` | texto que casa "2ª vez" é limpo antes da busca; resultado traz `orientacao` "ofereça o regular, sem desconto" (FR-005) | `GET /agenda/servicos?texto=` (G `01`) |
 | `horarios_livres` | oferta completa, sem corte (FR-001); com `id_opcoes_servicos`, encadeamento (abaixo) | `GET /agenda/horarios-livres` (G `03`:21-44) |
 | `agendar` fase 1 | consulta pacotes; pode devolver `pergunta_pacote` em vez de proposta; aceita `id_opcao_pagamento`; aceita `id_opcao_horario` de oferta `sequencia` (gera `agendar_conjunto`) | `GET /agenda/pacotes?idCliente=&idServico=` (G `04`:148-168) |
@@ -28,7 +29,7 @@ em `BVG_OPS`: `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro`.
 | Ferramenta | Entrada do modelo | Graces | Saída ao modelo |
 |------------|-------------------|--------|-----------------|
 | `buscar_pessoa` | `nome` (3–80) | `GET /agenda/clientes?busca=` (G `02`:17-26) | `{pessoas:[{id, nome}]}` (só nome e sobrenome); `[]` → `orientacao` "não achei; proponha cadastrar"; > `lista.max_itens` → "peça o nome completo" |
-| `escolher_pessoa` | `id_opcao` (oferta `pessoa`) | — | `{ok, nome}`; recusa `confirmacao_no_mesmo_turno` se no turno da busca |
+| `escolher_pessoa` | `id_opcao` (oferta `pessoa`) | — (usa `mesmo_celular`, calculado na busca a partir do `celular` da resposta, G `02`:39) | mesmo celular do remetente: `{ok, nome}`; celular diferente ou ausente: `{ok:false, code:'encaminhar_equipe', motivo:'terceiro_outro_celular'}` sem gravar `idCliente`; recusa `confirmacao_no_mesmo_turno` se no turno da busca |
 | `cadastrar_terceiro` | fase 1: `nome`, `celular?`; fase 2: `proposta_id` | fase 2: `POST /agenda/clientes {nomeCliente, ddiCelular:"55", celular}` (G `02`:50-68) | fase 1: `{proposta_id, resumo}` ("cadastrar Fulano com o seu celular"); fase 2: `{ok}` e o terceiro vira `pedido.idCliente` |
 
 ## Saídas novas
@@ -53,10 +54,16 @@ em `BVG_OPS`: `buscar_pessoa`, `escolher_pessoa`, `cadastrar_terceiro`.
     `agendar_conjunto` e `reagendar` (fases 1 e 2) com `servico_nao_oferecido` (FR-005).
 11. `escolher_pessoa` e fase 2 de `cadastrar_terceiro` só em turno posterior; cadastro só com
     `cfg.cadastroLiberado`, uma vez por sessão, e só com o nome que a busca não achou (FR-006, FR-007).
-11b. Terceiro com celular diferente do remetente: só `horarios_livres` e `agendar` avulso; leitura,
-    remarcação, cancelamento e pacote dele recusados com `terceiro_sem_vinculo`, exceto `idAgenda`
-    criado nesta conversa (research Decision 6, F-SEC-1). Busca exige 2+ palavras; tetos diários de
-    busca e cadastro por contato.
+11b. Terceiro com celular diferente do remetente (ou sem celular no cadastro): `escolher_pessoa`
+    devolve `encaminhar_equipe` e não grava `pedido.idCliente`; nada é agendado, lido, remarcado,
+    cancelado ou cobrado de pacote dessa pessoa. Mesmo celular = acesso total (block-003, dec-022,
+    research Decision 6, F-SEC-1). Primeiro contato: `cadastrar_cliente` não cadastra quando o mesmo
+    nome completo já existe com outro celular (`encaminhar_equipe`). Busca exige 2+ palavras; tetos
+    diários de 5 buscas e 1 cadastro de terceiro por contato.
+11c. `encaminhar_equipe` é o ponto de integração com `crm-etiquetas-handoff`: saída com `code` e
+    `motivo` (`terceiro_outro_celular` | `nome_outro_celular`), texto `textos.encaminhar_equipe` e
+    registro em `falhas_agente` (`encaminhar_equipe|<motivo>`), sem nome nem celular. A transferência
+    da conversa (setor 78, etiqueta 521) é daquela feature.
 12. Encadeamento só oferece inícios presentes nas grades de cada serviço, em sequência, com mesmo
     barbeiro quando existe; sem barbeiro único, só pergunta (FR-008, FR-012).
 13. Escrita com status 0 ou 5xx: relê agendamentos e compara antes de qualquer nova escrita; no

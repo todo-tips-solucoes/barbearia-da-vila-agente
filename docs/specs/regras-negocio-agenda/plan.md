@@ -9,7 +9,9 @@ Estende o agente da F3 sem peça nova de arquitetura: as regras de negócio entr
 impostas pelas ferramentas do `bv-graces`, não pelo prompt (FR-013). Oferta de horários sem corte e
 enviada em várias listas pelo `Compor`; pacote consultado em código antes de cada proposta, com a
 pergunta obrigatória por lista; "2ª vez" recusado também na escrita; terceiros por busca de nome com
-confirmação em turno posterior e cadastro em duas fases (desligado no TESTE); encadeamento só com
+confirmação em turno posterior e cadastro em duas fases (desligado no TESTE); terceiro ou nome de
+primeiro contato já cadastrado com outro celular é encaminhado à equipe, sem agendar nem cadastrar
+(block-003); encadeamento só com
 inícios presentes nas grades de cada serviço; erros decididos pelo `code`; escrita incerta verificada
 pelo próprio `bv-graces` antes de no máximo uma repetição. Para caber os estágios extras, o
 `bv-graces` passa a ter um laço de estágios com teto, medido na sonda S3 (fallback desenrolado).

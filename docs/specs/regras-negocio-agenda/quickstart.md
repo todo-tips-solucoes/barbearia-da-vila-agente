@@ -36,7 +36,10 @@ Cobertura obrigatória em `tests/graces.test.js` (respostas no formato de `grace
 | u18 | `cadastrar_terceiro` com `cadastroLiberado` falso | `cadastro_desabilitado`, nenhuma chamada |
 | u19 | `cadastrar_terceiro` liberado (mock), sem `celular` | POST com o celular do remetente, só na fase 2 em turno posterior |
 | u20 | laço com 17 estágios | `estagios_esgotados` |
-| u21 | terceiro escolhido com celular diferente do remetente | `meus_agendamentos`, `cancelar`, `reagendar` e pacote recusados com `terceiro_sem_vinculo`; `agendar` avulso aceito |
+| u21 | terceiro escolhido com celular diferente do remetente (e sem celular no cadastro) | `escolher_pessoa` → `encaminhar_equipe` `terceiro_outro_celular`; `pedido.idCliente` continua o do remetente; `agendar` seguinte age no remetente, nunca no terceiro; `falhas_agente` sem nome nem celular |
+| u22 | terceiro com o mesmo celular do remetente | `escolher_pessoa` `{ok}`; `meus_agendamentos`, `reagendar`, `cancelar` e pacote aceitos |
+| u23 | primeiro contato, `cadastroLiberado` (mock), busca pelo nome acha mesmo nome completo com outro celular | `encaminhar_equipe` `nome_outro_celular`; nenhum `POST /agenda/clientes` |
+| u24 | primeiro contato (mock), busca sem homônimo exato ou nome de uma palavra | `POST /agenda/clientes` com o celular do WhatsApp |
 
 ## Sondas (primeira fase)
 
@@ -74,4 +77,5 @@ Cobertura obrigatória em `tests/graces.test.js` (respostas no formato de `grace
     de teste (SC-008).
 
 Caminho `pacote` real e cadastro real de terceiro: fora do smoke até P3 e autorização expressa do
-owner (research Decisions 4 e 6).
+owner (research Decisions 4 e 6). Celular diferente, primeiro contato e encaminhamento à equipe só
+nos testes u21–u24 (mock): nenhum cliente real novo é cadastrado.
