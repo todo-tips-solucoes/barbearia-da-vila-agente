@@ -21,20 +21,20 @@ Escopo: regras de negocio sobre a agenda da Graces (oferta completa, pacote, "2a
 
 Ref: checklists/ux.md CHK021 CHK022; checklists/security.md CHK031 CHK033 CHK034; research.md Decision 6
 
-- [ ] 1.1.1 Em FR-006/US4: terceiro com celular diferente do remetente nunca vira `idCliente` (sem ver, remarcar, cancelar ou agendar) e e encaminhado a equipe (CHK021, CHK031)
-- [ ] 1.1.2 Em FR-007/Edge Cases: primeiro contato cujo nome completo ja existe com outro celular e encaminhado a equipe, sem cadastrar (CHK022)
-- [ ] 1.1.3 Definir mensuravelmente nome minimo de 2 palavras e criterio de "mesmo nome" (normalizacao de caixa/acento/espacos) (CHK033)
-- [ ] 1.1.4 Acrescentar requisito de nao exposicao: celular lido da busca nunca chega ao modelo nem a mensagem (CHK034)
-- [ ] 1.1.5 Acrescentar criterios de aceite/SC correspondentes (u21-u24 do quickstart)
+- [x] 1.1.1 Em FR-006/US4: terceiro com celular diferente do remetente nunca vira `idCliente` (sem ver, remarcar, cancelar ou agendar) e e encaminhado a equipe (CHK021, CHK031)
+- [x] 1.1.2 Em FR-007/Edge Cases: primeiro contato cujo nome completo ja existe com outro celular e encaminhado a equipe, sem cadastrar (CHK022)
+- [x] 1.1.3 Definir mensuravelmente nome minimo de 2 palavras e criterio de "mesmo nome" (normalizacao de caixa/acento/espacos) (CHK033)
+- [x] 1.1.4 Acrescentar requisito de nao exposicao: celular lido da busca nunca chega ao modelo nem a mensagem (CHK034)
+- [x] 1.1.5 Acrescentar criterios de aceite/SC correspondentes (u21-u24 do quickstart)
 
 ### 1.2 Atualizar spec.md com tetos, encaminhamento e conflito `[A]`
 
 Ref: checklists/api.md CHK007 CHK008; checklists/security.md CHK032
 
-- [ ] 1.2.1 Em FR-009/FR-011: desfecho quando `code` = `CONFLITO` no meio de encadeamento parcial (CHK007)
-- [ ] 1.2.2 Declarar o contrato de saida `encaminhar_equipe` (`motivo`) como requisito da spec (CHK008)
-- [ ] 1.2.3 Promover tetos `buscas_max_sessao/dia` e `cadastros_max_dia` a requisito da spec (CHK032)
-- [ ] 1.2.4 Marcar CHK007/008/021/022/031-034 como resolvidos nos checklists com Ref ao FR atualizado
+- [x] 1.2.1 Em FR-009/FR-011: desfecho quando `code` = `CONFLITO` no meio de encadeamento parcial (CHK007)
+- [x] 1.2.2 Declarar o contrato de saida `encaminhar_equipe` (`motivo`) como requisito da spec (CHK008)
+- [x] 1.2.3 Promover tetos `buscas_max_sessao/dia` e `cadastros_max_dia` a requisito da spec (CHK032)
+- [x] 1.2.4 Marcar CHK007/008/021/022/031-034 como resolvidos nos checklists com Ref ao FR atualizado
 
 ### 1.3 Validacao humana de itens do checklist `[A]`
 

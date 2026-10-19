@@ -12,8 +12,8 @@
 - [x] CHK004 - A falha parcial do encadeamento define o que informar, o que não recriar e o que repetir? [Cobertura, Spec §FR-011] {auto}
 - [x] CHK005 - A origem dos inícios ofertados (consulta de horários livres da mesma conversa) é exigida? [Rastreabilidade, Spec §FR-001, SC-001] {auto}
 - [x] CHK006 - O tamanho máximo de lista do canal e o envio em múltiplas listas estão tratados? [Edge case, Spec §FR-001] {auto}
-- [ ] CHK007 - A spec define o desfecho da escrita quando o `code` indica `CONFLITO` no meio de um encadeamento já parcialmente criado? [Gap, Spec §FR-009/§FR-011] {auto}
-- [ ] CHK008 - O contrato de saída `encaminhar_equipe` (`motivo`) é requisito da spec, e não só do plan/contracts? [Gap, Spec §FR-006/§FR-007 vs contracts/ferramentas-graces-regras.md 11c] {auto}
+- [x] CHK007 - A spec define o desfecho da escrita quando o `code` indica `CONFLITO` no meio de um encadeamento já parcialmente criado? [Gap, Spec §FR-009/§FR-011] {auto} Resolvido: spec FR-006/007/009/011/016-018, SC-009-011.
+- [x] CHK008 - O contrato de saída `encaminhar_equipe` (`motivo`) é requisito da spec, e não só do plan/contracts? [Gap, Spec §FR-006/§FR-007 vs contracts/ferramentas-graces-regras.md 11c] {auto} Resolvido: spec FR-006/007/009/011/016-018, SC-009-011.
 - [x] CHK009 - O ponto de integração com `crm-etiquetas-handoff` tem fronteira declarada (mínimo aqui: saída, texto, registro; handoff completo na outra feature)? [Dependência, plan.md/research.md Decision 6] {auto}
 - [x] CHK010 - O registro de `falhas_agente` para `encaminhar_equipe` exclui nome e celular? [Consistência, research.md Decision 6, data-model.md] {auto}
 

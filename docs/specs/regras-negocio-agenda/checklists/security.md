@@ -11,10 +11,10 @@
 - [x] CHK028 - Cadastro irreversível exige confirmação explícita e autorização do owner em testes? [Spec §FR-007, FR-014] {auto}
 - [x] CHK029 - O barbeiro de teste nunca é oferecido a clientes? [Spec §FR-002, briefing] {auto}
 - [x] CHK030 - Erros expostos ao cliente omitem detalhes técnicos e `code`/`traceId` logados sem dados pessoais? [Spec §FR-009] {auto}
-- [ ] CHK031 - A spec exige que terceiro com celular diferente nunca vire `idCliente` (sem ver, remarcar, cancelar ou agendar), fechando o IDOR por nome (A01/API1)? [Gap, Spec §FR-006; research.md Decision 6 F-SEC-1] {auto}
-- [ ] CHK032 - Tetos anti-varredura/lixo (`buscas_max_sessao/dia`, `cadastros_max_dia`) são requisitos da spec e não só de config? [Gap, contracts/config-regras.md F-SEC-2] {auto}
-- [ ] CHK033 - Nome completo mínimo de 2 palavras para a busca e o critério de "mesmo nome" (normalização) são mensuráveis? [Ambiguity, research.md Decision 6] {auto}
-- [ ] CHK034 - O celular lido da resposta de busca nunca chega ao modelo/mensagem (requisito explícito de não exposição)? [Assumption, research.md Decision 6] {auto}
+- [x] CHK031 - A spec exige que terceiro com celular diferente nunca vire `idCliente` (sem ver, remarcar, cancelar ou agendar), fechando o IDOR por nome (A01/API1)? [Gap, Spec §FR-006; research.md Decision 6 F-SEC-1] {auto} Resolvido: spec FR-006/007/009/011/016-018, SC-009-011.
+- [x] CHK032 - Tetos anti-varredura/lixo (`buscas_max_sessao/dia`, `cadastros_max_dia`) são requisitos da spec e não só de config? [Gap, contracts/config-regras.md F-SEC-2] {auto} Resolvido: spec FR-006/007/009/011/016-018, SC-009-011.
+- [x] CHK033 - Nome completo mínimo de 2 palavras para a busca e o critério de "mesmo nome" (normalização) são mensuráveis? [Ambiguity, research.md Decision 6] {auto} Resolvido: spec FR-006/007/009/011/016-018, SC-009-011.
+- [x] CHK034 - O celular lido da resposta de busca nunca chega ao modelo/mensagem (requisito explícito de não exposição)? [Assumption, research.md Decision 6] {auto} Resolvido: spec FR-006/007/009/011/016-018, SC-009-011.
 - [ ] CHK035 - Os gates validate-documentation e owasp-security foram re-executados após a mudança de block-003 (onda 5)? [Gap, process] {humano}
 
 ## Notes
