@@ -121,3 +121,9 @@ Feita pela sessão coordenadora com `get_workflow_details`:
 - Escrita na Graces so no barbeiro de teste (`ZZ TESTE`); cancelar tudo o que um teste criar.
 - Sonda S4 (4 listas seguidas, conexao 145): enviadas em 2026-10-19 pelo agente; confirmacao de ordem e de toque pendente do owner (block aberto). A API exige `User-Agent` de cliente comum (Cloudflare devolve `403 1010` ao padrao do `urllib`).
 - Validacao pelo MCP do n8n (`validate_workflow` antes, `get_workflow_details` depois): nao disponivel na sessao do orquestrador; fica para o operador no fechamento.
+
+## Validação pelo MCP (regras-negocio-agenda, 2026-10-19)
+
+- `validate_node_config`: 18 nós representativos de `bv-graces`, `entregar-rajada` e `bv-recepcao` (um por tipo e formato de parâmetros, nós Code fora), todos válidos.
+- `get_workflow_details` depois da publicação: `Entregar rajada (agente) [TESTE]` 71 nós, `Ferramentas da Graces [TESTE]` 19 nós, `Recepcao [TESTE]` 49 nós; todos ativos, versão publicada igual ao rascunho, timeout 300 s; contagens iguais ao repositório.
+- A recepção (gravação do `ticket_id` do Chat Master no contato) só foi publicada no fechamento; o deploy exige `BV_WEBHOOK_TOKEN_SHA256` no `.env.n8n`, preenchido com o hash já em uso no TESTE.
