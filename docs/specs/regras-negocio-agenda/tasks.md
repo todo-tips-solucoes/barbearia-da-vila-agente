@@ -80,10 +80,10 @@ Ref: contracts/config-regras.md
 
 Ref: spec.md FR-001 FR-002; quickstart u1-u3
 
-- [ ] 3.1.1 Remover corte de 3-5 horarios em `horarios_livres` (oferta completa, `completa:true`)
-- [ ] 3.1.2 Unir inicios de "qualquer barbeiro" excluindo o barbeiro de teste
-- [ ] 3.1.3 `Compor` em varias listas (10 por lista) respeitando limite de 4 mensagens
-- [ ] 3.1.4 Testes u1-u3 em `tests/graces.test.js` e `tests/agente.test.js`
+- [x] 3.1.1 Remover corte de 3-5 horarios em `horarios_livres` (oferta completa, `completa:true`)
+- [x] 3.1.2 Unir inicios de "qualquer barbeiro" excluindo o barbeiro de teste
+- [x] 3.1.3 `Compor` em varias listas (10 por lista) respeitando limite de 4 mensagens
+- [x] 3.1.4 Testes u1-u3 em `tests/graces.test.js` e `tests/agente.test.js`
 
 ### 3.2 Removida (pacote)
 
@@ -93,9 +93,9 @@ O agente nao trata de pacote (constituicao 3.0.0, principio XI; block-004). Sem 
 
 Ref: spec.md FR-005 FR-013; quickstart u8
 
-- [ ] 3.3.1 Normalizador de descricao (sem acento, variantes 2a/2o/2 vez)
-- [ ] 3.3.2 Filtrar da oferta e recusar `servico_nao_oferecido` em `agendar`/`reagendar` fases 1 e 2
-- [ ] 3.3.3 Teste u8 com variantes
+- [x] 3.3.1 Normalizador de descricao (sem acento, variantes 2a/2o/2 vez)
+- [x] 3.3.2 Filtrar da oferta e recusar `servico_nao_oferecido` em `agendar`/`reagendar` fases 1 e 2
+- [x] 3.3.3 Teste u8 com variantes
 
 ### 3.4 Terceiros `[C]`
 

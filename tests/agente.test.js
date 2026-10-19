@@ -65,3 +65,20 @@ const p = a.bvPrompt(cfg);
 for (const k of ['IA', 'remarcar', 'vamos marcar outro'.slice(0, 0) + 'cancelei', 'DADO', 'confirmação']) assert.ok(p.includes(k), k);
 assert.ok(!/sk-|Bearer|X-Api-Key/.test(p));
 console.log('agente.test.js ok');
+
+// u2: oferta completa de 23 horarios, modelo cita 2 ids: 3 listas (10, 10, 3) em ordem, dentro de 4 mensagens.
+{
+  const of = a.bvMontarOferta('horario', Array.from({ length: 23 }, (_, k) => ({ rotulo: `${String(8 + Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`, valor: k })), cfg, true);
+  assert.equal(of.itens.length, 23);
+  const out = a.bvCompor('Achei estes horários. Qual prefere?\nOPCOES:\n1 | 08:00\n2 | 08:30', of, cfg);
+  const listas = out.filter((x) => x.tipo === 'lista');
+  assert.deepEqual(listas.map((x) => x.opcoes.length), [10, 10, 3]);
+  assert.deepEqual(listas.flatMap((x) => x.opcoes.map((o) => o.id)), of.itens.map((i) => i.id));
+  assert.ok(out.length <= 4);
+  const mais = a.bvCompor('Um. Dois. Tres. Quatro? Cinco.\nOPCOES:\n1 | 08:00', of, cfg);
+  assert.ok(mais.length <= 4 && mais.filter((x) => x.tipo === 'lista').length === 3);
+}
+
+// u8 (normalizador): variantes de "2a vez".
+for (const n of ['x 2ª vez', 'x 2º vez', 'X 2A VEZ', 'x 2 vez', 'x 2o Vez']) assert.equal(a.bvSegundaVez(n), true, n);
+for (const n of ['corte adulto', 'corte 20 vezes', 'barba']) assert.equal(a.bvSegundaVez(n), false, n);
