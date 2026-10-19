@@ -53,6 +53,15 @@
             },
             {
               "name": "nome"
+            },
+            {
+              "name": "celular"
+            },
+            {
+              "name": "id_opcoes_servicos"
+            },
+            {
+              "name": "id_opcoes_agendamentos"
             }
           ]
         }

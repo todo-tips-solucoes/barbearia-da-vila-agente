@@ -101,31 +101,31 @@ Ref: spec.md FR-005 FR-013; quickstart u8
 
 Ref: spec.md FR-006 FR-007; research.md Decision 6; quickstart u17-u24
 
-- [ ] 3.4.1 Implementar `buscar_pessoa` (rotulos so com nome e sobrenome, nome minimo 2 palavras, tetos por sessao/dia)
-- [ ] 3.4.2 Implementar `escolher_pessoa` com confirmacao em turno posterior e `encaminhar_equipe` (`terceiro_outro_celular`)
-- [ ] 3.4.2b Handoff: `updateAPI` `{ticketId, queueId:78}` (conexao 145), `pedido.handoff=true`, agente calado; falha => `handoff_falhou`. Sonda S5 antes (bloqueia se a fonte nao bastar)
-- [ ] 3.4.3 Implementar `cadastrar_terceiro` em duas fases, desligado no TESTE (`cadastro_desabilitado`), teto `cadastros_max_dia`
-- [ ] 3.4.4 Primeiro contato com nome existente e outro celular: `encaminhar_equipe` (`nome_outro_celular`)
-- [ ] 3.4.5 Garantir que celular da busca nao chega ao modelo nem a mensagem
-- [ ] 3.4.6 Testes u17-u24
+- [x] 3.4.1 Implementar `buscar_pessoa` (rotulos so com nome e sobrenome, nome minimo 2 palavras, tetos por sessao/dia)
+- [x] 3.4.2 Implementar `escolher_pessoa` com confirmacao em turno posterior e `encaminhar_equipe` (`terceiro_outro_celular`)
+- [ ] 3.4.2b Handoff: `updateAPI` `{ticketId, queueId:78}` (conexao 145), `pedido.handoff=true`, agente calado; falha => `handoff_falhou`. Sonda S5 antes (bloqueia se a fonte nao bastar) (parcial: `pedido.handoff=true`, `efeitos.handoff.queueId` e `handoff_ativo` prontos em `bvgEncaminhar`; a chamada `updateAPI` no Code node espera a S5, bloqueada: block-006)
+- [x] 3.4.3 Implementar `cadastrar_terceiro` em duas fases, desligado no TESTE (`cadastro_desabilitado`), teto `cadastros_max_dia`
+- [x] 3.4.4 Primeiro contato com nome existente e outro celular: `encaminhar_equipe` (`nome_outro_celular`)
+- [x] 3.4.5 Garantir que celular da busca nao chega ao modelo nem a mensagem
+- [x] 3.4.6 Testes u17-u24
 
 ### 3.5 Encadeamento de servicos `[A]`
 
 Ref: spec.md FR-008 FR-011 FR-012; quickstart u14-u16
 
-- [ ] 3.5.1 Calcular inicios em sequencia presentes nas grades de cada servico para o mesmo barbeiro
-- [ ] 3.5.2 `sem_barbeiro_unico` com oferta `modo_encadeamento`
-- [ ] 3.5.3 Escrita em conjunto: um POST por servico, `parcial` com `criados`/`faltaram`, sem recriar
-- [ ] 3.5.4 Tratar `CONFLITO` no meio do encadeamento conforme spec atualizada (1.2.1)
-- [ ] 3.5.5 Testes u14-u16
+- [x] 3.5.1 Calcular inicios em sequencia presentes nas grades de cada servico para o mesmo barbeiro
+- [x] 3.5.2 `sem_barbeiro_unico` com oferta `modo_encadeamento`
+- [x] 3.5.3 Escrita em conjunto: um POST por servico, `parcial` com `criados`/`faltaram`, sem recriar
+- [x] 3.5.4 Tratar `CONFLITO` no meio do encadeamento conforme spec atualizada (1.2.1)
+- [x] 3.5.5 Testes u14-u16
 
 ### 3.6 Erros por `code` e escrita incerta `[C]`
 
 Ref: spec.md FR-009 FR-010; research.md Decision 9; quickstart u9-u13
 
-- [ ] 3.6.1 Tabela de reacao por `code` sem usar `detail`
-- [ ] 3.6.2 Escrita com timeout/5xx: ler agendamentos, no maximo uma repeticao, `incerta` com contingencia
-- [ ] 3.6.3 Testes u9-u13
+- [x] 3.6.1 Tabela de reacao por `code` sem usar `detail`
+- [x] 3.6.2 Escrita com timeout/5xx: ler agendamentos, no maximo uma repeticao, `incerta` com contingencia
+- [x] 3.6.3 Testes u9-u13
 
 ---
 

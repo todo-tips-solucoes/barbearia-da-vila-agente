@@ -69,7 +69,7 @@ function bvCompor(textoModelo, oferta, cfg) {
     atual = atual ? `${atual} ${f}` : f;
   }
   fecha();
-  const todos = oferta && oferta.completa && oferta.tipo === 'horario';
+  const todos = oferta && oferta.completa && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
   const ids = bloco.split('\n').map((l) => l.split('|')[0].trim()).filter(Boolean);
   const maxIt = cfg.lista.max_itens;
   // Oferta completa de horarios: o modelo so sinaliza que e uma lista; o codigo envia todos os itens, em ordem, em listas de ate max_itens.

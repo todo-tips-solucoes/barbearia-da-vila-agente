@@ -86,7 +86,7 @@ class BvGraces(unittest.TestCase):
             self.assertIn(trecho, q)
         self.assertIn("{{BV:proposta.validade_min}}", self.nos["Contexto"]["parameters"]["options"]["queryReplacement"])
         # revalida antes de escrever e o POST/PUT so nasce depois da revalidacao
-        self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda'"))
+        self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda', body: { idCliente: d.idCliente"))
 
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
         self.assertIn("cfg.ambiente === 'producao' || !cfg.redirecionar", self.js)
