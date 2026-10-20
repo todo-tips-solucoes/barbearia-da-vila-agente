@@ -21,10 +21,16 @@ MIDIA = {"hosts_audio": ["a.example.com"], "hosts_imagem": [], "mimes_audio": ["
          "transcricao_modelo": "whisper-1", "imagem_detalhe": "auto", "retencao_h": 23.9}
 
 
+MENS = {"ativo": True, "confirmacao_hora": "18:00", "lembrete_antes_min": 120, "pos_depois_min": 60, "varredura_s": 60, "reserva_s": 120,
+        "atraso_max_min": 30, "retentativas_min": [1, 5, 15], "reconciliacao_min": 15, "reconciliacao_dias": 7, "espera_texto_s": 10,
+        "titulo_sim": "Confirmo", "titulo_nao": "Nao vou", "repetida_max_por_hora": 2, "max_por_varredura": 20, "max_por_contato_dia": 6}
+TXT_M = {k: "x" for k in vr.TEXTOS_MENSAGENS}
+
+
 def cfg(prefixo, banco, db=2, **extra):
     base = {"redis": {"prefixo": prefixo, "db": db}, "postgres": {"database": banco, "credencial_id": ""},
             "midia": dict(MIDIA), "workflows_sub": {"interpretar_midia": ""},
-            "textos": {"midia_nao_entendida": "x", "midia_grande": "y"}}
+            "textos": {"midia_nao_entendida": "x", "midia_grande": "y", **TXT_M}, "mensagens": {**MENS, "ativo": banco.endswith("_teste")}, "graces": {"timeout_ms": 15000}}
     return {**base, **extra}
 
 
@@ -32,6 +38,27 @@ OK = {"integracao": cfg("bv:teste:", "barbearia_vila_teste"), "producao": cfg("b
 
 
 class T(unittest.TestCase):
+    def test_regras_de_mensagens(self):  # 5.1.3
+        import copy
+        def erros(amb="integracao", **m):
+            c = copy.deepcopy(OK)
+            c[amb]["mensagens"].update(m)
+            return "\n".join(vr.regras_mensagens(amb, c[amb]))
+        self.assertEqual(erros(), "")
+        self.assertIn("reserva_s deve ser maior", erros(reserva_s=30))
+        self.assertIn("confirmacao_hora", erros(confirmacao_hora="6pm"))
+        self.assertIn("retentativas_min", erros(retentativas_min=[]))
+        self.assertIn("reconciliacao_dias", erros(reconciliacao_dias=8))
+        self.assertIn("diferentes", erros(titulo_nao="Confirmo"))
+        self.assertIn("titulo_sim", erros(titulo_sim="x" * 25))
+        self.assertIn("inativas", erros("producao", ativo=True))
+        c = copy.deepcopy(OK)
+        del c["integracao"]["mensagens"]["atraso_max_min"]
+        del c["integracao"]["textos"]["lembrete"]
+        e = "\n".join(vr.regras_mensagens("integracao", c["integracao"]))
+        self.assertIn("mensagens.atraso_max_min ausente", e)
+        self.assertIn("textos.lembrete ausente", e)
+
     def test_config_valida(self):
         self.assertEqual(vr.verificar(OK, ""), [])
 

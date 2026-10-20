@@ -37,7 +37,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\nconst ev = $input.first().json;\nif (ev.tokenHash !== '{{BV:TOKEN_SHA256}}') return [{ json: { resultado: 'nao_autenticada' } }];\nconst r = bvNormalizar(ev, { maxKb: {{BV:payload.max_kb}} });\nif (r.status === 'aceita') return [{ json: { resultado: 'aceita', msg: r.msg } }];\nreturn [{ json: { resultado: r.status === 'invalida' ? 'invalida' : 'descartada', motivo: r.motivo } }];"
+        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\nconst ev = $input.first().json;\nif (ev.tokenHash !== '{{BV:TOKEN_SHA256}}') return [{ json: { resultado: 'nao_autenticada' } }];\nconst cfgM = { titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\" };\nconst rc = '{{BV:mensagens.ativo}}' === 'True' ? bvMReconhecer(ev.body, cfgM) : null;\n// selecao da lista de confirmacao (from_internal com selectedRowID bvc:<id>:<s|n>): nao e mensagem, vai para bv-confirmacao\nif (rc && rc.origem === 'id' && typeof ev.body.sender === 'string' && ev.body.sender) return [{ json: { resultado: 'selecao', telefone: ev.body.sender, rec: rc } }];\nconst r = bvNormalizar(ev, { maxKb: {{BV:payload.max_kb}} });\nif (r.status === 'aceita') return [{ json: { resultado: 'aceita', msg: { ...r.msg, confirmaTitulo: rc && rc.origem === 'titulo' ? (rc.confirmado ? 'sim' : 'nao') : '' } } }];\nreturn [{ json: { resultado: r.status === 'invalida' ? 'invalida' : 'descartada', motivo: r.motivo } }];"
       },
       "id": "180eaef6-7e4d-597c-b04a-f89cb82f6315",
       "name": "Normalizar",
@@ -151,6 +151,31 @@
               "options": {},
               "renamedOutput": true,
               "outputKey": "aceita"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "48abc201-82ba-54ed-8fa4-9b2a3a958bdd",
+                    "leftValue": "={{ $json.resultado }}",
+                    "rightValue": "selecao",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "options": {},
+              "renamedOutput": true,
+              "outputKey": "selecao"
             }
           ]
         },
@@ -1222,6 +1247,280 @@
       },
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f62cfa22-de03-5d9e-be7f-d9eab6bdaaf2",
+      "name": "Responder 200 selecao",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id AS contato_id FROM contatos WHERE telefone = $1::text",
+        "options": {
+          "queryReplacement": "={{ [$('Normalizar').first().json.telefone] }}"
+        }
+      },
+      "id": "cedc2390-4182-5a31-8380-c9bf21e06e4b",
+      "name": "Contato da selecao",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1680,
+        -300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e1e0d47a-5ce5-591d-8d12-b4a90a1b9bc1",
+              "leftValue": "={{ String(!!$json.contato_id) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e271643c-8b9a-5620-8bd0-9bbac9658f3b",
+      "name": "Contato achado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rc = $('Normalizar').first().json.rec;\nreturn [{ json: { contato_id: String($('Contato da selecao').first().json.contato_id), origem: 'id', confirmado: rc.confirmado, mensagem_id: String(rc.mensagem_id) } }];"
+      },
+      "id": "c1b162a7-111d-522a-b3a9-873e496e4b1e",
+      "name": "Montar confirmacao id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "{{BV:workflows_sub.bv_confirmacao}}",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "2c9ae63b-f14a-5ef5-a98e-608fc711a33c",
+      "name": "Chamar bv-confirmacao id",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2400,
+        -300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "708838c9-7322-57f8-a688-6a3bb3ad5104",
+              "leftValue": "={{ $('Normalizar').first().json.msg.confirmaTitulo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ae33a402-a2ef-5a27-81fd-40edb803956d",
+      "name": "Titulo de confirmacao?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::bigint AS contato_id, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo = 'confirmacao' AND situacao = 'enviada' AND resposta IS NULL AND motivo IS NULL AND inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS abertas, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo = 'confirmacao' AND resposta IS NOT NULL AND respondida_em > now() - make_interval(secs => $2::int)) + (SELECT count(*) FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' AND mensagem_id_canal LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes, (SELECT count(*) FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND criada_em > now() - make_interval(mins => $3::int)) AS propostas, COALESCE((SELECT tipo = 'lista' AND mensagem_id_canal LIKE 'agendada-%' FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' ORDER BY criado_em DESC, id DESC LIMIT 1), false) AS ultima_lista",
+        "options": {
+          "queryReplacement": "={{ [$('Upsert contato').first().json.contato_id, {{BV:mensagens.espera_texto_s}} * 2, {{BV:proposta.validade_min}}] }}"
+        }
+      },
+      "id": "0a67e506-9ad1-5e7e-b9d1-5a041d5ed397",
+      "name": "Confirmacao aberta?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        120,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce1f5a8a-9651-5217-aca5-bd075a6f681c",
+              "leftValue": "={{ $json.rota }}",
+              "rightValue": "consumir",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "60484829-bf5d-5231-9d91-f7032b551190",
+      "name": "Consumir titulo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "749ba7c6-c154-5e47-9636-d93a41eedb55",
+      "name": "Responder 200 titulo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ {{BV:mensagens.espera_texto_s}} }}",
+        "unit": "seconds"
+      },
+      "id": "5254f858-9d7d-5698-b1ce-bf2a7154bd25",
+      "name": "Aguardar id",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $('Normalizar').first().json.msg;\nreturn [{ json: { contato_id: String($('Upsert contato').first().json.contato_id), origem: 'titulo', confirmado: m.confirmaTitulo === 'sim', mensagem_id: null } }];"
+      },
+      "id": "9b1aa9d3-362e-598f-bb94-ef4b34ef03ca",
+      "name": "Montar confirmacao titulo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "{{BV:workflows_sub.bv_confirmacao}}",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "0bd02cd8-2225-5532-be7c-9b8cf4cfe990",
+      "name": "Chamar bv-confirmacao titulo",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1020,
+        360
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// titulo da lista: consome (nunca vai ao agente) se o toque ja foi respondido pelo id ou se ha confirmacao aberta, a lista foi a ultima\n// saida e nao ha proposta pendente; senao e texto comum (\"Confirmo\" ao resumo do agente). Escolha da linha: so no bv-confirmacao.\nconst e = $input.first().json;\nreturn [{ json: { ...e, rota: bvMTituloRota(e) } }];"
+      },
+      "id": "6db7f5ba-2b80-5e00-a60e-515751128ac9",
+      "name": "Rota do titulo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        610
+      ]
     }
   ],
   "connections": {
@@ -1251,6 +1550,13 @@
         [
           {
             "node": "Upsert contato",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 200 selecao",
             "type": "main",
             "index": 0
           }
@@ -1305,7 +1611,7 @@
       "main": [
         [
           {
-            "node": "Inserir mensagem",
+            "node": "Titulo de confirmacao?",
             "type": "main",
             "index": 0
           }
@@ -1810,6 +2116,141 @@
         [
           {
             "node": "Fim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder 200 selecao": {
+      "main": [
+        [
+          {
+            "node": "Contato da selecao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contato da selecao": {
+      "main": [
+        [
+          {
+            "node": "Contato achado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contato achado?": {
+      "main": [
+        [
+          {
+            "node": "Montar confirmacao id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar confirmacao id": {
+      "main": [
+        [
+          {
+            "node": "Chamar bv-confirmacao id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Titulo de confirmacao?": {
+      "main": [
+        [
+          {
+            "node": "Confirmacao aberta?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Inserir mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmacao aberta?": {
+      "main": [
+        [
+          {
+            "node": "Rota do titulo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder 200 titulo": {
+      "main": [
+        [
+          {
+            "node": "Aguardar id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar id": {
+      "main": [
+        [
+          {
+            "node": "Montar confirmacao titulo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar confirmacao titulo": {
+      "main": [
+        [
+          {
+            "node": "Chamar bv-confirmacao titulo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consumir titulo?": {
+      "main": [
+        [
+          {
+            "node": "Responder 200 titulo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Inserir mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rota do titulo": {
+      "main": [
+        [
+          {
+            "node": "Consumir titulo?",
             "type": "main",
             "index": 0
           }

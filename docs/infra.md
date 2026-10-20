@@ -127,3 +127,11 @@ Feita pela sessão coordenadora com `get_workflow_details`:
 - `validate_node_config`: 18 nós representativos de `bv-graces`, `entregar-rajada` e `bv-recepcao` (um por tipo e formato de parâmetros, nós Code fora), todos válidos.
 - `get_workflow_details` depois da publicação: `Entregar rajada (agente) [TESTE]` 71 nós, `Ferramentas da Graces [TESTE]` 19 nós, `Recepcao [TESTE]` 49 nós; todos ativos, versão publicada igual ao rascunho, timeout 300 s; contagens iguais ao repositório.
 - A recepção (gravação do `ticket_id` do Chat Master no contato) só foi publicada no fechamento; o deploy exige `BV_WEBHOOK_TOKEN_SHA256` no `.env.n8n`, preenchido com o hash já em uso no TESTE.
+
+## Mensagens agendadas (feature `mensagens-agendadas`, TESTE, 2026-10-20)
+
+- Agendador proprio no n8n (nada e agendado no Chat Master; dec-007/dec-008): `bv-mensagens` (varredura de `mensagens.varredura_s` + reconciliacao de `mensagens.reconciliacao_min`) e sub-workflow `bv-confirmacao`. Ids no TESTE: `bv-mensagens` `0B7Fe4qIe3eWipWI`, `bv-confirmacao` `e9BYiK0G3Xs3uQ3P` (config `workflows.bv-mensagens`, `workflows_sub.bv_confirmacao`); PROD fica vazio e o deploy recusa os dois (`mensagens.ativo` falso).
+- Migracao `0010_mensagens_agendadas.sql` (aplicar no TESTE antes de publicar qualquer workflow): indice unico parcial so entre pendentes, situacao `falhou`, colunas de envio/resposta, `falhas_agente.tipo = 'mensagem'`.
+- Politica de teste: so o barbeiro de teste (`graces.barbeiro_teste_id`) e so contatos de `teste.contatos_escrita` recebem; contato simulado nunca vai ao Chat Master (a varredura cancela com `fora_da_lista`, o `bv-confirmacao` so grava a saida). Tolerancia de atraso `mensagens.atraso_max_min` = 30 (proposta; o owner foi informado e nao objetou).
+- Medido (pai, sonda da lista e P1): a selecao da lista chega como `from_internal` com `selectedRowID` + `stanzaID` e como `start` so com o titulo; `POST /agenda` nasce `idStatusAgenda` 2; `POST /agenda/confirmacao` `{confirmado:true}` devolve 200 e status 3; repetir devolve 409 (tratado como ja confirmado). Pendente: P2 (envio x handoff aberto) e P4 (exibicao da lista de 2 linhas), no smoke da FASE 6 com o numero do owner.
+

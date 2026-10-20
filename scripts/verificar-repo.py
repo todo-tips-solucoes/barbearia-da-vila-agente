@@ -60,6 +60,46 @@ def regras_midia(amb, c):
     return erros
 
 
+CHAVES_MENSAGENS = ("ativo", "confirmacao_hora", "lembrete_antes_min", "pos_depois_min", "varredura_s", "reserva_s", "atraso_max_min",
+                    "retentativas_min", "reconciliacao_min", "reconciliacao_dias", "espera_texto_s", "titulo_sim", "titulo_nao",
+                    "repetida_max_por_hora", "max_por_varredura", "max_por_contato_dia")
+TEXTOS_MENSAGENS = ("confirmacao", "lembrete", "pos", "confirmacao_ok", "confirmacao_recusada", "confirmacao_repetida",
+                    "confirmacao_desatualizada", "confirmacao_falhou")
+
+
+def regras_mensagens(amb, c):
+    """mensagens-agendadas (FR-020): chaves mensagens.* e textos.*, reserva > timeout HTTP, PROD inativo e sem ids."""
+    erros, m, t = [], c.get("mensagens", {}), c.get("textos", {})
+    for k in CHAVES_MENSAGENS:
+        if k not in m:
+            erros.append(f"{amb}: mensagens.{k} ausente")
+    for k in TEXTOS_MENSAGENS:
+        if not t.get(k):
+            erros.append(f"{amb}: textos.{k} ausente")
+    if erros:
+        return erros
+    if not re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", str(m["confirmacao_hora"])):
+        erros.append(f"{amb}: mensagens.confirmacao_hora deve ser HH:mm")
+    r = m["retentativas_min"]
+    if not (isinstance(r, list) and r and all(isinstance(x, int) and x > 0 for x in r)):
+        erros.append(f"{amb}: mensagens.retentativas_min deve ser lista de inteiros > 0")
+    for k in ("varredura_s", "atraso_max_min", "reconciliacao_min", "max_por_varredura", "max_por_contato_dia"):
+        if not (isinstance(m[k], int) and m[k] > 0):
+            erros.append(f"{amb}: mensagens.{k} deve ser inteiro > 0")
+    if not (1 <= m["reconciliacao_dias"] <= 7):
+        erros.append(f"{amb}: mensagens.reconciliacao_dias deve estar entre 1 e 7 (limite de /agenda/completa)")
+    if m["reserva_s"] * 1000 <= 2 * c.get("graces", {}).get("timeout_ms", 0):  # revalidacao + envio, em sequencia
+        erros.append(f"{amb}: mensagens.reserva_s deve ser maior que 2 * graces.timeout_ms (revalidar e enviar)")
+    for k in ("titulo_sim", "titulo_nao"):
+        if not (0 < len(m[k]) <= c.get("lista", {}).get("max_titulo", 24)) or m[k] != m[k].strip():
+            erros.append(f"{amb}: mensagens.{k} deve ter 1..lista.max_titulo caracteres, sem espaco nas pontas")
+    if m["titulo_sim"] == m["titulo_nao"]:
+        erros.append(f"{amb}: mensagens.titulo_sim e titulo_nao devem ser diferentes")
+    if amb == "producao" and (m["ativo"] or c.get("workflows", {}).get("bv-mensagens") or c.get("workflows_sub", {}).get("bv_confirmacao")):
+        erros.append("producao: mensagens agendadas devem estar inativas (mensagens.ativo falso, sem ids de bv-mensagens/bv_confirmacao)")
+    return erros
+
+
 def verificar_workflows(raiz):
     """FR-008/FR-015: sem execucao salva com conteudo de midia e sem errorWorkflow nos workflows que a tocam."""
     erros = []
@@ -93,6 +133,7 @@ def verificar(cfgs, infra):
                 erros.append(f"{amb}: id de {caminho} ausente em docs/infra.md")
     for amb, c in cfgs.items():
         erros += regras_midia(amb, c)
+        erros += regras_mensagens(amb, c)
     lk = {a: c.get("lock", {}) for a, c in cfgs.items()}
     for a, l in lk.items():
         if l and l.get("espera_s", 0) * l.get("tentativas", 0) < l.get("ttl_s", 0):

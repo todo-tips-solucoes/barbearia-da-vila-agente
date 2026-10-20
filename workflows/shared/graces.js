@@ -3,6 +3,7 @@
 // Regras duras em codigo: FR-007 (duas fases), FR-012 (barbeiro de teste), FR-020 (idCliente so do pedido/telefone),
 // escrita so em TESTE e sempre redirecionada ao barbeiro de teste (research Decision 10).
 if (typeof module !== 'undefined' && typeof bvFiltrarBarbeiros === 'undefined') Object.assign(globalThis, require('./agente.js'));
+if (typeof module !== 'undefined' && typeof bvMProgramar === 'undefined') Object.assign(globalThis, require('./mensagens.js'));
 
 const BVG_CAMPOS = ['operacao', 'contato_id', 'telefone', 'turno_id', 'ambiente', 'texto', 'id_opcao', 'id_opcao_servico',
   'id_opcao_barbeiro', 'qualquer', 'data', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento',
@@ -224,7 +225,7 @@ function bvgFase1(i, ctx, cfg) {
   const agAnt = { idAgenda: ag0 && ag0.idAgenda, horaInicio: ag0 && ag0.horaInicio, recorrente: !!(ag0 && ag0.recorrente) };
   if (i.operacao === 'agendar') {
     if (!h || (i.substitui_id_opcao_agendamento && !antigo)) return bvgFim(bvgOpcaoInvalida());
-    const dados = { idCliente: ctx.pedido.idCliente, idServico: h.idServico, servico: h.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, valor: h.preco };
+    const dados = { idCliente: ctx.pedido.idCliente, idServico: h.idServico, servico: h.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, valor: h.preco, minutos: h.minutos };
     if (antigo) dados.antigo = agAnt;
     const resumo = `${antigo ? 'Trocar serviço: ' : ''}${h.servico} com ${h.apelido} em ${bvgDia(h.data)} às ${h.hora}${bvgReais(h.preco)}`;
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo }, { proposta_nova: { acao: antigo ? 'trocar_servico' : 'agendar', dados, resumo } });
@@ -233,7 +234,7 @@ function bvgFase1(i, ctx, cfg) {
   if (i.operacao === 'reagendar') {
     if (!h) return bvgFim(bvgOpcaoInvalida());
     if (h.idServico !== ag.idServico) return bvgFim(bvgRecusa('servico_diferente', 'os horários são de outro serviço; consulte horarios_livres com este agendamento'));
-    const dados = { ...agAnt, idServico: ag.idServico, servico: ag.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora };
+    const dados = { ...agAnt, idServico: ag.idServico, servico: ag.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, minutos: h.minutos };
     const resumo = `Remarcar ${ag.servico} de ${bvgDia(ag.horaInicio)} ${ag.horaInicio.slice(11, 16)} para ${bvgDia(h.data)} às ${h.hora} com ${h.apelido}`;
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo }, { proposta_nova: { acao: 'reagendar', dados, resumo } });
   }
@@ -283,6 +284,22 @@ function bvgReqItem(p, k, meta) {
   const x = p.dados.itens[k];
   if (p.acao === 'cancelar_conjunto') return { m: 'DELETE', path: `/agenda/${x.idAgenda}`, qs: x.recorrente ? { data: String(x.horaInicio).slice(0, 10) } : {} };
   return { m: 'POST', path: '/agenda', body: { idCliente: p.dados.idCliente, idServico: x.idServico, idProfissional: bvgProfDe(x, meta), data: x.data, horaInicio: x.hora, idIntegracao: `bv-${String(p.id).slice(0, 8)}-${x.ordem}` } };
+}
+
+// Efeito `mensagens` (research D3): o que programar/cancelar nas mensagens agendadas apos escrita bem-sucedida na Graces.
+// shortcut: sem `minutos` o fim vale o inicio (pos-atendimento sai 1 h apos o inicio); upgrade: ler horaFim do GET.
+function bvgItemMsg(idAgenda, x, idCliente, prof) {
+  const hora = x.hora, fim = Number(x.minutos) > 0 ? bvgSomaMin(hora, x.minutos) : hora;
+  return { idAgenda, idCliente, idProfissional: prof, inicio: `${x.data}T${hora}:00`, fim: `${x.data}T${fim}:00`, servico: x.servico, barbeiro: x.barbeiro || x.apelido, recorrente: !!x.recorrente };
+}
+function bvgMsgs(p, meta, novoId) {
+  const d = p.dados || {}, ic = d.idCliente || meta.idCliente;
+  const canc = (id, motivo) => ({ idAgenda: id, motivo });
+  if (p.acao === 'agendar') return novoId ? { criar: [bvgItemMsg(novoId, d, ic, meta.prof)], cancelar: [] } : null;
+  if (p.acao === 'trocar_servico') return novoId ? { criar: [bvgItemMsg(novoId, d, ic, meta.prof)], cancelar: [canc(d.antigo.idAgenda, 'cancelada_agente')] } : null;
+  if (p.acao === 'reagendar') return { criar: [bvgItemMsg(d.idAgenda, d, ic, meta.prof)], cancelar: [canc(d.idAgenda, 'reagendada')] };
+  if (p.acao === 'cancelar') return { criar: [], cancelar: [canc(d.idAgenda, 'cancelada_agente')] };
+  return null;
 }
 
 const bvgResp = (r) => ({ status: Number((r && r.status) || 0), body: r && r.body });
@@ -495,7 +512,9 @@ function bvgPassoConjunto(st, r0, cfg) {
   const hora = (x) => (cancela ? String(x.horaInicio).slice(11, 16) : x.hora);
   const criados = itens.filter((_, j) => res[j] && res[j].estado === 'criado').map((x) => ({ servico: x.servico, hora: hora(x) }));
   const faltaram = itens.filter((_, j) => !res[j] || res[j].estado !== 'criado').map((x) => ({ servico: x.servico }));
-  const fim = (estado, resultado, extra = {}) => bvgFim({ ...resultado, criados, faltaram }, { ...extra, proposta_upd: { id: p.id, estado, resultado: { ok: !!resultado.ok, code: resultado.code, itens: res } } });
+  const msgs = cancela ? { criar: [], cancelar: itens.filter((_, j) => res[j] && res[j].estado === 'criado').map((x) => ({ idAgenda: x.idAgenda, motivo: 'cancelada_agente' })) }
+    : { criar: itens.map((x, j) => (res[j] && res[j].estado === 'criado' ? bvgItemMsg(res[j].idAgenda, x, p.dados.idCliente, bvgProfDe(x, meta)) : null)).filter(Boolean), cancelar: [] };
+  const fim = (estado, resultado, extra = {}) => bvgFim({ ...resultado, criados, faltaram }, { ...extra, mensagens: msgs, proposta_upd: { id: p.id, estado, resultado: { ok: !!resultado.ok, code: resultado.code, itens: res } } });
   if (ok) return fim('executada', { ok: true }, { opcoes: {}, pedido: { servico: null, barbeiros: null, horario: null, agendamentos: null, faltantes: null } });
   const falha = { ...e.falha, motivo: criados.length ? 'conjunto_parcial' : e.falha.motivo, operacao: p.acao };
   if (e.incerto) return fim('incerta', { ok: false, code: 'incerta', orientacao: 'a agenda não respondeu num dos itens; avise o cliente, não repita e confira com meus_agendamentos' }, { falha: { ...falha, motivo: 'graces|escrita_incerta' } });
@@ -564,12 +583,13 @@ function bvgPassoEscrita(st, resps, cfg) {
     const sucessoFim = () => {
       if (p.acao === 'trocar_servico' && meta.etapa === 'escrita') {
         const a = d.antigo || {};
-        return prox('escrita2', [{ m: 'DELETE', path: `/agenda/${a.idAgenda}`, qs: a.recorrente ? { data: String(a.horaInicio).slice(0, 10) } : {} }]);
+        return prox('escrita2', [{ m: 'DELETE', path: `/agenda/${a.idAgenda}`, qs: a.recorrente ? { data: String(a.horaInicio).slice(0, 10) } : {} }], { novoId: (r0.body && r0.body.idAgenda) || null });
       }
       const msg = { agendar: 'agendado', trocar_servico: 'serviço trocado', reagendar: 'remarcado', cancelar: 'cancelado' }[p.acao];
       const res = { ok: true, [msg.replace(' ', '_')]: true };
       if (meta.verificada) res.verificada = true;
-      return termina('executada', res, { ...limpa, ...(repetida ? { falha: { motivo: 'graces|escrita_repetida', operacao: p.acao, code: 'REPETIDA', status: 0, trace: null } } : {}) });
+      const novoId = meta.etapa === 'escrita2' ? meta.novoId : (r0.body && r0.body.idAgenda);
+      return termina('executada', res, { ...limpa, mensagens: bvgMsgs(p, meta, novoId), ...(repetida ? { falha: { motivo: 'graces|escrita_repetida', operacao: p.acao, code: 'REPETIDA', status: 0, trace: null } } : {}) });
     };
     if (ok) return sucessoFim();
     const { e, f } = err(op, r0);
@@ -585,8 +605,11 @@ function bvgPassoEscrita(st, resps, cfg) {
     if (!sucesso2xx(r0) || !Array.isArray(r0.body)) return incerta(); // leitura falhou: nenhuma nova escrita
     if (bvgAplicada(p, d, meta, r0.body)) {
       const msg = { agendar: 'agendado', trocar_servico: 'serviço trocado', reagendar: 'remarcado', cancelar: 'cancelado' }[p.acao];
-      if (p.acao === 'trocar_servico') { const a = d.antigo || {}; return prox('escrita2', [{ m: 'DELETE', path: `/agenda/${a.idAgenda}`, qs: a.recorrente ? { data: String(a.horaInicio).slice(0, 10) } : {} }]); }
-      return termina('executada', { ok: true, [msg.replace(' ', '_')]: true, verificada: true }, limpa);
+      const ini = `${d.data}T${d.hora}`;
+      const novo = p.acao === 'agendar' || p.acao === 'trocar_servico'
+        ? (bvgNumAgenda(r0.body).find((a) => !(meta.base || []).includes(a.idAgenda) && a.idServico === d.idServico && a.idProfissional === meta.prof && String(a.horaInicio).startsWith(ini)) || {}).idAgenda : null;
+      if (p.acao === 'trocar_servico') { const a = d.antigo || {}; return prox('escrita2', [{ m: 'DELETE', path: `/agenda/${a.idAgenda}`, qs: a.recorrente ? { data: String(a.horaInicio).slice(0, 10) } : {} }], { novoId: novo || null }); }
+      return termina('executada', { ok: true, [msg.replace(' ', '_')]: true, verificada: true }, { ...limpa, mensagens: bvgMsgs(p, meta, novo) });
     }
     if ((meta.tent || 0) >= 1) return incerta(); // nunca uma terceira escrita
     return prox('escrita', [meta.w], { tent: 1 });
@@ -594,14 +617,32 @@ function bvgPassoEscrita(st, resps, cfg) {
   return termina('falhou', { ok: false, code: 'etapa_invalida', orientacao: 'não consegui concluir; tente de novo' });
 }
 
-// Parametros da query "Persistir" (so $1..$14; nenhum valor entra no texto do SQL).
-function bvGParams(i, efeitos) {
+// Parametros da query "Persistir" (so $1..$17; nenhum valor entra no texto do SQL).
+// msg = { ativo, agora, cfg (mensagens.*), escrita: [digitos] | null }: sem `ativo` (PROD) nada e programado/cancelado.
+// $15 = linhas a inserir (tipo, previsto_para, motivo 'ja_passou' quando nao programa), $16 = cancelamentos, $17 = lista de escrita
+// (trava do TESTE; null fora do ambiente integracao = sem trava `fora_da_lista`).
+function bvgMsgParams(e, msg) {
+  const m = e.mensagens;
+  if (!m || !msg || !msg.ativo) return [null, null, null];
+  const linhas = [];
+  for (const it of m.criar) {
+    const dados = { servico: it.servico, barbeiro: it.barbeiro, fim: it.fim, ...(it.recorrente ? { recorrente: true } : {}) };
+    const r = bvMProgramar({ inicio: it.inicio, fim: it.fim }, msg.agora, msg.cfg);
+    const base = { idAgenda: it.idAgenda, idCliente: it.idCliente, idProfissional: it.idProfissional, inicio: it.inicio, dados };
+    r.programar.forEach((x) => linhas.push({ ...base, tipo: x.tipo, previsto_para: x.previsto_para, motivo: null }));
+    r.ignorar.forEach((x) => linhas.push({ ...base, tipo: x.tipo, previsto_para: x.previsto_para, motivo: x.motivo }));
+  }
+  return [JSON.stringify(linhas), JSON.stringify(m.cancelar), msg.escrita == null ? null : JSON.stringify(msg.escrita.map(String))];
+}
+
+function bvGParams(i, efeitos, msg) {
   const e = efeitos || {};
   const j = (x) => (x === undefined || x === null ? null : JSON.stringify(x));
   const n = e.proposta_nova, u = e.proposta_upd, f = e.falha;
   return [i.contato_id, j(e.opcoes), j(e.pedido), i.turno_id, n ? n.acao : null, n ? j(n.dados) : null,
     u ? u.id : '', u ? u.estado : null, u ? j(u.resultado) : null,
-    f ? f.motivo : null, f ? f.operacao : null, f ? f.code : null, f ? f.status : null, f ? f.trace : null];
+    f ? f.motivo : null, f ? f.operacao : null, f ? f.code : null, f ? f.status : null, f ? f.trace : null,
+    ...bvgMsgParams(e, msg)];
 }
 
 if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, BVG_ACOES };

@@ -89,7 +89,19 @@ class BvGraces(unittest.TestCase):
             self.assertNotIn("'+", q.replace(" ", ""), nome)
             self.assertTrue(n["parameters"]["options"]["queryReplacement"].startswith("={{"), nome)
         persistir = qs["Persistir"]["parameters"]["query"]
-        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", persistir)}), list(range(1, 15)))
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", persistir)}), list(range(1, 18)))
+        # mensagens-agendadas 3.1.2: cancela pendentes, insere por idAgenda sem duplicar, fora da lista de escrita nasce cancelada
+        for trecho in ("mc AS (UPDATE mensagens_agendadas", "ma AS (INSERT INTO mensagens_agendadas", "ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE",
+                       "'fora_da_lista'", "y.motivo IS NULL", "m.situacao <> 'pendente'",
+                       "m.situacao = 'pendente' AND m.reservada_em IS NULL AND NOT EXISTS",  # item 9: reservada nao e cancelada (o envio grava)
+                       "me AS (UPDATE mensagens_agendadas m SET motivo = x.motivo",  # item 3: confirmacao ja enviada fica encerrada
+                       "m.tipo = 'confirmacao' AND m.situacao = 'enviada' AND m.resposta IS NULL AND m.motivo IS NULL",
+                       "$17::jsonb IS NOT NULL AND NOT EXISTS"):  # item 8: fora_da_lista so com lista (TESTE)
+            self.assertIn(trecho, persistir)
+        ef = self.nos["Efeitos"]["parameters"]["jsCode"]
+        self.assertIn("{{BV:INCLUDE:shared/mensagens.js}}", ef)
+        self.assertIn("bvGParams(j.st.in, j.final.efeitos, msg)", ef)
+        self.assertIn("'{{BV:mensagens.ativo}}' === 'True'", ef)
 
     def test_fase2_so_com_proposta_pendente_do_turno_anterior(self):  # FR-007 / 4.2.2
         q = self.nos["Contexto"]["parameters"]["query"]
@@ -213,6 +225,18 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual(m["parameters"]["model"]["value"], "{{BV:agente.modelo}}")
         self.assertEqual(m["parameters"]["options"]["reasoningEffort"], "{{BV:agente.raciocinio}}")
         tools = [n for n in self.wf["nodes"] if n["type"] == "@n8n/n8n-nodes-langchain.toolWorkflow"]
+        conf = [t for t in tools if t["parameters"]["name"] == "confirmar_presenca"]  # mensagens-agendadas 4.3.2: ferramenta propria, outro sub-workflow
+        tools = [t for t in tools if t not in conf]
+        self.assertEqual(len(conf), 1)
+        vc = conf[0]["parameters"]["workflowInputs"]["value"]
+        self.assertEqual(conf[0]["parameters"]["workflowId"]["value"], "{{BV:workflows_sub.bv_confirmacao}}")
+        self.assertEqual(vc["origem"], "agente")
+        self.assertNotIn("$fromAI", vc["contato_id"])  # o modelo nunca informa o contato
+        self.assertEqual(sorted(k for k, x in vc.items() if "$fromAI" in x), ["confirmado", "mensagem_id"])
+        self.assertIn("confirmar_presenca", ler("workflows/shared/agente.js"))
+        self.assertIn("m.resposta IS NULL", self.nos["Ler contexto"]["parameters"]["query"])
+        self.assertIn("bvMPromptConfirmacoes(ctx, Date.now()", self.nos["Preparar"]["parameters"]["jsCode"])  # confirmacoes e recusa (mensagens.js)
+        self.assertIn("m.motivo IS NULL", self.nos["Ler contexto"]["parameters"]["query"])  # confirmacao encerrada (cancelar/remarcar) nao entra
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
             "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",

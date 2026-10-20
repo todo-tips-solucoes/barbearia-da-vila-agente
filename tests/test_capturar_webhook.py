@@ -83,6 +83,27 @@ class T(unittest.TestCase):
         self.assertEqual(a["token"], "TOKEN_ANONIMIZADO")
         self.assertEqual((a["n"], a["ok"], type(a["l"])), (5, True, list))
 
+    def test_datajson_anonimizado_e_acao_preservada(self):
+        inner = json.dumps({"rawData": {"event": {"Info": {"Sender": "5511999998888@lid", "PushName": "Maria"},
+                            "Message": {"listResponseMessage": {"singleSelectReply": {"selectedRowID": "bvc:7:s"}, "title": "Confirmo"}}}}})
+        ev = {"acao": "start", "mensagem": {"dataJson": inner, "body": "Confirmo"}}
+        a = cap.anonimizar(ev, cap.valores_comuns([ev]))
+        self.assertEqual(a["acao"], "start")
+        t = json.dumps(a)
+        self.assertNotRegex(t, r"5511999998888|Maria|Confirmo")
+        self.assertIn("bvc:7:s", t)
+        self.assertIsInstance(json.loads(a["mensagem"]["dataJson"]), dict)
+
+    def test_fixtures_numera_a_partir_do_maior_e_nao_sobrescreve(self):
+        pasta = f"{self.d}/tests/fixtures/chatmaster"
+        os.makedirs(pasta)
+        open(f"{pasta}/evento-25.json", "w").write("intacto")
+        run = {"Webhook": [{"data": {"main": [[{"json": {"acao": "start", "n": 1}}]]}}]}
+        n8n = lambda m, r, c=None: {"data": [{"id": "1", "data": {"resultData": {"runData": run}}}]} if m == "GET" else {}
+        cap.fixtures(n8n, CFG, self.d)
+        self.assertEqual(open(f"{pasta}/evento-25.json").read(), "intacto")
+        self.assertEqual(json.load(open(f"{pasta}/evento-26.json"))["acao"], "start")
+
 
 if __name__ == "__main__":
     unittest.main()

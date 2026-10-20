@@ -104,6 +104,28 @@ class Migracao0009(unittest.TestCase):
         self.assertEqual(M9.count("DROP CONSTRAINT IF EXISTS"), 2)  # reaplicar nao falha
         self.assertNotIn("CREATE TABLE", M9)
 
+M10 = open("db/migrations/0010_mensagens_agendadas.sql").read()
+
+
+class Migracao0010(unittest.TestCase):
+    def test_indice_parcial_situacao_e_colunas(self):
+        self.assertIn("DROP CONSTRAINT IF EXISTS mensagens_agendadas_graces_agendamento_id_tipo_key", M10)
+        self.assertIn("UNIQUE INDEX IF NOT EXISTS mensagens_agendadas_pendente_unico_idx ON mensagens_agendadas (graces_agendamento_id, tipo) WHERE situacao = 'pendente'", M10)
+        self.assertIn("IN ('pendente','enviada','cancelada','falhou')", M10)
+        self.assertIn("(situacao = 'enviada') = (enviada_em IS NOT NULL)", M10)
+        self.assertIn("tipo IN ('graces','chatmaster','agente','turno','midia','mensagem')", M10)
+        for c in ("graces_cliente_id text", "id_profissional text", "inicio timestamp", "dados jsonb", "tentativas smallint", "proxima_tentativa_em timestamptz",
+                  "reservada_em timestamptz", "enviada_em timestamptz", "motivo text", "resposta text", "respondida_em timestamptz"):
+            self.assertIn("ADD COLUMN IF NOT EXISTS " + c, M10)
+
+    def test_idempotente(self):
+        self.assertNotIn("CREATE TABLE", M10)
+        for l in M10.splitlines():
+            if l.startswith(("ALTER TABLE mensagens_agendadas ADD COLUMN", "CREATE")):
+                self.assertRegex(l, "IF NOT EXISTS")
+        self.assertEqual(M10.count("ADD CONSTRAINT"), M10.count("DROP CONSTRAINT IF EXISTS") - 1)  # a 1a DROP e do UNIQUE antigo
+
+
 if __name__ == "__main__":
     unittest.main()
 
