@@ -55,6 +55,8 @@ assert.equal(bvMReconhecer(fi('bvc:7:n'), cfg).confirmado, false);
 for (const x of ['bvc:7:x', 'bvc:a:s', 'bv_conf_teste_sim', 'bvc:7:s;DROP', '', null]) assert.equal(bvMReconhecer(fi(x), cfg), null, String(x));
 assert.equal(bvMReconhecer({ ...fi('bvc:7:s'), fromMe: true }, cfg), null);
 assert.equal(bvMReconhecer({ acao: 'from_internal', mensagem: { dataJson: 'nao json' } }, cfg), null);
+// formato real (E2E 2026-10-20): dataJson e um texto JSON que contem outro texto JSON
+assert.equal(bvMReconhecer({ acao: 'from_internal', fromMe: false, mensagem: { body: 'Confirmo', dataJson: JSON.stringify(dj('bvc:7:s')) } }, cfg).mensagem_id, 7);
 const st = (t) => ({ acao: 'start', fromMe: false, mensagem: [{ type: 'text', text: t }] });
 assert.deepEqual(bvMReconhecer(st(' Confirmo '), cfg), { origem: 'titulo', confirmado: true });
 assert.equal(bvMReconhecer(st('Não vou poder'), cfg).confirmado, false);

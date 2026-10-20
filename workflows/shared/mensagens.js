@@ -78,7 +78,8 @@ function bvMReconhecer(ev, cfg) {
   const msg = ev.mensagem;
   if (ev.acao === 'from_internal' && msg && typeof msg === 'object' && !Array.isArray(msg)) {
     let r;
-    try { r = JSON.parse(msg.dataJson).rawData.event.Message.listResponseMessage; } catch (e) { return null; }
+    // dataJson chega codificado DUAS vezes (texto JSON dentro de texto JSON, medido no E2E): decodifica ate virar objeto
+    try { let d = msg.dataJson; for (let k = 0; k < 3 && typeof d === 'string'; k++) d = JSON.parse(d); r = d.rawData.event.Message.listResponseMessage; } catch (e) { return null; }
     const id = r && r.singleSelectReply && r.singleSelectReply.selectedRowID;
     const m = typeof id === 'string' && /^bvc:(\d{1,15}):(s|n)$/.exec(id);
     if (!m) return null;
