@@ -10,3 +10,5 @@ __pycache__/
 tests/conversas/relatorios/
 .captura-145.url
 tests/fixtures/midia-real.local.json
+# referencia local com credenciais (nunca versionar)
+docs/referencia.md
