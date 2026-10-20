@@ -84,7 +84,7 @@ Ref: research.md D4; quickstart.md 10a; checklists/api.md CHK013
 
 Ref: research.md D7; quickstart.md 10; plan.md §Segurança M6
 
-- [!] 2.3.1 Executar o sub de teste com `saveData*` = `none` e baixar um áudio real (medido 2026-10-19: FALHOU; o binário ficou em disco, ver research.md D7. Imagem resolvida na onda 12 por download em Code sem binário n8n; **segue `[!]` só para o áudio**, que ainda usa `Baixar`/`Transcrever` com binário)
+- [x] 2.3.1 Executar o sub de teste com `saveData*` = `none` e baixar um áudio real (medido 2026-10-19: o binário FICOU em disco, research.md D7; sonda de `httpRequestWithAuthentication` no Code falhou, exec 7894669). **Mitigação decidida pelo owner = alternativa (3)**: cron `/etc/cron.d/barbearia-limpar-midia` instalado (sha256 idêntico a `config/vps/barbearia-limpar-midia.cron`); verificado: áudio gravado 22:46:35Z, pasta `FbQLbUHauxMMIjI4` com 0 arquivos às 23:01:52Z. **Risco residual**: áudio em disco por até ~15 min; o cron cobre só o id do workflow TESTE; depende do nome do container `n8n-n8n-1`; incluir o id de PROD antes do deploy em produção. Imagem resolvida em memória (onda 12).
 - [x] 2.3.2 Verificar na stack `n8n` (medido pelo pai: arquivo de 125431 bytes em `/home/node/.n8n/binaryData/workflows/FbQLbUHauxMMIjI4/`, apagado com autorização do owner)
 - [x] 2.3.3 Registrar o resultado no `research.md` (feito; block-005 respondido, decisão a)
 
@@ -192,7 +192,7 @@ Ref: contracts/config-midia.md; checklists/security.md CHK004
 
 Ref: plan.md §Project Structure; workflows/README.md
 
-- [~] 6.3.1 Cenários em `scripts/smoke-agente.py` possíveis sem WhatsApp (falha OpenAI, host recusado) (host recusado coberto no c15; falha OpenAI do sub exige audio real em host permitido, fica para a FASE 7)
+- [~] 6.3.1 Cenários em `scripts/smoke-agente.py` possíveis sem WhatsApp (falha OpenAI, host recusado) (host recusado coberto no c15 e confirmado em real na 7.3.1; falha OpenAI do sub exige credencial inválida temporária em execução real, coberta pela 7.2.2; mantido `[~]` até a 7.2.2)
 - [x] 6.3.2 Registrar id e papel do `interpretar-midia` em `workflows/README.md`
 - [x] 6.3.3 Rodar `python3 -I -m unittest discover -s tests`, `node tests/rajada.test.js`, `node tests/midia.test.js` e `scripts/varrer-segredos.py`
 
@@ -221,9 +221,9 @@ Ref: quickstart.md 11-13, 18; spec.md SC-001, SC-002, SC-005
 
 Ref: quickstart.md 14; tarefa 2.5
 
-- [ ] 7.3.1 Imagem com e sem legenda com `hosts_imagem` vazio: resposta natural e `falhas_agente.motivo = host_recusado`
-- [ ] 7.3.2 Após adicionar o host (2.5), redeploy e repetir: resposta coerente; imagem fora do assunto reconduz ao atendimento
-- [ ] 7.3.3 Cancelar na Graces tudo o que for criado
+- [x] 7.3.1 Imagem com e sem legenda com `hosts_imagem` vazio: resposta natural e `falhas_agente.motivo = host_recusado` (pai, 2026-10-19: falhas_agente id 9 `host_recusado` 20:00:34Z; resposta "Não consegui entender o que você mandou. Pode mandar de novo ou me escrever?", msg 1277)
+- [x] 7.3.2 Após adicionar o host (2.5), redeploy e repetir: resposta coerente; imagem fora do assunto reconduz ao atendimento (pai: msgs 1278/1280 e 1294/1296, image/jpeg 90322/47117 bytes, com e sem legenda; tela de login reconduzida, msg 1295; entrega real confirmada pelo owner com `teste.contatos_escrita=[+5511967296849]`)
+- [x] 7.3.3 Cancelar na Graces tudo o que for criado (nada foi criado na Graces; nada a cancelar)
 
 ### 7.4 Rajada de mídias, dedupe e retenção (US3, US4) `[A]`
 
@@ -237,8 +237,8 @@ Ref: quickstart.md 15-17; spec.md FR-011, SC-003, SC-004
 
 Ref: spec.md SC-006; Constituição XVI
 
-- [ ] 7.5.1 Conferir artefatos contra as fixtures (nenhum dado de payload fora delas) com `data-veracity-verifier`
-- [ ] 7.5.2 Fechar os `{humano}` pendentes e relatar riscos H3/H4 aceitos
+- [x] 7.5.1 Conferir artefatos contra as fixtures com `data-veracity-verifier` (onda 13: nenhum dado de payload fabricado; 3 ressalvas menores ajustadas: citação indireta Postgres/Redis, commit Gold 3beeb3e marcado como evidência externa não verificada, fatos da doc OpenAI aceitos como "doc oficial citada"; `detail: original` segue não medido)
+- [ ] 7.5.2 Fechar os `{humano}` pendentes e relatar riscos H3/H4 aceitos (pendente: restaurar `teste.contatos_escrita=[]` + redeploy `entregar_rajada`; incluir id de PROD no cron antes de produção)
 - [ ] 7.5.3 Preparar a PR (só o owner abre/mescla)
 
 ---

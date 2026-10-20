@@ -53,7 +53,7 @@ precedente HTTP já está validado com nota de voz real e a forma do multipart e
 `fileMimeType = audio/ogg; codecs=opus` com `fileUrl` terminada em `.mp3`. A lista oficial de
 formatos aceitos ("mp3, mp4, mpeg, mpga, m4a, wav, and webm", guia speech-to-text) **não cita ogg**.
 O projeto de referência, porém, transcreve nota de voz Ogg/Opus em produção desde que o arquivo vá
-nomeado `.ogg` (commit `3beeb3e` de `/home/projetos/goldincision_licienciados`, conferido com `git show 3beeb3e`: "fix(audio): nota de voz .opus vai a openai como .ogg", altera `workflows/sub/transcrever-audio.json`). Isso é
+nomeado `.ogg` (commit `3beeb3e (evidencia externa nao verificada; ancora propria em D3 medido)` de `/home/projetos/goldincision_licienciados`, conferido com `git show 3beeb3e`: "fix(audio): nota de voz .opus vai a openai como .ogg", altera `workflows/sub/transcrever-audio.json`). Isso é
 evidência empírica de outro projeto, não documentação: **não medido neste projeto**. A primeira
 tarefa de implementação é uma sonda no TESTE com o áudio real; se a OpenAI recusar, bloqueio
 humano (o n8n não tem transcodificação nativa e instalar ffmpeg na VPS mexe fora do escopo).
@@ -206,3 +206,10 @@ vira fixture e o teste passa a usá-la.
   - **Decisão do owner (2026-10-19)**: alternativa (3). Cron `config/vps/barbearia-limpar-midia.cron` (a cada 5 min apaga arquivos com mais de 10 min só em `binaryData/workflows/FbQLbUHauxMMIjI4`). A instalação em `/etc/cron.d/` foi negada ao agente pelo classificador de permissões; o owner instala.
   - **Ajustes do agente (2026-10-19)**: `bvPromptImagem` não transcreve e-mails, telefones, endereços nem nomes; `bvPrompt` recusa com gentileza assuntos fora da barbearia. `interpretar_midia` e `entregar_rajada` republicados no TESTE.
   - **Risco residual do áudio**: cada nota de voz processada deixa o arquivo de áudio em disco no container do n8n, sem expurgo automático, até haver limpeza ou a troca para o Code. Por isso a 2.3 fica `[!]` só para o áudio.
+
+## Fechamento da onda 13 (2026-10-19/20, evidências observadas pelo pai)
+
+- **2.3 / D7**: cron `/etc/cron.d/barbearia-limpar-midia` instalado (sha256 idêntico ao `config/vps/barbearia-limpar-midia.cron`); áudio gravado 22:46:35Z, pasta `FbQLbUHauxMMIjI4` com 0 arquivos às 23:01:52Z. Residual: áudio em disco até ~15 min; só o id do TESTE no cron; depende do container `n8n-n8n-1`; incluir o id de PROD antes do deploy em produção.
+- **7.3 imagem**: `hosts_imagem` vazio -> `falhas_agente` id 9 `host_recusado` e resposta de recusa natural (msg 1277). Com o host: msgs 1278/1280 e 1294/1296 (image/jpeg 90322/47117 bytes) descritas e respondidas; imagem fora do assunto reconduzida (msg 1295). Nada criado na Graces.
+- **Áudio real**: msg 1292 (audio/ogg, 3 s) transcrita e respondida; msg 1298 (137 s) -> `midia_falha` longo, `falhas_agente` id 10 motivo `longo`, resposta `textos.midia_grande` (msg 1299). Texto puro (msgs 1283/1285, 1290/1291) sem regressão.
+- **Pendência temporária**: `teste.contatos_escrita=[+5511967296849]` só no TESTE; restaurar `[]` e redeployar `entregar_rajada` ao fim dos testes manuais (7.5.2). Saída de texto para contato `@lid` usa `/api/messages/whatsmeow/sendTextPROLid`.

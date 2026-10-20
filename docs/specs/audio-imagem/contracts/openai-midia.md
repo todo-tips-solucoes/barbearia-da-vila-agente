@@ -13,7 +13,7 @@ o resto está marcado "não medido".
   https://developers.openai.com/api/docs/guides/speech-to-text).
 - Resposta usada: campo `text` do JSON.
 - Formatos aceitos pelo guia: mp3, mp4, mpeg, mpga, m4a, wav, webm. **Ogg não está na lista.**
-  Envio de Ogg/Opus nomeado `.ogg`: funciona no projeto de referência (commit `3beeb3e`, `git show` no repositório
+  Envio de Ogg/Opus nomeado `.ogg`: funciona no projeto de referência (commit `3beeb3e (evidencia externa nao verificada)`, `git show` no repositório
   `goldincision_licienciados`), **não medido aqui** — sonda obrigatória na primeira tarefa.
 - Limite: "Files can be up to 25 MB" (guia).
 - Autenticação: credencial n8n `openAiApi` "Barbearia Vila OpenAI" (`predefinedCredentialType`);
