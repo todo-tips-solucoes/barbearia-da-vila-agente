@@ -30,3 +30,9 @@ Medido na conexão 145 (QR Pro), contato de teste do owner (Chat Master `contact
   - não entra no `dataJson` (string), que vazou nome e lid; os campos foram mascarados à mão.
 
   Corrigir o script antes da próxima captura.
+
+## Decisão do owner (2026-10-20, após a sonda)
+
+> "o seletor de botao no qual eu fiz teste agora, apenas para api oficial. vamos evitar de usar para api qrcode. para confirmação de agendamento use o botao em lista."
+
+O botão `quick_reply` (`sendButtonsPRO`) fica reservado para a API Oficial e não é usado na conexão QR Pro (145). A confirmação de agendamento usa o **botão em lista** (`sendListPRO`), o mesmo já usado pelo agente.

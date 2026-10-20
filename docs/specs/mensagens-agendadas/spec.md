@@ -155,3 +155,4 @@ Cada mensagem programada fica registrada localmente (tipo, horário previsto, ag
 - Q: Nova tentativa (FR-015)? -> A: Até 3 tentativas (1, 5 e 15 min); depois falha registrada e a verificação periódica corrige (parametrizável).
 - Q: Verificação periódica (FR-016)? -> A: A cada 15 min, agendamentos dos próximos 7 dias (parametrizável).
 - Q: Conteúdo do pós-atendimento? -> A: Só agradecimento humanizado e convite a voltar, sem link nem avaliação.
+- Q: Mecanismo de entrega e de "apagar" (FR-005, FR-010, FR-011, FR-013, US1-5, US3, FR-INFRA-SCHED)? -> A: Decisão do owner (dec-007, 2026-10-20): na QR Pro a confirmação usa **lista** (duas opções), não botão quick reply. Desenho (dec-008): nada é agendado no Chat Master; um agendador próprio no n8n envia as três mensagens a partir do registro local, e "apagar no canal" equivale a cancelar o registro local antes do envio (nenhuma mensagem pendente sai). FR-013 fica trivialmente satisfeito.
