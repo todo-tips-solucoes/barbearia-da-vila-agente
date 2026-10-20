@@ -219,3 +219,21 @@ vira fixture e o teste passa a usá-la.
 - `scripts/smoke-agente.py --so m1 ... m8`: contatos simulados (+5500000000440-489), áudios reais do owner gravados pela 145 e guardados em `tests/fixtures/midia-real.local.json` (fora do git: voz do owner e caminho do storage). Todos passaram.
 - **Áudio mudo**: o whisper-1 devolvia texto inventado em silêncio ("Legendas..."). `Transcrever` passou a pedir `response_format=verbose_json` e `Texto audio` trata como `vazio` quando todo segmento tem `no_speech_prob > 0,6`. Medido: áudio mudo real -> `vazio`; fala real segue transcrita.
 - **Incidente da rodada**: `tel(n)` devolve o telefone real do owner para n >= 520; a primeira versão dos cenários usou 560-589 e rodou no contato do owner no TESTE (sem envio real: `contatos_escrita` vazio). Corrigido para 440-489. O m3 troca a credencial do interpretar-midia: durante a rodada, o owner não deve mandar mídia pela 145.
+
+## Fechamento 7.5.2 (onda 14, 2026-10-20): riscos aceitos e pendências de produção
+
+**Itens `{humano}`**: os 5 foram respondidos pelo owner em block-003 / dec-020 ("aceitar-todos-e-prosseguir", 2026-10-19): api CHK005, security CHK009, ux CHK005, ux CHK009, ux CHK010. Nada pendente.
+
+**Riscos aceitos pelo owner**
+- **H3** (block-002 / dec-015): o conteúdo da mídia tem cópias fora da limpeza de 24 h (respostas de saída em `mensagens`, retenção da OpenAI, backups do Postgres). Sem mitigação nesta feature.
+- **H4** (block-004 / dec-025): sem teto de bytes no nó HTTP; defesa em camadas (`fileLength`/`seconds`, timeout de execução, tamanho real conferido antes da OpenAI). Residual: o binário pode ser lido até o timeout.
+- **Áudio em disco** (block-005 / dec-032, alternativa 3): o n8n2 grava o binário do áudio em disco; o cron `config/vps/barbearia-limpar-midia.cron` apaga em até ~15 min. Imagem já é em memória.
+
+**Estado restaurado**: `teste.contatos_escrita=[]` e `entregar_rajada` republicado (pai, commit 88c60ba).
+
+**Pendências antes de produção (ação do owner; fora do escopo, FR-016/Constituição XIII: só TESTE)**
+1. Incluir o id do workflow de PROD no cron da VPS (hoje só o id do TESTE: `FbQLbUHauxMMIjI4`).
+2. Preencher `midia.hosts_imagem` de PROD (hoje `[]`; TESTE tem `object.ce1.eveo.com.br`).
+3. O cron depende do nome do container `n8n-n8n-1`; revisar se a stack mudar.
+4. `detail: original` da imagem segue não medido; `content-type` genérico do storage derrubaria imagem em `sem_suporte` (não observado).
+5. Alerta de gasto OpenAI (M2) é configuração do owner.

@@ -238,8 +238,8 @@ Ref: quickstart.md 15-17; spec.md FR-011, SC-003, SC-004
 Ref: spec.md SC-006; Constituição XVI
 
 - [x] 7.5.1 Conferir artefatos contra as fixtures com `data-veracity-verifier` (onda 13: nenhum dado de payload fabricado; 3 ressalvas menores ajustadas: citação indireta Postgres/Redis, commit Gold 3beeb3e marcado como evidência externa não verificada, fatos da doc OpenAI aceitos como "doc oficial citada"; `detail: original` segue não medido)
-- [ ] 7.5.2 Fechar os `{humano}` pendentes e relatar riscos H3/H4 aceitos (pendente: restaurar `teste.contatos_escrita=[]` + redeploy `entregar_rajada`; incluir id de PROD no cron antes de produção)
-- [ ] 7.5.3 Preparar a PR (só o owner abre/mescla)
+- [x] 7.5.2 Fechar os `{humano}` pendentes e relatar riscos H3/H4 aceitos (onda 14: 5 itens respondidos em block-003/dec-020; `contatos_escrita=[]` restaurado e `entregar_rajada` republicado pelo pai; riscos e pendências de produção em `research.md` §Fechamento 7.5.2)
+- [x] 7.5.3 Preparar a PR (texto em `pr.md`; só o owner abre/mescla)
 
 ---
 
