@@ -109,7 +109,7 @@ def m1():
     b, _ = linha(cid, previsto=f"now() - interval '{atraso + 5} minutes'")
     c, _ = linha(cid, previsto="now() - interval '2 minutes'", reservada=f"now() - interval '{reserva + 30} seconds'")
     d, _ = linha(cid, previsto="now() - interval '1 minute'", prof="outro-profissional")
-    esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id IN ({a},{b},{c},{d}) AND situacao <> 'pendente'", M["varredura_s"] * 3 + 30)
+    esperar(f"SELECT (count(*) = 4)::int FROM mensagens_agendadas WHERE id IN ({a},{b},{c},{d}) AND situacao <> 'pendente'", M["varredura_s"] * 3 + 30)  # as 4, nao a primeira
     checar("contato fora de teste.contatos_escrita: cancelada/fora_da_lista (nada enviado)", estado_linha(a) == "cancelada/fora_da_lista/", estado_linha(a))
     checar("passou da tolerancia: cancelada/ja_passou", estado_linha(b) == "cancelada/ja_passou/", estado_linha(b))
     checar("reserva vencida: falhou/incerto, sem reenvio", estado_linha(c) == "falhou/incerto/", estado_linha(c))
