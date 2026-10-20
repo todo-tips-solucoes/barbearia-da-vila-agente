@@ -7,6 +7,7 @@ Uso: python3 -I scripts/smoke-mensagens.py [m1 m2 m3 m4 m6 ...] | --limpar      
   m2 selecao por id: confirma na Graces (status 3), repetir e idempotente
   m3 selecao por titulo (fallback): "Não vou poder" -> status 10 + conversas.pedido.confirmacao_recusada
   m4 desatualizada e fora do teste: sem Graces
+  m7 toque real (titulo + id): recusa pelo id cancela lembrete e pos; o titulo gemeo nunca vira turno do agente
   m6 reconciliacao: agendamento da Graces sem contato -> uma falha `sem_contato` por idAgenda. Limite: com teste.contatos_escrita vazio
      (exigido aqui) o Ler estado nao acha contato nenhum, entao so o caminho sem_contato e exercitado; criar/cancelar da reconciliacao
      ficam nos testes de unidade (bvMReconciliar) e no E2E da FASE 6 com o numero do owner.
@@ -161,6 +162,29 @@ def m6():
     checar("sem contato: exatamente uma falha por idAgenda", esperar(f"SELECT count(*) FROM falhas_agente WHERE code='{code}'", M["reconciliacao_min"] * 60 + 120, 20) == "1")
 
 
+def m7():
+    print("M7 (E2E 2026-10-20) toque real = titulo + id: recusa pelo id, o titulo gemeo nao vai ao agente, nem no re-toque")
+    cid, i, ag = confirmacao_aberta(509)
+    ini = sa.sql(f"SELECT to_char(inicio, 'YYYY-MM-DD HH24:MI:SS') FROM mensagens_agendadas WHERE id={i};")
+    lem, _ = linha(cid, "lembrete", ag=ag, cliente=sa.PAULO, inicio=ini, previsto="now() + interval '1 day'")
+    pos, _ = linha(cid, "pos_atendimento", ag=ag, cliente=sa.PAULO, inicio=ini, previsto="now() + interval '2 days'")
+    # saida depois da lista (como no E2E): sem o id, a regra da ultima lista mandaria o titulo ao agente
+    sa.sql(f"INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ({cid}, 'smoke-depois-{i}', 'saida', 'texto', 'smoke');")
+    sa.post(sa.evento(509, M["titulo_nao"]))  # chega antes do id, como medido
+    sa.post(evento_lista(509, f"bvc:{i}:n", M["titulo_nao"]))
+    checar("recusada pelo id", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='recusada'", 60) == "1", estado_linha(i))
+    checar("Graces registrou recusa (status 10)", status_graces(ag) == 10, str(status_graces(ag)))
+    checar("lembrete e pos cancelados (recusada)", estado_linha(lem) == "cancelada/recusada/" and estado_linha(pos) == "cancelada/recusada/", f"{estado_linha(lem)} {estado_linha(pos)}")
+    time.sleep(M["espera_texto_s"] + 15)
+    sem_agente = f"SELECT count(*) FROM mensagens WHERE contato_id={cid} AND (mensagem_id_canal LIKE 'out-%' OR (direcao='entrada' AND processada_em IS NULL))"
+    checar("titulo gemeo tirado da rajada: nenhum turno do agente", sa.sql(sem_agente + ";") == "0" and sa.sql(f"SELECT count(*) FROM turnos WHERE contato_id={cid};") == "0")
+    sa.post(evento_lista(509, f"bvc:{i}:n", M["titulo_nao"]))  # re-toque depois de respondido: id primeiro
+    time.sleep(5)
+    sa.post(sa.evento(509, M["titulo_nao"]))
+    time.sleep(M["espera_texto_s"] + 15)
+    checar("re-toque: nenhum turno do agente", sa.sql(sem_agente + ";") == "0" and sa.sql(f"SELECT count(*) FROM turnos WHERE contato_id={cid};") == "0")
+
+
 def encerrar():
     for a in _agendas:
         sa._del(a)
@@ -172,7 +196,7 @@ def encerrar():
         sa.sql(f"DELETE FROM falhas_agente WHERE code IN ({codes}) AND contato_id IS NULL;")
 
 
-CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6)
+CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6, m7=m7)
 
 if __name__ == "__main__":
     sa._env(".env.smoke", ".env.n8n")

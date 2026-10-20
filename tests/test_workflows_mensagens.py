@@ -297,6 +297,10 @@ class BvConfirmacao(Base, unittest.TestCase):
                   "tipo IN ('lembrete', 'pos_atendimento')", "motivo = 'recusada'"):  # item 11 (owner): recusa cancela lembrete e pos
             self.assertIn(t, r) if t != "mensagem_id_canal" else None
         self.assertEqual(self.destinos("Enviar texto?", 1), ["Registrar"])
+        # E2E 2026-10-20: o toque tratado pelo id tira da rajada o titulo gemeo ("Confirmo"), que senao iria ao agente
+        self.assertIn("tg AS (UPDATE mensagens SET processada_em = now() WHERE $13::text = 'id'", r)
+        self.assertIn("turno_id IS NULL AND conteudo IN ($14::text, $15::text)", r)
+        self.assertIn("mensagens.titulo_nao", self.nos["Registrar"]["parameters"]["options"]["queryReplacement"])
         self.assertIn("ent.origem !== 'agente'", self.nos["Desfecho"]["parameters"]["jsCode"])  # o agente responde sozinho
 
 
@@ -330,7 +334,7 @@ class RevisaoOnda7(CodeNodes):
         self.assertEqual(rota(ultima_lista=False)["rota"], "agente")
         q = json.load(open(os.path.join(RAIZ, "workflows", "bv-recepcao.json"), encoding="utf-8"))
         q = next(n for n in q["nodes"] if n["name"] == "Confirmacao aberta?")["parameters"]["query"]
-        for t in ("AS abertas", "AS recentes", "AS propostas", "AS ultima_lista", "'agendada-%'", "motivo IS NULL", "estado = 'pendente'"):
+        for t in ("AS abertas", "LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes", "AS propostas", "AS ultima_lista", "'agendada-%'", "motivo IS NULL", "estado = 'pendente'"):
             self.assertIn(t, q)
 
     def test_item2_confirmacoes_no_prompt_mesmo_em_sessao_nova(self):

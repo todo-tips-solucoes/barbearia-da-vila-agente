@@ -148,17 +148,17 @@ Ref: quickstart.md
 
 Ref: plan.md; XII/XIII
 
-- [ ] 6.1.1 Migração 0010 no `barbearia_vila_teste` (`scripts/migrar.py --alvo teste`)
-- [ ] 6.1.2 `deploy-n8n.sh integracao --criar bv_confirmacao` e `--criar bv-mensagens`; republicar `bv-graces`, `entregar-rajada`, `bv-recepcao`; `validate_node_config` antes e `get_workflow_details` depois
-- [ ] 6.1.3 Conferir Schedule ativo e nenhum envio a número fora da lista
+- [x] 6.1.1 Migração 0010 no `barbearia_vila_teste` (`scripts/migrar.py --alvo teste`)
+- [x] 6.1.2 `deploy-n8n.sh integracao --criar bv_confirmacao` e `--criar bv-mensagens`; republicar `bv-graces`, `entregar-rajada`, `bv-recepcao`; `validate_node_config` antes e `get_workflow_details` depois
+- [x] 6.1.3 Conferir Schedule ativo e nenhum envio a número fora da lista (m1: `fora_da_lista`; só o número do owner em `contatos_escrita` durante o E2E, restaurado para `[]` e republicado em 2026-10-20)
 
 ### 6.2 Ponta a ponta com o owner `[A]` {humano:pai}
 
 Ref: quickstart.md 3-14; SC-001..SC-007
 
-- [ ] 6.2.1 Programar, reagendar e cancelar (3-6)
-- [ ] 6.2.2 Lista real, confirmar, repetir, "não vou poder", texto livre (7-10)
-- [ ] 6.2.3 Órfã/faltante, falha do canal, handoff (11-13) e limpeza (14)
+- [x] 6.2.1 Programar e cancelar (3-6): 3 agendamentos reais no barbeiro de teste viraram confirmação/lembrete/pós pela reconciliação; o de 16:00 apagado na Graces encerrou a confirmação (`cancelada_agente`). Reagendar: só na unidade (`bvMReconciliar`)
+- [x] 6.2.2 Lista real (2 linhas, P4) e toque do owner: 14:00 e 15:00 confirmados na Graces (status 3), re-toque `repetida`, 16:00 `desatualizada`. "Não vou poder" pelo id: m7 (simulado: status 10, lembrete e pós cancelados). Texto livre: agente (fora deste E2E)
+- [ ] 6.2.3 Órfã/faltante, falha do canal, handoff (11-13) e limpeza (14). Limpeza feita (Graces sem agendamento no barbeiro de teste, nenhuma linha pendente); falha do canal e handoff (P2) não medidos
 - [ ] 6.2.4 Revisão de veracidade (nenhum campo sem fonte) e PR pelo rito
 
 ### 6.3 Correções da revisão de código (2026-10-20) `[C]`
@@ -175,7 +175,9 @@ Ref: revisão independente do pai (itens 1-12); research D2/D6/D7/D9/D12; contra
 - [x] 6.3.8 `mc` não cancela reservada; janela da reconciliação desde ontem (itens 9 e 10)
 - [x] 6.3.9 Recusa cancela lembrete e pós (owner, 2026-10-20: "Cancelar os dois") no `Decidir` (status 10) e no `Registrar` (item 11)
 - [x] 6.3.10 Smoke: limpeza só das `sem_contato` do smoke; limite do m6 documentado; m3 grava a lista como última saída (item 12)
-- [ ] 6.3.11 Republicar no TESTE (ordem: `bv-confirmacao`, `bv-graces`, `entregar-rajada`, `bv-recepcao`, `bv-mensagens`; sem migração nova) e rodar `smoke-mensagens.py` (m1-m4) {humano:pai}
+- [x] 6.3.11 Republicar no TESTE (ordem: `bv-confirmacao`, `bv-graces`, `entregar-rajada`, `bv-recepcao`, `bv-mensagens`; sem migração nova) e rodar `smoke-mensagens.py` (m1-m4) {humano:pai}
+
+- [x] 6.3.12 E2E (2026-10-20): `dataJson` codificado duas vezes (`bvMReconhecer` decodifica até virar objeto); o toque pelo id tira da rajada o título gêmeo (CTE `tg` no `Registrar`) e o re-toque conta como recente (`conf-%` em `recentes`); smoke m7
 
 ---
 

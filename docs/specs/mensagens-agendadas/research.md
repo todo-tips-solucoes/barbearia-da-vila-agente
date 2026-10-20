@@ -239,6 +239,16 @@ existente (sem sobrescrever) e a anonimizar recursivamente dentro de strings JSO
 22 e 24 tiveram `acao` mascarado (`"xxxxx"`/`"xxxxxx"`); a sonda registra os valores reais (`start` e `closed`),
 que são restaurados (campo estrutural, não PII).
 
+## Decision 14: toque real na lista = dois eventos (medido no E2E, 2026-10-20)
+
+**Medido**: cada toque gera o `start` (só o título) e o `from_internal` (id), quase juntos e em qualquer ordem; o
+`dataJson` vem codificado duas vezes. Sem tratamento, o título ia ao agente quando a lista não era a última saída
+ou no re-toque de uma confirmação já respondida (o agente respondeu "O que você gostaria de confirmar?").
+**Decision**: o caminho do id é a fonte; ao registrar (qualquer desfecho), marca como processada a entrada de texto
+igual a um dos títulos, sem turno, dos últimos `2 x espera_texto_s` (a rajada ainda está esperando). Título que
+chega depois do id é consumido porque `recentes` conta também as respostas `conf-%` dessa janela. Limite: um
+"Confirmo" digitado na mesma janela de um toque é descartado junto (mesmo texto, mesmo efeito).
+
 ## Pendências
 
 | Id | Item | Como fecha |
@@ -246,4 +256,4 @@ que são restaurados (campo estrutural, não PII).
 | P1 | Status inicial do `POST /agenda` (Decision 11) | **MEDIDO (pai, sonda-botao.md "P1")**: nasce `idStatusAgenda` 2; `POST /agenda/confirmacao` `{confirmado:true}` → 200 e status 3; repetir → 409 "não está com status 'A confirmar'" (tratar 409 como já confirmado, idempotente) |
 | P2 | Efeito de `openTicket: '0'` em ticket de handoff (Decision 10) | smoke com handoff aberto |
 | P3 | **FECHADO** (ver Decision 6, atualização medida). Formato do evento de seleção de lista no webhook QR Pro: `start` só com título + `from_internal` com `selectedRowID`/`stanzaID` | o pai captura UMA seleção real pelo `bv-captura` (owner autorizou); vira fixture `evento-26+` e ativa o caminho id (Decision 6) |
-| P4 | (lista de 3 linhas medida OK na sonda; 2 linhas ainda no smoke) Lista de 2 linhas com `RowId` `bvc:<id>:s` aceita e exibida | primeiro envio real ao owner no smoke |
+| P4 | **FECHADO** (E2E 2026-10-20: lista de 2 linhas `bvc:<id>:s/n` exibida e tocada pelo owner) Lista de 2 linhas com `RowId` `bvc:<id>:s` aceita e exibida | primeiro envio real ao owner no smoke |
