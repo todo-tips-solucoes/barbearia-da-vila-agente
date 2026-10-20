@@ -48,3 +48,11 @@ O botão `quick_reply` (`sendButtonsPRO`) fica reservado para a API Oficial e n�
      - `contextInfo.stanzaID` = o `wid` da mensagem de lista enviada (conferido: igual).
 - Reenvio da mesma escolha chega como evento novo e idêntico: o tratamento precisa ser idempotente, porque a confirmação já registrada não pode ser confirmada de novo.
 - Execuções do `bv-captura` apagadas. Fixtures não gravadas, porque o `capturar-webhook.py fixtures` sobrescreve e vaza dados (tarefa 1.1). Os caminhos e valores acima não têm dado pessoal. Webhook 145 restaurado para a recepção do TESTE e conferido.
+
+## P1: status inicial na Graces (pai, 2026-10-20), tarefa 1.3
+
+Medido no barbeiro de teste, cliente de teste do owner, data D+2 15:00. Cancelado no fim; 0 restantes no barbeiro de teste.
+- `POST /agenda` -> 200 `{"sucesso":true,"idAgenda":...}`; `GET /agenda/agendamentos?idCliente=...` -> `idStatusAgenda: 2`, `status: "A Confirmar"`. **Nasce 2: a confirmação tem efeito.**
+- `POST /agenda/confirmacao {"idAgenda":...,"confirmado":true}` -> 200 `{"sucesso":true,"idStatusAgenda":3,"mensagem":"Agendamento confirmado."}`; status passa a 3 "Confirmado".
+- Repetir a confirmação -> **409** ProblemDetails `.../errors/conflito`, `detail: "Agendamento não está com status 'A confirmar'."`. Tratar o 409 como já confirmado (idempotência), conferindo o status atual antes de responder ao cliente.
+- P2 (handoff x envio) fica para o smoke da FASE 6, com a proteção do plano: não enviar a contato com handoff aberto.
