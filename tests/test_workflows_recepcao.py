@@ -83,7 +83,9 @@ class WorkflowRecepcao(unittest.TestCase):
         self.assertEqual(g["Roteador"][3], ["Upsert contato"])
         self.assertEqual(g["Upsert contato"], [["Titulo de confirmacao?"], ["Registrar falha contato"]])  # mensagens-agendadas: titulo da lista antes do buffer
         self.assertEqual(g["Titulo de confirmacao?"], [["Confirmacao aberta?"], ["Inserir mensagem"]])
-        self.assertEqual(g["Uma aberta?"], [["Responder 200 titulo"], ["Inserir mensagem"]])
+        self.assertEqual(g["Confirmacao aberta?"], [["Rota do titulo"]])
+        self.assertEqual(g["Rota do titulo"], [["Consumir titulo?"]])
+        self.assertEqual(g["Consumir titulo?"], [["Responder 200 titulo"], ["Inserir mensagem"]])
         self.assertEqual(g["Inserir mensagem"], [["Gravada?"], ["Registrar falha mensagem"]])
         self.assertEqual(g["Gravada?"], [["Responder 200 aceita"], ["Responder 200 descartada"]])
         self.assertEqual(g["Registrar falha contato"], [["Responder 500"]])

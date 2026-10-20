@@ -50,7 +50,10 @@ mecanismos, exclusão remota sujeita a falha, evento `closed` sem efeito conheci
 **Decision**: antes de cada envio, `GET /agenda/agendamentos?idCliente=<graces_cliente_id>&proximos=true`. Se
 o `idAgenda` não aparece ou o `horaInicio` mudou, a linha vira `cancelada` (motivo `orfa`) sem enviar. A
 confirmação só sai se `idStatusAgenda = 2` ("A confirmar"); com outro status vira `cancelada` (motivo
-`status_<n>`).
+`status_<n>`). Linha sem `graces_cliente_id` (criada pela reconciliação) é revalidada pela `GET /agenda/completa` do
+dia do início, procurando o `idAgenda` (revisão 2026-10-20, item 6). A ocorrência vale por `(idAgenda, horaInicio)`
+(recorrente repete o `idAgenda`). Lembrete e pós com status 10 ("Não vou poder") viram `cancelada` (motivo `recusada`):
+decisão do owner em 2026-10-20 ("Cancelar os dois").
 
 **Rationale**: IX (Graces é a fonte da verdade) e US3-6; cobre cancelamento pela equipe entre duas
 reconciliações. `POST /agenda/confirmacao` só funciona com status 2 (`04-agendamentos.md`).
@@ -126,6 +129,12 @@ com título de confirmação aberta é desviado para `bv-confirmacao`, sem buffe
   `mensagens.titulo_nao` e o contato tem confirmação enviada sem resposta → `bv-confirmacao` pelo caminho `texto`
   (sem buffer, sem turno do agente). Se há exatamente uma confirmação enviada sem resposta do contato, resolve
   por ela; com duas ou mais, segue como mensagem normal para o agente (que pergunta qual, via Decision 8).
+  **Revisão 2026-10-20 (itens 1 e 5)**: o `from_internal` (id) e o `start` (título) chegam para o MESMO toque. O título é
+  consumido (nunca vai ao agente) quando há confirmação respondida há menos de 2 × `mensagens.espera_texto_s` (o id
+  já tratou o toque: `repetida`, em silêncio) ou quando há confirmação aberta, nenhuma proposta `pendente` do contato
+  (dentro de `proposta.validade_min`) e a última saída para o contato foi a lista (`agendada-<id>`, tipo `lista`); senão
+  é texto comum do agente ("Confirmo" ao resumo de um agendamento novo). Depois da espera, com 2+ abertas o título
+  nunca escolhe: sem o id, responde `textos.confirmacao_escolher` pedindo para o cliente escolher.
 - **Caminho id (após captura)**: se a captura de uma seleção real (pendência P3) mostrar o `RowId` em algum
   evento (ex.: `from_internal` com `fromMe: false`), a normalização (`shared/rajada.js`) passa a classificá-lo
   como `resposta_lista` quando o id tem prefixo `bvc:` e chama `bv-confirmacao` com o `mensagem_id` exato
@@ -151,9 +160,14 @@ não vier no webhook); só o `from_internal` (perde a resposta se o evento falta
 **Decision**: `POST /agenda/confirmacao {idAgenda, confirmado}`; `confirmado: false` marca status 10 e não libera
 o horário (`04-agendamentos.md`). Em TESTE, só `idAgenda` do barbeiro de teste (XI/XIII; a linha guarda
 `id_profissional`). Antes de chamar: linha `cancelada` ou toque depois do início → sem Graces, texto
-`textos.confirmacao_desatualizada`. 409 ou outro erro → `textos.confirmacao_falhou` (cordial) + falha registrada. Status 0/5xx: até 2 novas chamadas (1 s e 5 s);
-como a confirmação só vale com status 2, uma chamada repetida que receba 409 é conferida por
-`GET /agenda/agendamentos` (status 3/10 igual ao pedido = sucesso), atendendo FR-015.
+`textos.confirmacao_desatualizada`. Erro → `textos.confirmacao_falhou` (cordial) + falha registrada. Status 0/5xx: até 2 novas chamadas (1 s e 5 s);
+como a confirmação só vale com status 2, o 409 (medido: repetir a confirmação devolve 409) é conferido por
+`GET /agenda/agendamentos?idCliente` (ou `/agenda/completa` do dia, sem cliente): status 3 para confirmar / 10 para
+recusar = sucesso; divergente = `desatualizada` (o claim é devolvido e a linha fica encerrada, motivo `divergente`);
+sem leitura = `falhou`, atendendo FR-015. Ocorrência de série recorrente (`dados.recorrente`) manda `data`.
+Confirmação já `enviada` sem resposta cujo agendamento o agente cancela, remarca ou troca fica encerrada (`motivo`
+`cancelada_agente`/`reagendada`, `resposta` NULL; sem migração: `motivo` em `enviada` era sempre NULL): o toque na
+lista antiga responde `textos.confirmacao_desatualizada`, sem Graces, e ela some do contexto do agente.
 Respostas por textos de config: `confirmacao_ok`, `confirmacao_recusada` (oferece remarcar ou cancelar),
 `confirmacao_repetida`, `confirmacao_desatualizada`, `confirmacao_falhou`; gravadas como `saida` em `mensagens`.
 "Não vou poder" grava em `conversas.pedido.confirmacao_recusada` o `idAgenda`, para o agente conduzir a remarcação
@@ -183,7 +197,11 @@ claramente equivalente; o `bv-confirmacao` aplica o mesmo claim e devolve o resu
 a hoje+7 (`mensagens.reconciliacao_dias`), casa `celularCliente` (`ddiCelular` + dígitos) com `contatos.telefone`;
 cancela pendentes cujo `idAgenda` sumiu ou mudou de horário; cria as faltantes por `bvMProgramar`. Em TESTE,
 considera só o barbeiro de teste e os contatos de `teste.contatos_escrita`. Contato não encontrado → motivo
-`sem_contato` (FR-017), uma vez por `idAgenda`.
+`sem_contato` (FR-017), uma vez por `idAgenda`. Revisão 2026-10-20: a janela começa ontem (mesmo início do `Ler
+estado`, para o pós de ontem não virar órfã); `idAgenda` repetido na janela (recorrente) é pulado e registrado uma vez
+(`recorrente:<idAgenda>`), porque a chave única é `(idAgenda, tipo)`. Limite: recorrente com uma só ocorrência na janela
+não é detectável pela `/agenda/completa` (não traz `recorrente`). Fora do TESTE, lê todos os barbeiros menos o de teste e
+casa os contatos pelos telefones da própria agenda.
 
 **Rationale**: `/agenda/completa` é o endpoint indicado para lembretes internos e cobre exatamente ±7 dias.
 
@@ -210,6 +228,9 @@ desenhado. Se nascer 3 (Confirmado), a confirmação não se aplica: a Decision 
 `max_por_contato_dia`, `repetida_max_por_hora`) e `textos.confirmacao_*`/`textos.lembrete`/`textos.pos` em
 `config/ambientes/integracao.json` e `producao.json`; PROD com ids de workflow vazios e o deploy recusando (XIII).
 Envio real só para `teste.contatos_escrita` (FR-018); demais contatos ficam `cancelada` com motivo `fora_da_lista`.
+As travas de TESTE (só barbeiro de teste, `fora_da_lista`, `fora_do_teste`, envio simulado) valem só com
+`ambiente = integracao` (revisão 2026-10-20, item 8). `producao.json` renderiza os workflows da feature (chaves sem
+id de PROD ficam vazias: `implantar` pede `--criar`; `teste.*` segue recusado no deploy de PROD, sem id inventado).
 
 ## Decision 13: anonimizador de fixtures
 

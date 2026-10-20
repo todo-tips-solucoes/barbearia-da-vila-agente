@@ -7,7 +7,9 @@ Uso: python3 -I scripts/smoke-mensagens.py [m1 m2 m3 m4 m6 ...] | --limpar      
   m2 selecao por id: confirma na Graces (status 3), repetir e idempotente
   m3 selecao por titulo (fallback): "Não vou poder" -> status 10 + conversas.pedido.confirmacao_recusada
   m4 desatualizada e fora do teste: sem Graces
-  m6 reconciliacao: agendamento da Graces sem contato -> uma falha `sem_contato` por idAgenda
+  m6 reconciliacao: agendamento da Graces sem contato -> uma falha `sem_contato` por idAgenda. Limite: com teste.contatos_escrita vazio
+     (exigido aqui) o Ler estado nao acha contato nenhum, entao so o caminho sem_contato e exercitado; criar/cancelar da reconciliacao
+     ficam nos testes de unidade (bvMReconciliar) e no E2E da FASE 6 com o numero do owner.
 Segredos de .env.smoke/.env.n8n (nunca impressos). Exit 1 se algum cenario falhar."""
 import importlib.util
 import json
@@ -94,6 +96,8 @@ def confirmacao_aberta(n, **o):
     cid = contato(n)
     ag, ini = agenda_teste(o.pop("idx", 0))
     i, _ = linha(cid, "confirmacao", situacao="enviada", ag=ag, cliente=sa.PAULO, inicio=ini, **o)
+    # a lista como ultima saida (como o Gravar resultado grava): sem ela o titulo vai ao agente (revisao, item 5)
+    sa.sql(f"INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ({cid}, 'agendada-{i}', 'saida', 'lista', 'smoke');")
     return cid, i, ag
 
 
@@ -162,7 +166,10 @@ def encerrar():
         sa._del(a)
     for t in _contatos:
         sa.sql(f"DELETE FROM contatos WHERE telefone='{t}';")  # cascade: mensagens, mensagens_agendadas, conversas, falhas
-    sa.sql("DELETE FROM falhas_agente WHERE code LIKE 'sem_contato:%' AND criado_em > now() - interval '1 day' AND contato_id IS NULL;")
+    # so as falhas dos agendamentos deste smoke (nunca as sem_contato reais do dia); --limpar sem _agendas nao apaga nenhuma
+    codes = ",".join(f"'sem_contato:{a}'" for a in _agendas if all(ch.isalnum() or ch == "-" for ch in a))
+    if codes:
+        sa.sql(f"DELETE FROM falhas_agente WHERE code IN ({codes}) AND contato_id IS NULL;")
 
 
 CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6)

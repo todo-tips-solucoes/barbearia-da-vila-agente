@@ -72,9 +72,12 @@ class Base:
                 self.assertIn("httpHeaderAuth", n["credentials"])
 
 
-def rodar(arq, no, input_, refs=None, each=False, run_index=0):
+PCFG = json.load(open(os.path.join(RAIZ, "config", "ambientes", "producao.json"), encoding="utf-8"))
+
+
+def rodar(arq, no, input_, refs=None, each=False, run_index=0, cfg=None):
     """Executa o jsCode renderizado de um Code node com $/$input simulados (tests/harness_code_node.js)."""
-    wf = json.loads(dep.renderizar(open(os.path.join(RAIZ, arq), encoding="utf-8").read(), CFG, RAIZ))
+    wf = json.loads(dep.renderizar(open(os.path.join(RAIZ, arq), encoding="utf-8").read(), cfg or CFG, RAIZ))
     js = next(n["parameters"]["jsCode"] for n in wf["nodes"] if n["name"] == no)
     r = subprocess.run(["node", os.path.join(RAIZ, "tests", "harness_code_node.js")], capture_output=True, text=True,
                        input=json.dumps({"js": js, "each": each, "input": input_, "refs": refs or {}, "runIndex": run_index}))
@@ -208,7 +211,9 @@ class BvMensagens(Base, unittest.TestCase):
     def test_cadeia_da_varredura(self):  # contracts/envio-chatmaster.md
         self.assertEqual(self.destinos("Reservar"), ["Tem cliente?"])
         self.assertEqual(self.destinos("Tem cliente?", 0), ["Graces agendamentos"])
-        self.assertEqual(self.destinos("Tem cliente?", 1), ["Decidir"])
+        self.assertEqual(self.destinos("Tem cliente?", 1), ["Graces dia"])  # item 6: sem cliente revalida pela /agenda/completa do dia
+        self.assertEqual(self.destinos("Graces dia"), ["Decidir"])
+        self.assertIn("/agenda/completa", self.nos["Graces dia"]["parameters"]["url"])
         self.assertEqual(self.destinos("Graces agendamentos"), ["Decidir"])
         self.assertEqual(self.destinos("Enviar?", 0), ["Enviar"])
         self.assertEqual(self.destinos("Enviar?", 1), ["Resultado"])
@@ -241,12 +246,14 @@ class BvMensagens(Base, unittest.TestCase):
         self.assertEqual(self.destinos("Agenda ok?", 0), ["Ler estado"])
         self.assertEqual(self.destinos("Agenda ok?", 1), ["Falha reconciliacao"])
         self.assertIn("/agenda/completa", self.nos["Agenda completa"]["parameters"]["url"])
-        self.assertIn("p.idProfissional === teste", self.nos["Achatar"]["parameters"]["jsCode"])  # TESTE: so o barbeiro de teste
+        self.assertIn("(p.idProfissional === teste) === soTeste", self.nos["Achatar"]["parameters"]["jsCode"])  # TESTE: so o de teste; PROD: todos menos ele
+        self.assertIn("dataInicio: $json.inicio", self.nos["Agenda completa"]["parameters"]["jsonQuery"])  # item 10
         self.assertIn("bvMReconciliar", self.nos["Reconciliar"]["parameters"]["jsCode"])
         a = self.nos["Aplicar"]["parameters"]["query"]
         self.assertIn("ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE", a)
         self.assertIn("'sem_contato:' || s", a)
         self.assertIn("NOT EXISTS (SELECT 1 FROM falhas_agente", a)  # sem_contato uma vez por idAgenda
+        self.assertIn("'recorrente:' || s", a)  # item 7: recorrente pulado e registrado uma vez
 
 
 class BvConfirmacao(Base, unittest.TestCase):
@@ -255,18 +262,29 @@ class BvConfirmacao(Base, unittest.TestCase):
     def test_entrada_e_claim_atomico(self):  # 4.1.1 / 4.1.2
         self.assertEqual([v["name"] for v in self.nos["Gatilho"]["parameters"]["workflowInputs"]["values"]], ["contato_id", "origem", "confirmado", "mensagem_id"])
         c = self.nos["Reivindicar"]["parameters"]["query"]
-        for t in ("contato_id = $2::bigint", "tipo = 'confirmacao'", "situacao = 'enviada'", "resposta IS NULL", "RETURNING"):
+        for t in ("contato_id = $2::bigint", "tipo = 'confirmacao'", "situacao = 'enviada'", "resposta IS NULL", "motivo IS NULL", "RETURNING"):
             self.assertIn(t, c)
         self.assertEqual(self.destinos("Reivindicar?", 0), ["Reivindicar"])
         self.assertEqual(self.destinos("Reivindicar?", 1), ["Desfecho"])  # desatualizada/repetida/fora do teste: sem Graces
         self.assertEqual(self.destinos("Chamar Graces?", 1), ["Desfecho"])
-        self.assertIn("conf-repetida-%", self.nos["Selecionar"]["parameters"]["query"])  # teto de repetidas
+        s = self.nos["Selecionar"]["parameters"]["query"]
+        self.assertIn("conf-repetida-%", s)  # teto de repetidas
+        self.assertIn("m.respondida_em > now() - make_interval(secs => $3::int)", s)  # item 1: o titulo enxerga o gemeo ja respondido
+        self.assertIn("m.motivo", s)  # item 3
 
     def test_graces_com_ate_duas_novas_chamadas(self):  # 4.1.3
         p = self.nos["Graces confirmacao"]["parameters"]
         self.assertIn("/agenda/confirmacao", p["url"])
         self.assertEqual(self.destinos("Repetir?", 0), ["Espera"])
         self.assertEqual(self.destinos("Espera"), ["Graces confirmacao"])
+        # item 4: 409 nao vira sucesso: conferir o status antes de afirmar
+        self.assertEqual(self.destinos("Repetir?", 1), ["Conferir?"])
+        self.assertEqual(self.destinos("Conferir?", 0), ["Graces conferir"])
+        self.assertEqual(self.destinos("Conferir?", 1), ["Desfecho"])
+        self.assertEqual(self.destinos("Graces conferir"), ["Conferencia"])
+        self.assertEqual(self.destinos("Conferencia"), ["Desfecho"])
+        self.assertEqual(self.nos["Graces conferir"]["parameters"]["method"], "GET")
+        self.assertIn("'agendamentos' : 'completa'", self.nos["Graces conferir"]["parameters"]["url"])
         self.assertIn("$runIndex", self.nos["Avaliar"]["parameters"]["jsCode"])
 
     def test_trava_de_teste_antes_do_claim(self):  # 4.1.1
@@ -275,12 +293,120 @@ class BvConfirmacao(Base, unittest.TestCase):
 
     def test_respostas_registro_e_recusa(self):  # 4.1.4
         r = self.nos["Registrar"]["parameters"]["query"]
-        for t in ("'confirmacao_recusada'", "'saida'", "'conf-' ||", "mensagem_id_canal", "falhas_agente", "resposta = NULL"):
+        for t in ("'confirmacao_recusada'", "'saida'", "'conf-' ||", "mensagem_id_canal", "falhas_agente", "resposta = NULL", "'divergente'",
+                  "tipo IN ('lembrete', 'pos_atendimento')", "motivo = 'recusada'"):  # item 11 (owner): recusa cancela lembrete e pos
             self.assertIn(t, r) if t != "mensagem_id_canal" else None
         self.assertEqual(self.destinos("Enviar texto?", 1), ["Registrar"])
         self.assertIn("ent.origem !== 'agente'", self.nos["Desfecho"]["parameters"]["jsCode"])  # o agente responde sozinho
 
 
+
+
+class RevisaoOnda7(CodeNodes):
+    """Achados da revisao de codigo (2026-10-20), executando o JS real dos Code nodes."""
+    CONF = "workflows/sub/bv-confirmacao.json"
+    MSG = "workflows/bv-mensagens.json"
+
+    def row(self, **o):
+        return {"id": "7", "situacao": "enviada", "resposta": None, "motivo": None, "recente": False, "id_profissional": TESTE, "futuro": True, "repetidas": "0",
+                "inicio": "2026-10-22T14:00:00", "telefone": TEL, "graces_agendamento_id": "A", "graces_cliente_id": None, "dados": {}, **o}
+
+    def test_item1_titulo_nao_confirma_a_outra_aberta(self):
+        ent = {"ok": True, "contato_id": "1", "origem": "titulo", "confirmado": True, "mensagem_id": None}
+        rows = [self.row(), self.row(id="8", resposta="confirmada", recente=True)]  # o id do mesmo toque ja respondeu a 8
+        e = rodar(self.CONF, "Escolher", rows, {"Normalizar": [ent]})[0]
+        self.assertEqual((e["acao"], e["code"]), ("fim", "repetida"))
+        e = rodar(self.CONF, "Escolher", [self.row(), self.row(id="8")], {"Normalizar": [ent]})[0]
+        self.assertEqual(e["code"], "ambigua")  # 2 abertas sem id: nenhuma e confirmada
+        d = rodar(self.CONF, "Desfecho", [{**e, "ent": ent}])[0]
+        self.assertEqual((d["enviar"], d["texto"]), (True, CFG["textos"]["confirmacao_escolher"]))  # pede para escolher
+
+    def test_item1_e_5_rota_do_titulo_na_recepcao(self):
+        rota = lambda **o: rodar("workflows/bv-recepcao.json", "Rota do titulo", [{"contato_id": "1", "abertas": "1", "recentes": "0", "propostas": "0", "ultima_lista": True, **o}])[0]
+        self.assertEqual(rota()["rota"], "consumir")
+        self.assertEqual(rota()["contato_id"], "1")  # Inserir mensagem (ramo agente) le $json.contato_id
+        self.assertEqual(rota(abertas="0", recentes="1", ultima_lista=False)["rota"], "consumir")  # gemeo do toque: nunca vai ao agente
+        self.assertEqual(rota(propostas="1")["rota"], "agente")  # "Confirmo" ao resumo do agente
+        self.assertEqual(rota(ultima_lista=False)["rota"], "agente")
+        q = json.load(open(os.path.join(RAIZ, "workflows", "bv-recepcao.json"), encoding="utf-8"))
+        q = next(n for n in q["nodes"] if n["name"] == "Confirmacao aberta?")["parameters"]["query"]
+        for t in ("AS abertas", "AS recentes", "AS propostas", "AS ultima_lista", "'agendada-%'", "motivo IS NULL", "estado = 'pendente'"):
+            self.assertIn(t, q)
+
+    def test_item2_confirmacoes_no_prompt_mesmo_em_sessao_nova(self):
+        import time
+        agora = int(time.time() * 1000)
+        ctx = {"ultima_ms": agora - 5 * 86400000, "pedido": {"confirmacao_recusada": {"idAgenda": "A", "em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}},
+               "opcoes": None, "historico": [], "pendente": None, "confirmacoes": [{"id": 9, "servico": "Corte", "barbeiro": "Ze", "inicio": "2026-10-22T14:00:00"}]}
+        r = rodar("workflows/sub/entregar-rajada.json", "Preparar", [], {"Gatilho": [{"itens": [{"tipo": "texto", "conteudo": "oi"}]}], "Ler contexto": [ctx], "Registrar turno": [{"turnos_hora": 0}]})[0]
+        self.assertTrue(r["sessao_nova"])
+        self.assertIn("id=9 (Corte com Ze", r["system"])
+        self.assertIn("não vai poder comparecer ao agendamento A", r["system"])
+
+    def test_item3_lista_antiga_encerrada_e_desatualizada_sem_graces(self):
+        ent = {"ok": True, "contato_id": "1", "origem": "id", "confirmado": True, "mensagem_id": "7"}
+        e = rodar(self.CONF, "Escolher", [self.row(motivo="cancelada_agente")], {"Normalizar": [ent]})[0]
+        self.assertEqual((e["acao"], e["code"]), ("fim", "desatualizada"))
+        d = rodar(self.CONF, "Desfecho", [{**e, "ent": ent}])[0]
+        self.assertEqual((d["texto"], d["idAgenda"], d["liberar"]), (CFG["textos"]["confirmacao_desatualizada"], None, False))
+
+    def test_item4_409_conferido(self):
+        ent = {"confirmado": True}
+        g = lambda st: {"statusCode": 200, "body": [{"idAgenda": "A", "horaInicio": "2026-10-22T14:00:00", "idStatusAgenda": st}]}
+        c = lambda i: rodar(self.CONF, "Conferencia", [i], {"Escolher": [{"row": self.row()}], "Normalizar": [ent]})[0]["code"]
+        self.assertEqual(c(g(3)), "confirmada")
+        self.assertEqual(c(g(10)), "desatualizada")
+        self.assertEqual(c({"error": "timeout"}), "falhou")
+        ok = {"ok": True, "contato_id": "1", "origem": "id", "confirmado": True, "mensagem_id": "7"}
+        d = rodar(self.CONF, "Desfecho", [{"code": "desatualizada", "status": 200}], {"Resolver claim": [{"ent": ok, "row": self.row(), "req": {"idAgenda": "A"}}]})[0]
+        self.assertEqual((d["ok"], d["liberar"], d["encerrar"]), (False, True, True))  # divergente: devolve o claim e encerra
+
+    def test_item6_sem_cliente_revalida_pela_completa(self):
+        l = self.linha(graces_cliente_id=None)
+        comp = lambda ag: {"statusCode": 200, "body": [{"idProfissional": TESTE, "apelido": "Ze", "agendamentos": [{"idAgenda": ag, "horaInicio": "2026-10-22T14:00:00", "idStatusAgenda": 2}]}]}
+        self.assertEqual(rodar(self.MSG, "Decidir", [comp("A")], {"Reservar": [l]}, each=True)["acao"], "enviar")
+        self.assertEqual(rodar(self.MSG, "Decidir", [comp("B")], {"Reservar": [l]}, each=True)["motivo"], "orfa")  # antes: enviava sem revalidar
+
+    def test_item7_recorrente_manda_data(self):
+        e = {"ent": {"confirmado": False}, "row": self.row(dados={"recorrente": True})}
+        r = rodar(self.CONF, "Resolver claim", [{"id": "7", "graces_agendamento_id": "A"}], {"Escolher": [e]})[0]
+        self.assertEqual(r["req"], {"idAgenda": "A", "confirmado": False, "data": "2026-10-22"})
+        ag = lambda ini: {"idAgenda": "R", "horaInicio": ini, "horaFim": ini, "idStatusAgenda": 2, "ddiCelular": "55", "celularCliente": "(11) 99999-8888", "nomeServico": "C", "profissional": "Z", "idProfissional": TESTE}
+        r = rodar(self.MSG, "Reconciliar", [{"linhas": [], "contatos": [{"id": 1, "telefone": TEL}]}], {"Achatar": [{"agenda": [ag("2099-10-21T14:00:00"), ag("2099-10-24T14:00:00")]}]})[0]
+        self.assertEqual((r["criar"], r["recorrente"]), ([], ["R"]))
+
+    def test_item8_prod_sem_travas_de_teste(self):
+        l = self.linha(id_profissional="real", telefone="5511912345678")
+        ag = {"statusCode": 200, "body": [{"idAgenda": "A", "horaInicio": "2026-10-22T14:00:00", "idStatusAgenda": 2}]}
+        self.assertEqual(rodar(self.MSG, "Decidir", [ag], {"Reservar": [l]}, each=True)["motivo"], "fora_do_teste")  # TESTE trava
+        self.assertEqual(rodar(self.MSG, "Decidir", [ag], {"Reservar": [l]}, each=True, cfg=PCFG)["acao"], "enviar")  # PROD nao
+        body = [{"idProfissional": TESTE, "agendamentos": [{"idAgenda": "T"}]}, {"idProfissional": "real", "agendamentos": [{"idAgenda": "R"}]}]
+        ach = lambda cfg: [a["idAgenda"] for a in rodar(self.MSG, "Achatar", [{"statusCode": 200, "body": body}], cfg=cfg)[0]["agenda"]]
+        self.assertEqual((ach(CFG), ach(PCFG)), (["T"], ["R"]))  # PROD nunca le a agenda do barbeiro de teste
+        ent = {"ok": True, "contato_id": "1", "origem": "id", "confirmado": True, "mensagem_id": "7"}
+        d = rodar(self.CONF, "Desfecho", [{"acao": "fim", "code": "confirmada", "ent": ent, "row": self.row(telefone="5511912345678")}], cfg=PCFG)[0]
+        self.assertEqual((d["enviar"], d["simulado"]), (True, False))
+        e = rodar(self.CONF, "Escolher", [self.row(id_profissional="real")], {"Normalizar": [ent]}, cfg=PCFG)[0]
+        self.assertEqual(e["acao"], "claim")
+
+    def test_item8_producao_renderiza_os_workflows_da_feature(self):
+        for arq in ("workflows/bv-mensagens.json", "workflows/sub/bv-confirmacao.json", "workflows/sub/bv-graces.json", "workflows/sub/entregar-rajada.json", "workflows/bv-recepcao.json"):
+            os.environ.setdefault("BV_WEBHOOK_TOKEN_SHA256", "tok")
+            wf = json.loads(dep.renderizar(open(os.path.join(RAIZ, arq), encoding="utf-8").read(), PCFG, RAIZ))
+            for n in wf["nodes"]:
+                js = n["parameters"].get("jsCode")
+                if js is None:
+                    continue
+                with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+                    f.write("function __no(){\n" + js + "\n}\n")
+                r = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
+                os.unlink(f.name)
+                self.assertEqual(r.returncode, 0, f"{arq}::{n['name']}: {r.stderr[:300]}")
+
+    def test_item10_janela_comeca_ontem(self):
+        import datetime
+        j = rodar(self.MSG, "Janela", [{}])[0]
+        self.assertEqual(datetime.date.fromisoformat(j["hoje"]) - datetime.date.fromisoformat(j["inicio"]), datetime.timedelta(days=1))
 
 
 class SemRequireNoN8n(unittest.TestCase):

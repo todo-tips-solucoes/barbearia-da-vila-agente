@@ -96,17 +96,23 @@ function bvMReconhecer(ev, cfg) {
 // agenda: itens de /agenda/completa achatados [{idAgenda,idProfissional,horaInicio,horaFim,idStatusAgenda,ddiCelular,celularCliente,nomeServico,profissional}];
 // linhas: mensagens_agendadas [{id,graces_agendamento_id,tipo,situacao,previsto_para,inicio}]; contatos: [{id,telefone}].
 // Nao recria o que ja tem linha (enviada/falhou/cancelada) do mesmo idAgenda, tipo e previsto_para.
-// Devolve { cancelar:[{id,motivo}], criar:[{...item, contato_id, tipo, previsto_para}], sem_contato:[idAgenda] }.
+// Devolve { cancelar:[{id,motivo}], criar:[{...item, contato_id, tipo, previsto_para}], sem_contato:[idAgenda], recorrente:[idAgenda] }.
+// shortcut: idAgenda que aparece mais de uma vez na janela (serie recorrente) e pulado e registrado (`recorrente`): a chave unica e
+// (idAgenda, tipo) e duas ocorrencias derrubariam o upsert; recorrente com uma so ocorrencia na janela nao e detectavel (a /completa nao
+// traz `recorrente`). Upgrade: chave por (idAgenda, inicio) numa migracao.
 function bvMReconciliar(agenda, linhas, contatos, agora, cfg) {
   const t0 = new Date(agora).getTime();
   const limite = t0 + (cfg.reconciliacao_dias || 7) * 86400000;
-  const out = { cancelar: [], criar: [], sem_contato: [] };
+  const out = { cancelar: [], criar: [], sem_contato: [], recorrente: [] };
   const vivos = new Set();
   const cancelados = new Set();
   const iso = (v) => new Date(v).toISOString();
+  const vezes = {};
+  for (const it of agenda) vezes[it.idAgenda] = (vezes[it.idAgenda] || 0) + 1;
   for (const it of agenda) {
     if (it.idStatusAgenda === 9) continue; // nao compareceu: nada a programar
     vivos.add(it.idAgenda);
+    if (vezes[it.idAgenda] > 1) { if (!out.recorrente.includes(it.idAgenda)) out.recorrente.push(it.idAgenda); continue; }
     const tel = bvMDig(it.ddiCelular) + bvMDig(it.celularCliente);
     const c = tel.length > bvMDig(it.ddiCelular).length ? contatos.find((x) => bvMDig(x.telefone) === tel) : null;
     if (!c) { out.sem_contato.push(it.idAgenda); continue; }
@@ -141,9 +147,23 @@ function bvMTextoDe(linha, textos) {
   return bvMTemplate(textos[linha.tipo === 'pos_atendimento' ? 'pos' : linha.tipo], { servico: d.servico, barbeiro: d.barbeiro, dia: bvMDia(linha.inicio), hora: String(linha.inicio || '').slice(11, 16) });
 }
 
+// /agenda/completa ([{idProfissional, apelido, agendamentos:[...]}]) -> lista plana; /agenda/agendamentos (ja plana) passa igual.
+function bvMAgendaDe(body) {
+  if (!Array.isArray(body)) return null;
+  const out = [];
+  for (const x of body) {
+    if (x && Array.isArray(x.agendamentos)) for (const a of x.agendamentos) out.push({ ...a, idProfissional: x.idProfissional, profissional: String(x.apelido || '').trim() });
+    else if (x) out.push(x);
+  }
+  return out;
+}
+
+// Ocorrencia de (idAgenda, inicio) na resposta (recorrente: mesmo idAgenda em varias ocorrencias, so a do inicio vale).
+const bvMOcorrencia = (lista, idAgenda, inicio) => lista.find((a) => a && a.idAgenda === idAgenda && String(a.horaInicio).slice(0, 16) === String(inicio).slice(0, 16));
+
 // Decide o destino de uma linha reservada: enviar | cancelar(motivo) | adiar (libera a reserva, tenta na proxima varredura).
-// resp: { status, body } do GET /agenda/agendamentos do cliente (null = sem graces_cliente_id: nao ha como revalidar).
-// cfg: { wid, botao, topo, titulo_sim, titulo_nao, textos, teste?: { testeId, escrita: [digitos] } }
+// resp: { status, body } do GET /agenda/agendamentos do cliente ou da /agenda/completa do dia (linha sem graces_cliente_id); null = nao revalida.
+// cfg: { wid, botao, topo, titulo_sim, titulo_nao, textos, teste?: { testeId, escrita: [digitos] } } (teste so no ambiente integracao)
 function bvMDecidir(linha, resp, cfg) {
   const tel = String(linha.telefone || '');
   if (cfg.teste) { // trava de TESTE: so o barbeiro de teste e contatos da lista de escrita (FR-012, XIII)
@@ -152,10 +172,12 @@ function bvMDecidir(linha, resp, cfg) {
   }
   if (linha.handoff_aberto) return { acao: 'adiar' }; // equipe conversando: nao interromper (plan; P2 a medir no smoke)
   if (resp) {
-    if (!(resp.status >= 200 && resp.status < 300) || !Array.isArray(resp.body)) return { acao: 'adiar' };
-    const ag = resp.body.find((a) => a && a.idAgenda === linha.graces_agendamento_id);
-    if (!ag || String(ag.horaInicio).slice(0, 16) !== String(linha.inicio).slice(0, 16)) return { acao: 'cancelar', motivo: 'orfa' };
+    const lista = resp.status >= 200 && resp.status < 300 ? bvMAgendaDe(resp.body) : null;
+    if (!lista) return { acao: 'adiar' };
+    const ag = bvMOcorrencia(lista, linha.graces_agendamento_id, linha.inicio);
+    if (!ag) return { acao: 'cancelar', motivo: 'orfa' };
     if (linha.tipo === 'confirmacao' && ag.idStatusAgenda !== 2) return { acao: 'cancelar', motivo: `status_${ag.idStatusAgenda}` };
+    if (ag.idStatusAgenda === 10) return { acao: 'cancelar', motivo: 'recusada' }; // "Nao vou poder": owner decidiu cancelar lembrete e pos
     if (linha.tipo === 'pos_atendimento' && ag.idStatusAgenda === 9) return { acao: 'cancelar', motivo: 'status_9' };
   }
   const texto = bvMTextoDe(linha, cfg.textos);
@@ -177,31 +199,72 @@ function bvMConfNormalizar(raw) {
   return { ok: true, contato_id: String(r.contato_id), origem: r.origem, confirmado: r.confirmado === true || r.confirmado === 'true', mensagem_id: temId ? String(r.mensagem_id) : null };
 }
 
-// rows: confirmacoes do contato [{id, situacao, resposta, id_profissional, futuro, repetidas, ...}] (so as do proprio contato).
+// rows: confirmacoes do contato [{id, situacao, resposta, motivo, recente, id_profissional, futuro, repetidas, ...}] (so as do proprio contato).
+// motivo preenchido numa `enviada` = encerrada (agendamento cancelado/remarcado depois do envio): lista antiga, desatualizada.
+// recente = respondida ha pouco (o from_internal do MESMO toque ja chegou): o titulo nunca escolhe outra linha.
 // Devolve { acao: 'claim', row } ou { acao: 'fim', code, row? } (code: desatualizada|ambigua|fora_do_teste|repetida).
 function bvMConfEscolher(rows, ent, cfg) {
-  const ativas = (rows || []).filter((r) => r && r.situacao === 'enviada' && !r.resposta && r.futuro);
+  const ativas = (rows || []).filter((r) => r && r.situacao === 'enviada' && !r.resposta && !r.motivo && r.futuro);
   let row;
   if (ent.mensagem_id) {
     row = (rows || []).find((r) => String(r.id) === String(ent.mensagem_id));
     if (!row) return { acao: 'fim', code: 'desatualizada' };
-  } else if (ativas.length === 1) row = ativas[0];
-  else return { acao: 'fim', code: ativas.length ? 'ambigua' : 'desatualizada' };
+  } else {
+    const gemea = (rows || []).find((r) => r && r.resposta && r.recente);
+    if (gemea) return { acao: 'fim', code: 'repetida', row: gemea };
+    if (ativas.length > 1) return { acao: 'fim', code: 'ambigua', row: ativas[0] }; // 2+ sem id: pede para escolher (row so da o telefone)
+    if (!ativas.length) return { acao: 'fim', code: 'desatualizada' };
+    row = ativas[0];
+  }
   if (cfg.testeId && row.id_profissional !== cfg.testeId) return { acao: 'fim', code: 'fora_do_teste', row };
-  if (row.situacao !== 'enviada' || !row.futuro) return { acao: 'fim', code: 'desatualizada', row };
+  if (row.situacao !== 'enviada' || !row.futuro || row.motivo) return { acao: 'fim', code: 'desatualizada', row };
   if (row.resposta) return { acao: 'fim', code: 'repetida', row };
   return { acao: 'claim', row };
 }
 
 // Resposta da Graces ao POST /agenda/confirmacao. tent = tentativa ja feita (0-based). 0/5xx: ate 2 novas chamadas (1 s, 5 s).
-// 409 (medido, P1): o agendamento nao esta mais "A confirmar" => idempotente: confirmar vale confirmada; recusar vale recusada
-// (o agente oferece cancelar/remarcar). shortcut: 409 nao e conferido por GET; upgrade: conferir idStatusAgenda antes de afirmar.
+// 409 (medido, P1): o agendamento nao esta mais "A confirmar" => `conferir` (GET do agendamento, bvMConfConferir) antes de afirmar.
 function bvMConfAvaliar(status, tent, confirmado) {
   const s = Number(status) || 0;
   if (s >= 200 && s < 300) return { code: confirmado ? 'confirmada' : 'recusada' };
-  if (s === 409) return { code: confirmado ? 'confirmada' : 'recusada', repetido: true };
+  if (s === 409) return { code: 'conferir' };
   if ((s === 0 || s >= 500) && tent < 2) return { code: 'retry', espera_s: [1, 5][tent] };
   return { code: 'falhou', status: s };
+}
+
+// Conferencia apos 409: resp = GET /agenda/agendamentos?idCliente ou /agenda/completa do dia; row = {graces_agendamento_id, inicio}.
+// Confirmar so vale com status 3; recusar so com 10. Divergente ou ausente = desatualizada; sem resposta valida = falhou.
+function bvMConfConferir(resp, row, confirmado) {
+  const s = Number(resp && resp.status) || 0;
+  const lista = s >= 200 && s < 300 ? bvMAgendaDe(resp.body) : null;
+  if (!lista) return { code: 'falhou', status: s };
+  const ag = bvMOcorrencia(lista, row.graces_agendamento_id, row.inicio);
+  if (ag && ag.idStatusAgenda === (confirmado ? 3 : 10)) return { code: confirmado ? 'confirmada' : 'recusada', status: s };
+  return { code: 'desatualizada', status: s };
+}
+
+// Corpo do POST /agenda/confirmacao; `data` so para ocorrencia de serie recorrente (dados.recorrente).
+const bvMConfReq = (idAgenda, row, confirmado) => ({ idAgenda, confirmado, ...(row && row.dados && row.dados.recorrente ? { data: String(row.inicio).slice(0, 10) } : {}) });
+
+// Rota do texto igual a um titulo da lista (bv-recepcao). e = { abertas, recentes, propostas, ultima_lista }:
+// recentes > 0 => o from_internal do mesmo toque ja respondeu: consome (bv-confirmacao devolve repetida, sem texto);
+// com confirmacao aberta, sem proposta pendente e com a lista como ultima saida => consome (espera o id); senao vai ao agente.
+function bvMTituloRota(e) {
+  if (Number(e && e.recentes) > 0) return 'consumir';
+  if (Number(e && e.abertas) > 0 && !(Number(e.propostas) > 0) && (e.ultima_lista === true || e.ultima_lista === 'true')) return 'consumir';
+  return 'agente';
+}
+
+// Linhas do prompt do agente sobre confirmacoes (independem de sessao nova: a confirmacao chega quando o cliente nao fala ha dias).
+// A recusa vale por janelaMin a partir de `em` (propria, nao a da conversa). neutro = bvNeutralizar.
+function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro) {
+  let s = '';
+  const cs = Array.isArray(ctx && ctx.confirmacoes) ? ctx.confirmacoes : [];
+  if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ');
+  const r = ctx && ctx.pedido && ctx.pedido.confirmacao_recusada;
+  const em = r ? Date.parse(r.em) : NaN;
+  if (Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado): ofereça remarcar ou cancelar.';
+  return s;
 }
 
 function bvMConfTexto(code, row, origem, textos, repetidaMax) {
@@ -212,7 +275,9 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax) {
   if (code === 'desatualizada') return textos.confirmacao_desatualizada;
   if (code === 'falhou') return textos.confirmacao_falhou;
   if (code === 'repetida') return origem === 'titulo' || Number(r.repetidas || 0) >= repetidaMax ? '' : textos.confirmacao_repetida;
-  return ''; // fora_do_teste, ambigua: sem texto (o agente segue o turno normal)
+  if (code === 'ambigua') return origem === 'titulo' ? textos.confirmacao_escolher || '' : '';
+  return ''; // fora_do_teste: sem texto
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto };
+if (typeof module !== 'undefined') module.exports = { bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+  bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

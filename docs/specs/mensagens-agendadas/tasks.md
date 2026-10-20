@@ -161,6 +161,22 @@ Ref: quickstart.md 3-14; SC-001..SC-007
 - [ ] 6.2.3 Órfã/faltante, falha do canal, handoff (11-13) e limpeza (14)
 - [ ] 6.2.4 Revisão de veracidade (nenhum campo sem fonte) e PR pelo rito
 
+### 6.3 Correções da revisão de código (2026-10-20) `[C]`
+
+Ref: revisão independente do pai (itens 1-12); research D2/D6/D7/D9/D12; contracts/bv-confirmacao.md
+
+- [x] 6.3.1 Título com 2 confirmações abertas: `Rota do titulo` (`bvMTituloRota`) na recepção; `bvMConfEscolher` aborta `repetida` com respondida recente e responde `confirmacao_escolher` com 2+ (itens 1 e 5)
+- [x] 6.3.2 Confirmações no prompt independem de sessão nova; recusa pela recência do `em` (`bvMPromptConfirmacoes`) (item 2)
+- [x] 6.3.3 Confirmação enviada encerrada ao cancelar/remarcar (`me` no `Persistir`; `motivo` sem migração nova); Selecionar/Reivindicar/Ler contexto/recepção a excluem (item 3)
+- [x] 6.3.4 409 conferido por GET (`Graces conferir` + `bvMConfConferir`) (item 4)
+- [x] 6.3.5 Linha sem `graces_cliente_id` revalidada pela `/agenda/completa` do dia (`Graces dia`) (item 6)
+- [x] 6.3.6 Recorrentes: ocorrência por `(idAgenda, inicio)`, reconciliação pula e registra `recorrente:`, POST com `data` (item 7)
+- [x] 6.3.7 Travas de TESTE só com `ambiente = integracao`; `producao.json` renderiza os 5 workflows (item 8)
+- [x] 6.3.8 `mc` não cancela reservada; janela da reconciliação desde ontem (itens 9 e 10)
+- [x] 6.3.9 Recusa cancela lembrete e pós (owner, 2026-10-20: "Cancelar os dois") no `Decidir` (status 10) e no `Registrar` (item 11)
+- [x] 6.3.10 Smoke: limpeza só das `sem_contato` do smoke; limite do m6 documentado; m3 grava a lista como última saída (item 12)
+- [ ] 6.3.11 Republicar no TESTE (ordem: `bv-confirmacao`, `bv-graces`, `entregar-rajada`, `bv-recepcao`, `bv-mensagens`; sem migração nova) e rodar `smoke-mensagens.py` (m1-m4) {humano:pai}
+
 ---
 
 ## Matriz de Dependencias

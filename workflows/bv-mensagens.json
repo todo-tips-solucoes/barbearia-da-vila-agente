@@ -116,7 +116,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', botao: \"{{BV:textos.lista_botao}}\", topo: \"{{BV:textos.lista_topo}}\", titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\", retentativas_min: {{BV:mensagens.retentativas_min}},\n  textos: { confirmacao: \"{{BV:textos.confirmacao}}\", lembrete: \"{{BV:textos.lembrete}}\", pos: \"{{BV:textos.pos}}\" },\n  teste: { testeId: '{{BV:graces.barbeiro_teste_id}}', escrita: {{BV:teste.contatos_escrita}} } };\nconst l = $('Reservar').item.json;\nconst r = $input.item.json;\n// sem graces_cliente_id nao ha revalidacao (reconciliacao); com ele, falha da chamada (status 0) vira `adiar`, nunca envio as cegas\nconst resp = l.graces_cliente_id ? { status: Number(r.statusCode || 0), body: r.body } : null;\nconst d = bvMDecidir(l, resp, cfg);\nreturn { json: { id: l.id, reserva: l.reserva, tentativas: l.tentativas, tipo: l.tipo, ...d } };",
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', botao: \"{{BV:textos.lista_botao}}\", topo: \"{{BV:textos.lista_topo}}\", titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\", retentativas_min: {{BV:mensagens.retentativas_min}},\n  textos: { confirmacao: \"{{BV:textos.confirmacao}}\", lembrete: \"{{BV:textos.lembrete}}\", pos: \"{{BV:textos.pos}}\" },\n  teste: '{{BV:ambiente}}' === 'integracao' ? { testeId: '{{BV:graces.barbeiro_teste_id}}', escrita: {{BV:teste.contatos_escrita}} } : null }; // trava so no TESTE\nconst l = $('Reservar').item.json;\nconst r = $input.item.json;\n// com graces_cliente_id: GET /agenda/agendamentos; sem (reconciliacao): /agenda/completa do dia. Falha da chamada vira `adiar`, nunca envio as cegas\nconst resp = { status: Number(r.statusCode || 0), body: r.body };\nconst d = bvMDecidir(l, resp, cfg);\nreturn { json: { id: l.id, reserva: l.reserva, tentativas: l.tentativas, tipo: l.tipo, ...d } };",
         "mode": "runOnceForEachItem"
       },
       "id": "eed6c5e2-7f96-51f2-8ac3-b7bb7cfb9665",
@@ -200,7 +200,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', botao: \"{{BV:textos.lista_botao}}\", topo: \"{{BV:textos.lista_topo}}\", titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\", retentativas_min: {{BV:mensagens.retentativas_min}},\n  textos: { confirmacao: \"{{BV:textos.confirmacao}}\", lembrete: \"{{BV:textos.lembrete}}\", pos: \"{{BV:textos.pos}}\" },\n  teste: { testeId: '{{BV:graces.barbeiro_teste_id}}', escrita: {{BV:teste.contatos_escrita}} } };\nconst d = $('Decidir').item.json;\nconst base = { id: d.id, reserva: d.reserva };\nif (d.acao === 'cancelar') return { json: { ...base, situacao: 'cancelada', motivo: d.motivo } };\nif (d.acao === 'adiar') return { json: { ...base, situacao: 'pendente' } }; // libera a reserva; tenta na proxima varredura\nconst status = Number($input.item.json.statusCode || 0); // 0 = timeout/sem resposta: incerto, nunca reenvia\nconst r = bvMResultadoEnvio(status, d.tentativas, cfg, new Date());\nconst falha = r.situacao === 'enviada' ? {} : { falha_motivo: status === 0 ? 'mensagem|envio_incerto' : 'mensagem|envio_falhou', code: status === 0 ? 'SEM_RESPOSTA' : `HTTP_${status}`, status };\nreturn { json: { ...base, situacao: r.situacao, motivo: r.motivo, tentativas: r.tentativas, proxima: r.proxima_tentativa_em, ...(r.situacao === 'enviada' ? { tipo_msg: d.tipo_msg, texto: d.texto } : {}), ...falha } };",
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', botao: \"{{BV:textos.lista_botao}}\", topo: \"{{BV:textos.lista_topo}}\", titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\", retentativas_min: {{BV:mensagens.retentativas_min}},\n  textos: { confirmacao: \"{{BV:textos.confirmacao}}\", lembrete: \"{{BV:textos.lembrete}}\", pos: \"{{BV:textos.pos}}\" },\n  teste: '{{BV:ambiente}}' === 'integracao' ? { testeId: '{{BV:graces.barbeiro_teste_id}}', escrita: {{BV:teste.contatos_escrita}} } : null }; // trava so no TESTE\nconst d = $('Decidir').item.json;\nconst base = { id: d.id, reserva: d.reserva };\nif (d.acao === 'cancelar') return { json: { ...base, situacao: 'cancelada', motivo: d.motivo } };\nif (d.acao === 'adiar') return { json: { ...base, situacao: 'pendente' } }; // libera a reserva; tenta na proxima varredura\nconst status = Number($input.item.json.statusCode || 0); // 0 = timeout/sem resposta: incerto, nunca reenvia\nconst r = bvMResultadoEnvio(status, d.tentativas, cfg, new Date());\nconst falha = r.situacao === 'enviada' ? {} : { falha_motivo: status === 0 ? 'mensagem|envio_incerto' : 'mensagem|envio_falhou', code: status === 0 ? 'SEM_RESPOSTA' : `HTTP_${status}`, status };\nreturn { json: { ...base, situacao: r.situacao, motivo: r.motivo, tentativas: r.tentativas, proxima: r.proxima_tentativa_em, ...(r.situacao === 'enviada' ? { tipo_msg: d.tipo_msg, texto: d.texto } : {}), ...falha } };",
         "mode": "runOnceForEachItem"
       },
       "id": "467694b2-b159-592e-b213-1de59f8f64d4",
@@ -257,7 +257,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());\nconst fim = new Date(Date.parse(hoje + 'T00:00:00Z') + {{BV:mensagens.reconciliacao_dias}} * 86400000).toISOString().slice(0, 10);\nreturn [{ json: { hoje, fim } }];"
+        "jsCode": "const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());\nconst dia = (n) => new Date(Date.parse(hoje + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);\n// inicio = ontem: o Ler estado le desde ontem; sem isso o pos_atendimento de ontem viraria orfa\nreturn [{ json: { hoje, inicio: dia(-1), fim: dia({{BV:mensagens.reconciliacao_dias}}) } }];"
       },
       "id": "97e60e40-ac6a-5f63-b9c6-5a2678fcbc1f",
       "name": "Janela",
@@ -286,7 +286,7 @@
         },
         "sendQuery": true,
         "specifyQuery": "json",
-        "jsonQuery": "={{ JSON.stringify({ dataInicio: $json.hoje, dataFim: $json.fim, pageSize: 200 }) }}",
+        "jsonQuery": "={{ JSON.stringify({ dataInicio: $json.inicio, dataFim: $json.fim, pageSize: 200 }) }}",
         "sendBody": false
       },
       "id": "17ec99ae-254b-5f8f-bd60-fa1442df91d5",
@@ -307,7 +307,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// TESTE: so a agenda do barbeiro de teste (nunca a de barbeiros reais)\nconst r = $input.first().json;\nif (Number(r.statusCode) !== 200 || !Array.isArray(r.body)) return [{ json: { ok: false, status: Number(r.statusCode || 0) } }];\nconst teste = '{{BV:graces.barbeiro_teste_id}}';\nconst agenda = [];\nfor (const p of r.body) if (p.idProfissional === teste) for (const a of p.agendamentos || []) agenda.push({ ...a, idProfissional: p.idProfissional, profissional: String(p.apelido || '').trim() });\nreturn [{ json: { ok: true, agenda } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// TESTE (integracao): so a agenda do barbeiro de teste; fora do TESTE: todos menos o de teste (nunca vai a cliente)\nconst r = $input.first().json;\nif (Number(r.statusCode) !== 200 || !Array.isArray(r.body)) return [{ json: { ok: false, status: Number(r.statusCode || 0) } }];\nconst teste = '{{BV:graces.barbeiro_teste_id}}', soTeste = '{{BV:ambiente}}' === 'integracao';\nconst agenda = bvMAgendaDe(r.body.filter((p) => p && (p.idProfissional === teste) === soTeste));\nreturn [{ json: { ok: true, agenda } }];"
       },
       "id": "a8009200-3018-5d9c-9e9d-06e94e1655db",
       "name": "Achatar",
@@ -379,7 +379,7 @@
         "operation": "executeQuery",
         "query": "SELECT COALESCE((SELECT json_agg(json_build_object('id', m.id, 'graces_agendamento_id', m.graces_agendamento_id, 'tipo', m.tipo, 'situacao', m.situacao, 'previsto_para', m.previsto_para, 'inicio', to_char(m.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS'))) FROM mensagens_agendadas m WHERE m.inicio >= ($1::date - 1)), '[]'::json) AS linhas, COALESCE((SELECT json_agg(json_build_object('id', c.id, 'telefone', c.telefone)) FROM contatos c WHERE regexp_replace(c.telefone, '[^0-9]', '', 'g') IN (SELECT jsonb_array_elements_text($2::jsonb))), '[]'::json) AS contatos",
         "options": {
-          "queryReplacement": "={{ [$('Janela').first().json.hoje, JSON.stringify({{BV:teste.contatos_escrita}}.map((x) => String(x).replace(/\\D/g, '')))] }}"
+          "queryReplacement": "={{ [$('Janela').first().json.hoje, JSON.stringify(('{{BV:ambiente}}' === 'integracao' ? {{BV:teste.contatos_escrita}} : $('Achatar').first().json.agenda.map((a) => String(a.ddiCelular || '') + String(a.celularCliente || ''))).map((x) => String(x).replace(/\\D/g, '')))] }}"
         }
       },
       "id": "cd0c9ca8-287b-5461-b4df-50b512dd017c",
@@ -399,7 +399,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { reconciliacao_dias: {{BV:mensagens.reconciliacao_dias}}, confirmacao_hora: \"{{BV:mensagens.confirmacao_hora}}\", lembrete_antes_min: {{BV:mensagens.lembrete_antes_min}}, pos_depois_min: {{BV:mensagens.pos_depois_min}} };\nconst agenda = $('Achatar').first().json.agenda;\nconst e = $input.first().json;\nconst r = bvMReconciliar(agenda, e.linhas || [], e.contatos || [], new Date(), cfg);\n// 'reagendada' e substituida pelo upsert do Aplicar (mesmo idAgenda e tipo): cancelar a antiga aqui disputaria a mesma linha\nconst cancelar = r.cancelar.filter((c) => c.motivo !== 'reagendada').map((c) => ({ id: c.id, motivo: c.motivo }));\nconst criar = r.criar.map((c) => ({ contato_id: c.contato_id, tipo: c.tipo, previsto_para: c.previsto_para, idAgenda: c.idAgenda, idProfissional: c.idProfissional, inicio: c.horaInicio,\n  dados: { servico: c.nomeServico, barbeiro: c.profissional, fim: c.horaFim } }));\nreturn [{ json: { cancelar, criar, sem_contato: [...new Set(r.sem_contato)] } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { reconciliacao_dias: {{BV:mensagens.reconciliacao_dias}}, confirmacao_hora: \"{{BV:mensagens.confirmacao_hora}}\", lembrete_antes_min: {{BV:mensagens.lembrete_antes_min}}, pos_depois_min: {{BV:mensagens.pos_depois_min}} };\nconst agenda = $('Achatar').first().json.agenda;\nconst e = $input.first().json;\nconst r = bvMReconciliar(agenda, e.linhas || [], e.contatos || [], new Date(), cfg);\n// 'reagendada' e substituida pelo upsert do Aplicar (mesmo idAgenda e tipo): cancelar a antiga aqui disputaria a mesma linha\nconst cancelar = r.cancelar.filter((c) => c.motivo !== 'reagendada').map((c) => ({ id: c.id, motivo: c.motivo }));\nconst criar = r.criar.map((c) => ({ contato_id: c.contato_id, tipo: c.tipo, previsto_para: c.previsto_para, idAgenda: c.idAgenda, idProfissional: c.idProfissional, inicio: c.horaInicio,\n  dados: { servico: c.nomeServico, barbeiro: c.profissional, fim: c.horaFim } }));\nreturn [{ json: { cancelar, criar, sem_contato: [...new Set(r.sem_contato)], recorrente: r.recorrente } }];"
       },
       "id": "d51effe4-f346-5fbe-9056-8b1ddc42dfdd",
       "name": "Reconciliar",
@@ -413,9 +413,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH mc AS (UPDATE mensagens_agendadas m SET situacao = 'cancelada', motivo = x.motivo, reservada_em = NULL, atualizado_em = now() FROM jsonb_to_recordset($1::jsonb) AS x(id bigint, motivo text) WHERE m.id = x.id AND m.situacao = 'pendente' AND m.reservada_em IS NULL RETURNING 1), ma AS (INSERT INTO mensagens_agendadas (contato_id, tipo, previsto_para, graces_agendamento_id, situacao, id_profissional, inicio, dados) SELECT x.contato_id, x.tipo, x.previsto_para::timestamptz, x.\"idAgenda\", 'pendente', x.\"idProfissional\", x.inicio::timestamp, COALESCE(x.dados, '{}'::jsonb) FROM jsonb_to_recordset($2::jsonb) AS x(contato_id bigint, tipo text, previsto_para text, \"idAgenda\" text, \"idProfissional\" text, inicio text, dados jsonb) WHERE NOT EXISTS (SELECT 1 FROM mensagens_agendadas m WHERE m.graces_agendamento_id = x.\"idAgenda\" AND m.tipo = x.tipo AND m.previsto_para = x.previsto_para::timestamptz AND m.situacao <> 'pendente') ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE SET previsto_para = EXCLUDED.previsto_para, inicio = EXCLUDED.inicio, dados = EXCLUDED.dados, tentativas = 0, proxima_tentativa_em = NULL, atualizado_em = now() WHERE mensagens_agendadas.reservada_em IS NULL RETURNING 1), sc AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code) SELECT 'mensagem', 'mensagem|reconciliacao', 'sem_contato', 'sem_contato:' || s FROM jsonb_array_elements_text($3::jsonb) s WHERE NOT EXISTS (SELECT 1 FROM falhas_agente f WHERE f.code = 'sem_contato:' || s) RETURNING 1) SELECT (SELECT count(*) FROM ma) AS criadas",
+        "query": "WITH mc AS (UPDATE mensagens_agendadas m SET situacao = 'cancelada', motivo = x.motivo, reservada_em = NULL, atualizado_em = now() FROM jsonb_to_recordset($1::jsonb) AS x(id bigint, motivo text) WHERE m.id = x.id AND m.situacao = 'pendente' AND m.reservada_em IS NULL RETURNING 1), ma AS (INSERT INTO mensagens_agendadas (contato_id, tipo, previsto_para, graces_agendamento_id, situacao, id_profissional, inicio, dados) SELECT x.contato_id, x.tipo, x.previsto_para::timestamptz, x.\"idAgenda\", 'pendente', x.\"idProfissional\", x.inicio::timestamp, COALESCE(x.dados, '{}'::jsonb) FROM jsonb_to_recordset($2::jsonb) AS x(contato_id bigint, tipo text, previsto_para text, \"idAgenda\" text, \"idProfissional\" text, inicio text, dados jsonb) WHERE NOT EXISTS (SELECT 1 FROM mensagens_agendadas m WHERE m.graces_agendamento_id = x.\"idAgenda\" AND m.tipo = x.tipo AND m.previsto_para = x.previsto_para::timestamptz AND m.situacao <> 'pendente') ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE SET previsto_para = EXCLUDED.previsto_para, inicio = EXCLUDED.inicio, dados = EXCLUDED.dados, tentativas = 0, proxima_tentativa_em = NULL, atualizado_em = now() WHERE mensagens_agendadas.reservada_em IS NULL RETURNING 1), sc AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code) SELECT 'mensagem', 'mensagem|reconciliacao', 'sem_contato', 'sem_contato:' || s FROM jsonb_array_elements_text($3::jsonb) s WHERE NOT EXISTS (SELECT 1 FROM falhas_agente f WHERE f.code = 'sem_contato:' || s) RETURNING 1), rc AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code) SELECT 'mensagem', 'mensagem|reconciliacao', 'recorrente', 'recorrente:' || s FROM jsonb_array_elements_text($4::jsonb) s WHERE NOT EXISTS (SELECT 1 FROM falhas_agente f WHERE f.code = 'recorrente:' || s) RETURNING 1) SELECT (SELECT count(*) FROM ma) AS criadas",
         "options": {
-          "queryReplacement": "={{ [JSON.stringify($json.cancelar), JSON.stringify($json.criar), JSON.stringify($json.sem_contato)] }}"
+          "queryReplacement": "={{ [JSON.stringify($json.cancelar), JSON.stringify($json.criar), JSON.stringify($json.sem_contato), JSON.stringify($json.recorrente || [])] }}"
         }
       },
       "id": "005d45f4-d3fe-5139-b725-3376890e0b5c",
@@ -432,6 +432,43 @@
           "name": "Postgres Barbearia Vila"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{BV:graces.host}}/public/v1/agenda/completa",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ dataInicio: String($json.inicio).slice(0, 10), dataFim: String($json.inicio).slice(0, 10), pageSize: 200 }) }}",
+        "sendBody": false
+      },
+      "id": "00d739d0-04fa-52a6-82f1-e01a35deb84f",
+      "name": "Graces dia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        150
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -468,7 +505,7 @@
         ],
         [
           {
-            "node": "Decidir",
+            "node": "Graces dia",
             "type": "main",
             "index": 0
           }
@@ -615,6 +652,17 @@
         [
           {
             "node": "Aplicar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces dia": {
+      "main": [
+        [
+          {
+            "node": "Decidir",
             "type": "main",
             "index": 0
           }

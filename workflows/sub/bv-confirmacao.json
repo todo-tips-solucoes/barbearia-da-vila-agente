@@ -92,9 +92,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT m.id, m.situacao, m.resposta, m.id_profissional, to_char(m.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS inicio, m.dados, c.telefone, (m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS futuro, (SELECT count(*) FROM mensagens r WHERE r.contato_id = m.contato_id AND r.direcao = 'saida' AND r.mensagem_id_canal LIKE 'conf-repetida-%' AND r.criado_em > now() - interval '1 hour') AS repetidas FROM mensagens_agendadas m JOIN contatos c ON c.id = m.contato_id WHERE m.contato_id = $1::bigint AND m.tipo = 'confirmacao' AND m.situacao IN ('enviada', 'cancelada', 'falhou') AND (m.id = $2::bigint OR ($2::bigint IS NULL AND m.situacao = 'enviada' AND m.resposta IS NULL AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo'))) ORDER BY m.enviada_em DESC NULLS LAST LIMIT 5",
+        "query": "SELECT m.id, m.situacao, m.resposta, m.motivo, m.id_profissional, m.graces_agendamento_id, m.graces_cliente_id, to_char(m.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS inicio, m.dados, c.telefone, (m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS futuro, COALESCE(m.respondida_em > now() - make_interval(secs => $3::int), false) AS recente, (SELECT count(*) FROM mensagens r WHERE r.contato_id = m.contato_id AND r.direcao = 'saida' AND r.mensagem_id_canal LIKE 'conf-repetida-%' AND r.criado_em > now() - interval '1 hour') AS repetidas FROM mensagens_agendadas m JOIN contatos c ON c.id = m.contato_id WHERE m.contato_id = $1::bigint AND m.tipo = 'confirmacao' AND m.situacao IN ('enviada', 'cancelada', 'falhou') AND (m.id = $2::bigint OR ($2::bigint IS NULL AND m.situacao = 'enviada' AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo') AND ((m.resposta IS NULL AND m.motivo IS NULL) OR m.respondida_em > now() - make_interval(secs => $3::int)))) ORDER BY m.enviada_em DESC NULLS LAST LIMIT 5",
         "options": {
-          "queryReplacement": "={{ [$json.contato_id, $json.mensagem_id] }}"
+          "queryReplacement": "={{ [$json.contato_id, $json.mensagem_id, {{BV:mensagens.espera_texto_s}} * 2] }}"
         }
       },
       "id": "823e3f11-5ca1-54c7-a941-432c0a9450d6",
@@ -115,7 +115,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', testeId: '{{BV:graces.barbeiro_teste_id}}' };\nconst ent = $('Normalizar').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id);\nconst e = bvMConfEscolher(rows, ent, cfg);\nreturn [{ json: { ...e, ent } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', testeId: '{{BV:ambiente}}' === 'integracao' ? '{{BV:graces.barbeiro_teste_id}}' : '' }; // trava so no TESTE\nconst ent = $('Normalizar').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id);\nconst e = bvMConfEscolher(rows, ent, cfg);\nreturn [{ json: { ...e, ent } }];"
       },
       "id": "91f37e00-8f4e-5968-9fc1-38539b05239d",
       "name": "Escolher",
@@ -162,7 +162,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE mensagens_agendadas SET resposta = $3::text, respondida_em = now(), atualizado_em = now() WHERE id = $1::bigint AND contato_id = $2::bigint AND tipo = 'confirmacao' AND situacao = 'enviada' AND resposta IS NULL RETURNING id, graces_agendamento_id",
+        "query": "UPDATE mensagens_agendadas SET resposta = $3::text, respondida_em = now(), atualizado_em = now() WHERE id = $1::bigint AND contato_id = $2::bigint AND tipo = 'confirmacao' AND situacao = 'enviada' AND resposta IS NULL AND motivo IS NULL RETURNING id, graces_agendamento_id",
         "options": {
           "queryReplacement": "={{ [$json.row.id, $json.ent.contato_id, $json.ent.confirmado ? 'confirmada' : 'recusada'] }}"
         }
@@ -185,7 +185,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const e = $('Escolher').first().json;\nconst r = $input.first().json;\n// sem linha retornada: outro toque ja reivindicou (claim atomico) => repetida, sem Graces\nif (!r || !r.id) return [{ json: { ...e, acao: 'fim', code: 'repetida', req: null } }];\nreturn [{ json: { ...e, acao: 'graces', req: { idAgenda: r.graces_agendamento_id, confirmado: e.ent.confirmado } } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst e = $('Escolher').first().json;\nconst r = $input.first().json;\n// sem linha retornada: outro toque ja reivindicou (claim atomico) => repetida, sem Graces\nif (!r || !r.id) return [{ json: { ...e, acao: 'fim', code: 'repetida', req: null } }];\nreturn [{ json: { ...e, acao: 'graces', req: bvMConfReq(r.graces_agendamento_id, e.row, e.ent.confirmado) } }];"
       },
       "id": "ec4ce504-aca0-5735-b9f4-7d17a20c26f6",
       "name": "Resolver claim",
@@ -329,7 +329,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst textos = { confirmacao_ok: \"{{BV:textos.confirmacao_ok}}\", confirmacao_recusada: \"{{BV:textos.confirmacao_recusada}}\", confirmacao_repetida: \"{{BV:textos.confirmacao_repetida}}\",\n  confirmacao_desatualizada: \"{{BV:textos.confirmacao_desatualizada}}\", confirmacao_falhou: \"{{BV:textos.confirmacao_falhou}}\" };\n// tres origens: fim direto (Escolher / Resolver claim, com `ent`) ou resultado da Graces (Avaliar)\nconst i = $input.first().json;\nlet ent, row, code, status = 0, req = null;\nif (i.ent) { ent = i.ent; row = i.row || null; code = i.code; req = i.req || null; }\nelse { const b = $('Resolver claim').first().json; ent = b.ent; row = b.row || null; req = b.req; code = i.code; status = i.status || 0; }\nconst texto = bvMConfTexto(code, row, ent.origem, textos, {{BV:mensagens.repetida_max_por_hora}});\n// so contatos de escrita (teste.contatos_escrita) recebem de verdade; os simulados so tem a saida gravada em `mensagens`\nconst dig = (x) => String(x || '').replace(/\\D/g, '');\nconst simulado = !{{BV:teste.contatos_escrita}}.map(dig).includes(dig(row && row.telefone));\nconst falha = code === 'falhou' ? { motivo: 'mensagem|graces_confirmacao', code: status ? 'HTTP_' + status : 'SEM_RESPOSTA', status }\n  : code === 'fora_do_teste' ? { motivo: 'mensagem|fora_do_teste', code: 'FORA_DO_TESTE', status: 0 } : null;\nreturn [{ json: { ok: code === 'confirmada' || code === 'recusada' || code === 'repetida', code, texto, enviar: !!texto && ent.origem !== 'agente' && !simulado, simulado: !!texto && ent.origem !== 'agente' && simulado, falha,\n  id: row && row.id, idAgenda: req && req.idAgenda, recusada: code === 'recusada', liberar: code === 'falhou', telefone: row && row.telefone, contato_id: ent.contato_id } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst textos = { confirmacao_ok: \"{{BV:textos.confirmacao_ok}}\", confirmacao_recusada: \"{{BV:textos.confirmacao_recusada}}\", confirmacao_repetida: \"{{BV:textos.confirmacao_repetida}}\",\n  confirmacao_desatualizada: \"{{BV:textos.confirmacao_desatualizada}}\", confirmacao_falhou: \"{{BV:textos.confirmacao_falhou}}\",\n  confirmacao_escolher: \"{{BV:textos.confirmacao_escolher}}\" };\n// tres origens: fim direto (Escolher / Resolver claim, com `ent`) ou resultado da Graces (Avaliar / Conferencia)\nconst i = $input.first().json;\nlet ent, row, code, status = 0, req = null;\nif (i.ent) { ent = i.ent; row = i.row || null; code = i.code; req = i.req || null; }\nelse { const b = $('Resolver claim').first().json; ent = b.ent; row = b.row || null; req = b.req; code = i.code; status = i.status || 0; }\nconst texto = bvMConfTexto(code, row, ent.origem, textos, {{BV:mensagens.repetida_max_por_hora}});\n// so contatos de escrita (teste.contatos_escrita) recebem de verdade; os simulados so tem a saida gravada em `mensagens`\nconst dig = (x) => String(x || '').replace(/\\D/g, '');\nconst simulado = '{{BV:ambiente}}' === 'integracao' && !{{BV:teste.contatos_escrita}}.map(dig).includes(dig(row && row.telefone));\n// desatualizada depois do claim (409 divergente): devolve a resposta e encerra a linha (motivo 'divergente'), sem novo claim\nconst encerrar = code === 'desatualizada' && !!req;\nconst falha = code === 'falhou' ? { motivo: 'mensagem|graces_confirmacao', code: status ? 'HTTP_' + status : 'SEM_RESPOSTA', status }\n  : code === 'fora_do_teste' ? { motivo: 'mensagem|fora_do_teste', code: 'FORA_DO_TESTE', status: 0 } : null;\nreturn [{ json: { ok: code === 'confirmada' || code === 'recusada' || code === 'repetida', code, texto, enviar: !!texto && ent.origem !== 'agente' && !simulado, simulado: !!texto && ent.origem !== 'agente' && simulado, falha,\n  id: row && row.id, idAgenda: req && req.idAgenda, recusada: code === 'recusada', liberar: code === 'falhou' || encerrar, encerrar, telefone: row && row.telefone, contato_id: ent.contato_id } }];"
       },
       "id": "314f5b2e-28db-5ab9-9620-a4794fb88f9a",
       "name": "Desfecho",
@@ -426,9 +426,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH rel AS (UPDATE mensagens_agendadas SET resposta = NULL, respondida_em = NULL, atualizado_em = now() WHERE id = $1::bigint AND $2::boolean AND resposta IS NOT NULL RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', $3::text, 'confirmar', $4::text, $5::int, $6::bigint WHERE $3::text IS NOT NULL RETURNING 1), cv AS (INSERT INTO conversas (contato_id, pedido) SELECT $6::bigint, jsonb_build_object('confirmacao_recusada', jsonb_build_object('idAgenda', $7::text, 'em', now())) WHERE $8::boolean ON CONFLICT (contato_id) DO UPDATE SET pedido = conversas.pedido || EXCLUDED.pedido, atualizado_em = now() RETURNING 1), ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT $6::bigint, 'conf-' || $9::text || '-' || gen_random_uuid()::text, 'saida', 'texto', $10::text WHERE $11::boolean RETURNING 1) SELECT 1 AS ok",
+        "query": "WITH rel AS (UPDATE mensagens_agendadas SET resposta = NULL, respondida_em = NULL, motivo = CASE WHEN $12::boolean THEN 'divergente' ELSE motivo END, atualizado_em = now() WHERE id = $1::bigint AND $2::boolean AND resposta IS NOT NULL RETURNING 1), rp AS (UPDATE mensagens_agendadas SET situacao = 'cancelada', motivo = 'recusada', atualizado_em = now() WHERE $8::boolean AND graces_agendamento_id = $7::text AND tipo IN ('lembrete', 'pos_atendimento') AND situacao = 'pendente' AND reservada_em IS NULL AND inicio = (SELECT inicio FROM mensagens_agendadas WHERE id = $1::bigint) RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', $3::text, 'confirmar', $4::text, $5::int, $6::bigint WHERE $3::text IS NOT NULL RETURNING 1), cv AS (INSERT INTO conversas (contato_id, pedido) SELECT $6::bigint, jsonb_build_object('confirmacao_recusada', jsonb_build_object('idAgenda', $7::text, 'em', now())) WHERE $8::boolean ON CONFLICT (contato_id) DO UPDATE SET pedido = conversas.pedido || EXCLUDED.pedido, atualizado_em = now() RETURNING 1), ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT $6::bigint, 'conf-' || $9::text || '-' || gen_random_uuid()::text, 'saida', 'texto', $10::text WHERE $11::boolean RETURNING 1) SELECT 1 AS ok",
         "options": {
-          "queryReplacement": "={{ (() => { const d = $('Desfecho').first().json; const env = $json.statusCode >= 200 && $json.statusCode < 300; return [d.id || null, !!d.liberar, d.falha ? d.falha.motivo : null, d.falha ? d.falha.code : null, d.falha ? d.falha.status : null, d.contato_id, d.idAgenda || null, !!d.recusada, d.code, d.texto || null, !!env || !!d.simulado]; })() }}"
+          "queryReplacement": "={{ (() => { const d = $('Desfecho').first().json; const env = $json.statusCode >= 200 && $json.statusCode < 300; return [d.id || null, !!d.liberar, d.falha ? d.falha.motivo : null, d.falha ? d.falha.code : null, d.falha ? d.falha.status : null, d.contato_id, d.idAgenda || null, !!d.recusada, d.code, d.texto || null, !!env || !!d.simulado, !!d.encerrar]; })() }}"
         }
       },
       "id": "e2ed5e01-7144-5932-85a7-7b5725c5c1b7",
@@ -457,6 +457,89 @@
       "position": [
         4080,
         0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5c3f2f0e-6a1d-5b8e-9a51-0c0f1e2d3a4b",
+              "leftValue": "={{ $json.code }}",
+              "rightValue": "conferir",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "84a3291f-55e4-5a72-9812-e7076b847e68",
+      "name": "Conferir?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{BV:graces.host}}/public/v1/agenda/{{ $('Escolher').first().json.row.graces_cliente_id ? 'agendamentos' : 'completa' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "sendBody": false,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify((() => { const r = $('Escolher').first().json.row; const d = String(r.inicio).slice(0, 10); return r.graces_cliente_id ? { idCliente: r.graces_cliente_id, proximos: true, pageSize: 200 } : { dataInicio: d, dataFim: d, pageSize: 200 }; })()) }}"
+      },
+      "id": "56a84eb9-a392-5a93-b37b-935e1a9f4520",
+      "name": "Graces conferir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        150
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// 409 no POST: so afirma com o status conferido (3 confirmar, 10 recusar); divergente = desatualizada; sem leitura = falhou\nconst row = $('Escolher').first().json.row;\nconst i = $input.first().json;\nreturn [{ json: bvMConfConferir({ status: Number(i.statusCode || 0), body: i.body }, row, $('Normalizar').first().json.confirmado) }];"
+      },
+      "id": "317187a0-8523-50ed-9aa8-26ea5c2578cf",
+      "name": "Conferencia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        150
       ]
     }
   ],
@@ -614,7 +697,7 @@
         ],
         [
           {
-            "node": "Desfecho",
+            "node": "Conferir?",
             "type": "main",
             "index": 0
           }
@@ -688,6 +771,46 @@
         [
           {
             "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir?": {
+      "main": [
+        [
+          {
+            "node": "Graces conferir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Desfecho",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces conferir": {
+      "main": [
+        [
+          {
+            "node": "Conferencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferencia": {
+      "main": [
+        [
+          {
+            "node": "Desfecho",
             "type": "main",
             "index": 0
           }

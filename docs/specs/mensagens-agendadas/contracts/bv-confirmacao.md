@@ -27,23 +27,26 @@ Reconhecimento na recepção (`shared/rajada.js`, normalização):
 ## Processamento
 
 1. `origem=titulo` (fallback; o evento com id é o primário): espera `mensagens.espera_texto_s`.
-2. Seleciona a linha (por `mensagem_id`, ou a única candidata).
-3. Linha `cancelada`/`falhou`, ou início já passou → sem Graces; texto `textos.confirmacao_desatualizada`.
+2. Seleciona a linha (por `mensagem_id`, ou a única candidata). Sem id: confirmação respondida há menos de
+   2 × `mensagens.espera_texto_s` → `repetida` em silêncio (o id do mesmo toque já tratou); 2+ abertas → `ambigua`,
+   texto `textos.confirmacao_escolher` (nunca confirma uma delas).
+3. Linha `cancelada`/`falhou`, `enviada` encerrada (`motivo` preenchido: o agente cancelou/remarcou depois do envio), ou
+   início já passou → sem Graces; texto `textos.confirmacao_desatualizada`.
    TESTE: `id_profissional` ≠ barbeiro de teste → sem claim e sem Graces, registra `mensagem|fora_do_teste`.
 4. Claim (vínculo inteiro no próprio UPDATE): `UPDATE mensagens_agendadas SET resposta, respondida_em WHERE id = $1
-   AND contato_id = $2 AND tipo = 'confirmacao' AND situacao = 'enviada' AND resposta IS NULL RETURNING`. Sem linha
+   AND contato_id = $2 AND tipo = 'confirmacao' AND situacao = 'enviada' AND resposta IS NULL AND motivo IS NULL RETURNING`. Sem linha
    retornada → já respondida: `origem=titulo` com id ativo → termina em silêncio (dedupe do mesmo toque); demais →
    `textos.confirmacao_repetida`, sem Graces (FR-008).
 5. `POST /public/v1/agenda/confirmacao` `{ "idAgenda": "<graces_agendamento_id>", "confirmado": <bool> }`
    (`graces-api/04-agendamentos.md:130-144`; só status 2, senão 409). Sucesso → `textos.confirmacao_ok` ou
    `textos.confirmacao_recusada` (+ `conversas.pedido.confirmacao_recusada`). Erro → `textos.confirmacao_falhou` +
    `falhas_agente` (`mensagem|graces_confirmacao`, `code` do ProblemDetails). Status 0/5xx: até 2 novas chamadas
-   (1 s, 5 s). **409 (medido, P1)**: o agendamento já não está "A confirmar" ⇒ idempotente: `confirmado=true` vale `confirmada`; `confirmado=false` vale `recusada` (o agente oferece cancelar/remarcar). Não há conferência por `GET` (atalho registrado em `bvMConfAvaliar`). Falha final (`confirmacao_falhou`): o claim é **liberado** (`resposta = NULL`) para o cliente poder tentar de novo.
-6. Envia o texto (só `origem` ≠ `agente`) pelo mesmo construtor de texto e grava em `mensagens` (`saida`). Só contatos de `teste.contatos_escrita` recebem de verdade; os simulados só têm a saída gravada.
+   (1 s, 5 s). **409 (medido, P1)**: o agendamento já não está "A confirmar" ⇒ conferência (`Graces conferir`): `GET /agenda/agendamentos?idCliente` (ou `/agenda/completa` do dia, sem `graces_cliente_id`) e `bvMConfConferir`: status 3 (confirmar) / 10 (recusar) = sucesso; divergente = `desatualizada` (claim devolvido, `motivo = 'divergente'`); sem leitura = `falhou`. Ocorrência recorrente (`dados.recorrente`): corpo com `data` (`AAAA-MM-DD`). Recusa (`recusada`) também cancela o lembrete e o pós pendentes da mesma ocorrência (motivo `recusada`; owner, 2026-10-20). Falha final (`confirmacao_falhou`): o claim é **liberado** (`resposta = NULL`) para o cliente poder tentar de novo.
+6. Envia o texto (só `origem` ≠ `agente`) pelo mesmo construtor de texto e grava em `mensagens` (`saida`). No TESTE (`ambiente = integracao`) só contatos de `teste.contatos_escrita` recebem de verdade; os simulados só têm a saída gravada.
 
 Teto: `textos.confirmacao_repetida` no máximo `mensagens.repetida_max_por_hora` vezes por contato; acima disso, silêncio.
 
 ## Saída
 
-`{ "ok": bool, "code": "confirmada|recusada|repetida|desatualizada|falhou|fora_do_teste", "texto": "<o que dizer>" }`.
+`{ "ok": bool, "code": "confirmada|recusada|repetida|desatualizada|falhou|fora_do_teste|ambigua", "texto": "<o que dizer>" }`.
 Para `origem=agente`, o agente usa `texto` como orientação e responde ele mesmo.

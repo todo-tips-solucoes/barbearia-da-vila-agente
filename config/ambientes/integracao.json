@@ -161,7 +161,8 @@
     "confirmacao_recusada": "Tudo bem, avisei a equipe. Quer que eu remarque pra outro dia ou horário, ou prefere cancelar?",
     "confirmacao_repetida": "Esse horário já está respondido, tá? Se quiser mudar alguma coisa é só me falar.",
     "confirmacao_desatualizada": "Esse horário não está mais valendo. Se quiser, me fala e eu vejo outro pra você.",
-    "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho? Se for urgente, chama a loja no (11) 97126-5299."
+    "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho? Se for urgente, chama a loja no (11) 97126-5299.",
+    "confirmacao_escolher": "Você tem mais de um horário pra confirmar. Toca no botão da mensagem do horário que quer responder, ou me fala o dia e a hora, tá?"
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",

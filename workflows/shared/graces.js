@@ -290,7 +290,7 @@ function bvgReqItem(p, k, meta) {
 // shortcut: sem `minutos` o fim vale o inicio (pos-atendimento sai 1 h apos o inicio); upgrade: ler horaFim do GET.
 function bvgItemMsg(idAgenda, x, idCliente, prof) {
   const hora = x.hora, fim = Number(x.minutos) > 0 ? bvgSomaMin(hora, x.minutos) : hora;
-  return { idAgenda, idCliente, idProfissional: prof, inicio: `${x.data}T${hora}:00`, fim: `${x.data}T${fim}:00`, servico: x.servico, barbeiro: x.barbeiro || x.apelido };
+  return { idAgenda, idCliente, idProfissional: prof, inicio: `${x.data}T${hora}:00`, fim: `${x.data}T${fim}:00`, servico: x.servico, barbeiro: x.barbeiro || x.apelido, recorrente: !!x.recorrente };
 }
 function bvgMsgs(p, meta, novoId) {
   const d = p.dados || {}, ic = d.idCliente || meta.idCliente;
@@ -618,20 +618,21 @@ function bvgPassoEscrita(st, resps, cfg) {
 }
 
 // Parametros da query "Persistir" (so $1..$17; nenhum valor entra no texto do SQL).
-// msg = { ativo, agora, cfg (mensagens.*), escrita: [digitos] }: sem `ativo` (PROD) nada e programado/cancelado.
-// $15 = linhas a inserir (tipo, previsto_para, motivo 'ja_passou' quando nao programa), $16 = cancelamentos, $17 = lista de escrita.
+// msg = { ativo, agora, cfg (mensagens.*), escrita: [digitos] | null }: sem `ativo` (PROD) nada e programado/cancelado.
+// $15 = linhas a inserir (tipo, previsto_para, motivo 'ja_passou' quando nao programa), $16 = cancelamentos, $17 = lista de escrita
+// (trava do TESTE; null fora do ambiente integracao = sem trava `fora_da_lista`).
 function bvgMsgParams(e, msg) {
   const m = e.mensagens;
   if (!m || !msg || !msg.ativo) return [null, null, null];
   const linhas = [];
   for (const it of m.criar) {
-    const dados = { servico: it.servico, barbeiro: it.barbeiro, fim: it.fim };
+    const dados = { servico: it.servico, barbeiro: it.barbeiro, fim: it.fim, ...(it.recorrente ? { recorrente: true } : {}) };
     const r = bvMProgramar({ inicio: it.inicio, fim: it.fim }, msg.agora, msg.cfg);
     const base = { idAgenda: it.idAgenda, idCliente: it.idCliente, idProfissional: it.idProfissional, inicio: it.inicio, dados };
     r.programar.forEach((x) => linhas.push({ ...base, tipo: x.tipo, previsto_para: x.previsto_para, motivo: null }));
     r.ignorar.forEach((x) => linhas.push({ ...base, tipo: x.tipo, previsto_para: x.previsto_para, motivo: x.motivo }));
   }
-  return [JSON.stringify(linhas), JSON.stringify(m.cancelar), JSON.stringify((msg.escrita || []).map(String))];
+  return [JSON.stringify(linhas), JSON.stringify(m.cancelar), msg.escrita == null ? null : JSON.stringify(msg.escrita.map(String))];
 }
 
 function bvGParams(i, efeitos, msg) {

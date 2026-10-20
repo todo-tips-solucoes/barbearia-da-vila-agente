@@ -1391,9 +1391,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT count(*) AS n, $1::bigint AS contato_id FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo = 'confirmacao' AND situacao = 'enviada' AND resposta IS NULL AND inicio > (now() AT TIME ZONE 'America/Sao_Paulo')",
+        "query": "SELECT $1::bigint AS contato_id, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo = 'confirmacao' AND situacao = 'enviada' AND resposta IS NULL AND motivo IS NULL AND inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS abertas, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo = 'confirmacao' AND resposta IS NOT NULL AND respondida_em > now() - make_interval(secs => $2::int)) AS recentes, (SELECT count(*) FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND criada_em > now() - make_interval(mins => $3::int)) AS propostas, COALESCE((SELECT tipo = 'lista' AND mensagem_id_canal LIKE 'agendada-%' FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' ORDER BY criado_em DESC, id DESC LIMIT 1), false) AS ultima_lista",
         "options": {
-          "queryReplacement": "={{ [$('Upsert contato').first().json.contato_id] }}"
+          "queryReplacement": "={{ [$('Upsert contato').first().json.contato_id, {{BV:mensagens.espera_texto_s}} * 2, {{BV:proposta.validade_min}}] }}"
         }
       },
       "id": "0a67e506-9ad1-5e7e-b9d1-5a041d5ed397",
@@ -1423,8 +1423,8 @@
           "conditions": [
             {
               "id": "ce1f5a8a-9651-5217-aca5-bd075a6f681c",
-              "leftValue": "={{ String($json.n) }}",
-              "rightValue": "1",
+              "leftValue": "={{ $json.rota }}",
+              "rightValue": "consumir",
               "operator": {
                 "type": "string",
                 "operation": "equals"
@@ -1436,7 +1436,7 @@
         "options": {}
       },
       "id": "60484829-bf5d-5231-9d91-f7032b551190",
-      "name": "Uma aberta?",
+      "name": "Consumir titulo?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
@@ -1508,6 +1508,19 @@
         360
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// titulo da lista: consome (nunca vai ao agente) se o toque ja foi respondido pelo id ou se ha confirmacao aberta, a lista foi a ultima\n// saida e nao ha proposta pendente; senao e texto comum (\"Confirmo\" ao resumo do agente). Escolha da linha: so no bv-confirmacao.\nconst e = $input.first().json;\nreturn [{ json: { ...e, rota: bvMTituloRota(e) } }];"
+      },
+      "id": "6db7f5ba-2b80-5e00-a60e-515751128ac9",
+      "name": "Rota do titulo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        610
+      ]
     }
   ],
   "connections": {
@@ -2175,25 +2188,7 @@
       "main": [
         [
           {
-            "node": "Uma aberta?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Uma aberta?": {
-      "main": [
-        [
-          {
-            "node": "Responder 200 titulo",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Inserir mensagem",
+            "node": "Rota do titulo",
             "type": "main",
             "index": 0
           }
@@ -2227,6 +2222,35 @@
         [
           {
             "node": "Chamar bv-confirmacao titulo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consumir titulo?": {
+      "main": [
+        [
+          {
+            "node": "Responder 200 titulo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Inserir mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rota do titulo": {
+      "main": [
+        [
+          {
+            "node": "Consumir titulo?",
             "type": "main",
             "index": 0
           }

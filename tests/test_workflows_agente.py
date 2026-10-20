@@ -92,7 +92,11 @@ class BvGraces(unittest.TestCase):
         self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", persistir)}), list(range(1, 18)))
         # mensagens-agendadas 3.1.2: cancela pendentes, insere por idAgenda sem duplicar, fora da lista de escrita nasce cancelada
         for trecho in ("mc AS (UPDATE mensagens_agendadas", "ma AS (INSERT INTO mensagens_agendadas", "ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE",
-                       "'fora_da_lista'", "y.motivo IS NULL", "m.situacao <> 'pendente'"):
+                       "'fora_da_lista'", "y.motivo IS NULL", "m.situacao <> 'pendente'",
+                       "m.situacao = 'pendente' AND m.reservada_em IS NULL AND NOT EXISTS",  # item 9: reservada nao e cancelada (o envio grava)
+                       "me AS (UPDATE mensagens_agendadas m SET motivo = x.motivo",  # item 3: confirmacao ja enviada fica encerrada
+                       "m.tipo = 'confirmacao' AND m.situacao = 'enviada' AND m.resposta IS NULL AND m.motivo IS NULL",
+                       "$17::jsonb IS NOT NULL AND NOT EXISTS"):  # item 8: fora_da_lista so com lista (TESTE)
             self.assertIn(trecho, persistir)
         ef = self.nos["Efeitos"]["parameters"]["jsCode"]
         self.assertIn("{{BV:INCLUDE:shared/mensagens.js}}", ef)
@@ -231,7 +235,8 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual(sorted(k for k, x in vc.items() if "$fromAI" in x), ["confirmado", "mensagem_id"])
         self.assertIn("confirmar_presenca", ler("workflows/shared/agente.js"))
         self.assertIn("m.resposta IS NULL", self.nos["Ler contexto"]["parameters"]["query"])
-        self.assertIn("confirmacao_recusada", self.nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("bvMPromptConfirmacoes(ctx, Date.now()", self.nos["Preparar"]["parameters"]["jsCode"])  # confirmacoes e recusa (mensagens.js)
+        self.assertIn("m.motivo IS NULL", self.nos["Ler contexto"]["parameters"]["query"])  # confirmacao encerrada (cancelar/remarcar) nao entra
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
             "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",

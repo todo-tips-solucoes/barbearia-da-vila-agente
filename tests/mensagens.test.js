@@ -93,6 +93,9 @@ assert.deepEqual([rc.criar, rc.cancelar], [[], []]);
 // sem contato / telefone de outro
 rc = bvMReconciliar([it('B', '2026-10-22T14:00:00', '977776666')], [], cts, now, cfg);
 assert.deepEqual([rc.sem_contato, rc.criar], [['B'], []]);
+// item 7: recorrente (mesmo idAgenda 2x na janela): pulado e registrado, nunca 2 `criar` com a mesma chave; pendente dele nao vira orfa
+rc = bvMReconciliar([it('R', '2026-10-21T14:00:00'), it('R', '2026-10-24T14:00:00')], [{ id: 31, graces_agendamento_id: 'R', tipo: 'lembrete', situacao: 'pendente', previsto_para: '2026-10-21T15:00:00Z', inicio: '2026-10-21T14:00:00' }], cts, now, cfg);
+assert.deepEqual([rc.criar, rc.cancelar, rc.recorrente], [[], [], ['R']]);
 console.log('mensagens.test.js ok');
 
 // decisao do envio
@@ -117,7 +120,18 @@ console.log('mensagens.test.js ok');
   assert.deepEqual(bvMDecidir(lin, { status: 200, body: [] }, c2), { acao: 'cancelar', motivo: 'orfa' });
   assert.equal(bvMDecidir(lin, ag({ horaInicio: '2026-10-22T15:00:00' }), c2).motivo, 'orfa');
   assert.equal(bvMDecidir(lin, ag({ idStatusAgenda: 3 }), c2).motivo, 'status_3');
-  assert.equal(bvMDecidir({ ...lin, tipo: 'lembrete' }, ag({ idStatusAgenda: 10 }), c2).acao, 'enviar'); // lembrete nao exige status 2
+  assert.equal(bvMDecidir({ ...lin, tipo: 'lembrete' }, ag({ idStatusAgenda: 3 }), c2).acao, 'enviar'); // lembrete nao exige status 2
+  // item 11 (owner, 2026-10-20: "Cancelar os dois"): apos "Nao vou poder" (status 10) lembrete e pos nao saem
+  assert.deepEqual(bvMDecidir({ ...lin, tipo: 'lembrete' }, ag({ idStatusAgenda: 10 }), c2), { acao: 'cancelar', motivo: 'recusada' });
+  assert.deepEqual(bvMDecidir({ ...lin, tipo: 'pos_atendimento' }, ag({ idStatusAgenda: 10 }), c2), { acao: 'cancelar', motivo: 'recusada' });
+  // item 7: recorrente (mesmo idAgenda em varias ocorrencias): vale a ocorrencia do inicio, nao a primeira
+  const rec = { status: 200, body: [{ idAgenda: 'A', horaInicio: '2026-10-15T14:00:00', idStatusAgenda: 3 }, { idAgenda: 'A', horaInicio: '2026-10-22T14:00:00', idStatusAgenda: 2 }] };
+  assert.equal(bvMDecidir(lin, rec, c2).acao, 'enviar');
+  // item 6: linha sem graces_cliente_id revalidada pela /agenda/completa do dia (por profissional)
+  const comp = (o) => ({ status: 200, body: [{ idProfissional: T, apelido: 'Zé ', agendamentos: [{ idAgenda: 'A', horaInicio: '2026-10-22T14:00:00', idStatusAgenda: 2, ...o }] }] });
+  assert.equal(bvMDecidir(lin, comp(), c2).acao, 'enviar');
+  assert.equal(bvMDecidir(lin, comp({ idAgenda: 'B' }), c2).motivo, 'orfa');
+  assert.equal(bvMDecidir(lin, comp({ idStatusAgenda: 3 }), c2).motivo, 'status_3');
   assert.equal(bvMDecidir({ ...lin, tipo: 'pos_atendimento' }, ag({ idStatusAgenda: 9 }), c2).motivo, 'status_9');
   for (const r of [{ status: 0 }, { status: 500, body: {} }, { status: 200, body: {} }]) assert.equal(bvMDecidir(lin, r, c2).acao, 'adiar');
   // trava de TESTE e handoff
@@ -138,7 +152,13 @@ console.log('mensagens.test.js (decisao) ok');
   const T = '1cee', cfg2 = { testeId: T };
   const row = (o) => ({ id: 3, situacao: 'enviada', resposta: null, id_profissional: T, futuro: true, repetidas: 0, inicio: '2026-10-22T14:00:00', ...o });
   assert.equal(E([row()], { mensagem_id: null }, cfg2).acao, 'claim');
-  assert.equal(E([row(), row({ id: 4 })], { mensagem_id: null }, cfg2).code, 'ambigua'); // 2 abertas sem id: cai no agente
+  assert.equal(E([row(), row({ id: 4 })], { mensagem_id: null }, cfg2).code, 'ambigua'); // 2 abertas sem id: pede para escolher
+  // item 1: o from_internal (id) do mesmo toque ja respondeu B; o titulo nao pode confirmar A (a unica aberta que sobrou)
+  assert.deepEqual(E([row(), row({ id: 4, resposta: 'confirmada', recente: true })], { mensagem_id: null }, cfg2).code, 'repetida');
+  assert.equal(E([row(), row({ id: 4, resposta: 'confirmada', recente: false })], { mensagem_id: null }, cfg2).row.id, 3);
+  // item 3: enviada encerrada por cancelar/remarcar (motivo preenchido): lista antiga = desatualizada, sem claim
+  assert.equal(E([row({ motivo: 'cancelada_agente' })], { mensagem_id: '3' }, cfg2).code, 'desatualizada');
+  assert.equal(E([row({ motivo: 'reagendada' })], { mensagem_id: null }, cfg2).code, 'desatualizada');
   assert.equal(E([row(), row({ id: 4 })], { mensagem_id: '4' }, cfg2).row.id, 4);
   assert.equal(E([], { mensagem_id: null }, cfg2).code, 'desatualizada');
   assert.equal(E([row()], { mensagem_id: '99' }, cfg2).code, 'desatualizada'); // id de outro contato nao esta em rows
@@ -148,8 +168,29 @@ console.log('mensagens.test.js (decisao) ok');
   assert.equal(E([row({ id_profissional: 'real' })], { mensagem_id: '3' }, cfg2).code, 'fora_do_teste');
   // Graces
   assert.deepEqual(A(200, 0, true), { code: 'confirmada' });
-  assert.equal(A(409, 0, true).code, 'confirmada');
-  assert.equal(A(409, 0, false).code, 'recusada');
+  // item 4: 409 nao e sucesso as cegas: conferir o status por GET
+  assert.deepEqual(A(409, 0, true), { code: 'conferir' });
+  assert.deepEqual(A(409, 0, false), { code: 'conferir' });
+  const { bvMConfConferir: C, bvMConfReq: Q, bvMTituloRota: R } = require('../workflows/shared/mensagens.js');
+  const lr = { graces_agendamento_id: 'A', inicio: '2026-10-22T14:00:00' };
+  const g = (st, o) => ({ status: 200, body: [{ idAgenda: 'A', horaInicio: '2026-10-22T14:00:00', idStatusAgenda: st, ...o }] });
+  assert.equal(C(g(3), lr, true).code, 'confirmada');
+  assert.equal(C(g(10), lr, false).code, 'recusada');
+  assert.equal(C(g(10), lr, true).code, 'desatualizada'); // divergente
+  assert.equal(C(g(3), lr, false).code, 'desatualizada');
+  assert.equal(C(g(3, { horaInicio: '2026-10-22T15:00:00' }), lr, true).code, 'desatualizada');
+  assert.equal(C({ status: 200, body: [{ idProfissional: 'p', agendamentos: [{ idAgenda: 'A', horaInicio: '2026-10-22T14:00:00', idStatusAgenda: 3 }] }] }, lr, true).code, 'confirmada'); // /completa
+  assert.equal(C({ status: 0 }, lr, true).code, 'falhou');
+  assert.equal(C({ status: 500, body: {} }, lr, true).code, 'falhou');
+  // item 7: `data` so em recorrente
+  assert.deepEqual(Q('A', { inicio: '2026-10-22T14:00:00', dados: {} }, true), { idAgenda: 'A', confirmado: true });
+  assert.deepEqual(Q('A', { inicio: '2026-10-22T14:00:00', dados: { recorrente: true } }, false), { idAgenda: 'A', confirmado: false, data: '2026-10-22' });
+  // itens 1 e 5: rota do titulo na recepcao
+  assert.equal(R({ abertas: 0, recentes: 1, propostas: 1, ultima_lista: false }), 'consumir'); // gemeo do toque ja respondido: nunca vai ao agente
+  assert.equal(R({ abertas: 2, recentes: 0, propostas: 0, ultima_lista: true }), 'consumir'); // 2 abertas: espera o id
+  assert.equal(R({ abertas: 1, recentes: 0, propostas: 1, ultima_lista: true }), 'agente'); // proposta pendente: "Confirmo" e do agente
+  assert.equal(R({ abertas: 1, recentes: 0, propostas: 0, ultima_lista: false }), 'agente'); // ultima saida nao foi a lista
+  assert.equal(R({ abertas: '0', recentes: '0', propostas: '0', ultima_lista: 'true' }), 'agente');
   assert.deepEqual(A(0, 0, true), { code: 'retry', espera_s: 1 });
   assert.deepEqual(A(503, 1, true), { code: 'retry', espera_s: 5 });
   assert.equal(A(503, 2, true).code, 'falhou');
@@ -161,5 +202,14 @@ console.log('mensagens.test.js (decisao) ok');
   assert.equal(X('repetida', row({ repetidas: 2 }), 'id', tx, 2), ''); // teto
   assert.equal(X('repetida', row(), 'titulo', tx, 2), ''); // dedupe do mesmo toque
   assert.equal(X('ambigua', row(), 'id', tx, 2), '');
+  assert.equal(X('ambigua', row(), 'titulo', { ...tx, confirmacao_escolher: 'esc' }, 2), 'esc'); // titulo com 2+ abertas e sem id
+  // item 2: prompt das confirmacoes independe de sessao nova; recusa vale pela recencia do proprio `em`
+  const { bvMPromptConfirmacoes: P } = require('../workflows/shared/mensagens.js');
+  const agora = Date.parse('2026-10-21T21:30:00Z'), id = (x) => x;
+  const ctx = { confirmacoes: [{ id: 9, servico: 'Corte', barbeiro: 'Zé', inicio: '2026-10-22T14:00:00' }], pedido: { confirmacao_recusada: { idAgenda: 'A', em: '2026-10-21T21:00:00Z' } } };
+  assert.match(P(ctx, agora, 120, id), /id=9 \(Corte com Zé, quinta-feira \(22\/10\) às 14:00\)/);
+  assert.match(P(ctx, agora, 120, id), /não vai poder comparecer ao agendamento A/);
+  assert.doesNotMatch(P(ctx, agora + 3 * 3600000, 120, id), /não vai poder/); // recusa antiga some
+  assert.equal(P({}, agora, 120, id), '');
 }
 console.log('mensagens.test.js (confirmacao) ok');
