@@ -150,3 +150,8 @@ Cada mensagem programada fica registrada localmente (tipo, horário previsto, ag
 ### Session 2026-10-20
 
 - Q: O botão Quick Reply cabe numa mensagem agendada do canal QR Pro? -> A: Desconhecido; sonda mostrou que o campo de botões é aceito e guardado, mas o render real depende de envio ao número do owner. Tratado no plano e em bloqueio humano único (FR-005).
+- Q: Janela do texto livre equivalente ao botão (FR-009)? -> A: Até o início do atendimento, enquanto houver confirmação pendente do cliente e a frase for claramente equivalente (parametrizável).
+- Q: Botão não renderiza em nenhum modo (FR-005)? -> A: Confirmação só em texto pedindo SIM/NÃO, tratada pelo FR-009.
+- Q: Nova tentativa (FR-015)? -> A: Até 3 tentativas (1, 5 e 15 min); depois falha registrada e a verificação periódica corrige (parametrizável).
+- Q: Verificação periódica (FR-016)? -> A: A cada 15 min, agendamentos dos próximos 7 dias (parametrizável).
+- Q: Conteúdo do pós-atendimento? -> A: Só agradecimento humanizado e convite a voltar, sem link nem avaliação.
