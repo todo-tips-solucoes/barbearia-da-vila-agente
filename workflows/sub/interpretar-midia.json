@@ -106,7 +106,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "{{BV:INCLUDE:shared/midia.js}}\nconst cfg = { hosts_audio: {{BV:midia.hosts_audio}}, hosts_imagem: {{BV:midia.hosts_imagem}}, prefixos_audio: {{BV:midia.prefixos_audio}}, prefixos_imagem: {{BV:midia.prefixos_imagem}}, mimes_audio: {{BV:midia.mimes_audio}}, mimes_imagem: {{BV:midia.mimes_imagem}}, audio_max_s: {{BV:midia.audio_max_s}}, audio_max_mb: {{BV:midia.audio_max_mb}}, imagem_max_mb: {{BV:midia.imagem_max_mb}}, max_por_turno: {{BV:midia.max_por_turno}}, descricao_max_chars: {{BV:midia.descricao_max_chars}}, imagem_detalhe: '{{BV:midia.imagem_detalhe}}', modelo: '{{BV:agente.modelo}}' };\nconst v = $('Validar').item.json; const st = $json.statusCode;\nconst falha = (motivo, extra) => ({ json: { ...v, ok: false, motivo, ...(extra || {}) } });\nif (!(st >= 200 && st < 300) || !$input.item.binary || !$input.item.binary.data) return falha('download', { status_http: Number.isInteger(st) ? st : null });\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nif (buf.length === 0) return falha('vazio');\nif (buf.length > cfg.audio_max_mb * 1024 * 1024) return falha('grande');\nconst b = $input.item.binary;\nb.data.mimeType = bvMimeBase(v.midia_mime); b.data.fileName = 'audio.ogg';\nreturn { json: { ...v, ok: true }, binary: b };"
+        "jsCode": "{{BV:INCLUDE:shared/midia.js}}\nconst cfg = { hosts_audio: {{BV:midia.hosts_audio}}, hosts_imagem: {{BV:midia.hosts_imagem}}, prefixos_audio: {{BV:midia.prefixos_audio}}, prefixos_imagem: {{BV:midia.prefixos_imagem}}, mimes_audio: {{BV:midia.mimes_audio}}, mimes_imagem: {{BV:midia.mimes_imagem}}, audio_max_s: {{BV:midia.audio_max_s}}, audio_max_mb: {{BV:midia.audio_max_mb}}, imagem_max_mb: {{BV:midia.imagem_max_mb}}, max_por_turno: {{BV:midia.max_por_turno}}, descricao_max_chars: {{BV:midia.descricao_max_chars}}, imagem_detalhe: '{{BV:midia.imagem_detalhe}}', modelo: '{{BV:agente.modelo}}' };\nconst v = $('Validar').item.json; const st = $json.statusCode;\nconst falha = (motivo, extra) => ({ json: { ...v, ok: false, motivo, ...(extra || {}) } });\nif (!(st >= 200 && st < 300) || !$input.item.binary || !$input.item.binary.data) return falha('download', { status_http: Number.isInteger(st) ? st : null });\nconst buf = await this.helpers.getBinaryDataBuffer($itemIndex, 'data');\nif (buf.length === 0) return falha('vazio');\nif (buf.length > cfg.audio_max_mb * 1024 * 1024) return falha('grande');\nconst b = $input.item.binary;\nb.data.mimeType = bvMimeBase(v.midia_mime); b.data.fileName = 'audio.ogg';\nreturn { json: { ...v, ok: true }, binary: b };"
       },
       "id": "1beca570-b784-5f6f-9821-362341d8c73d",
       "name": "Conferir",
@@ -312,9 +312,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE mensagens SET conteudo_derivado = $2::text, midia_falha = $3::text WHERE id = $1::bigint",
+        "query": "UPDATE mensagens SET conteudo_derivado = $2::text, midia_falha = $3::text WHERE id = $1::bigint RETURNING id, $3::text AS motivo, $4::text AS tipo, $5::text AS host, $6::int AS status_http, $7::bigint AS contato_id",
         "options": {
-          "queryReplacement": "={{ [$json.mensagem_id, $json.texto, $json.motivo] }}"
+          "queryReplacement": "={{ [$json.mensagem_id, $json.texto, $json.motivo, $json.tipo, $json.host, $json.status_http, $json.contato_id] }}"
         }
       },
       "id": "3215c141-c3b9-512a-98ef-97f621168aac",
@@ -338,7 +338,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'midia', $1::text, $2::text, $3::text, $4::int, $5::bigint WHERE $1::text IS NOT NULL",
         "options": {
-          "queryReplacement": "={{ [$('Juntar').item.json.motivo, $('Juntar').item.json.tipo, $('Juntar').item.json.host, $('Juntar').item.json.status_http, $('Juntar').item.json.contato_id] }}"
+          "queryReplacement": "={{ [$json.motivo, $json.tipo, $json.host, $json.status_http, $json.contato_id] }}"
         }
       },
       "id": "4dd8a490-64f6-5888-9e09-63d07fa958a3",

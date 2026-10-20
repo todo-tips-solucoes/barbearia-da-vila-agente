@@ -48,7 +48,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE mensagens SET midia_url = NULL, midia_mime = NULL, conteudo = NULL, conteudo_derivado = NULL, mensagem_id_canal = 'sha256:' || encode(sha256(convert_to(mensagem_id_canal, 'UTF8')), 'hex') WHERE tipo IN ('audio','imagem','outro') AND criado_em < now() - make_interval(secs => $1::float8 * 3600) AND mensagem_id_canal NOT LIKE 'sha256:%' RETURNING id",
+        "query": "UPDATE mensagens SET midia_url = NULL, midia_mime = NULL, conteudo = NULL, conteudo_derivado = NULL, mensagem_id_canal = 'sha256:' || encode(sha256(convert_to(mensagem_id_canal || ':' || id, 'UTF8')), 'hex') WHERE tipo IN ('audio','imagem','outro') AND criado_em < now() - make_interval(secs => $1::float8 * 3600) AND mensagem_id_canal NOT LIKE 'sha256:%' RETURNING id",
         "options": {
           "queryReplacement": "={{ [{{BV:midia.retencao_h}}] }}"
         }

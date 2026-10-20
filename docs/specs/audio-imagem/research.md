@@ -237,3 +237,12 @@ vira fixture e o teste passa a usá-la.
 3. O cron depende do nome do container `n8n-n8n-1`; revisar se a stack mudar.
 4. `detail: original` da imagem segue não medido; `content-type` genérico do storage derrubaria imagem em `sem_suporte` (não observado).
 5. Alerta de gasto OpenAI (M2) é configuração do owner.
+
+## Revisão de código da PR #11 (2026-10-20)
+
+Achados confirmados e corrigidos, todos validados por `validate_node_config`, republicados no TESTE e cobertos pelo smoke:
+- `bv-vigia`/`Reter midia`: o hash agora inclui o `id` (`mensagem_id_canal || ':' || id`). Sem isso, um `fileUrl` reenviado depois da retenção colidia no UNIQUE e travava toda a retenção.
+- `Conferir`: `getBinaryDataBuffer($itemIndex, 'data')`. Antes lia sempre o item 0, então o 2º áudio do turno herdava o binário ou a falha do 1º. Coberto pelo smoke m9.
+- `Gravar` → `Registrar falhas`: o `Gravar` devolve por linha (`RETURNING`) os campos da falha, e o `Registrar falhas` lê o próprio item. Antes usava `$('Juntar').item`, que despareava com 2 ou mais mídias e perdia a linha de `falhas_agente`. Medido: m9/m10 gravam exatamente 1 falha.
+- `bvMontarTurno`: o texto de "áudio longo" agora sai só para áudio recusado por tamanho ou duração. Uma imagem grande recebe o aviso de não entendida.
+- Smoke c15: a asserção proíbe URL, não o host, que é permitido no `code`. `tests/test_workflows_midia.py`: o `__main__` foi movido para o fim.

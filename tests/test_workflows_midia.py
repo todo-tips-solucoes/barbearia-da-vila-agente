@@ -89,9 +89,6 @@ class InterpretarMidia(unittest.TestCase):
             self.assertIn("`%s`" % k, contrato)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class RetencaoVigia(unittest.TestCase):
     """6.1.3: retencao de midia no bv-vigia (FR-009)."""
@@ -113,8 +110,12 @@ class RetencaoVigia(unittest.TestCase):
         self.assertIn("tipo IN ('audio','imagem','outro')", q)
         for c in ("midia_url = NULL", "midia_mime = NULL", "conteudo = NULL", "conteudo_derivado = NULL"):
             self.assertIn(c, q)
-        self.assertIn("'sha256:' || encode(sha256(convert_to(mensagem_id_canal, 'UTF8')), 'hex')", q)
+        self.assertIn("'sha256:' || encode(sha256(convert_to(mensagem_id_canal || ':' || id, 'UTF8')), 'hex')", q)
         # 2a rodada: a linha ja expurgada tem sha256: no canal e sai do filtro => 0 linhas
         self.assertIn("mensagem_id_canal NOT LIKE 'sha256:%'", q)
         self.assertTrue(self.no["alwaysOutputData"])
         self.assertIn("RETURNING id", q)  # so o id; nenhum conteudo volta para a execucao
+
+
+if __name__ == "__main__":
+    unittest.main()

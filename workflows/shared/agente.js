@@ -140,16 +140,16 @@ function bvMontarTurno(itens, resultados) {
   const rs = new Map((Array.isArray(resultados) ? resultados : []).filter((r) => r && r.mensagem_id != null).map((r) => [Number(r.mensagem_id), r]));
   const linhas = [];
   const motivos = [];
+  let grande = false; // texto de audio longo so quando um AUDIO foi recusado por tamanho/duracao
   for (const it of Array.isArray(itens) ? itens : []) {
     const t = String(it.conteudo == null ? '' : it.conteudo).trim();
     if (it.tipo === 'texto') { if (t) linhas.push(t); continue; }
     const r = rs.get(Number(it.mensagem_id));
     const texto = r && typeof r.texto === 'string' ? bvNeutralizar(r.texto) : '';
     if (texto) linhas.push(`${it.tipo === 'audio' ? '[áudio transcrito]' : '[imagem descrita]'} ${texto}`);
-    else motivos.push(r && r.motivo ? String(r.motivo) : 'interpretacao');
+    else { motivos.push(r && r.motivo ? String(r.motivo) : 'interpretacao'); if (it.tipo === 'audio' && ['longo', 'grande'].includes(motivos[motivos.length - 1])) grande = true; }
     if (it.tipo === 'imagem' && t) linhas.push(`[legenda da imagem] ${bvNeutralizar(t)}`);
   }
-  const grande = motivos.some((m) => m === 'longo' || m === 'grande');
   return {
     linhas, nao_compreendidas: motivos.length, so_midia: (Array.isArray(itens) ? itens.length : 0) > 0 && linhas.length === 0,
     texto_midia: grande ? 'grande' : 'nao_entendida',

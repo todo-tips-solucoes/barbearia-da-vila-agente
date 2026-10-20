@@ -342,7 +342,7 @@ def c15():
     t = turno(507, evento_audio(507))
     checar("turno concluido", bool(t) and t["estado"] == "concluido", str(t)[:120])
     checar("resposta e o aviso de nao entendido (textos.midia_nao_entendida ou midia_grande)", bool(t) and any(CFG["textos"][k] in t["saidas"] for k in ("midia_nao_entendida", "midia_grande")), str(t and t["saidas"])[:160])
-    checar("falhas_agente midia|host_recusado, sem URL", any(x.startswith("midia|host_recusado") and "exemplo.invalid" not in x for x in falhas(507)), str(falhas(507)))
+    checar("falhas_agente midia|host_recusado, sem URL", any(x.startswith("midia|host_recusado") and "://" not in x and "/" not in x for x in falhas(507)), str(falhas(507)))
 
 
 def _trocar_credencial(api, d, wid, tipo, falsa):
@@ -1056,6 +1056,40 @@ def m8():
     checar("resposta e o aviso de midia nao entendida", bool(t) and CFG["textos"]["midia_nao_entendida"] in t["saidas"], str(t and t["saidas"])[:160])
 
 
+def _misto(n, primeiro, segundo, rotulo):
+    semear(n, {"idCliente": FANTASMA, "cliente_nome": "Teste"})
+    post(primeiro)
+    t = turno(n, segundo)
+    es = entradas(n)
+    f = falhas(n)
+    print(f"    {rotulo}:", [(x["tipo"], x["falha"], bool(x["derivado"])) for x in es], f)
+    checar("duas entradas no mesmo turno", len(es) == 2 and es[0]["turno"] == es[1]["turno"], str([(x["tipo"], x["turno"]) for x in es]))
+    checar("turno concluido com resposta", bool(t) and t["estado"] == "concluido" and len(t["saidas"]) >= 1, str(t)[:160])
+    return es, f
+
+
+def m9():
+    print("M9 audio com falha de download + audio bom no mesmo turno: cada item com o proprio binario (Conferir por $itemIndex)")
+    url, seg = _local("cortar_amanha_tarde")
+    host = CFG["midia"]["hosts_audio"][0]
+    es, f = _misto(447, evento_midia(447, f"https://{host}/smoke-inexistente/{uuid.uuid4().hex}.mp3"), evento_midia(447, url, seg), "m9")
+    checar("1o: midia_falha=download; 2o: transcrito", len(es) == 2 and es[0]["falha"] == "download" and not es[1]["falha"] and bool(es[1]["derivado"]))
+    checar("exatamente uma falhas_agente midia|download", sum(x.startswith("midia|download") for x in f) == 1 and len(f) == 1, str(f))
+
+
+def m10():
+    print("M10 audio bom + imagem com falha de download no mesmo turno: ramos diferentes, Juntar/Registrar falhas pareados")
+    url, seg = _local("cortar_amanha_tarde")
+    img = evento_midia(448, f"https://{CFG['midia']['hosts_imagem'][0]}/smoke-inexistente/{uuid.uuid4().hex}.jpeg")
+    m = img["mensagem"][0]
+    m.update(type="image", fileMimeType="image/jpeg")
+    m["originalData"] = {"imageMessage": {"mimetype": "image/jpeg", "fileLength": 1000}}
+    es, f = _misto(448, evento_midia(448, url, seg), img, "m10")
+    por = {x["tipo"]: x for x in es}
+    checar("audio transcrito; imagem midia_falha=download", bool(por.get("audio", {}).get("derivado")) and por.get("imagem", {}).get("falha") == "download", str(por)[:200])
+    checar("exatamente uma falhas_agente (a da imagem)", len(f) == 1 and f[0].startswith("midia|download"), str(f))
+
+
 def verificar_implantado():
     """O workflow implantado tambem tem de enviar so a contatos_escrita (vazio): sem envio real no smoke."""
     d, api = _api_deploy()
@@ -1065,7 +1099,7 @@ def verificar_implantado():
 
 
 CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13,
-                m1=m1, m2=m2, m3=m3, m4=m4, m5=m5, m6=m6, m7=m7, m8=m8,
+                m1=m1, m2=m2, m3=m3, m4=m4, m5=m5, m6=m6, m7=m7, m8=m8, m9=m9, m10=m10,
                 r1=r1, r2=r2, r3=r3, r4=r4, r5=r5, r6=r6, r7=r7, r8=r8, r9=r9, r10=r10)
 
 if __name__ == "__main__":

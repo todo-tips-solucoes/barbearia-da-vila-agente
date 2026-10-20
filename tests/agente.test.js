@@ -111,6 +111,8 @@ assert.ok(/e-mails, telefones/.test(pi) && /só atende assuntos da Barbearia/.te
   // precedencia: grande vence host_recusado; so midia ilegivel; sub ausente = tudo interpretacao
   assert.equal(a.bvMontarTurno([{ mensagem_id: 1, tipo: 'audio' }, { mensagem_id: 2, tipo: 'imagem' }],
     [{ mensagem_id: 1, texto: null, motivo: 'longo' }, { mensagem_id: 2, texto: null, motivo: 'host_recusado' }]).texto_midia, 'grande');
+  // imagem grande nao recebe o texto de audio longo
+  assert.equal(a.bvMontarTurno([{ mensagem_id: 1, tipo: 'imagem' }], [{ mensagem_id: 1, texto: null, motivo: 'grande' }]).texto_midia, 'nao_entendida');
   const vazio = a.bvMontarTurno([{ mensagem_id: 1, tipo: 'audio' }], undefined);
   assert.ok(vazio.so_midia && vazio.nao_compreendidas === 1 && vazio.nota.includes('1 mídia que') && vazio.texto_midia === 'nao_entendida');
   assert.equal(a.bvMontarTurno([{ mensagem_id: 1, tipo: 'texto', conteudo: 'oi' }], []).nota, '');
