@@ -36,3 +36,15 @@ Medido na conexão 145 (QR Pro), contato de teste do owner (Chat Master `contact
 > "o seletor de botao no qual eu fiz teste agora, apenas para api oficial. vamos evitar de usar para api qrcode. para confirmação de agendamento use o botao em lista."
 
 O botão `quick_reply` (`sendButtonsPRO`) fica reservado para a API Oficial e não é usado na conexão QR Pro (145). A confirmação de agendamento usa o **botão em lista** (`sendListPRO`), o mesmo já usado pelo agente.
+
+## Sonda da lista (pai, 2026-10-20): tarefa 1.2, fecha P3/P4
+
+- `POST /api/messages/whatsmeow/sendListPRO` com `openTicket "1"`, `queueId "0"`, `whatsappId "145"` e `List` de 3 linhas (`RowId` `bv_conf_teste_sim`/`_nao`/`_remarcar`): HTTP 200, "Mensagem de LISTA via WHATSMEOW PRO enviada COM TICKET". O eco `from_internal` traz `body: "MENU ENVIADO\n\n<TopText>\n\n<RowId> - <title>..."`.
+- O owner escolheu "Confirmo" duas vezes (04:20:12Z e 04:38:30Z). Cada escolha gerou 2 eventos:
+  1. `acao: "start"`, `fromMe: false`, `mensagem: [{ "type": "text", "text": "Confirmo" }]`: só o **título** da linha, sem o RowId. É o que a recepção processa hoje.
+  2. `acao: "from_internal"`, `fromMe: false`, `mensagem.body: "Confirmo"`, `mensagem.dataJson` (string JSON aninhada) com `rawData.event.Message.listResponseMessage`:
+     - `singleSelectReply.selectedRowID: "bv_conf_teste_sim"`;
+     - `title: "Confirmo"`, `listType: 1`;
+     - `contextInfo.stanzaID` = o `wid` da mensagem de lista enviada (conferido: igual).
+- Reenvio da mesma escolha chega como evento novo e idêntico: o tratamento precisa ser idempotente, porque a confirmação já registrada não pode ser confirmada de novo.
+- Execuções do `bv-captura` apagadas. Fixtures não gravadas, porque o `capturar-webhook.py fixtures` sobrescreve e vaza dados (tarefa 1.1). Os caminhos e valores acima não têm dado pessoal. Webhook 145 restaurado para a recepção do TESTE e conferido.
