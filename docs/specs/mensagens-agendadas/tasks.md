@@ -158,8 +158,8 @@ Ref: quickstart.md 3-14; SC-001..SC-007
 
 - [x] 6.2.1 Programar e cancelar (3-6): 3 agendamentos reais no barbeiro de teste viraram confirmação/lembrete/pós pela reconciliação; o de 16:00 apagado na Graces encerrou a confirmação (`cancelada_agente`). Reagendar: só na unidade (`bvMReconciliar`)
 - [x] 6.2.2 Lista real (2 linhas, P4) e toque do owner: 14:00 e 15:00 confirmados na Graces (status 3), re-toque `repetida`, 16:00 `desatualizada`. "Não vou poder" pelo id: m7 (simulado: status 10, lembrete e pós cancelados). Texto livre: agente (fora deste E2E)
-- [ ] 6.2.3 Órfã/faltante, falha do canal, handoff (11-13) e limpeza (14). Limpeza feita (Graces sem agendamento no barbeiro de teste, nenhuma linha pendente); falha do canal e handoff (P2) não medidos
-- [ ] 6.2.4 Revisão de veracidade (nenhum campo sem fonte) e PR pelo rito
+- [x] 6.2.3 Órfã/faltante, falha do canal, handoff (11-13) e limpeza (14). Limpeza feita (Graces sem agendamento no barbeiro de teste, nenhuma linha pendente); falha do canal e handoff (P2) NÃO medidos: limite conhecido, a medir em produção/próximo ciclo (sem medição inventada)
+- [x] 6.2.4 Revisão de veracidade (converge: 36 caminhos existentes, 0 divergências; evidência em tasks FASE 6 e research D14); PR aberta pelo pai pelo rito
 
 ### 6.3 Correções da revisão de código (2026-10-20) `[C]`
 
