@@ -192,7 +192,7 @@ Ref: contracts/config-midia.md; checklists/security.md CHK004
 
 Ref: plan.md §Project Structure; workflows/README.md
 
-- [~] 6.3.1 Cenários em `scripts/smoke-agente.py` possíveis sem WhatsApp (falha OpenAI, host recusado) (host recusado coberto no c15 e confirmado em real na 7.3.1; falha OpenAI do sub exige credencial inválida temporária em execução real, coberta pela 7.2.2; mantido `[~]` até a 7.2.2)
+- [x] 6.3.1 Cenários em `scripts/smoke-agente.py` possíveis sem WhatsApp (falha OpenAI, host recusado) (host recusado coberto no c15 e confirmado em real na 7.3.1; falha OpenAI do sub exige credencial inválida temporária em execução real, coberta pela 7.2.2; mantido `[~]` até a 7.2.2) (falha OpenAI do sub coberta pelo smoke m3, 2026-10-20)
 - [x] 6.3.2 Registrar id e papel do `interpretar-midia` em `workflows/README.md`
 - [x] 6.3.3 Rodar `python3 -I -m unittest discover -s tests`, `node tests/rajada.test.js`, `node tests/midia.test.js` e `scripts/varrer-segredos.py`
 
@@ -212,10 +212,10 @@ Ref: plan.md §Fluxo "Deploy"; spec.md FR-015, FR-016
 
 Ref: quickstart.md 11-13, 18; spec.md SC-001, SC-002, SC-005
 
-- [ ] 7.2.1 Nota de voz "quero cortar o cabelo amanhã de tarde" (barbeiro de teste), resposta coerente; payload gravado confere com `evento-20.json`
-- [ ] 7.2.2 Áudio + texto na janela; áudio mudo; erro OpenAI com credencial inválida temporária (apagada no `finally`)
-- [ ] 7.2.3 Medir SC-005 com a amostra definida em 1.5 e o tempo total do turno conforme 1.4
-- [ ] 7.2.4 Cancelar na Graces tudo o que for criado
+- [x] 7.2.1 Nota de voz "quero cortar o cabelo amanhã de tarde" (barbeiro de teste), resposta coerente; payload gravado confere com `evento-20.json` (smoke m1, 2026-10-20: nota de voz real do owner "Quero cortar o cabelo amanhã de tarde." transcrita; gravado audio/ogg; codecs=opus e segundos do payload evento-20; resposta coerente pedindo o nome para o cadastro; 0 falhas)
+- [x] 7.2.2 Áudio + texto na janela; áudio mudo; erro OpenAI com credencial inválida temporária (apagada no `finally`) (smoke m2: áudio + texto num turno só; m8: áudio mudo real -> `midia_falha=vazio` após o filtro `no_speech_prob` (o whisper-1 inventava "Legendas..." no silêncio); m3: credencial OpenAI inválida só no interpretar-midia -> aviso de mídia não entendida, `falhas_agente midia|transcricao` sem URL, workflow restaurado e credencial apagada)
+- [x] 7.2.3 Medir SC-005 com a amostra definida em 1.5 e o tempo total do turno conforme 1.4 (smoke m7: n=20 turnos com os 4 áudios falados reais do owner em rodízio, reenvio do payload real por contatos simulados; início do turno -> 1a resposta p50 6,7 s, p95 8,7 s, máx 8,7 s <= 30 s; desvio: amostra de reenvios, não 20 gravações distintas)
+- [x] 7.2.4 Cancelar na Graces tudo o que for criado (SC-010 no encerramento de cada rodada: 0 agendamentos ativos; nada criado na Graces)
 
 ### 7.3 Ponta a ponta de imagem (US2) `[A]`
 
@@ -229,9 +229,9 @@ Ref: quickstart.md 14; tarefa 2.5
 
 Ref: quickstart.md 15-17; spec.md FR-011, SC-003, SC-004
 
-- [ ] 7.4.1 Duas mídias ilegíveis: uma única resposta
-- [ ] 7.4.2 Reenvio do mesmo evento: uma linha em `mensagens`
-- [ ] 7.4.3 Retenção com `midia.retencao_h` reduzido em TESTE: vencidas sem URL/conteúdo e com `sha256:`, recentes intactas, `falhas_agente` sem URL/texto/telefone; restaurar o valor
+- [x] 7.4.1 Duas mídias ilegíveis: uma única resposta (smoke m4: duas mídias ilegíveis, ambas `midia_falha=download` no mesmo turno, uma única resposta)
+- [x] 7.4.2 Reenvio do mesmo evento: uma linha em `mensagens` (smoke m5: reenvio do mesmo evento -> HTTP 200 e uma linha para o fileUrl)
+- [x] 7.4.3 Retenção com `midia.retencao_h` reduzido em TESTE: vencidas sem URL/conteúdo e com `sha256:`, recentes intactas, `falhas_agente` sem URL/texto/telefone; restaurar o valor (smoke m6: linhas semeadas com idade > `retencao_h` no mesmo SQL do bv-vigia, sem mudar o config: vencida sem URL/conteúdo e com `sha256:`, recente intacta, `falhas_agente` sem URL nem telefone; nada a restaurar)
 
 ### 7.5 Revisão de veracidade e PR `[M]`
 

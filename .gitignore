@@ -9,3 +9,4 @@ alteracoes_clientes/*.jpeg
 __pycache__/
 tests/conversas/relatorios/
 .captura-145.url
+tests/fixtures/midia-real.local.json

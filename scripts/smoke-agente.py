@@ -1,7 +1,7 @@
 """Smoke do agente no TESTE (quickstart cenarios 2, 3, 5, 9-15). So contatos SIMULADOS +5500000000xxx (teste.contatos_simulados);
 a saida e conferida em `mensagens` (nenhum envio real ao Chat Master: teste.contatos_escrita vazio, conferido no config e no workflow implantado).
 Chama a OpenAI e le a Graces de verdade. Nao confirma nenhuma proposta; se alguma ficar `executada`, o finally cancela na Graces (SC-010).
-Uso: python3 -I scripts/smoke-agente.py [--so NOME ...] | --limpar. NOMES: c2 c3 c5 c9 c10 c11 c14 c15 c12 c13 (c12/c13 trocam credencial so no TESTE); roteiros r1-r10 (quickstart, chamada direta ao bv-graces, escrita real no barbeiro de teste) so por nome.
+Uso: python3 -I scripts/smoke-agente.py [--so NOME ...] | --limpar. NOMES: c2 c3 c5 c9 c10 c11 c14 c15 c12 c13 (c12/c13 trocam credencial so no TESTE); midia m1-m8 (audios reais do owner em tests/fixtures/midia-real.local.json, fora do git; m3 troca a credencial do interpretar-midia; m6 ~7 min; m7 20 audios); roteiros r1-r10 (quickstart, chamada direta ao bv-graces, escrita real no barbeiro de teste) so por nome.
 Segredos vem de .env.smoke/.env.n8n (nunca impressos). Exit 1 se algum cenario falhar."""
 import contextlib
 import importlib.util
@@ -362,7 +362,7 @@ def _cenario_credencial(num, wf_chave, so_nome, tipo_cred, dados_cred, conversa,
     cred = api("POST", "/credentials", {"name": "Barbearia Vila INVALIDA (smoke)", "type": tipo_cred, "data": dados_cred})["id"]
     try:
         _trocar_credencial(api, d, wid, "openAiApi" if tipo_cred == "openAiApi" else "httpHeaderAuth", cred)
-        t = turno(num, evento(num, conversa))
+        t = turno(num, evento(num, conversa) if isinstance(conversa, str) else conversa)
         esperado(t)
     finally:
         rc = d.main(["integracao", "--so", so_nome])  # restaura o JSON versionado
@@ -905,6 +905,157 @@ def encerrar():
     print("  restantes:", sql(f"SELECT count(*) FROM contatos WHERE telefone LIKE '{PREFIXO}%';"))
 
 
+# ---------------------------------------------------------------- midia (audio-imagem, FASE 7.2/7.4): audio real, contatos simulados
+LOCAL_MIDIA = os.path.join(RAIZ, "tests", "fixtures", "midia-real.local.json")  # fora do git: voz do owner e caminho do storage
+
+
+def _local(nome):
+    """Audio real guardado (gravado pelo owner pela 145 e mantido fora do git): (url, segundos)."""
+    try:
+        d = json.load(open(LOCAL_MIDIA, encoding="utf-8"))[nome]
+    except (FileNotFoundError, KeyError):
+        raise SystemExit(f"sem '{nome}' em {LOCAL_MIDIA}: grave o audio pela 145 e registre a URL")
+    return d["url"], d["segundos"]
+
+
+def _midia_real(tipo, longo=False):
+    """URL de uma midia REAL ja recebida pela 145 (ainda dentro da retencao). Sem URL no repo: o storage traz caminho da empresa."""
+    lim = CFG["midia"]["audio_max_s"]
+    cond = f"AND midia_segundos {'>' if longo else '<='} {lim}" if tipo == "audio" else ""
+    r = sql(f"SELECT midia_url||'|'||coalesce(midia_segundos,0) FROM mensagens m JOIN contatos c ON c.id=m.contato_id WHERE m.tipo='{tipo}' "
+            f"AND m.direcao='entrada' AND m.midia_url LIKE 'https://{CFG['midia']['hosts_audio'][0]}/%' AND c.telefone NOT LIKE '+55000%' {cond} "
+            f"ORDER BY m.id DESC LIMIT 1;")
+    if not r:
+        raise SystemExit(f"sem {tipo} real dentro da retencao: mande um pela 145 e rode de novo")
+    u, seg = r.rsplit("|", 1)
+    return u, int(seg)
+
+
+def evento_midia(n, url, segundos=5, legenda=None):
+    """Payload real de nota de voz (evento-20) com o fileUrl trocado; ?smoke= deixa o mensagem_id_canal unico (o storage ignora a query)."""
+    b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-20.json"), encoding="utf-8"))["body"]
+    b.update(sender=tel(n), token_origin=TOKEN)
+    m = b["mensagem"][0]
+    m["fileUrl"] = url if "smoke=" in url else f"{url}?smoke={uuid.uuid4().hex[:10]}"
+    m["originalData"]["audioMessage"]["seconds"] = segundos
+    if legenda:
+        m["text"] = legenda
+    return b
+
+
+def entradas(n):
+    return json.loads(sql(f"SELECT coalesce(json_agg(json_build_object('id',id,'tipo',tipo,'turno',turno_id,'mime',midia_mime,'seg',midia_segundos,"
+                          f"'falha',midia_falha,'derivado',conteudo_derivado,'canal',mensagem_id_canal) ORDER BY id),'[]') FROM mensagens "
+                          f"WHERE contato_id={cid(n) or 0} AND direcao='entrada';"))
+
+
+NAO_ENT = lambda: (CFG["textos"]["midia_nao_entendida"], CFG["textos"]["contingencia"])
+
+
+def m1():
+    print("M1 (7.2.1) nota de voz real 'quero cortar o cabelo amanha de tarde': transcrita, resposta coerente, payload confere com evento-20")
+    url, seg = _local("cortar_amanha_tarde")
+    semear(440, {"idCliente": FANTASMA, "cliente_nome": "Teste"})
+    t = turno(440, evento_midia(440, url, seg))
+    e = (entradas(440) or [{}])[-1]
+    checar("turno concluido", bool(t) and t["estado"] == "concluido", str(t)[:160])
+    checar("gravado: tipo audio, mime e segundos do payload", e.get("tipo") == "audio" and e.get("mime") == "audio/ogg; codecs=opus" and e.get("seg") == seg, str(e)[:200])
+    checar("transcricao em conteudo_derivado, sem falha", bool(e.get("derivado")) and not e.get("falha"), str(e)[:200])
+    checar("resposta coerente (nao e aviso de midia/contingencia)", bool(t) and t["saidas"] and not set(t["saidas"]) & set(NAO_ENT()), str(t and t["saidas"])[:200])
+    checar("0 falhas_agente", not falhas(440), str(falhas(440)))
+    print("    transcricao:", str(e.get("derivado"))[:120], "| resposta:", str(t and t["saidas"])[:160])
+
+
+def m2():
+    print("M2 (7.2.2) audio + texto na mesma janela: um turno so, com os dois")
+    url, seg = _midia_real("audio")
+    semear(441, {"idCliente": FANTASMA, "cliente_nome": "Teste"})
+    post(evento_midia(441, url, seg))
+    t = turno(441, evento(441, "é pra amanhã"))
+    es = entradas(441)
+    checar("duas entradas no mesmo turno", len(es) == 2 and es[0]["turno"] and es[0]["turno"] == es[1]["turno"], str([(x["tipo"], x["turno"]) for x in es]))
+    checar("um turno concluido", int(sql(f"SELECT count(*) FROM turnos WHERE contato_id={cid(441)};")) == 1 and bool(t) and t["estado"] == "concluido")
+
+
+def m3():
+    print("M3 (7.2.2) erro da OpenAI na transcricao: credencial invalida so no interpretar-midia de TESTE, restaurada no finally")
+    url, seg = _midia_real("audio")
+
+    def esperado(t):
+        f = falhas(442)
+        checar("resposta e o aviso de midia nao entendida", bool(t) and CFG["textos"]["midia_nao_entendida"] in t["saidas"], str(t and t["saidas"])[:200])
+        checar("falhas_agente midia|transcricao, sem URL", any(x.startswith("midia|transcricao") for x in f) and not any("http" in x for x in f), str(f))
+    _cenario_credencial(442, "interpretar_midia", "interpretar_midia", "openAiApi", {"apiKey": "sk-invalida-smoke"}, evento_midia(442, url, seg), esperado)
+
+
+def m4():
+    print("M4 (7.4.1) duas midias ilegiveis na mesma janela: uma unica resposta")
+    host = CFG["midia"]["hosts_audio"][0]
+    semear(443, {"idCliente": FANTASMA, "cliente_nome": "Teste"})
+    post(evento_midia(443, f"https://{host}/smoke-inexistente/{uuid.uuid4().hex}.mp3"))
+    t = turno(443, evento_midia(443, f"https://{host}/smoke-inexistente/{uuid.uuid4().hex}.mp3"))
+    es = entradas(443)
+    checar("duas entradas, ambas com midia_falha, mesmo turno", len(es) == 2 and all(x["falha"] for x in es) and es[0]["turno"] == es[1]["turno"], str([(x["falha"], x["turno"]) for x in es]))
+    checar("uma unica resposta", bool(t) and len(t["saidas"]) == 1, str(t and t["saidas"])[:200])
+
+
+def m5():
+    print("M5 (7.4.2) reenvio do mesmo evento de midia: uma linha em mensagens")
+    url, seg = _midia_real("audio")
+    semear(444, {"idCliente": FANTASMA, "cliente_nome": "Teste"})
+    corpo = evento_midia(444, url, seg)
+    turno(444, corpo)
+    s, _ = post(corpo)
+    time.sleep(8)
+    checar("reenvio aceito sem erro", s == 200, str(s))
+    checar("uma linha para o fileUrl", int(sql(f"SELECT count(*) FROM mensagens WHERE mensagem_id_canal=$u${corpo['mensagem'][0]['fileUrl']}$u$;")) == 1)
+
+
+def m6(limite_s=420):
+    print("M6 (7.4.3) retencao: linhas semeadas vencidas (sem mudar config; mesmo SQL do bv-vigia), recentes intactas")
+    c = semear(445)
+    h = CFG["midia"]["retencao_h"]
+    ids = {}
+    for nome, idade in (("vencida", h + 1), ("recente", 0)):
+        ids[nome] = int(sql(f"INSERT INTO mensagens(contato_id,mensagem_id_canal,direcao,tipo,conteudo,midia_url,midia_mime,conteudo_derivado,criado_em) VALUES "
+                            f"({c},'https://smoke.invalid/{uuid.uuid4().hex}','entrada','audio','legenda smoke','https://smoke.invalid/a.ogg','audio/ogg','transcricao smoke',"
+                            f"now() - make_interval(secs => {idade} * 3600)) RETURNING id;").splitlines()[0])
+    lin = lambda i: sql(f"SELECT coalesce(midia_url,'')||'|'||coalesce(conteudo,'')||'|'||coalesce(conteudo_derivado,'')||'|'||mensagem_id_canal FROM mensagens WHERE id={i};")
+    fim = time.time() + limite_s
+    while time.time() < fim and not lin(ids["vencida"]).startswith("|||sha256:"):
+        time.sleep(15)
+    checar("vencida sem URL/conteudo e com sha256:", lin(ids["vencida"]).startswith("|||sha256:"), lin(ids["vencida"])[:80])
+    checar("recente intacta", lin(ids["recente"]).startswith("https://smoke.invalid/a.ogg|legenda smoke|transcricao smoke|https://"))
+    vaz = sql("SELECT count(*) FROM falhas_agente WHERE code ~ '(https?://|\\+?55\\d{10,11})' OR motivo ~ 'https?://';")
+    checar("falhas_agente sem URL nem telefone", vaz == "0", vaz)
+
+
+def m7(n=20):
+    print(f"M7 (7.2.3) SC-005: {n} notas de voz curtas reais (reenvio do payload real), resposta <= 30 s apos a janela em 95%")
+    falados = [_local(k) for k in ("cortar_amanha_tarde", "preco_corte_barba", "sabado_manha", "pedido_25s")]
+    lat0 = len(_lat)
+    for i in range(n):
+        url, seg = falados[i % len(falados)]
+        semear(470 + i, {"idCliente": FANTASMA, "cliente_nome": "Teste"})
+        t = turno(470 + i, evento_midia(470 + i, url, seg))
+        checar(f"audio {i + 1}: concluido e entendido", bool(t) and t["estado"] == "concluido" and not set(t["saidas"]) & set(NAO_ENT()), str(t and t["saidas"])[:120])
+    q = sorted(_lat[lat0:])
+    if q:
+        p95 = q[min(len(q) - 1, int(len(q) * 0.95))]
+        _info.append(f"SC-005: n={len(q)} p50={q[len(q)//2]:.1f}s p95={p95:.1f}s max={q[-1]:.1f}s (inicio do turno -> 1a resposta)")
+        checar("SC-005 p95 <= 30 s", p95 <= 30, f"p95={p95:.1f}s")
+
+
+def m8():
+    print("M8 (7.2.2) audio mudo real: sem transcricao, aviso de midia nao entendida")
+    url, seg = _local("mudo")
+    semear(446, {"idCliente": FANTASMA, "cliente_nome": "Teste"})
+    t = turno(446, evento_midia(446, url, seg))
+    e = (entradas(446) or [{}])[-1]
+    checar("midia_falha registrada e sem conteudo_derivado", bool(e.get("falha")) and not e.get("derivado"), str(e)[:160])
+    checar("resposta e o aviso de midia nao entendida", bool(t) and CFG["textos"]["midia_nao_entendida"] in t["saidas"], str(t and t["saidas"])[:160])
+
+
 def verificar_implantado():
     """O workflow implantado tambem tem de enviar so a contatos_escrita (vazio): sem envio real no smoke."""
     d, api = _api_deploy()
@@ -914,6 +1065,7 @@ def verificar_implantado():
 
 
 CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13,
+                m1=m1, m2=m2, m3=m3, m4=m4, m5=m5, m6=m6, m7=m7, m8=m8,
                 r1=r1, r2=r2, r3=r3, r4=r4, r5=r5, r6=r6, r7=r7, r8=r8, r9=r9, r10=r10)
 
 if __name__ == "__main__":

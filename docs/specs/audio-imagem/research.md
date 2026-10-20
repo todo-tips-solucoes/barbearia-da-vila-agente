@@ -213,3 +213,9 @@ vira fixture e o teste passa a usá-la.
 - **7.3 imagem**: `hosts_imagem` vazio -> `falhas_agente` id 9 `host_recusado` e resposta de recusa natural (msg 1277). Com o host: msgs 1278/1280 e 1294/1296 (image/jpeg 90322/47117 bytes) descritas e respondidas; imagem fora do assunto reconduzida (msg 1295). Nada criado na Graces.
 - **Áudio real**: msg 1292 (audio/ogg, 3 s) transcrita e respondida; msg 1298 (137 s) -> `midia_falha` longo, `falhas_agente` id 10 motivo `longo`, resposta `textos.midia_grande` (msg 1299). Texto puro (msgs 1283/1285, 1290/1291) sem regressão.
 - **Pendência temporária**: `teste.contatos_escrita=[+5511967296849]` só no TESTE; restaurar `[]` e redeployar `entregar_rajada` ao fim dos testes manuais (7.5.2). Saída de texto para contato `@lid` usa `/api/messages/whatsmeow/sendTextPROLid`.
+
+## Smoke de mídia automatizado (2026-10-20)
+
+- `scripts/smoke-agente.py --so m1 ... m8`: contatos simulados (+5500000000440-489), áudios reais do owner gravados pela 145 e guardados em `tests/fixtures/midia-real.local.json` (fora do git: voz do owner e caminho do storage). Todos passaram.
+- **Áudio mudo**: o whisper-1 devolvia texto inventado em silêncio ("Legendas..."). `Transcrever` passou a pedir `response_format=verbose_json` e `Texto audio` trata como `vazio` quando todo segmento tem `no_speech_prob > 0,6`. Medido: áudio mudo real -> `vazio`; fala real segue transcrita.
+- **Incidente da rodada**: `tel(n)` devolve o telefone real do owner para n >= 520; a primeira versão dos cenários usou 560-589 e rodou no contato do owner no TESTE (sem envio real: `contatos_escrita` vazio). Corrigido para 440-489. O m3 troca a credencial do interpretar-midia: durante a rodada, o owner não deve mandar mídia pela 145.

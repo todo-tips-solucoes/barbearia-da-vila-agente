@@ -183,6 +183,10 @@
             {
               "name": "language",
               "value": "pt"
+            },
+            {
+              "name": "response_format",
+              "value": "verbose_json"
             }
           ]
         },
@@ -253,7 +257,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const v = $('Conferir').item.json; const st = $json.statusCode; const ok = st >= 200 && st < 300;\nconst t = (typeof ($json.body || {}).text === 'string' ? $json.body.text : '' || '').trim();\nconst r = { idx: v.idx, contato_id: v.contato_id, mensagem_id: v.mensagem_id, tipo: v.tipo, texto: null, motivo: null, status_http: Number.isInteger(st) ? st : null, host: null };\nif (!ok) r.motivo = 'transcricao'; else if (!t) r.motivo = 'vazio'; else r.texto = t.slice(0, 4000);\nreturn { json: r };"
+        "jsCode": "const v = $('Conferir').item.json; const st = $json.statusCode; const ok = st >= 200 && st < 300;\nconst t = (typeof ($json.body || {}).text === 'string' ? $json.body.text : '' || '').trim();\n// whisper inventa texto em silencio (ex.: legendas Amara.org): todo segmento provavelmente sem fala => vazio\nconst segs = Array.isArray(($json.body || {}).segments) ? $json.body.segments : [];\nconst semFala = segs.length > 0 && segs.every((s) => Number(s.no_speech_prob) > 0.6);\nconst r = { idx: v.idx, contato_id: v.contato_id, mensagem_id: v.mensagem_id, tipo: v.tipo, texto: null, motivo: null, status_http: Number.isInteger(st) ? st : null, host: null };\nif (!ok) r.motivo = 'transcricao'; else if (!t || semFala) r.motivo = 'vazio'; else r.texto = t.slice(0, 4000);\nreturn { json: r };"
       },
       "id": "bc17012c-e28a-5265-8d6d-c6053147a02a",
       "name": "Texto audio",
