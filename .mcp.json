@@ -5,9 +5,7 @@
       "command": "/root/.claude/skills/agente-00c-runtime/scripts/mcp-launch.sh",
       "args": [],
       "timeout": 300000,
-      "env": {
-        "CSTK_CLIENT_TOOL_TIMEOUT_MS": "300000"
-      }
+      "env": { "CSTK_CLIENT_TOOL_TIMEOUT_MS": "300000" }
     }
   }
 }

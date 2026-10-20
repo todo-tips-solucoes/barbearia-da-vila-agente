@@ -1,0 +1,242 @@
+{
+  "schema_version": "1.0.0",
+  "short_name": "regras-negocio-agenda",
+  "execution": {
+    "id": "feat-regras-negocio-agenda-20261018T231723Z",
+    "target_project_path": "/home/projetos/barbearia_da_villa-regras-negocio-agenda",
+    "target_project_description": "Regras de negócio sobre a agenda da Graces: oferecer todos os inícios em que a duração do serviço cabe, perguntar se usa a sessão do pacote ou paga avulso, nunca oferecer nem agendar serviços \"2ª vez\", agendar para terceiros (pedir o nome e buscar ou cadastrar a pessoa) e encadear vários serviços com um agendamento por serviço. Tratamento de erro pelo campo `code` e escrita nunca repetida às cegas após timeout. Estende o entregar-rajada e o bv-graces da feature 3. Testes de escrita \n...",
+    "suggested_stack": null,
+    "status": "em_andamento",
+    "termination_reason": null,
+    "started_at": "2026-10-18T23:17:23Z",
+    "finished_at": null
+  },
+  "prerequisites": {
+    "briefing": {
+      "path": "/home/projetos/barbearia_da_villa-regras-negocio-agenda/docs/briefing.md",
+      "sha256": "a08f37e7621bdd07e2341d6fb4e5ef71434850a5a24393db4c64d4d46fe6ee36"
+    },
+    "constitution": {
+      "path": "/home/projetos/barbearia_da_villa-regras-negocio-agenda/docs/constitution.md",
+      "sha256": "f029442779847cac056dcc6f022507eb3af2bbf06590ab5125e3f5c9af8aaa6a",
+      "version": "2.0.0"
+    }
+  },
+  "current_stage": "clarify",
+  "next_instruction": "Iniciar etapa clarify.",
+  "waves": [
+    {
+      "id": "onda-001",
+      "started_at": "2026-10-18T23:18:04Z",
+      "finished_at": "2026-10-18T23:19:45Z",
+      "executed_stages": [
+        "specify"
+      ],
+      "tool_calls": 10,
+      "wallclock_seconds": 101,
+      "termination_reason": "etapa_concluida_avancando",
+      "next_wave_scheduled_for": null,
+      "skills_invoked": [
+        {
+          "skill": "specify",
+          "timestamp": "2026-10-18T23:19:44Z",
+          "decision_id": null,
+          "kind": "skill"
+        },
+        {
+          "skill": "requirement-coverage",
+          "timestamp": "2026-10-18T23:19:44Z",
+          "decision_id": null,
+          "kind": "gate"
+        }
+      ],
+      "agent_usage": null,
+      "agent_spawns": [],
+      "otel_usage": {
+        "session_id": "4857b458-13ac-4a28-a2ee-eb7552b8df96",
+        "total_cost_usd": 0.333291,
+        "total_tokens": 875742,
+        "by_source": {
+          "subagent": {
+            "cost_usd": 0.333291,
+            "input": 18,
+            "output": 11374,
+            "cache_read": 808900,
+            "cache_creation": 55450
+          }
+        },
+        "by_model": {
+          "claude-sonnet-5-5": {
+            "cost_usd": 0.333291,
+            "total_tokens": 875742
+          }
+        }
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dec-001",
+      "wave_id": "init",
+      "timestamp": "2026-10-18T23:17:35Z",
+      "stage": "specify",
+      "agent": "feature-00c",
+      "context": "Warm-up de permissoes pulado: execucao nao-interativa",
+      "options_considered": [
+        "proceder",
+        "abortar"
+      ],
+      "choice": "proceder",
+      "rationale": "Sem operador para confirmar; warm-up nao tem funcao em execucao nao-interativa e abortar inviabilizaria automacao",
+      "justification_score": null,
+      "evidence": null,
+      "references": [],
+      "originating_artifact": null,
+      "decision_class": null,
+      "structural_axis": null,
+      "human_consent_block_id": null
+    },
+    {
+      "id": "dec-002",
+      "wave_id": "init",
+      "timestamp": "2026-10-18T23:17:35Z",
+      "stage": "specify",
+      "agent": "agente-00c-feature-orchestrator",
+      "context": "Selecao de modelo para onda init (fase specify)",
+      "options_considered": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "manter-atual"
+      ],
+      "choice": "model:sonnet",
+      "rationale": "sugerido=sonnet aplicado=sonnet origem=mapa | faixa=media fase=specify (mapa primario)",
+      "justification_score": 0,
+      "evidence": null,
+      "references": [],
+      "originating_artifact": null,
+      "decision_class": null,
+      "structural_axis": null,
+      "human_consent_block_id": null
+    },
+    {
+      "id": "dec-003",
+      "wave_id": "onda-001",
+      "timestamp": "2026-10-18T23:19:44Z",
+      "stage": "specify",
+      "agent": "agente-00c-feature-orchestrator",
+      "context": "specify-init: spec gerada com 3 NEEDS CLARIFICATION (FR-001 apresentacao de muitos inicios, FR-007 terceiro sem celular, FR-012 encadeamento com barbeiros distintos)",
+      "options_considered": [
+        "iniciar",
+        "abortar"
+      ],
+      "choice": "iniciar",
+      "rationale": "Spec fundamentada em graces-api e decisoes-pre-00c; gate requirement-coverage 15/15; lacunas viram clarify",
+      "justification_score": 2,
+      "evidence": null,
+      "references": [],
+      "originating_artifact": null,
+      "decision_class": "operacional",
+      "structural_axis": null,
+      "human_consent_block_id": null
+    },
+    {
+      "id": "dec-004",
+      "wave_id": "onda-001",
+      "timestamp": "2026-10-18T23:19:44Z",
+      "stage": "specify",
+      "agent": "agente-00c-feature-orchestrator",
+      "context": "Skip do gate validate-documentation apos specify: spec validada por requirement-coverage (15/15) e sera refinada em clarify",
+      "options_considered": [
+        "rodar-gate",
+        "skip-com-justificativa"
+      ],
+      "choice": "skip-com-justificativa",
+      "rationale": "Gate nao-bloqueante; clarify/checklist cobrem qualidade de requisitos na sequencia",
+      "justification_score": 2,
+      "evidence": null,
+      "references": [],
+      "originating_artifact": null,
+      "decision_class": "operacional",
+      "structural_axis": null,
+      "human_consent_block_id": null
+    },
+    {
+      "id": "dec-005",
+      "wave_id": "onda-001",
+      "timestamp": "2026-10-18T23:24:09Z",
+      "stage": "clarify",
+      "agent": "agente-00c-feature-orchestrator",
+      "context": "Selecao de modelo para onda 1 (fase clarify)",
+      "options_considered": [
+        "haiku",
+        "sonnet",
+        "opus",
+        "manter-atual"
+      ],
+      "choice": "model:sonnet",
+      "rationale": "sugerido=sonnet aplicado=sonnet origem=mapa | faixa=media fase=clarify (mapa primario)",
+      "justification_score": 0,
+      "evidence": null,
+      "references": [],
+      "originating_artifact": null,
+      "decision_class": null,
+      "structural_axis": null,
+      "human_consent_block_id": null
+    }
+  ],
+  "human_blocks": [],
+  "budgets": {
+    "max_recursion": 3,
+    "current_subagent_depth": 1,
+    "max_retro_executions_per_feature": 2,
+    "retro_executions_consumed": 0,
+    "max_cycles_per_stage": 5,
+    "cycles_consumed_current_stage": 0,
+    "tool_calls_threshold_wave": 80,
+    "wallclock_threshold_seconds": 5400,
+    "state_size_threshold_bytes": 1048576,
+    "tool_calls_current_wave": 0,
+    "current_wave_start": "2026-10-18T23:18:04Z"
+  },
+  "accumulated_metrics": {
+    "waves_total": 1,
+    "tool_calls_total": 10,
+    "wallclock_total_seconds": 101,
+    "max_depth_reached": 1,
+    "subagents_spawned": 0,
+    "decisions_total": 5,
+    "human_blocks_total": 0,
+    "global_skill_suggestions_total": 0,
+    "toolkit_issues_opened": 0,
+    "agent_spawns_total": 0,
+    "agent_spawns_with_usage_total": 0,
+    "agent_tokens_total": null,
+    "agent_tool_use_count_total": null,
+    "agent_duration_ms_total": null
+  },
+  "external_urls_whitelist": [],
+  "circular_movement_history": [],
+  "initial_key_aspects": [
+    "regras",
+    "neg",
+    "cio",
+    "sobre",
+    "agenda",
+    "graces",
+    "oferecer"
+  ],
+  "atomic_commit_enabled": false,
+  "roadmap_mode_enabled": false,
+  "delivery_tier": "cloud-public",
+  "optin_responses": [
+    {
+      "field": "atomic_commit",
+      "channel": "prose",
+      "outcome": "absent",
+      "applied_value": "false",
+      "recorded_at": "2026-10-18T23:17:35Z",
+      "reason": "execucao nao-interativa: default seguro sem perguntar"
+    }
+  ]
+}
