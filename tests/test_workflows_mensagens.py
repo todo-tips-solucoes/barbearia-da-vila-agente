@@ -1,3 +1,4 @@
+import glob
 import importlib.util
 import json
 import os
@@ -278,6 +279,21 @@ class BvConfirmacao(Base, unittest.TestCase):
             self.assertIn(t, r) if t != "mensagem_id_canal" else None
         self.assertEqual(self.destinos("Enviar texto?", 1), ["Registrar"])
         self.assertIn("ent.origem !== 'agente'", self.nos["Desfecho"]["parameters"]["jsCode"])  # o agente responde sozinho
+
+
+
+
+class SemRequireNoN8n(unittest.TestCase):
+    """O n8n proibe require em Code node: todo no que inclui graces.js precisa incluir antes o que ele importa."""
+
+    def test_graces_js_com_dependencias(self):
+        for f in glob.glob(os.path.join(RAIZ, "workflows", "**", "*.json"), recursive=True):
+            for n in json.load(open(f, encoding="utf-8"))["nodes"]:
+                c = n.get("parameters", {}).get("jsCode", "")
+                if "{{BV:INCLUDE:shared/graces.js}}" in c:
+                    for dep in ("agente.js", "mensagens.js"):
+                        self.assertLess(c.find("shared/" + dep), c.find("shared/graces.js"), f"{f}::{n['name']} sem {dep} antes de graces.js")
+                        self.assertNotEqual(c.find("shared/" + dep), -1, f"{f}::{n['name']} sem {dep}")
 
 
 if __name__ == "__main__":
