@@ -10,6 +10,7 @@ Fonte versionada dos workflows. Os JSON usam placeholders `{{BV:...}}` (config d
 | bv-verificacao | `bv-verificacao.json` | `uoDF0RFEgzAtKUay` | nao criado |
 | bv-graces | `sub/bv-graces.json` | `mjhd7O0AzrqNVrf0` | nao criado (recusa `teste.*`) |
 | bv-vigia | `bv-vigia.json` | `fzJA2yWESqiPXyib` | nao criado (config vazio) |
+| interpretar-midia | `sub/interpretar-midia.json` | vazio ate o deploy (`workflows_sub.interpretar_midia`) | nao criado |
 
 ## bv-recepcao
 
@@ -28,7 +29,7 @@ Robustez da recepcao (feature `recepcao-robustez`, so TESTE): o `200` de aceita 
 
 ## bv-vigia
 
-Agendado a cada 5 min (TESTE). Apaga de `tentativas_recepcao` as linhas mais velhas que `execucao.timeout_s` + 30 s e registra cada uma em `falhas_recepcao` (`redis_indisponivel|tempo_esgotado`, so `contato_id`, sem PII). Cobre o no Redis pendurado, que o `executionTimeout` cancela sem disparar error workflow. A mensagem segue pendente (`processada_em` nulo) e e entregue no turno seguinte do contato. Criacao: `scripts/deploy-n8n.sh integracao --criar bv-vigia`.
+Agendado a cada 5 min (TESTE). Apaga de `tentativas_recepcao` as linhas mais velhas que `execucao.timeout_s` + 30 s e registra cada uma em `falhas_recepcao` (`redis_indisponivel|tempo_esgotado`, so `contato_id`, sem PII). Alem disso, o no `Reter midia` expurga a midia de `mensagens` mais velha que `midia.retencao_h` (`midia_url`, `midia_mime`, `conteudo`, `conteudo_derivado` NULL; `mensagem_id_canal` vira `sha256:<hex>`; idempotente). Cobre o no Redis pendurado, que o `executionTimeout` cancela sem disparar error workflow. A mensagem segue pendente (`processada_em` nulo) e e entregue no turno seguinte do contato. Criacao: `scripts/deploy-n8n.sh integracao --criar bv-vigia`.
 
 ## bv-graces
 
@@ -36,4 +37,8 @@ Sub-workflow das 10 ferramentas do agente (`contracts/ferramentas-graces.md`). L
 
 ## entregar-rajada (agente)
 
-Substitui o stub (mesmo id e contrato de turno). Fluxo: `Registrar turno` (idempotente por `turno_id`) -> `Ler contexto` -> `Preparar` (recencia, historico, prompt) -> `Sessao` -> so midia (`textos.midia`) / limite por hora (`textos.humano`) / `Agente` (AI Agent 3, `lmChatOpenAi` 1.3, 10 `toolWorkflow` para `bv-graces`, sem memoria) -> `Compor` -> `Saidas` -> posicoes 1..4 (`Gravar saida` -> `Simulado?` -> digitando -> `Espera` -> envio -> `Enviado?`) -> `Concluir turno`. Erro do agente: `falhas_agente` + `textos.contingencia`. Envio real so para `teste.contatos_escrita` (vazio ate o P2): os demais contatos sao simulados. O smoke da recepcao (`smoke-recepcao.py`) dependia dos marcadores `__lento__`/`__falha__` do stub e nao se aplica mais a este workflow. Executado no TESTE por `scripts/smoke-agente.py` (OpenAI e Graces reais, contatos simulados `+5500000000xxx`, nenhum envio ao Chat Master; politica: ver docs/infra.md "Agente: ids, ordem do fluxo e politica de teste"). Smoke achou e corrigiu o no `Sessao` (`''::jsonb` num ramo de `CASE` e avaliado no planejamento do Postgres: usar `NULLIF($3::text,'')::jsonb`).
+Substitui o stub (mesmo id e contrato de turno). Fluxo: `Registrar turno` (idempotente por `turno_id`) -> `Ler contexto` -> `Preparar` (recencia, historico, prompt) -> `Sessao` -> `Tem midia?` -> `Itens de midia` -> `Interpretar midia` (sub `interpretar-midia`, `continueRegularOutput`) -> so midia (`textos.midia_nao_entendida`/`textos.midia_grande`, a `grande` vence) / limite por hora (`textos.humano`) / `Agente` (AI Agent 3, `lmChatOpenAi` 1.3, 10 `toolWorkflow` para `bv-graces`, sem memoria) -> `Compor` -> `Saidas` -> posicoes 1..4 (`Gravar saida` -> `Simulado?` -> digitando -> `Espera` -> envio -> `Enviado?`) -> `Concluir turno`. Erro do agente: `falhas_agente` + `textos.contingencia`. Envio real so para `teste.contatos_escrita` (vazio ate o P2): os demais contatos sao simulados. O smoke da recepcao (`smoke-recepcao.py`) dependia dos marcadores `__lento__`/`__falha__` do stub e nao se aplica mais a este workflow. Executado no TESTE por `scripts/smoke-agente.py` (OpenAI e Graces reais, contatos simulados `+5500000000xxx`, nenhum envio ao Chat Master; politica: ver docs/infra.md "Agente: ids, ordem do fluxo e politica de teste"). Smoke achou e corrigiu o no `Sessao` (`''::jsonb` num ramo de `CASE` e avaliado no planejamento do Postgres: usar `NULLIF($3::text,'')::jsonb`).
+
+## interpretar-midia
+
+Sub-workflow chamado pelo `entregar-rajada` (no `Interpretar midia`, `continueRegularOutput`) so quando o turno tem audio, imagem ou `outro`. Cadeia: `Validar` (host, MIME, limites) -> `Tipo da midia`; audio: `Baixar` (sem credencial, sem redirecionamento, timeout `midia.download_timeout_s`) -> `Conferir` -> `Transcrever` (OpenAI); imagem: `Baixar imagem` (Code, em memoria, sem binario n8n) -> `Descrever` (`/v1/responses`) -> `Juntar` -> `Gravar` (`conteudo_derivado`/`midia_falha`) -> `Registrar falhas` (`falhas_agente.tipo='midia'`, so codigo e host) -> `Resumo`. Execucoes nao sao salvas (`saveData*` = `none`) e nada de URL, transcricao ou descricao vai a log. Contrato: `docs/specs/audio-imagem/contracts/interpretar-midia.md`. Criacao: `scripts/deploy-n8n.sh integracao --criar interpretar_midia` (a chave do config usa `_`), antes de publicar o `entregar-rajada`.

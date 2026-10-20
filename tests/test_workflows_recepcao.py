@@ -119,6 +119,17 @@ class WorkflowRecepcao(unittest.TestCase):
         self.assertEqual(n["Limpar marcas"]["onError"], "continueRegularOutput")
         self.assertIn("DELETE FROM marcas_conteudo", n["Limpar marcas"]["parameters"]["query"])
 
+    def test_grava_e_devolve_metadados_de_midia(self):  # audio-imagem FR-002
+        n, g = self._grafo()
+        q = n["Inserir mensagem"]["parameters"]["query"]
+        for col in ("midia_mime", "midia_segundos", "midia_bytes"):
+            self.assertIn(col, q)
+            self.assertIn("m." + col, n["Montar turno"]["parameters"]["query"])
+        r = n["Inserir mensagem"]["parameters"]["options"]["queryReplacement"]
+        for campo in ("midiaMime", "midiaSegundos", "midiaBytes"):
+            self.assertIn("msg." + campo, r)
+        self.assertIn("midia_bytes:", n["Montar entrega"]["parameters"]["jsCode"])
+
     def test_tempo_maximo_da_execucao_parametrizado(self):  # FR-006 / dec-020
         texto, wf = carregar("bv-recepcao.json")
         self.assertEqual(wf["settings"]["executionTimeout"], "{{BV:NUM:execucao.timeout_s}}")

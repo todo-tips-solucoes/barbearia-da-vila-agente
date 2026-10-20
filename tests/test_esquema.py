@@ -91,6 +91,19 @@ class Migracao0004(unittest.TestCase):
             self.assertNotIn(proibido, corpo.replace("hash_conteudo", ""))
 
 
+
+M9 = open("db/migrations/0009_midia.sql").read()
+
+
+class Migracao0009(unittest.TestCase):
+    def test_colunas_e_checks_idempotentes(self):
+        for c in ("midia_mime text", "midia_segundos integer", "midia_bytes bigint", "conteudo_derivado text", "midia_falha text"):
+            self.assertIn("ADD COLUMN IF NOT EXISTS " + c, M9)
+        self.assertIn("tipo IN ('texto','audio','imagem','outro')", M9)
+        self.assertIn("tipo IN ('graces','chatmaster','agente','turno','midia')", M9)
+        self.assertEqual(M9.count("DROP CONSTRAINT IF EXISTS"), 2)  # reaplicar nao falha
+        self.assertNotIn("CREATE TABLE", M9)
+
 if __name__ == "__main__":
     unittest.main()
 

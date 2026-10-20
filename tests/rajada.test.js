@@ -24,6 +24,20 @@ for (const ruim of [null, {}, { body: [] }, { body: { acao: 'start', mensagem: [
 assert.equal(bvNormalizar({ body: { acao: 'start', mensagem: [{}] } }).status, 'invalida');
 assert.equal(bvNormalizar(fx('02'), { maxKb: 1 }).motivo, 'acima_do_limite');
 
+// FR-002/FR-003: audio real (evento-20), imagem (13/15) e mutados
+r = bvNormalizar(fx('20')).msg;
+assert.equal(r.tipo, 'audio'); assert.equal(r.midiaMime, 'audio/ogg; codecs=opus'); assert.equal(r.midiaSegundos, 5); assert.equal(r.midiaBytes, 9694);
+assert.equal(r.idCanal, r.midiaUrl); // dedupe por fileUrl
+r = bvNormalizar(fx('13')).msg;
+assert.equal(r.tipo, 'imagem'); assert.equal(r.midiaBytes, 202663); assert.equal(r.midiaSegundos, null);
+assert.equal(bvNormalizar(fx('15')).msg.tipo, 'imagem');
+assert.equal(bvNormalizar(fx('17')).msg.midiaSegundos, 2);
+const vid = fx('20'); vid.body.mensagem = [{ type: 'video', fileUrl: 'https://h/x.mp4', fileMimeType: 'video/mp4' }];
+assert.equal(bvNormalizar(vid).msg.tipo, 'outro'); assert.equal(bvNormalizar(vid).msg.midiaBytes, null);
+const ext = fx('20'); ext.body.mensagem[0].fileUrl = 'https://object.ce1.eveo.com.br/x/y.mp3'; ext.body.mensagem[0].fileMimeType = 'audio/ogg';
+assert.equal(bvNormalizar(ext).msg.midiaMime, 'audio/ogg'); // formato pelo MIME, nunca pela extensao .mp3
+for (const k of ['fromMe', 'isGroup']) { const e = fx('20'); e.body[k] = true; assert.equal(bvNormalizar(e).status, 'descartada', k); }
+
 // deveEntregar: ultima vence; teto forca a entrega.
 assert.equal(deveEntregar({ ultimaId: 5, minhaId: '5', maisAntigaMs: 0, agoraMs: 8000, tetoS: 60 }), true);
 assert.equal(deveEntregar({ ultimaId: 6, minhaId: 5, maisAntigaMs: 0, agoraMs: 8000, tetoS: 60 }), false);

@@ -1,0 +1,4 @@
+# Barbearia da Vila: apaga o audio que o n8n2 grava em disco no interpretar_midia (TESTE),
+# pois ele nao expurga binaryData sozinho (research.md, sonda 2.3). Instalar em /etc/cron.d/.
+# shortcut: so o id do TESTE (FbQLbUHauxMMIjI4); incluir o id de PROD quando o workflow existir la.
+*/5 * * * * root docker exec n8n-n8n-1 sh -c 'd=/home/node/.n8n/binaryData/workflows/FbQLbUHauxMMIjI4; [ -d "$d" ] && find "$d" -type f -mmin +10 -delete && find "$d" -mindepth 1 -type d -empty -delete' >/dev/null 2>&1

@@ -15,8 +15,17 @@ def carregar(nome):
 vr, vs = carregar("verificar_repo"), carregar("varrer_segredos")
 
 
+MIDIA = {"hosts_audio": ["a.example.com"], "hosts_imagem": [], "mimes_audio": ["audio/ogg"], "mimes_imagem": ["image/png"],
+         "prefixos_audio": [], "prefixos_imagem": [], "descricao_max_chars": 600, "audio_max_s": 120, "audio_max_mb": 10,
+         "imagem_max_mb": 10, "max_por_turno": 2, "download_timeout_s": 10, "openai_timeout_s": 25, "execucao_timeout_s": 75,
+         "transcricao_modelo": "whisper-1", "imagem_detalhe": "auto", "retencao_h": 23.9}
+
+
 def cfg(prefixo, banco, db=2, **extra):
-    return {"redis": {"prefixo": prefixo, "db": db}, "postgres": {"database": banco, "credencial_id": ""}, **extra}
+    base = {"redis": {"prefixo": prefixo, "db": db}, "postgres": {"database": banco, "credencial_id": ""},
+            "midia": dict(MIDIA), "workflows_sub": {"interpretar_midia": ""},
+            "textos": {"midia_nao_entendida": "x", "midia_grande": "y"}}
+    return {**base, **extra}
 
 
 OK = {"integracao": cfg("bv:teste:", "barbearia_vila_teste"), "producao": cfg("bv:prod:", "barbearia_vila")}
@@ -25,6 +34,27 @@ OK = {"integracao": cfg("bv:teste:", "barbearia_vila_teste"), "producao": cfg("b
 class T(unittest.TestCase):
     def test_config_valida(self):
         self.assertEqual(vr.verificar(OK, ""), [])
+
+    def test_regras_de_midia(self):  # 6.2.3
+        def com(**m):
+            c = cfg("bv:teste:", "barbearia_vila_teste", lock={"ttl_s": 120, "espera_s": 3, "tentativas": 45})
+            c["midia"].update(m)
+            return {"integracao": c, "producao": OK["producao"]}
+        self.assertEqual(vr.verificar(com(), ""), [])
+        for m, trecho in ((dict(hosts_audio=["https://a.com"]), "so o host"), (dict(hosts_imagem=["a.com/"]), "so o host"),
+                          (dict(prefixos_audio=["b/"]), "comecar com '/'"), (dict(descricao_max_chars=0), "descricao_max_chars"),
+                          (dict(execucao_timeout_s=120), "menor que lock.ttl_s")):
+            self.assertIn(trecho, " ".join(vr.verificar(com(**m), "")), m)
+        c = com()
+        del c["integracao"]["midia"]["retencao_h"]
+        c["integracao"]["textos"]["midia"] = "velho"
+        del c["integracao"]["workflows_sub"]["interpretar_midia"]
+        e = " ".join(vr.verificar(c, ""))
+        for t in ("midia.retencao_h ausente", "textos.midia foi substituido", "workflows_sub.interpretar_midia ausente"):
+            self.assertIn(t, e)
+
+    def test_workflows_de_midia_sem_execucao_salva(self):  # 6.2.3
+        self.assertEqual(vr.verificar_workflows(RAIZ), [])
 
     def test_lock_e_paths(self):
         ok = {"integracao": cfg("bv:teste:", "barbearia_vila_teste", lock={"ttl_s": 120, "espera_s": 3, "tentativas": 45},
