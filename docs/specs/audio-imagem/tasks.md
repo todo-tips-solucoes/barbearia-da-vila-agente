@@ -67,9 +67,9 @@ Ref: checklists/ux.md CHK012; spec.md SC-005 `[PROPOSTA]`
 
 Ref: research.md D3; quickstart.md 9; contracts/openai-midia.md
 
-- [!] 2.1.1 Com uma nota de voz nova do número de teste (owner), baixar do host permitido e enviar à OpenAI como `audio.ogg` (`whisper-1`), sem gravar o binário no repositório
-- [ ] 2.1.2 Registrar status e campo `text` (sem a transcrição inteira) no `research.md` como resultado medido
-- [ ] 2.1.3 Se recusado, abrir bloqueio humano e parar a FASE 4
+- [x] 2.1.1 Com uma nota de voz nova do número de teste (owner), baixar do host permitido e enviar à OpenAI como `audio.ogg` (`whisper-1`), sem gravar o binário no repositório (feito pelo pai em 2026-10-19; research.md §Resultados medidos pelo pai)
+- [x] 2.1.2 Registrar status e campo `text` (sem a transcrição inteira) no `research.md` como resultado medido (feito pelo pai em 2026-10-19; research.md §Resultados medidos pelo pai)
+- [x] 2.1.3 Se recusado, abrir bloqueio humano e parar a FASE 4 (n/a: não recusado; 2.1/D3 OK em research.md §Resultados medidos pelo pai)
 
 ### 2.2 Sonda D4: forma da chamada de imagem `[C]`
 

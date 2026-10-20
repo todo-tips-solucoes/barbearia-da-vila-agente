@@ -1,5 +1,0 @@
-.claude/agente-00c-whitelist
-.claude/agente-00c-whitelist.txt
-.claude/enforcement-log.jsonl
-.claude/settings.json
-docs/specs/regras-negocio-agenda/converge-report.md
