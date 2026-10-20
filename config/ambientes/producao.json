@@ -20,7 +20,9 @@
     "graces": "",
     "chatmaster": ""
   },
-  "workflows": {},
+  "workflows": {
+    "bv-mensagens": ""
+  },
   "webhook": {
     "path": "",
     "webhook_id": ""
@@ -91,17 +93,34 @@
     "lista_continua": "Seguem mais opções:",
     "modo_diferentes": "Vou marcar cada serviço com um barbeiro diferente, no melhor horário de cada um.",
     "modo_separados": "Vou marcar cada serviço separado, em horários independentes.",
-    "encaminhar_equipe": "Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?"
+    "encaminhar_equipe": "Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?",
+    "confirmacao": "Oi! Passando pra confirmar seu horário: {servico} com {barbeiro}, {dia} às {hora}. Você consegue vir?",
+    "lembrete": "Oi! Só lembrando que hoje, às {hora}, tem {servico} com {barbeiro} aqui na Barbearia da Vila. Te esperamos!",
+    "pos": "Oi! Obrigado por ter vindo hoje. Espero que tenha gostado do {servico} com {barbeiro}. Se quiser marcar o próximo ou deixar um recado, é só me chamar por aqui.",
+    "confirmacao_ok": "Fechado, presença confirmada! Te esperamos {dia} às {hora}.",
+    "confirmacao_recusada": "Tudo bem, avisei a equipe. Quer que eu remarque pra outro dia ou horário, ou prefere cancelar?",
+    "confirmacao_repetida": "Esse horário já está respondido, tá? Se quiser mudar alguma coisa é só me falar.",
+    "confirmacao_desatualizada": "Esse horário não está mais valendo. Se quiser, me fala e eu vejo outro pra você.",
+    "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho? Se for urgente, chama a loja no (11) 97126-5299."
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
     "contatos": "Telefone/WhatsApp (11) 97126-5299; contato@barbeariadavila.com.br; Instagram @barbeariadavila_vilamascote"
   },
   "midia": {
-    "hosts_audio": ["object.ce1.eveo.com.br"],
+    "hosts_audio": [
+      "object.ce1.eveo.com.br"
+    ],
     "hosts_imagem": [],
-    "mimes_audio": ["audio/ogg"],
-    "mimes_imagem": ["image/png", "image/jpeg", "image/webp", "image/gif"],
+    "mimes_audio": [
+      "audio/ogg"
+    ],
+    "mimes_imagem": [
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif"
+    ],
     "prefixos_audio": [],
     "prefixos_imagem": [],
     "descricao_max_chars": 600,
@@ -118,7 +137,8 @@
   },
   "workflows_sub": {
     "bv_graces": "",
-    "interpretar_midia": ""
+    "interpretar_midia": "",
+    "bv_confirmacao": ""
   },
   "encadeamento": {
     "max_servicos": 3
@@ -132,5 +152,27 @@
   "handoff": {
     "setor_id": 78,
     "whatsapp_id": "145"
+  },
+  "mensagens": {
+    "ativo": false,
+    "confirmacao_hora": "18:00",
+    "lembrete_antes_min": 120,
+    "pos_depois_min": 60,
+    "varredura_s": 60,
+    "reserva_s": 120,
+    "atraso_max_min": 30,
+    "retentativas_min": [
+      1,
+      5,
+      15
+    ],
+    "reconciliacao_min": 15,
+    "reconciliacao_dias": 7,
+    "espera_texto_s": 10,
+    "titulo_sim": "Confirmo",
+    "titulo_nao": "Não vou poder",
+    "repetida_max_por_hora": 2,
+    "max_por_varredura": 20,
+    "max_por_contato_dia": 6
   }
 }

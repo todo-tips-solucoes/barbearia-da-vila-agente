@@ -191,8 +191,8 @@ p = g.bvGPlano(entrada({ operacao: 'listar_servicos' }), null, cfg);
 r = g.bvGPasso(p.st, [resp(401, { code: 'NAO_AUTENTICADO', traceId: '00-zz-01', detail: 'segredo' })], cfg).final;
 assert.equal(r.resultado.ok, false);
 assert.ok(!JSON.stringify(r).includes('segredo'));
-assert.deepEqual(g.bvGParams(base, r.efeitos).slice(9), ['graces|configuracao', 'listar_servicos', 'NAO_AUTENTICADO', 401, '00-zz-01']);
-assert.equal(g.bvGParams({ ...base }, {}).length, 14);
+assert.deepEqual(g.bvGParams(base, r.efeitos).slice(9, 14), ['graces|configuracao', 'listar_servicos', 'NAO_AUTENTICADO', 401, '00-zz-01']);
+assert.equal(g.bvGParams({ ...base }, {}).length, 17);
 
 // ---- FASE 3: escrita incerta (u9-u12), erros por code (u13) ----
 {
@@ -425,4 +425,38 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   const so2 = { ...cfg, terceiroLiberado: true };
   assert.ok(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped }, so2).final.efeitos.proposta_nova);
   assert.equal(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped, dia: { cadastros: 1 } }, so2).final.resultado.code, 'limite_cadastros');
+}
+
+// ---- mensagens-agendadas: efeito `mensagens` e parametros $15..$17 ----
+{
+  const msgCfg = { confirmacao_hora: '18:00', lembrete_antes_min: 120, pos_depois_min: 60 };
+  const agora = '2026-10-20T12:00:00Z';
+  const dA = { idCliente: 'c1', idServico: 's1', servico: 'corte adulto', idProfissional: 'b1', barbeiro: 'R', data: '2026-10-22', hora: '14:00', valor: 85, minutos: 45 };
+  const wr = () => { const pl = f2({ operacao: 'agendar' }, prop('agendar', dA)); return g.bvGPasso(pl.st, [ok({ horarios: ['14:00'] }), ok([])], cfg); };
+  // agendar: efeito com idAgenda do POST, fim = inicio + minutos, profissional realmente reservado (o de teste, redirecionado)
+  let r = g.bvGPasso(wr().st, [ok({ sucesso: true, idAgenda: 'n1' })], cfg).final;
+  assert.deepEqual(r.efeitos.mensagens, { criar: [{ idAgenda: 'n1', idCliente: 'c1', idProfissional: TESTE, inicio: '2026-10-22T14:00:00', fim: '2026-10-22T14:45:00', servico: 'corte adulto', barbeiro: 'R' }], cancelar: [] });
+  let pr = g.bvGParams({ contato_id: 1, turno_id: 't' }, r.efeitos, { ativo: true, agora, cfg: msgCfg, escrita: ['5511999998888'] });
+  assert.equal(pr.length, 17);
+  assert.deepEqual(JSON.parse(pr[14]).map((x) => x.tipo), ['confirmacao', 'lembrete', 'pos_atendimento']);
+  assert.deepEqual(JSON.parse(pr[14])[1].dados, { servico: 'corte adulto', barbeiro: 'R', fim: '2026-10-22T14:45:00' });
+  assert.equal(pr[16], '["5511999998888"]');
+  // inativo (PROD): nada programado
+  pr = g.bvGParams({ contato_id: 1, turno_id: 't' }, r.efeitos, { ativo: false, agora, cfg: msgCfg });
+  assert.deepEqual(pr.slice(14), [null, null, null]);
+  // horario que ja passou vira linha com motivo, nunca pendente
+  const hoje = { ...dA, data: '2026-10-20', hora: '09:00' };
+  const m0 = g.bvGParams({ contato_id: 1, turno_id: 't' }, { mensagens: { criar: [{ idAgenda: 'n', idCliente: 'c', idProfissional: 'p', inicio: '2026-10-20T09:00:00', fim: '2026-10-20T09:45:00', servico: 's', barbeiro: 'b' }], cancelar: [] } }, { ativo: true, agora, cfg: msgCfg });
+  assert.deepEqual(JSON.parse(m0[14]).map((x) => [x.tipo, x.motivo]), [['pos_atendimento', null], ['confirmacao', 'ja_passou'], ['lembrete', 'ja_passou']]);
+  // 5xx incerto verificado: idAgenda vem da releitura
+  const v = g.bvGPasso(wr().st, [resp(0)], cfg);
+  r = g.bvGPasso(v.st, [ok([{ idAgenda: 'n9', idServico: 's1', idProfissional: TESTE, horaInicio: '2026-10-22T14:00:00' }])], cfg).final;
+  assert.equal(r.efeitos.mensagens.criar[0].idAgenda, 'n9');
+  // cancelar: so cancela as pendentes
+  const pc = f2({ operacao: 'cancelar' }, prop('cancelar', dadosCanc));
+  r = g.bvGPasso(pc.st, [ok({ sucesso: true })], cfg).final;
+  assert.deepEqual(r.efeitos.mensagens, { criar: [], cancelar: [{ idAgenda: dadosCanc.idAgenda, motivo: 'cancelada_agente' }] });
+  // falha na Graces: nenhum efeito em mensagens
+  r = g.bvGPasso(wr().st, [resp(409, { code: 'CONFLITO' })], cfg).final;
+  assert.equal(r.efeitos.mensagens, undefined);
 }

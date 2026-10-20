@@ -11,6 +11,8 @@ Fonte versionada dos workflows. Os JSON usam placeholders `{{BV:...}}` (config d
 | bv-graces | `sub/bv-graces.json` | `mjhd7O0AzrqNVrf0` | nao criado (recusa `teste.*`) |
 | bv-vigia | `bv-vigia.json` | `fzJA2yWESqiPXyib` | nao criado (config vazio) |
 | interpretar-midia | `sub/interpretar-midia.json` | vazio ate o deploy (`workflows_sub.interpretar_midia`) | nao criado |
+| bv-mensagens | `bv-mensagens.json` | vazio ate o deploy (`workflows.bv-mensagens`) | nunca por enquanto (deploy recusa; `mensagens.ativo` falso) |
+| bv-confirmacao | `sub/bv-confirmacao.json` | vazio ate o deploy (`workflows_sub.bv_confirmacao`) | nunca por enquanto (deploy recusa) |
 
 ## bv-recepcao
 
@@ -42,3 +44,16 @@ Substitui o stub (mesmo id e contrato de turno). Fluxo: `Registrar turno` (idemp
 ## interpretar-midia
 
 Sub-workflow chamado pelo `entregar-rajada` (no `Interpretar midia`, `continueRegularOutput`) so quando o turno tem audio, imagem ou `outro`. Cadeia: `Validar` (host, MIME, limites) -> `Tipo da midia`; audio: `Baixar` (sem credencial, sem redirecionamento, timeout `midia.download_timeout_s`) -> `Conferir` -> `Transcrever` (OpenAI); imagem: `Baixar imagem` (Code, em memoria, sem binario n8n) -> `Descrever` (`/v1/responses`) -> `Juntar` -> `Gravar` (`conteudo_derivado`/`midia_falha`) -> `Registrar falhas` (`falhas_agente.tipo='midia'`, so codigo e host) -> `Resumo`. Execucoes nao sao salvas (`saveData*` = `none`) e nada de URL, transcricao ou descricao vai a log. Contrato: `docs/specs/audio-imagem/contracts/interpretar-midia.md`. Criacao: `scripts/deploy-n8n.sh integracao --criar interpretar_midia` (a chave do config usa `_`), antes de publicar o `entregar-rajada`.
+
+## bv-mensagens e bv-confirmacao (feature `mensagens-agendadas`, so TESTE)
+
+**bv-mensagens** (`bv-mensagens.json`): dois agendadores no mesmo workflow, sem execucao salva (dados do contato nao ficam no n8n).
+- Varredura a cada `mensagens.varredura_s`: `Reservar` (uma instrucao SQL: reserva vencida vira `falhou/incerto` sem reenvio, descarta o que passou de `mensagens.atraso_max_min`, escolhe ate `max_por_varredura` com `FOR UPDATE SKIP LOCKED` e carimba `reservada_em`) -> `Tem cliente?` -> `Graces agendamentos` (revalida: sumiu ou mudou de horario = `orfa`; confirmacao so com status 2) -> `Decidir` (`bvMDecidir`: trava de TESTE, handoff aberto adia, monta a lista ou o texto) -> `Enviar?` -> `Enviar` (Chat Master `sendListPRO` com `RowId` `bvc:<id>:s|n`, ou texto) -> `Resultado` (`bvMResultadoEnvio`: 2xx enviada; recusa tenta de novo em 1/5/15 min; sem resposta = `incerto`, nunca reenvia) -> `Gravar resultado` (so quem tem a reserva grava; grava a saida em `mensagens` e a falha em `falhas_agente` sem PII).
+- Reconciliacao a cada `mensagens.reconciliacao_min`: `Agenda completa` (hoje..+`reconciliacao_dias`, so o barbeiro de teste) -> `Ler estado` -> `Reconciliar` (`bvMReconciliar`) -> `Aplicar` (cancela orfas, cria faltantes por upsert, `sem_contato` uma vez por idAgenda). Linhas criadas por aqui nao tem `graces_cliente_id` (a `/agenda/completa` nao devolve) e por isso nao sao revalidadas no envio.
+- Programacao imediata: `bv-graces` (`Efeitos` + `Persistir`, `shared/mensagens.js`) grava as pendentes ao concluir agendar, conjunto, reagendar, trocar servico e cancelar; contato fora de `teste.contatos_escrita` nasce `cancelada/fora_da_lista`.
+
+**bv-confirmacao** (`sub/bv-confirmacao.json`): chamado pela recepcao (selecao da lista) e pela ferramenta `confirmar_presenca` do agente. `Normalizar` -> `Selecionar` -> `Escolher` (`bvMConfEscolher`: trava de TESTE antes do claim) -> `Reivindicar` (claim atomico: `resposta IS NULL`) -> `Graces confirmacao` (`POST /agenda/confirmacao`; sem resposta/5xx ate 2 novas chamadas em 1 s e 5 s; 409 = ja confirmado, idempotente) -> `Desfecho` -> texto (so a contatos de escrita; simulados so gravam a saida) -> `Registrar` (falha final libera o claim para o cliente tentar de novo).
+
+**bv-recepcao**: o `Normalizar` reconhece o `from_internal` com `selectedRowID` `bvc:<id>:(s|n)` (caminho primario, medido) e o `start` com o titulo exato (fallback, espera `mensagens.espera_texto_s` pelo evento com id). Nenhum dos dois entra no buffer nem gera turno do agente. **entregar-rajada**: `Ler contexto` traz as confirmacoes abertas, `Preparar` as cita no prompt e a ferramenta `confirmar_presenca` chama o `bv-confirmacao` (`origem=agente`, so `mensagem_id` e `confirmado` vem do modelo).
+
+Deploy (TESTE, nesta ordem): migracao `0010`; `bv-confirmacao` (`--criar bv_confirmacao`, depois deploy); `bv-graces`; `entregar-rajada`; `bv-recepcao`; `bv-mensagens` (`--criar bv-mensagens`, depois deploy). Testes: `node tests/mensagens.test.js`, `tests/test_workflows_mensagens.py`, `scripts/smoke-mensagens.py`.

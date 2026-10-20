@@ -102,6 +102,8 @@ def restaurar(cm, cfg, raiz):
 # ---- fixtures -------------------------------------------------------------------------------
 ENUM = re.compile(r"^[A-Za-z][A-Za-z_\-]{0,29}$")
 TOKEN = re.compile(r"token|secret|senha|password|authorization", re.I)
+# campos estruturais nossos (sem dado pessoal): sobrevivem mesmo aparecendo uma vez so (selectedRowID e o RowId que enviamos)
+ESTRUTURAIS = {"acao", "type", "fromMe", "listType", "selectedRowID"}
 
 
 def caminhos(obj, p=""):
@@ -118,7 +120,9 @@ def caminhos(obj, p=""):
 def anonimizar(obj, comuns, tokens=(), p=""):
     """Preserva estrutura/tipos. String so sobrevive se parecer enum E se repetir em >=2 eventos no mesmo caminho."""
     if isinstance(obj, dict):
-        return {k: ("TOKEN_ANONIMIZADO" if TOKEN.search(k) and isinstance(v, str) and v else anonimizar(v, comuns, tokens, f"{p}.{k}"))
+        return {k: ("TOKEN_ANONIMIZADO" if TOKEN.search(k) and isinstance(v, str) and v
+                    else v if k in ESTRUTURAIS and isinstance(v, str) and (ENUM.match(v) or k == "selectedRowID") and v not in tokens
+                    else anonimizar(v, comuns, tokens, f"{p}.{k}"))
                 for k, v in obj.items()}
     if isinstance(obj, list):
         return [anonimizar(v, comuns, tokens, f"{p}[]") for v in obj]
@@ -129,16 +133,35 @@ def anonimizar(obj, comuns, tokens=(), p=""):
     if isinstance(obj, str):
         if obj in tokens:
             return "TOKEN_ANONIMIZADO"
+        if obj[:1] in "{[":  # string que e JSON (mensagem.dataJson): anonimiza por dentro
+            try:
+                return json.dumps(anonimizar(json.loads(obj), comuns, tokens, p), ensure_ascii=False)
+            except ValueError:
+                pass
         if (p, obj) in comuns and ENUM.match(obj):
             return obj
         return "x" * min(len(obj), 12) if obj else obj
     return obj
 
 
+def expandir(obj):
+    """Copia com strings-JSON expandidas, para os caminhos de dentro do dataJson contarem em valores_comuns."""
+    if isinstance(obj, dict):
+        return {k: expandir(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [expandir(v) for v in obj]
+    if isinstance(obj, str) and obj[:1] in "{[":
+        try:
+            return expandir(json.loads(obj))
+        except ValueError:
+            pass
+    return obj
+
+
 def valores_comuns(eventos):
     conta = {}
     for ev in eventos:
-        for par in set(caminhos(ev)):
+        for par in set(caminhos(expandir(ev))):
             conta[par] = conta.get(par, 0) + 1
     return {par for par, n in conta.items() if n >= 2}
 
@@ -156,7 +179,9 @@ def fixtures(n8n, cfg, raiz, tokens=(), apagar=True):
     comuns = valores_comuns(eventos)
     pasta = os.path.join(raiz, "tests", "fixtures", "chatmaster")
     os.makedirs(pasta, exist_ok=True)
-    for i, ev in enumerate(eventos, 1):
+    # numera a partir do maior existente: nunca sobrescreve fixture ja revisada
+    ja = [int(m.group(1)) for f in os.listdir(pasta) if (m := re.fullmatch(r"evento-(\d+)\.json", f))]
+    for i, ev in enumerate(eventos, max(ja, default=0) + 1):
         with open(os.path.join(pasta, f"evento-{i:02d}.json"), "w", encoding="utf-8") as f:
             json.dump(anonimizar(ev, comuns, tokens), f, ensure_ascii=False, indent=2)
             f.write("\n")

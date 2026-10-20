@@ -113,7 +113,16 @@ da opção (`docs/specs/agente-conversacional-graces/contracts/saida-chatmaster.
 **não medido** (sonda S2 daquela feature; não há fixture de seleção de lista). Por analogia com o botão (sonda b),
 é provável um segundo evento `from_internal` com o `RowId` no `dataJson`, mas isso não é afirmado aqui.
 
-- **Caminho título (primário)**: evento `start` cujo texto é exatamente `mensagens.titulo_sim` ou
+**Atualização medida (2026-10-20, sonda da lista, sonda-botao.md)**: cada seleção gera DOIS eventos: `start`
+(`fromMe` false, só o título) e `from_internal` (`fromMe` false) com `mensagem.dataJson` (string JSON) contendo
+`rawData.event.Message.listResponseMessage.singleSelectReply.selectedRowID` (o `RowId` enviado) e
+`contextInfo.stanzaID` (= `wid` da lista enviada). Portanto o **caminho id é o primário** (`bvMReconhecer`:
+`origem=id`, `bvc:<int>:(s|n)`); o título é o fallback para quando o `from_internal` não chega (espera
+`mensagens.espera_texto_s`). O reenvio da mesma escolha gera um evento idêntico: o claim idempotente
+(`resposta IS NULL`) evita segunda chamada à Graces, e a seleção de confirmação não gera turno do agente (o `start`
+com título de confirmação aberta é desviado para `bv-confirmacao`, sem buffer). O texto abaixo é o desenho anterior à medição.
+
+- **Caminho título (primário no desenho original; agora fallback)**: evento `start` cujo texto é exatamente `mensagens.titulo_sim` ou
   `mensagens.titulo_nao` e o contato tem confirmação enviada sem resposta → `bv-confirmacao` pelo caminho `texto`
   (sem buffer, sem turno do agente). Se há exatamente uma confirmação enviada sem resposta do contato, resolve
   por ela; com duas ou mais, segue como mensagem normal para o agente (que pergunta qual, via Decision 8).
@@ -213,7 +222,7 @@ que são restaurados (campo estrutural, não PII).
 
 | Id | Item | Como fecha |
 |----|------|------------|
-| P1 | Status inicial do `POST /agenda` (Decision 11) | smoke com barbeiro de teste |
+| P1 | Status inicial do `POST /agenda` (Decision 11) | **MEDIDO (pai, sonda-botao.md "P1")**: nasce `idStatusAgenda` 2; `POST /agenda/confirmacao` `{confirmado:true}` → 200 e status 3; repetir → 409 "não está com status 'A confirmar'" (tratar 409 como já confirmado, idempotente) |
 | P2 | Efeito de `openTicket: '0'` em ticket de handoff (Decision 10) | smoke com handoff aberto |
-| P3 | Formato do evento de seleção de lista no webhook QR Pro (título no `start`? `RowId` em `from_internal`?) | o pai captura UMA seleção real pelo `bv-captura` (owner autorizou); vira fixture `evento-26+` e ativa o caminho id (Decision 6) |
-| P4 | Lista de 2 linhas com `RowId` `bvc:<id>:s` aceita e exibida | primeiro envio real ao owner no smoke |
+| P3 | **FECHADO** (ver Decision 6, atualização medida). Formato do evento de seleção de lista no webhook QR Pro: `start` só com título + `from_internal` com `selectedRowID`/`stanzaID` | o pai captura UMA seleção real pelo `bv-captura` (owner autorizou); vira fixture `evento-26+` e ativa o caminho id (Decision 6) |
+| P4 | (lista de 3 linhas medida OK na sonda; 2 linhas ainda no smoke) Lista de 2 linhas com `RowId` `bvc:<id>:s` aceita e exibida | primeiro envio real ao owner no smoke |

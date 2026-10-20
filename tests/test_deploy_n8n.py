@@ -114,6 +114,23 @@ class T(unittest.TestCase):
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
+    def test_producao_recusa_mensagens_agendadas(self):
+        os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
+        try:
+            self.pcfg["workflows"]["bv-mensagens"] = ""
+            self.pcfg["workflows_sub"] = {"bv_confirmacao": ""}
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            api = FakeApi()
+            for nome in ("bv-mensagens", "bv_confirmacao"):
+                rc, _, err = self.run_main(["producao", "--confirmar-id", "wfP", "--so", nome], api)
+                self.assertEqual(rc, 2)
+                self.assertIn("so do TESTE", err)
+            # deploy geral de PROD ignora os dois (nao ha arquivo de workflow para eles neste fixture)
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], api)[0], 0)
+            self.assertTrue(all("bv-mensagens" not in r and "confirmacao" not in r for _, r in api.chamadas))
+        finally:
+            os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
+
     def test_producao_recusa_chave_teste(self):
         os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
         try:

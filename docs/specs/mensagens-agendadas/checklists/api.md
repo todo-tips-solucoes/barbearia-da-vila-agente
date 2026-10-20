@@ -18,7 +18,7 @@ Suposições (execução autônoma do feature-00c): profundidade Standard, públ
 
 ## Resposta do cliente
 
-- [ ] CHK007 - O formato do evento de seleção de lista no webhook QR Pro está definido por fixture real? [Gap, research D6/P3; contracts/bv-confirmacao.md] {auto}
+- [x] CHK007 - O formato do evento de seleção de lista no webhook QR Pro está definido por fixture real? [Gap, research D6/P3; contracts/bv-confirmacao.md] {auto}
 - [x] CHK008 - A vinculação da resposta ao agendamento com duas confirmações abertas está definida sem ambiguidade? [Cobertura, Spec §FR-007, Edge Cases; research D6 (cai no agente com 2+)] {auto}
 - [x] CHK009 - A dedupe dos dois eventos de um mesmo toque está especificada? [Consistência, research D6; contracts/bv-confirmacao.md passo 4] {auto}
 - [x] CHK010 - O texto livre equivalente tem janela e responsável definidos? [Clareza, Spec §FR-009, Clarify Q2; research D8] {auto}

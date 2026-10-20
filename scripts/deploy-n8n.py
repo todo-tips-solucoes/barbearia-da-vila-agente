@@ -15,6 +15,7 @@ import urllib.request
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARQ = {"integracao": "integracao.json", "producao": "producao.json"}
+INATIVOS_PROD = ("bv-mensagens", "bv_confirmacao")  # mensagens-agendadas: so TESTE ate o owner liberar PROD
 
 
 class Falha(Exception):
@@ -159,6 +160,10 @@ def main(argv=None, raiz=RAIZ, api=None):
             if "bv-captura" in nomes:
                 print("producao recusada: bv-captura e so do TESTE.", file=sys.stderr)
                 return 2
+            if a.so in INATIVOS_PROD:
+                print(f"producao recusada: {a.so} (mensagens agendadas) e so do TESTE por enquanto.", file=sys.stderr)
+                return 2
+            nomes = [n for n in nomes if n not in INATIVOS_PROD]
             if "bv-recepcao" in nomes and not (cfg.get("webhook", {}).get("path") and cfg.get("chatmaster", {}).get("whatsapp_id")):
                 print("producao recusada: webhook.path e chatmaster.whatsapp_id devem estar preenchidos.", file=sys.stderr)
                 return 2

@@ -9,7 +9,7 @@ a confirmação (véspera 18:00), o lembrete (início − 2 h) e o pós-atendime
 `bv-mensagens`, roda a cada minuto, revalida cada mensagem vencida na Graces e a envia: a confirmação como
 **lista** (`sendListPRO`, decisão do owner dec-007) com as opções "Confirmar presença" e "Não vou poder", o resto
 como texto. Cancelar ou reagendar é só atualizar o registro local, porque nada é agendado no Chat Master
-(dec-008). A seleção da lista chega à recepção como texto com o título; a recepção a entrega a um sub-workflow
+(dec-008). A seleção da lista chega à recepção em dois eventos (medido): `from_internal` com o `selectedRowID` (caminho primário) e `start` só com o título (fallback); a recepção a entrega a um sub-workflow
 novo, `bv-confirmacao`, que chama `POST /agenda/confirmacao` e responde com naturalidade. Texto livre ("vou sim")
 vai pelo agente, com uma ferramenta nova. A cada 15 min, o `bv-mensagens` reconcilia com `GET /agenda/completa`.
 Só TESTE. Desenho e fontes em [research.md](research.md).
@@ -62,7 +62,7 @@ a cada 5 min, mas varredura de 1 min e reconciliação com a Graces não são vi
 bv-graces (proposta executada) --Persistir+CTEs--> mensagens_agendadas (pendente)
 bv-mensagens  Schedule 1 min  --> reservar vencidas --> GET /agenda/agendamentos --> sendListPRO | send --> enviada|falhou|cancelada
               Schedule 15 min --> GET /agenda/completa --> cancelar órfãs / criar faltantes (bvMProgramar)
-bv-recepcao   start com título da lista + confirmação aberta --> bv-confirmacao --> POST /agenda/confirmacao --> texto
+bv-recepcao   from_internal com selectedRowID bvc:<id>:(s|n) (ou start com título, fallback) + confirmação aberta --> bv-confirmacao --> POST /agenda/confirmacao --> texto
 entregar-rajada  contexto com confirmações abertas; ferramenta confirmar_presenca --> bv-confirmacao (origem=agente)
 ```
 
@@ -71,7 +71,7 @@ entregar-rajada  contexto com confirmações abertas; ferramenta confirmar_prese
 ```text
 db/migrations/0010_mensagens_agendadas.sql           # novo
 workflows/shared/mensagens.js                        # novo: bvMProgramar, bvMTexto, bvMLista, bvMResultadoEnvio, bvMReconciliar
-workflows/shared/rajada.js                           # reconhecer título da lista (e id após P3)
+workflows/shared/rajada.js                           # reconhecer selectedRowID da lista (primário) e título (fallback)
 workflows/shared/graces.js                           # efeitos de programação na proposta executada
 workflows/shared/agente.js                           # prompt/contexto: confirmações abertas, ferramenta confirmar_presenca
 workflows/bv-mensagens.json                          # novo (varredura + reconciliação)
@@ -102,7 +102,7 @@ Mapper: os Code nodes convertem Graces → linha (`horaInicio`→`inicio`, `idPr
 | Risco | Mitigação |
 |-------|-----------|
 | Evento de seleção sem id (só título) com 2 confirmações do mesmo contato | cai no agente, que pergunta qual (ferramenta com `mensagem_id`) |
-| Agendamento nasce "Confirmado" (P1) | confirmação vira `cancelada/status_3`; owner decide |
+| Agendamento nasce "Confirmado" (P1) | MEDIDO: nasce status 2 ("A Confirmar"); 409 em repetição é tratado como já confirmado |
 | Envio fecha ticket de handoff (P2) | smoke mede; se fechar, pula contato com handoff aberto |
 | Varredura atrasada (n8n fora) | não envia o que passou da tolerância `mensagens.atraso_max_min`; motivo `ja_passou` |
 
