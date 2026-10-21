@@ -60,7 +60,7 @@ O operador publica os sub-workflows e depois a recepcao em PROD, com validacao d
 
 ### User Story 4 - Webhook unico aponta para PROD e VPS ajustada (Priority: P2)
 
-A conexao 145 passa a entregar mensagens a PROD; o TESTE segue por disparos diretos com contatos simulados. Na VPS, o cron de midia usa o id de PROD, o nome do container esta correto e o hook de guarda de PROD esta ativo.
+A conexao 145 passa a entregar mensagens a PROD; o TESTE segue por disparos diretos com contatos simulados. Na VPS, o cron de midia usa o id de PROD, o nome do container esta correto e o hook de guarda de PROD esta documentado em `docs/infra.md` (instalacao e do owner).
 
 **Why this priority**: Sem isso PROD nao recebe mensagens reais; mas so apos o deploy.
 
@@ -70,7 +70,8 @@ A conexao 145 passa a entregar mensagens a PROD; o TESTE segue por disparos dire
 
 1. **Given** a recepcao de PROD ativa, **When** o webhook da conexao 145 e alterado, **Then** uma mensagem do owner gera execucao em PROD e nenhuma em TESTE.
 2. **Given** o webhook em PROD, **When** a suite de validacao dispara direto no TESTE, **Then** segue 17/17.
-3. **Given** a VPS, **When** o cron de midia roda, **Then** usa o id de PROD e o container correto; o hook de guarda de PROD bloqueia acao proibida.
+3. **Given** a VPS, **When** o cron de midia roda, **Then** usa o id de PROD e o container correto; o hook de guarda de PROD esta documentado em `docs/infra.md` com o passo de instalacao do owner.
+4. **Given** um passo da execucao em PROD que falha, **When** o rollback anotado no plan e aplicado, **Then** o estado volta ao de antes do passo (banco, credenciais, workflow ou webhook 145).
 
 ---
 
@@ -87,6 +88,7 @@ Cada feature (1 a 6) e validada em PROD so com o numero 5511967296849; o resulta
 1. **Given** PROD publicada, **When** o quickstart roda, **Then** apenas 5511967296849 e contatado e nenhum numero de cliente recebe mensagem.
 2. **Given** um passo que exigiria escrita na agenda de barbeiro real, **When** o quickstart chega nele, **Then** nao escreve e abre bloqueio humano.
 3. **Given** o quickstart concluido, **When** o resultado e enviado ao WhatsApp do owner, **Then** a liberacao a todos e `mensagens.ativo` permanecem desligados ate o ok explicito do owner (bloqueio humano final).
+4. **Given** `mensagens.ativo` falso em PROD, **When** o deploy roda, **Then** `bv-mensagens` nao e publicado (FR-018) e nenhuma mensagem agendada sai para cliente.
 
 ---
 
@@ -112,12 +114,14 @@ Cada feature (1 a 6) e validada em PROD so com o numero 5511967296849; o resulta
 - **FR-007**: System MUST usar somente a instancia n8n2 e nunca `n8n.todo-tips.com`.
 - **FR-008**: System MUST exigir autorizacao explicita e confirmacao de id para publicar em PROD, com rollback anotado em cada passo.
 - **FR-009**: System MUST apontar o webhook unico da conexao 145 para PROD apos o deploy, mantendo o TESTE operavel por disparos diretos (suite 17/17).
-- **FR-010**: System MUST configurar na VPS o id de PROD no cron de midia, o nome do container e o hook de guarda de PROD.
+- **FR-010**: System MUST configurar na VPS o id de PROD no cron de midia e o nome do container, e documentar em `docs/infra.md` o hook de guarda de PROD (instalacao e do owner).
 - **FR-011**: System MUST guardar mensagens por 12 meses e executar limpeza diaria do que exceder, preservando contato e agendamentos (base legal art. 7o V; sem parecer juridico).
 - **FR-012**: System MUST usar em PROD os valores `[PROPOSTA]` iguais aos validados no TESTE.
 - **FR-013**: System MUST executar o quickstart de cada feature 1 a 6 em PROD somente com o numero 5511967296849 como contato autorizado.
 - **FR-014**: System MUST NOT escrever em agenda de barbeiro real em PROD; passo que exija isso abre bloqueio humano.
 - **FR-015**: System MUST enviar o resultado do quickstart ao WhatsApp do owner e manter a liberacao a todos e `mensagens.ativo` desligados ate o ok explicito dele.
+- **FR-017**: System MUST ter rollback anotado e aplicavel para cada passo da execucao em PROD (tabela "Fases de execucao" do plan), inclusive o webhook 145 e o banco criado.
+- **FR-018**: System MUST manter `bv-mensagens` fora de PROD enquanto `mensagens.ativo` for falso, porque a reconciliacao dele programa envios sem consultar a flag (tasks 2.7); `bv_confirmacao` pode ir desligado.
 - **FR-016**: System MUST enviar alerta fora de banda ao WhatsApp 5511967296849 para Postgres fora e cota/gasto da OpenAI.
 
 ### Key Entities

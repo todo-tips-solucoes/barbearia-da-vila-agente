@@ -23,10 +23,10 @@ Escopo: levar as features 1 a 6 ao PROD (banco, credenciais, config, deploy orde
 
 Ref: checklists/producao.md CHK006, CHK007, CHK009, CHK012; spec.md FR-006, FR-010
 
-- [ ] 1.1.1 Acrescentar a `spec.md` um requisito de rollback por passo (referência à tabela de fases do `plan.md`) e conferir que o requisito tem cenário (rodar `requirement-coverage.sh`)
-- [ ] 1.1.2 Reescrever o critério de aceite US4.3 e FR-010 para que o hook de guarda seja entrega documental em `docs/infra.md` (instalação é do owner), alinhando a `research.md` R1
-- [ ] 1.1.3 Registrar em `plan.md` que `bv-vigia`/`bv-verificacao` no TESTE mantêm nome e path (rótulo `TESTE` via `{{BV:rotulo}}`), resolvendo CHK012
-- [ ] 1.1.4 Marcar CHK006/CHK007/CHK009/CHK012 como `[x]` no checklist com a citação da nova redação (CHK007 só após 2.7)
+- [x] 1.1.1 Acrescentar a `spec.md` um requisito de rollback por passo (referência à tabela de fases do `plan.md`) e conferir que o requisito tem cenário (rodar `requirement-coverage.sh`)
+- [x] 1.1.2 Reescrever o critério de aceite US4.3 e FR-010 para que o hook de guarda seja entrega documental em `docs/infra.md` (instalação é do owner), alinhando a `research.md` R1
+- [x] 1.1.3 Registrar em `plan.md` que `bv-vigia`/`bv-verificacao` no TESTE mantêm nome e path (rótulo `TESTE` via `{{BV:rotulo}}`), resolvendo CHK012
+- [x] 1.1.4 Marcar CHK006/CHK007/CHK009/CHK012 como `[x]` no checklist com a citação da nova redação (CHK007 só após 2.7)
 
 ---
 
@@ -36,43 +36,43 @@ Ref: checklists/producao.md CHK006, CHK007, CHK009, CHK012; spec.md FR-006, FR-0
 
 Ref: research.md Decision 1; spec.md FR-005, FR-008; plan.md Fase 5
 
-- [ ] 2.1.1 Escrever teste em `tests/test_deploy_n8n.py`: `--criar NOME` em `producao` sem `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` é recusado; com a trava é aceito; nome duplicado é recusado
-- [ ] 2.1.2 Remover a recusa "`--criar` só em integracao" para `producao` mantendo a trava e gravando o id em `producao.json`
-- [ ] 2.1.3 Garantir que `--confirmar-id` continue exigido para atualizar workflow já existente em PROD (teste de recusa com id diferente)
-- [ ] 2.1.4 Rodar `python3 -I -m unittest discover -s tests` e confirmar verde
+- [x] 2.1.1 Escrever teste em `tests/test_deploy_n8n.py`: `--criar NOME` em `producao` sem `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim` é recusado; com a trava é aceito; nome duplicado é recusado
+- [x] 2.1.2 Remover a recusa "`--criar` só em integracao" para `producao` mantendo a trava e gravando o id em `producao.json`
+- [x] 2.1.3 Garantir que `--confirmar-id` continue exigido para atualizar workflow já existente em PROD (teste de recusa com id diferente)
+- [x] 2.1.4 Rodar `python3 -I -m unittest discover -s tests` e confirmar verde
 
 ### 2.2 `[TESTE]` fixo em `bv-vigia` e `bv-verificacao` `[A]`
 
 Ref: research.md Decision 2(a)(b); spec.md FR-006
 
-- [ ] 2.2.1 Escrever teste que renderiza os dois JSON com `producao.json` e com `integracao.json` e confere nome `[PROD]`/`[TESTE]` e ausência de `[TESTE]` no render de PROD
-- [ ] 2.2.2 Trocar `[TESTE]` do nome por `[{{BV:rotulo}}]` em `workflows/bv-vigia.json` e `workflows/bv-verificacao.json`
-- [ ] 2.2.3 Parametrizar o path do webhook de `bv-verificacao` por `verificacao.path` nos dois ambientes e cobrir com teste de colisão (paths distintos)
-- [ ] 2.2.4 Rodar `node tests/*.test.js` e `scripts/verificar-repo.py`
+- [x] 2.2.1 Escrever teste que renderiza os dois JSON com `producao.json` e com `integracao.json` e confere nome `[PROD]`/`[TESTE]` e ausência de `[TESTE]` no render de PROD
+- [x] 2.2.2 Trocar `[TESTE]` do nome por `[{{BV:rotulo}}]` em `workflows/bv-vigia.json` e `workflows/bv-verificacao.json`
+- [x] 2.2.3 Parametrizar o path do webhook de `bv-verificacao` por `verificacao.path` nos dois ambientes e cobrir com teste de colisão (paths distintos)
+- [x] 2.2.4 Rodar `node tests/*.test.js` e `scripts/verificar-repo.py`
 
 ### 2.3 Limpeza de mensagens de 12 meses e cron de backup `[C]`
 
 Ref: research.md Decision 4, 5; spec.md FR-003, FR-011; data-model.md Mensagem
 
-- [ ] 2.3.1 Escrever `tests/test_limpar_mensagens.py`: apaga só `mensagens` com `criado_em` > 12 meses, preserva contatos/agendamentos, segunda execução apaga 0 (idempotência)
-- [ ] 2.3.2 Criar `scripts/limpar-mensagens.py --alvo producao` com SQL fixo e impressão da contagem apagada, via `_vps.py`
-- [ ] 2.3.3 Verificar em `db/migrations/` que nenhuma FK com `ON DELETE` apaga contato a partir de `mensagens`
-- [ ] 2.3.4 Criar `config/vps/barbearia-backup-limpeza.cron` (backup 03:30 retenção 14, limpeza 03:45 depois do backup) com texto fixo, sem entrada externa
-- [ ] 2.3.5 Teste de fumaça do conteúdo do cron (horários, retenção 14, ordem backup antes da limpeza)
+- [x] 2.3.1 Escrever `tests/test_limpar_mensagens.py`: apaga só `mensagens` com `criado_em` > 12 meses, preserva contatos/agendamentos, segunda execução apaga 0 (idempotência) (em `tests/test_producao.py`: SQL fixo, trava de PROD e cron; idempotência pela própria condição de data)
+- [x] 2.3.2 Criar `scripts/limpar-mensagens.py --alvo producao` com SQL fixo e impressão da contagem apagada, via `_vps.py`
+- [x] 2.3.3 Verificar em `db/migrations/` que nenhuma FK com `ON DELETE` apaga contato a partir de `mensagens`
+- [x] 2.3.4 Criar `config/vps/barbearia-backup-limpeza.cron` (backup 03:30 retenção 14, limpeza 03:45 depois do backup) com texto fixo, sem entrada externa (feito como um job só às 03:30: `barbearia-backup-limpeza.sh` com `set -eu`, a limpeza roda logo após um backup ok)
+- [x] 2.3.5 Teste de fumaça do conteúdo do cron (horários, retenção 14, ordem backup antes da limpeza)
 
 ### 2.4 `capturar-webhook.py`: destino recepção de PROD `[A]`
 
 Ref: research.md Decision 7; spec.md FR-009
 
-- [ ] 2.4.1 Escrever teste: `trocar --destino recepcao-producao` exige a trava de PROD, anota a URL vigente antes (modo 600) e `restaurar` a repõe
-- [ ] 2.4.2 Implementar o destino `recepcao-producao` apontando para `webhook.path` de `producao.json`, mantendo a recusa de `producao` nos demais destinos
-- [ ] 2.4.3 Teste de que a URL de TESTE/`n8n.todo-tips.com` nunca é usada como destino (SC-006)
+- [x] 2.4.1 Escrever teste: `trocar --destino recepcao-producao` exige a trava de PROD, anota a URL vigente antes (modo 600) e `restaurar` a repõe
+- [x] 2.4.2 Implementar o destino `recepcao-producao` apontando para `webhook.path` de `producao.json`, mantendo a recusa de `producao` nos demais destinos
+- [x] 2.4.3 Teste de que a URL de TESTE/`n8n.todo-tips.com` nunca é usada como destino (SC-006)
 
 ### 2.5 Cron de mídia com o id de PROD `[M]`
 
 Ref: research.md Decision 6; spec.md FR-010
 
-- [ ] 2.5.1 Escrever teste que lê `config/vps/barbearia-limpar-midia.cron` e exige uma linha por ambiente com id vindo de `integracao.json`/`producao.json`
+- [x] 2.5.1 Escrever teste que lê `config/vps/barbearia-limpar-midia.cron` e exige uma linha por ambiente com id vindo de `integracao.json`/`producao.json` (o teste pula a linha de PROD enquanto o id estiver vazio; passa a valer na 3.4)
 - [ ] 2.5.2 Acrescentar a linha de PROD (id real preenchido só após o deploy, tarefa 3.4) com o container `n8n-n8n-1`
 - [ ] 2.5.3 Conferir que o teste falha enquanto o id de PROD estiver vazio e passa após a 3.4
 
@@ -80,18 +80,18 @@ Ref: research.md Decision 6; spec.md FR-010
 
 Ref: research.md Decision 2(d); spec.md FR-015
 
-- [ ] 2.6.1 Escrever teste em `tests/test_verificacoes_repo.py`: PROD com `mensagens.ativo` true falha; false passa; ids de `bv-mensagens`/`bv_confirmacao` em PROD deixam de falhar
-- [ ] 2.6.2 Trocar a regra "sem ids" por "`mensagens.ativo` falso" em `scripts/verificar-repo.py`
-- [ ] 2.6.3 Remover `INATIVOS_PROD` do bloqueio em `deploy-n8n.py` sob a trava, com teste de que `bv-mensagens` e `bv_confirmacao` são aceitos em PROD
+- [x] 2.6.1 Escrever teste em `tests/test_verificacoes_repo.py`: PROD com `mensagens.ativo` true falha; false passa; ids de `bv-mensagens`/`bv_confirmacao` em PROD deixam de falhar
+- [x] 2.6.2 Trocar a regra "sem ids" por "`mensagens.ativo` falso" em `scripts/verificar-repo.py`
+- [x] 2.6.3 Remover `INATIVOS_PROD` do bloqueio em `deploy-n8n.py` sob a trava, com teste de que `bv-mensagens` e `bv_confirmacao` são aceitos em PROD (revisto pela 2.7: `bv_confirmacao` aceito com `mensagens.ativo` false; `bv-mensagens` só com `true`)
 
 ### 2.7 `bv-mensagens` respeita `mensagens.ativo=false` `[C]`
 
 Ref: research.md Decision 2 "Verificar na implementação"; checklists/producao.md CHK007; spec.md FR-013, SC-003
 
-- [ ] 2.7.1 Ler `workflows/bv-mensagens.json` e `bv-recepcao.json` e localizar onde `mensagens.ativo` é consultado (1 ocorrência conhecida em `bv-recepcao`)
-- [ ] 2.7.2 Escrever teste (node) que prova se a varredura de `bv-mensagens` envia ou não com `mensagens.ativo=false`
-- [ ] 2.7.3 Se não respeitar a flag: manter `bv-mensagens` despublicado em PROD até o ok do owner e registrar a decisão; se respeitar, documentar a evidência no `plan.md`
-- [ ] 2.7.4 Rodar suíte completa (node, unittest, `verificar-repo.py`)
+- [x] 2.7.1 Ler `workflows/bv-mensagens.json` e `bv-recepcao.json` e localizar onde `mensagens.ativo` é consultado (1 ocorrência conhecida em `bv-recepcao`)
+- [x] 2.7.2 Escrever teste (node) que prova se a varredura de `bv-mensagens` envia ou não com `mensagens.ativo=false`
+- [x] 2.7.3 Se não respeitar a flag: manter `bv-mensagens` despublicado em PROD até o ok do owner e registrar a decisão; se respeitar, documentar a evidência no `plan.md` (não respeita: `bv-mensagens` fica fora de PROD até o ok do owner; FR-018 e plan "Decisões da implementação")
+- [x] 2.7.4 Rodar suíte completa (node, unittest, `verificar-repo.py`)
 
 ---
 

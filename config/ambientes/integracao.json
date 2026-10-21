@@ -202,5 +202,9 @@
     "repetida_max_por_hora": 2,
     "max_por_varredura": 20,
     "max_por_contato_dia": 6
+  },
+  "verificacao": {
+    "path": "bv-verificacao",
+    "webhook_id": "9d789ec6-5ed3-50ab-951a-5c25c2676822"
   }
 }

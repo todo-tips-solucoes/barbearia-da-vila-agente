@@ -1,6 +1,6 @@
 """Publica workflows/<nome>.json no n8n pela API publica: GET -> PUT -> publish por id do config (nunca POST no deploy).
-Uso: deploy-n8n.sh integracao [--so NOME] | integracao --criar NOME (so TESTE, uma vez)
-     deploy-n8n.sh producao --confirmar-id ID   (exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim)
+Uso: deploy-n8n.sh integracao [--so NOME] | integracao --criar NOME (uma vez por workflow)
+     deploy-n8n.sh producao --confirmar-id ID [--so NOME] | producao --criar NOME (exigem BV_DEPLOY_PRODUCAO_AUTORIZADO=sim)
 N8N_API_URL/N8N_API_KEY do ambiente ou de .env.n8n (worktree, senao checkout principal; fora do git); nunca impressos.
 Exit 0 ok, 1 falha de execucao, 2 uso invalido/alvo recusado."""
 import argparse
@@ -15,7 +15,6 @@ import urllib.request
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARQ = {"integracao": "integracao.json", "producao": "producao.json"}
-INATIVOS_PROD = ("bv-mensagens", "bv_confirmacao")  # mensagens-agendadas: so TESTE ate o owner liberar PROD
 
 
 class Falha(Exception):
@@ -131,13 +130,11 @@ def main(argv=None, raiz=RAIZ, api=None):
     with open(arq_cfg, encoding="utf-8") as f:
         cfg = json.load(f)
     if a.ambiente == "producao":
-        ids = [i for i in cfg["workflows"].values() if i]
-        if os.environ.get("BV_DEPLOY_PRODUCAO_AUTORIZADO") != "sim" or not a.confirmar_id or a.confirmar_id not in ids:
-            print("producao recusada: exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim e --confirmar-id igual ao id de PROD do config.",
-                  file=sys.stderr)
-            return 2
-        if a.criar:
-            print("--criar so em integracao.", file=sys.stderr)
+        ids = [i for i in {**cfg.get("workflows_sub", {}), **cfg["workflows"]}.values() if i]
+        # --criar nasce sem id (nao ha o que confirmar); atualizar exige --confirmar-id de um id de PROD do config
+        if os.environ.get("BV_DEPLOY_PRODUCAO_AUTORIZADO") != "sim" or not (a.criar or (a.confirmar_id and a.confirmar_id in ids)):
+            print("producao recusada: exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim e --confirmar-id igual ao id de PROD do config"
+                  " (ou --criar).", file=sys.stderr)
             return 2
     try:
         sys.path.insert(0, os.path.join(RAIZ, "scripts"))  # python -I nao poe o diretorio do script no path
@@ -153,10 +150,13 @@ def main(argv=None, raiz=RAIZ, api=None):
             if "bv-captura" in nomes:
                 print("producao recusada: bv-captura e so do TESTE.", file=sys.stderr)
                 return 2
-            if a.so in INATIVOS_PROD:
-                print(f"producao recusada: {a.so} (mensagens agendadas) e so do TESTE por enquanto.", file=sys.stderr)
-                return 2
-            nomes = [n for n in nomes if n not in INATIVOS_PROD]
+            # bv-mensagens nao consulta mensagens.ativo: a reconciliacao programa envios para todo contato com agenda na
+            # Graces (tasks 2.7). So vai para PROD com mensagens.ativo true, depois do ok do owner; ate la fica fora.
+            if cfg.get("mensagens", {}).get("ativo") is not True:
+                if a.so == "bv-mensagens":
+                    print("producao recusada: bv-mensagens so com mensagens.ativo true (ok do owner).", file=sys.stderr)
+                    return 2
+                nomes = [n for n in nomes if n != "bv-mensagens"]
             if "bv-recepcao" in nomes and not (cfg.get("webhook", {}).get("path") and cfg.get("chatmaster", {}).get("whatsapp_id")):
                 print("producao recusada: webhook.path e chatmaster.whatsapp_id devem estar preenchidos.", file=sys.stderr)
                 return 2

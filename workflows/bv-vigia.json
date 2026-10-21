@@ -1,5 +1,5 @@
 {
-  "name": "Barbearia Vila - Vigia da recepcao [TESTE]",
+  "name": "Barbearia Vila - Vigia da recepcao [{{BV:rotulo}}]",
   "nodes": [
     {
       "parameters": {

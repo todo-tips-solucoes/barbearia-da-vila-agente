@@ -9,6 +9,7 @@ alteracoes_clientes/*.jpeg
 __pycache__/
 tests/conversas/relatorios/
 .captura-145.url
+.webhook-145-antes-prod.url
 tests/fixtures/midia-real.local.json
 # referencia local com credenciais (nunca versionar)
 docs/referencia.md

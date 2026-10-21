@@ -52,6 +52,10 @@ class T(unittest.TestCase):
         self.assertIn("diferentes", erros(titulo_nao="Confirmo"))
         self.assertIn("titulo_sim", erros(titulo_sim="x" * 25))
         self.assertIn("inativas", erros("producao", ativo=True))
+        self.assertEqual(erros("producao"), "")  # ativo false passa
+        c = copy.deepcopy(OK)  # ids de bv-mensagens/bv_confirmacao em PROD nao falham mais (publicadas desligadas)
+        c["producao"].update(workflows={"bv-mensagens": "wfM"}, workflows_sub={"bv_confirmacao": "wfC"})
+        self.assertEqual(vr.regras_mensagens("producao", c["producao"]), [])
         c = copy.deepcopy(OK)
         del c["integracao"]["mensagens"]["atraso_max_min"]
         del c["integracao"]["textos"]["lembrete"]

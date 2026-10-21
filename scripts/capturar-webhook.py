@@ -2,10 +2,13 @@
 """Captura de eventos reais da conexao 145 (Chat Master) pelo workflow bv-captura. So TESTE.
 
 Uso: python3 -I scripts/capturar-webhook.py anotar|trocar|restaurar|fixtures [--ambiente integracao]
+     python3 -I scripts/capturar-webhook.py trocar|restaurar --destino recepcao-producao  (exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim)
   anotar    grava a URL vigente do webhook da 145 em .captura-145.url (600). NAO sobrescreve: idempotente.
   trocar    exige a URL anotada; aponta a 145 para o webhook de captura e confere relendo o status.
   restaurar volta a URL anotada e confere relendo o status (repetivel; mantem o arquivo).
   fixtures  le as execucoes do bv-captura, anonimiza em tests/fixtures/chatmaster/ e apaga as execucoes.
+  --destino recepcao-producao: trocar anota a URL vigente em .webhook-145-antes-prod.url (600, uma vez) e aponta a 145
+            para a recepcao de PROD (webhook.path do producao.json); restaurar volta a URL anotada.
 Token do Chat Master (CHATMASTER_TOKEN_TESTE) e chave do n8n vem de .env.smoke / .env.n8n (ou BV_ENV_N8N); nunca impressos.
 Exit 0 ok, 1 falha, 2 uso/alvo recusado (producao)."""
 import argparse
@@ -20,6 +23,8 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CM = "https://api.chatmasterveloz.com"
 CONEXAO = 145
 ARQ_URL = ".captura-145.url"
+ARQ_PROD = ".webhook-145-antes-prod.url"
+PROIBIDO = "n8n.todo-tips.com"  # instancia antiga: nunca destino (so n8n2)
 
 
 class Falha(Exception):
@@ -97,6 +102,39 @@ def trocar(cm, cfg, raiz):
 def restaurar(cm, cfg, raiz):
     definir(cm, lido(raiz))
     return "restaurado e conferido"
+
+
+def url_recepcao_prod(raiz):
+    pcfg = json.load(open(os.path.join(raiz, "config", "ambientes", "producao.json"), encoding="utf-8"))
+    path = (pcfg.get("webhook") or {}).get("path")
+    if not path:
+        raise Falha("producao.json sem webhook.path: publique a recepcao de PROD antes")
+    url = f"{pcfg['n8n_url'].rstrip('/')}/webhook/{path}"
+    if f"//{PROIBIDO}" in url:
+        raise Falha(f"destino em {PROIBIDO} recusado")
+    return url
+
+
+def trocar_prod(cm, raiz):
+    url, arq = url_recepcao_prod(raiz), os.path.join(raiz, ARQ_PROD)
+    atual = webhook_atual(cm)
+    if not os.path.exists(arq):  # anota uma vez so: repetir o trocar nunca perde a URL de antes da PROD
+        if not atual:
+            raise Falha("a API nao devolveu a URL do webhook: peca ao owner antes de trocar")
+        fd = os.open(arq, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(atual + "\n")
+    definir(cm, url)
+    return "145 apontada para a recepcao de PROD e conferida"
+
+
+def restaurar_prod(cm, raiz):
+    try:
+        url = open(os.path.join(raiz, ARQ_PROD), encoding="utf-8").read().strip()
+    except OSError:
+        raise Falha(f"{ARQ_PROD} ausente: nada a restaurar") from None
+    definir(cm, url)
+    return "145 restaurada para a URL de antes da PROD e conferida"
 
 
 # ---- fixtures -------------------------------------------------------------------------------
@@ -196,7 +234,21 @@ def main(argv=None, raiz=RAIZ, cm=None, n8n=None):
     ap.add_argument("passo", choices=["anotar", "trocar", "restaurar", "fixtures"])
     ap.add_argument("--ambiente", default="integracao")
     ap.add_argument("--manter", action="store_true", help="fixtures: nao apagar as execucoes brutas (apos revisar, rode sem --manter)")
+    ap.add_argument("--destino", choices=["captura", "recepcao-producao"], default="captura")
     a = ap.parse_args(argv)
+    if a.destino == "recepcao-producao":
+        if a.passo not in ("trocar", "restaurar") or os.environ.get("BV_DEPLOY_PRODUCAO_AUTORIZADO") != "sim":
+            print("recepcao-producao: so trocar/restaurar e exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim.", file=sys.stderr)
+            return 2
+        try:
+            carregar_env(raiz)
+            tok = os.environ.get("CHATMASTER_TOKEN_TESTE", "")  # mesma conexao 145 (owner, 2026-10-21)
+            cm = cm or (lambda m, r, c=None: http(m, CM + r, {"Authorization": f"Bearer {tok}"}, c))
+            print((trocar_prod if a.passo == "trocar" else restaurar_prod)(cm, raiz))
+        except (Falha, OSError, KeyError) as e:
+            print(f"falha: {e}", file=sys.stderr)
+            return 1
+        return 0
     if a.ambiente != "integracao":
         print("captura recusada: so no TESTE (integracao).", file=sys.stderr)
         return 2

@@ -1,0 +1,3 @@
+# Barbearia da Vila (PROD): backup 03:30 (14 dias) e, em seguida, limpeza de mensagens > 12 meses. Instalar em /etc/cron.d/.
+# Horario de Sao Paulo: CRON_TZ exige cronie; com o cron do Debian, ajuste a hora ao fuso da VPS (docs/infra.md).
+30 3 * * * root sh /root/barbearia_vila/barbearia-backup-limpeza.sh >> /root/barbearia_vila/backup-limpeza.log 2>&1

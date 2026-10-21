@@ -65,6 +65,12 @@ docs/infra.md, docs/rito-dev.md  # registrar P3 e P7 resolvidos e rollbacks
 N/A — sem borda backend/frontend. Convenção de ambiente: TESTE e PROD diferem só por `config/ambientes/*.json`
 (banco, prefixo Redis, path, ids, rótulo); os JSON de workflow são os mesmos, com `{{BV:...}}`.
 
+## Decisões da implementação (FASE 2)
+
+- **bv-vigia / bv-verificacao (CHK012):** nome com `[{{BV:rotulo}}]` e path/webhookId de `verificacao.*`; no TESTE `verificacao` mantém `bv-verificacao` e o webhookId de antes, e `tests/test_producao.py` confere que o render do TESTE é idêntico ao da develop `00a0688`.
+- **mensagens.ativo (CHK007, tasks 2.7):** só `bv-recepcao` e `bv-graces` leem a flag. A reconciliação do `bv-mensagens` programa envios para todo contato com agenda na Graces sem olhar a flag. Por isso o `deploy-n8n` deixa o `bv-mensagens` fora de PROD enquanto `mensagens.ativo` não for `true` (ok do owner); `bv_confirmacao` vai desligado.
+- **Backup e limpeza:** um job só, `config/vps/barbearia-backup-limpeza.sh` às 03:30, com `set -eu`: a limpeza de 12 meses só roda depois de um backup ok.
+
 ## Fases de execução (cada passo com rollback)
 
 | # | Passo | Comando/fonte | Rollback |

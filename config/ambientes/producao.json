@@ -21,7 +21,10 @@
     "chatmaster": ""
   },
   "workflows": {
-    "bv-mensagens": ""
+    "bv-mensagens": "",
+    "bv-recepcao": "",
+    "bv-vigia": "",
+    "bv-verificacao": ""
   },
   "webhook": {
     "path": "",
@@ -180,5 +183,9 @@
   "teste": {
     "contatos_escrita": [],
     "redirecionar_escrita": false
+  },
+  "verificacao": {
+    "path": "bv-verificacao-98149456-156e-441b-af93-13b728f80a4d",
+    "webhook_id": "aa3f8b3c-bdda-4d5c-844b-b3576fbde593"
   }
 }
