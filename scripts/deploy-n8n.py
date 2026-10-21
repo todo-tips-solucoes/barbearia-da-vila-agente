@@ -164,8 +164,13 @@ def main(argv=None, raiz=RAIZ, api=None):
             arq = os.path.join(raiz, "workflows", ("sub/" + nome.replace("_", "-") if nome in subs else nome) + ".json")
             with open(arq, encoding="utf-8") as f:
                 bruto = f.read()
-            if a.ambiente == "producao" and re.search(r"\{\{BV:(NUM:)?teste\.", bruto):
-                print(f"producao recusada: {nome} usa chave teste.* do config.", file=sys.stderr)
+            # teste.* em PROD so com as chaves conhecidas e inertes (o codigo as usa atras de ambiente === 'integracao')
+            usadas = set(re.findall(r"\{\{BV:(?:NUM:)?teste\.([a-z_]+)\}\}", bruto))
+            t = cfg.get("teste", {})
+            if a.ambiente == "producao" and usadas and (usadas - {"contatos_escrita", "redirecionar_escrita"}
+                                                        or t.get("redirecionar_escrita") is not False or t.get("contatos_escrita") != []):
+                print(f"producao recusada: {nome} usa chave teste.* fora das inertes (redirecionar_escrita false, contatos_escrita []).",
+                      file=sys.stderr)
                 return 2
             wf = json.loads(renderizar(bruto, cfg, raiz))
             if a.criar:

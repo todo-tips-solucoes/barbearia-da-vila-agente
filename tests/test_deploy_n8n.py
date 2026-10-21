@@ -141,15 +141,24 @@ class T(unittest.TestCase):
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
-    def test_producao_recusa_chave_teste(self):
+    def test_producao_chave_teste_so_inerte(self):
         os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
         try:
             json.dump(dict(WF, name="{{BV:teste.contato}}"), open(f"{self.d}/workflows/bv-verificacao.json", "w"))
             api = FakeApi()
             rc, _, err = self.run_main(["producao", "--confirmar-id", "wfP"], api)
-            self.assertEqual(rc, 2)
+            self.assertEqual((rc, api.chamadas), (2, []))  # chave desconhecida
             self.assertIn("teste.*", err)
-            self.assertEqual(api.chamadas, [])
+            json.dump(dict(WF, name="x {{BV:teste.redirecionar_escrita}} {{BV:teste.contatos_escrita}}"),
+                      open(f"{self.d}/workflows/bv-verificacao.json", "w"))
+            for t in ({}, {"redirecionar_escrita": True, "contatos_escrita": []}, {"redirecionar_escrita": False, "contatos_escrita": ["+55"]}):
+                self.pcfg["teste"] = t
+                json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+                api = FakeApi()
+                self.assertEqual((self.run_main(["producao", "--confirmar-id", "wfP"], api)[0], api.chamadas), (2, []), t)
+            self.pcfg["teste"] = {"redirecionar_escrita": False, "contatos_escrita": []}
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], FakeApi())[0], 0)
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
