@@ -163,12 +163,15 @@ Nada de workflow agendado novo.
 - **Backup:** diário às 03:30, guardando 14 dias (recomendação do agente; owner delegou).
 - **Alerta fora de banda** (Postgres fora, cota e gasto da OpenAI: CHK032): WhatsApp 5511967296849.
 
-**Insumos ainda abertos** (confirmar no início da E):
-- a autorização explícita de publicar os workflows em PROD (`BV_DEPLOY_PRODUCAO_AUTORIZADO`); o owner autorizou o banco
-  e pediu as features 1 a 6 em produção, mas o deploy em si é confirmado na hora;
-- LGPD: retenção do histórico e base legal (infra P7, fora de escopo até agora);
-- revisão dos valores `[PROPOSTA]`: `execucao.timeout_s` 300, `atraso_max_min` 30, `agente.iteracoes_max` 8, `midia.*`,
-  `lista.*`, `digitando.*`, `graces.timeout_ms` e os textos.
+**Insumos respondidos no início da E (2026-10-21):**
+- **Deploy em PROD:** autorização explícita do owner para publicar os workflows ("pode sim", depois das PRs #15 e #16
+  mescladas).
+- **LGPD:** histórico de mensagens guardado por 12 meses, com limpeza diária do que passar disso. Contato e
+  agendamentos ficam, porque a Graces já os guarda. Base legal proposta: execução do atendimento e do agendamento a pedido
+  do cliente (art. 7º, V). Recomendação do agente, sem parecer jurídico; o owner escolheu.
+- **Valores `[PROPOSTA]`:** vão para PROD iguais aos do TESTE validados na rodada 17/17 (`20261021-133335`).
+- **Liberação:** depois do quickstart só com o número do owner, o resultado vai para o WhatsApp dele, e o atendimento a
+  todos e `mensagens.ativo` só ligam com o ok dele.
 
 ## Riscos aceitos que seguem valendo
 
