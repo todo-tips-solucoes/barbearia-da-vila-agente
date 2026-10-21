@@ -9,7 +9,7 @@ const BVG_CAMPOS = ['operacao', 'contato_id', 'telefone', 'turno_id', 'ambiente'
   'id_opcao_barbeiro', 'qualquer', 'data', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento',
   'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos'];
 const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente', 'listar_servicos', 'listar_barbeiros',
-  'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro'];
+  'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro', 'funcionamento'];
 const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BVG_OPC = /^[A-Za-z0-9_-]{1,12}$/;
 const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto', cadastrar_terceiro: 'cadastrar_terceiro' };
@@ -55,7 +55,7 @@ function bvGNormalizar(raw, cfg) {
   const falta = {
     escolher_cliente: !v.id_opcao,
     listar_barbeiros: !v.id_opcao_servico,
-    horarios_livres: !v.data || !(v.id_opcao_barbeiro || v.qualquer || v.id_opcoes_servicos || v.id_opcao),
+    horarios_livres: !v.data || !(v.id_opcao_barbeiro || v.qualquer || v.id_opcoes_servicos || v.id_opcao || v.id_opcao_agendamento),
     cadastrar_cliente: !v.nome,
     buscar_pessoa: !v.nome || v.nome.length < 3,
     escolher_pessoa: !v.id_opcao,
@@ -88,6 +88,11 @@ function bvgEscritaPermitida(cfg) {
   return null;
 }
 
+// Cancelar fase 1 (R7): remarcar ou cancelar vai como opcoes; o agendamento escolhido segue no pedido (bvgResolver).
+const bvgDecisaoCanc = (resultado, efeitos, cfg) => {
+  const of = bvMontarOferta('decisao_cancelamento', [{ rotulo: 'Remarcar', valor: 'remarcar' }, { rotulo: 'Cancelar mesmo', valor: 'cancelar' }], cfg);
+  return bvgFim({ ...resultado, opcoes: of.itens.map((x) => ({ id: x.id, rotulo: x.rotulo })), orientacao: 'ofereça remarcar ou cancelar como opções; Remarcar: horarios_livres com o agendamento; Cancelar mesmo: cancelar com o proposta_id' }, { ...efeitos, opcoes: of });
+};
 const bvgDia = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 const bvgReais = (v) => (v == null ? '' : ` (R$ ${Number(v).toFixed(2).replace('.', ',')})`);
 const bvgSoDigitos = (t) => String(t).replace(/\D/g, '');
@@ -176,13 +181,19 @@ function bvGPlano(i, ctx0, cfg) {
       const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
       const s = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : (i.id_opcao_servico ? bvgResolver(i.id_opcao_servico, 'servico', ctx) : ctx.pedido.servico);
       if (!s) return bvgFim(bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
+      // Reagendar sem barbeiro escolhido: barbeiros do servico do agendamento neste passo (poupa duas rodadas do modelo, R8)
+      if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data });
       // FR-002/FR-012: defesa extra, o barbeiro de teste nunca entra na uniao nem se vier no pedido.
       const bs = bvFiltrarBarbeiros(i.qualquer ? (ctx.pedido.barbeiros || []) : [bvgResolver(i.id_opcao_barbeiro, 'barbeiro', ctx)].filter(Boolean), cfg.testeId);
       if (!bs.length) return bvgFim(i.qualquer ? bvgRecusa('barbeiros_nao_listados', 'chame listar_barbeiros antes') : bvgOpcaoInvalida());
       const reqs = bs.slice(0, 10).map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.idProfissional, data: i.data } }));
       return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data });
     }
+    case 'funcionamento': // horario da loja por dia da semana (graces-api/03 GET /agenda/configuracao), so leitura
+      return chamar([{ m: 'GET', path: '/agenda/configuracao' }]);
     case 'meus_agendamentos':
+      // Sem cliente na sessao: identifica pelo telefone neste passo (poupa uma rodada do modelo, R8)
+      if (!idCliente && !ctx.pedido.cliente_sem_cadastro) return chamar([{ m: 'GET', path: '/agenda/clientes', qs: { celular: bvgSoDigitos(i.telefone) } }], { etapa: 'ident' });
       if (!idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
       return chamar([{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente, proximos: true } }]);
     default:
@@ -212,7 +223,7 @@ function bvgFase1(i, ctx, cfg) {
     if (ags.some((a) => a.idProfissional !== cfg.testeId)) return bvgFim(fora);
     const itens = ags.map((a, k) => ({ ordem: k + 1, idAgenda: a.idAgenda, horaInicio: a.horaInicio, recorrente: !!a.recorrente, servico: a.servico }));
     const resumo = `Cancelar ${itens.map((x) => `${x.servico} em ${bvgDia(x.horaInicio)} às ${x.horaInicio.slice(11, 16)}`).join(' e ')}`;
-    return bvgFim({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar_conjunto', dados: { itens, resumo }, resumo } });
+    return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar_conjunto', dados: { itens, resumo }, resumo } }, cfg);
   }
   const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
   const h = i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'horario', ctx) : null;
@@ -239,7 +250,7 @@ function bvgFase1(i, ctx, cfg) {
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo }, { proposta_nova: { acao: 'reagendar', dados, resumo } });
   }
   const resumo = `Cancelar ${ag.servico} em ${bvgDia(ag.horaInicio)} às ${ag.horaInicio.slice(11, 16)} com ${ag.profissional}`;
-  return bvgFim({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar', dados: { ...agAnt, servico: ag.servico, barbeiro: ag.profissional, resumo }, resumo } });
+  return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar', dados: { ...agAnt, servico: ag.servico, barbeiro: ag.profissional, resumo }, resumo } }, cfg);
 }
 
 // Fase 2: a proposta ja vem reivindicada (UPDATE atomico no Contexto: pendente, mesmo contato, turno anterior, na validade).
@@ -394,6 +405,12 @@ function bvgPassoUm(st, resps0, cfg) {
         { opcoes: of, pedido: { servico: meta.servico, barbeiros: of.itens.map((x) => ({ opcao_id: x.id, ...x.valor })), horario: null } });
     }
     case 'horarios_livres': {
+      if (meta.etapa === 'ag_prof') {
+        const bs = bvFiltrarBarbeiros(lista.map((b) => ({ idProfissional: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId).slice(0, 10);
+        if (!bs.length) return bvgFim({ ok: true, total: 0, orientacao: 'nenhum barbeiro disponível para este serviço' });
+        const reqs = bs.map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: meta.servico.idServico, idProfissional: b.idProfissional, data: meta.data } }));
+        return { reqs, st: { ...st, meta: { ...meta, etapa: null, barbeiros: bs } } };
+      }
       const porHora = new Map();
       resps.forEach((r, k) => {
         if (!ok200(r) || !r.body || !Array.isArray(r.body.horarios)) return;
@@ -410,13 +427,25 @@ function bvgPassoUm(st, resps0, cfg) {
       if (!horas.length) res.orientacao = 'dia lotado; sugira outro dia';
       return bvgFim(res, { opcoes: of, pedido: { servico: s } });
     }
+    case 'funcionamento': {
+      const hs = (r0.body && Array.isArray(r0.body.horarios) ? r0.body.horarios : []).filter((h) => h && h.dia)
+        .map((h) => ({ dia: String(h.dia), abre: String(h.horaInicio || ''), fecha: String(h.horaFim || '') }));
+      return bvgFim({ ok: true, horarios: hs, orientacao: hs.length ? 'dia fora da lista: diga que não tem essa informação e passe os contatos da loja' : 'sem horário de funcionamento; passe os contatos da loja' });
+    }
     case 'meus_agendamentos': {
+      if (meta.etapa === 'ident') { // 0 ou varios cadastros: devolve a propria identificacao (pedir nome | escolher_cliente)
+        const id = bvgPassoUm({ ...st, meta: { op: 'identificar_cliente' } }, resps0, cfg);
+        const ped = id.final.efeitos.pedido;
+        if (!ped.idCliente) return id;
+        return { reqs: [{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: ped.idCliente, proximos: true } }], st: { ...st, meta: { ...meta, etapa: null, ident: ped } } };
+      }
       const ags = lista.filter((a) => a && a.idAgenda && (cfg.ambiente !== 'producao' || (a.idProfissional !== cfg.testeId && !/\bteste\b/i.test(String(a.profissional || '')))));
       const of = bvMontarOferta('agendamento', ags.map((a) => ({
         rotulo: `${bvgDia(String(a.horaInicio))} ${String(a.horaInicio).slice(11, 16)} ${a.descricaoServico || ''}`.trim(),
         valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico, idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
       })), cfg);
-      return bvgFim({ ok: true, agendamentos: of.itens.map((x) => ({ id: x.id, servico: x.valor.servico, barbeiro: x.valor.profissional, inicio: x.valor.horaInicio })), orientacao: of.itens.length ? undefined : 'nenhum agendamento futuro' }, { opcoes: of, pedido: { agendamentos: of.itens.map((x) => ({ opcao_id: x.id, ...x.valor })) } });
+      const ident = meta.ident ? { nome: meta.ident.cliente_nome } : {};
+      return bvgFim({ ok: true, ...ident, agendamentos: of.itens.map((x) => ({ id: x.id, servico: x.valor.servico, barbeiro: x.valor.profissional, inicio: x.valor.horaInicio })), orientacao: of.itens.length ? undefined : 'nenhum agendamento futuro' }, { opcoes: of, pedido: { ...(meta.ident || {}), agendamentos: of.itens.map((x) => ({ opcao_id: x.id, ...x.valor })) } });
     }
     default:
       return falha(op, { status: 500 });

@@ -240,7 +240,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
             "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",
-            "buscar_pessoa", "escolher_pessoa", "cadastrar_terceiro"})
+            "buscar_pessoa", "escolher_pessoa", "cadastrar_terceiro", "funcionamento"})
         campos_graces = set(re.search(r"BVG_CAMPOS = \[(.*?)\]", ler("workflows/shared/graces.js"), re.S).group(1).replace("'", "").replace("\n", "").replace(" ", "").split(","))
         for t in tools:
             self.assertEqual(t["typeVersion"], 2.2)

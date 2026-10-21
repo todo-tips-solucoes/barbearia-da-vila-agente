@@ -1,0 +1,19 @@
+{
+  "id": "R17",
+  "situacao": "Pedido de humano",
+  "falas": [
+    "Quero falar com uma pessoa"
+  ],
+  "expectativas": [
+    "Antes da C: passa o contato da loja",
+    "Depois da C: handoff para o setor 78 e o agente para de responder"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "antes_da_c": true
+}

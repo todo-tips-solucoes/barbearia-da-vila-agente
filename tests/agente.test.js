@@ -64,7 +64,21 @@ assert.equal(a.bvDigitacaoMs('a'.repeat(500), cfg), 4000);
 const p = a.bvPrompt(cfg);
 for (const k of ['IA', 'remarcar', 'vamos marcar outro'.slice(0, 0) + 'cancelei', 'DADO', 'confirmação']) assert.ok(p.includes(k), k);
 assert.ok(!/sk-|Bearer|X-Api-Key/.test(p));
+assert.deepEqual(a.bvFrases('Fale com contato@loja.com.br. Ou no site loja.com.br! Quer?! Ok... sim'), ['Fale com contato@loja.com.br.', 'Ou no site loja.com.br!', 'Quer?!', 'Ok...', 'sim']);
+// suite-validacao: loja da config no prompt (K4), contato da loja em vez de prometer humano, convite apos duvida (K5), saudacao (K1).
+const pl = a.bvPrompt({ ...cfg, loja: { endereco: 'Rua X, 1', contatos: '(11) 0000-0000' } });
+assert.ok(pl.includes('Rua X, 1') && pl.includes('(11) 0000-0000') && /funcionamento/.test(pl) && /convite leve/.test(pl) && /não prometa chamar/.test(pl) && /cumprimente/.test(pl));
+assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
 console.log('agente.test.js ok');
+
+// Modelo omitiu OPCOES depois de a ferramenta montar lista nova: o compositor anexa a lista da ferramenta; sem oferta nova, nao.
+m = a.bvCompor('Temos estes serviços. Qual prefere?', oferta, cfg, true);
+assert.equal(m[m.length - 1].tipo, 'lista');
+assert.equal(m[m.length - 1].opcoes.length, 10);
+assert.ok(m.every((x) => x.tipo === 'texto' || x === m[m.length - 1]));
+assert.equal(a.bvCompor('Temos estes serviços. Qual prefere?', oferta, cfg, false)[0].tipo, 'texto');
+m = a.bvCompor('Escolha:\nOPCOES:\n2 | B', oferta, cfg, true);
+assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['2']);
 
 // u2: oferta completa de 23 horarios, modelo cita 2 ids: 3 listas (10, 10, 3) em ordem, dentro de 4 mensagens.
 {
@@ -122,3 +136,21 @@ assert.ok(/e-mails, telefones/.test(pi) && /só atende assuntos da Barbearia/.te
   assert.ok(inj.linhas[0].startsWith('[áudio transcrito] '));
 }
 console.log('agente.test.js turno com midia ok');
+
+// bvSaudar (K1): so na sessao nova e so quando o modelo nao cumprimentou
+{
+  const { bvSaudar } = require('../workflows/shared/agente.js');
+  const s = [{ n: 1, tipo: 'texto', texto: 'Você prefere remarcar?' }, { n: 2, tipo: 'lista', texto: 'x' }];
+  assert.equal(bvSaudar(s, true)[0].texto, 'Oi! Você prefere remarcar?');
+  assert.equal(bvSaudar(s, true)[1].texto, 'x');
+  assert.equal(bvSaudar(s, false)[0].texto, 'Você prefere remarcar?');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Olá, Ana! Tudo bem?' }], true)[0].texto, 'Olá, Ana! Tudo bem?');
+  assert.deepEqual(bvSaudar([], true), []);
+}
+
+// K5: mensagem com lista sem pergunta ganha a pergunta curta; com pergunta fica como veio
+{
+  const of = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Corte', valor: {} }] };
+  assert.equal(a.bvCompor('Estes horários estão disponíveis:\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Estes horários estão disponíveis. Qual fica melhor pra você?');
+  assert.equal(a.bvCompor('Qual serviço?\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Qual serviço?');
+}

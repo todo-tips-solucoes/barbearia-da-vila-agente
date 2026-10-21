@@ -1,0 +1,20 @@
+{
+  "id": "R15",
+  "situacao": "Cliente apressado ou irritado",
+  "falas": [
+    "Tô atrasado 15 min, ainda dá?"
+  ],
+  "expectativas": [
+    "Empatia",
+    "Não decide pela loja",
+    "Passa o contato da loja ou o handoff (depois da C)"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "antes_da_c": true
+}

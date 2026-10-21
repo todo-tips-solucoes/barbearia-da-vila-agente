@@ -1,7 +1,7 @@
 """Publica workflows/<nome>.json no n8n pela API publica: GET -> PUT -> publish por id do config (nunca POST no deploy).
 Uso: deploy-n8n.sh integracao [--so NOME] | integracao --criar NOME (so TESTE, uma vez)
      deploy-n8n.sh producao --confirmar-id ID   (exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim)
-N8N_API_URL/N8N_API_KEY do ambiente ou de $BV_ENV_N8N (default .env.n8n, fora do git); nunca impressos.
+N8N_API_URL/N8N_API_KEY do ambiente ou de .env.n8n (worktree, senao checkout principal; fora do git); nunca impressos.
 Exit 0 ok, 1 falha de execucao, 2 uso invalido/alvo recusado."""
 import argparse
 import json
@@ -120,15 +120,6 @@ def criar(api, cfg, arq_cfg, nome, wf):
     return wid
 
 
-def carregar_env(caminho):
-    if os.path.exists(caminho):
-        with open(caminho, encoding="utf-8") as f:
-            for l in f:
-                if "=" in l and not l.startswith("#"):
-                    k, v = l.rstrip("\n").split("=", 1)
-                    os.environ.setdefault(k, v)
-
-
 def main(argv=None, raiz=RAIZ, api=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("ambiente", choices=list(ARQ))
@@ -149,7 +140,9 @@ def main(argv=None, raiz=RAIZ, api=None):
             print("--criar so em integracao.", file=sys.stderr)
             return 2
     try:
-        carregar_env(os.environ.get("BV_ENV_N8N", os.path.join(raiz, ".env.n8n")))
+        sys.path.insert(0, os.path.join(RAIZ, "scripts"))  # python -I nao poe o diretorio do script no path
+        import _smoke  # carregar_env unico: raiz da worktree e, em fallback, checkout principal
+        _smoke.carregar_env(".env.n8n")
         api = api or Api(os.environ["N8N_API_URL"], os.environ["N8N_API_KEY"])
         subs = cfg.get("workflows_sub", {})
         todos = {**subs, **cfg["workflows"]}  # sub-workflows primeiro: o principal os referencia

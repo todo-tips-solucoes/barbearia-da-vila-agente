@@ -1,0 +1,23 @@
+{
+  "id": "R8",
+  "situacao": "Cancelei, vamos marcar outro",
+  "falas": [
+    "Cancela o de sexta e marca pra segunda"
+  ],
+  "expectativas": [
+    "Entende o contexto: cancela e já oferece segunda",
+    "Não pede tudo de novo"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "agenda": true,
+  "antes_da_c": false,
+  "preparo": "agendamento_previo",
+  "preparo_dia_semana": 4
+}

@@ -1,0 +1,22 @@
+{
+  "id": "R4",
+  "situacao": "Indeciso sobre o serviço",
+  "falas": [
+    "Quero dar um trato no visual, não sei o que fazer"
+  ],
+  "expectativas": [
+    "Pergunta aberta e acolhedora",
+    "Oferece os serviços reais por lista",
+    "Não empurra o mais caro"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "agenda": false,
+  "antes_da_c": false
+}

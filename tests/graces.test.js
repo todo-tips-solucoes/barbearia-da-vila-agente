@@ -67,8 +67,25 @@ const comBarbeiro = entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2
 assert.equal(g.bvGPlano(comBarbeiro, ctxH, cfg).reqs.length, 1);
 assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '99', data: '2026-10-20' }), ctxH, cfg).final.resultado.code, 'opcao_desconhecida');
 
+// funcionamento (suite-validacao R3): so leitura de /agenda/configuracao, sem cliente identificado; dia fora da lista vira contato da loja.
+p = g.bvGPlano(entrada({ operacao: 'funcionamento' }), ctxOp({}, {}), cfg);
+assert.deepEqual(p.reqs, [{ m: 'GET', path: '/agenda/configuracao' }]);
+r = g.bvGPasso(p.st, [ok({ prazoMinimoAntecedencia: 0, horarios: [{ dia: 'Domingo', horaInicio: '08:00', horaFim: '16:00' }, null] })], cfg).final;
+assert.deepEqual(r.resultado.horarios, [{ dia: 'Domingo', abre: '08:00', fecha: '16:00' }]);
+assert.match(g.bvGPasso(p.st, [ok({})], cfg).final.resultado.orientacao, /contatos da loja/);
+assert.equal(g.bvGPasso(p.st, [resp(500, {})], cfg).final.resultado.ok, false);
+
 // meus_agendamentos: usa so pedido.idCliente (FR-020); nunca /agenda/completa.
-assert.equal(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, {}), cfg).final.resultado.code, 'cliente_nao_identificado');
+assert.equal(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { cliente_sem_cadastro: true }), cfg).final.resultado.code, 'cliente_nao_identificado');
+// sem cliente na sessao: identifica e lista no mesmo passo (R8); 0 cadastros devolve a identificacao
+p = g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, {}), cfg);
+assert.deepEqual(p.reqs[0].qs, { celular: '5511999998888' });
+assert.equal(g.bvGPasso(p.st, [ok([])], cfg).final.resultado.encontrado, false);
+let pi = g.bvGPasso(p.st, [ok([{ idCliente: 'c9', nomeCliente: 'Ana' }])], cfg);
+assert.deepEqual(pi.reqs[0], { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: 'c9', proximos: true } });
+r = g.bvGPasso(pi.st, [ok([])], cfg).final;
+assert.equal(r.efeitos.pedido.idCliente, 'c9');
+assert.equal(r.resultado.nome, 'Ana');
 p = g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg);
 assert.deepEqual(p.reqs[0], { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: 'c1', proximos: true } });
 const agBruto = [{ idAgenda: 'a1', horaInicio: '2026-10-20T14:00:00', idServico: 's1', descricaoServico: 'corte adulto', idProfissional: TESTE, profissional: 'ZZ TESTE ', recorrente: false }];
@@ -87,7 +104,17 @@ const dadosAg = p.final.efeitos.proposta_nova.dados;
 assert.equal(dadosAg.hora, '14:00');
 p = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), ctxE(opcoesAg), cfg);
 assert.equal(p.final.resultado.sugerir_remarcar, true);
+assert.deepEqual(p.final.efeitos.opcoes.itens.map((x) => x.valor), ['remarcar', 'cancelar']); // R7: decisao por lista
 const dadosCanc = p.final.efeitos.proposta_nova.dados;
+// horarios_livres com o agendamento e sem barbeiro: barbeiros do servico no mesmo passo, sem o de teste (R8)
+p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-26' }), ctxE(opcoesAg), cfg);
+assert.deepEqual(p.reqs, [{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: 's1' } }]);
+pi = g.bvGPasso(p.st, [ok([{ idProfissional: TESTE, apelido: 'Zé' }, { idProfissional: 'b2', apelido: 'Kiel ' }])], cfg);
+assert.deepEqual(pi.reqs, [{ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: 's1', idProfissional: 'b2', data: '2026-10-26' } }]);
+r = g.bvGPasso(pi.st, [ok({ minutos: 40, horarios: ['10:00'] })], cfg).final;
+assert.deepEqual(r.resultado.opcoes, [{ id: '1', hora: '10:00', barbeiro: 'Kiel' }]);
+assert.equal(r.efeitos.opcoes.itens[0].valor.idServico, 's1');
+assert.equal(g.bvGPasso(p.st, [ok([{ idProfissional: TESTE, apelido: 'Zé' }])], cfg).final.resultado.total, 0);
 // recusas: producao, sem redirecionamento, barbeiro de teste vindo do modelo, agenda de barbeiro real, sem cliente
 assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora), { ...cfg, ambiente: 'producao' }).final.resultado.code, 'escrita_desabilitada');
 assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora), { ...cfg, redirecionar: false }).final.resultado.code, 'escrita_desabilitada');

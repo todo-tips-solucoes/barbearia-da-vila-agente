@@ -12,3 +12,4 @@ tests/conversas/relatorios/
 tests/fixtures/midia-real.local.json
 # referencia local com credenciais (nunca versionar)
 docs/referencia.md
+relatorios/

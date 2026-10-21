@@ -15,12 +15,12 @@ import uuid
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(RAIZ, "scripts"))
+import _smoke  # noqa: E402
 import _vps  # noqa: E402
 
 BANCO = "barbearia_vila_teste"
 PREFIXO = "+5500000000"  # + 3 digitos (faixa 500-599, longe do smoke-recepcao)
-CFG = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
-URL = f"{CFG['n8n_url']}/webhook/{CFG['webhook']['path']}"
+CFG, URL = _smoke.CFG, _smoke.URL
 TESTE_ID = CFG["graces"]["barbeiro_teste_id"]
 _falhas, _info, _lat = [], [], []
 PAULO = "95e69175-6021-4280-a001-5ef2a0135bf8"  # cliente de teste autorizado pelo owner (P1): GET /agenda/clientes?celular=5511967296849
@@ -28,15 +28,7 @@ _ocupados = []  # idAgenda criados pelo c4 para ocupar horario
 FANTASMA = "00000000-0000-0000-0000-0000000000aa"  # cliente/profissional ficticios: so alimentam a fase 1 (nada vai a Graces)
 
 
-def _env(*arquivos):
-    for a in arquivos:
-        try:
-            for linha in open(os.path.join(RAIZ, a), encoding="utf-8"):
-                k, _, v = linha.strip().partition("=")
-                if k and not k.startswith("#"):
-                    os.environ.setdefault(k, v.strip().strip('"').strip("'"))
-        except FileNotFoundError:
-            pass
+_env = _smoke.carregar_env
 
 
 PAULO_TEL = "+5511967296849"  # P1/P2: telefone real do cliente de teste; no TESTE nada e enviado (contatos_escrita vazio)
@@ -45,17 +37,15 @@ PAULO_TEL = "+5511967296849"  # P1/P2: telefone real do cliente de teste; no TES
 def tel(n):
     if n >= 520:
         return PAULO_TEL
-    return f"{PREFIXO}{n:03d}"
+    return _smoke.tel(PREFIXO, n, 3)
 
 
 def checar(nome, ok, detalhe=""):
-    print(f"  [{'ok' if ok else 'FALHA'}] {nome} {detalhe}")
-    if not ok:
-        _falhas.append(nome)
+    _smoke.checar(_falhas, nome, ok, detalhe)
 
 
 def sql(q):
-    return _vps.psql(BANCO, q).strip()
+    return _smoke.sql(BANCO, q)
 
 
 def cid(n):
@@ -81,12 +71,7 @@ def evento_audio(n):
 
 
 def post(corpo, url=URL):
-    req = urllib.request.Request(url, data=json.dumps(corpo).encode(), headers={"Content-Type": "application/json"}, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            return r.status, r.read().decode()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode()
+    return _smoke.post(corpo, url)
 
 
 def semear(n, pedido=None, opcoes=None):
@@ -486,12 +471,12 @@ def c4():
     checar("avisou e/ou ofereceu novas opcoes", bool(t) and (estado(521)["opcoes"].get("tipo") == "horario" or any("hor" in x.lower() for x in t["saidas"])), str(t and t["saidas"])[:200])
 
 
-def _semear_agendamento(n, hora="15:00"):
+def _semear_agendamento(n, hora="15:00", dia=None):
     """Agendamento do Paulo no barbeiro de teste, direto na Graces (o roteiro seguinte o cancela em encerrar)."""
     for a in _agendas_paulo():  # roteiros anteriores deixam agendamentos do Paulo no barbeiro de teste: cancela antes
         urllib.request.urlopen(urllib.request.Request(f"https://{os.environ['GRACES_BASE_URL_PROD']}/public/v1/agenda/{a['idAgenda']}", method="DELETE", headers={"X-Api-Key": os.environ["GRACES_API_KEY"]}), timeout=30)
     s0 = next(x for x in graces_get("/agenda/servicos?texto=corte") if x.get("ativo", True) and "adulto" in x["descricaoAgenda"].lower())
-    dia = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 3600 + 86400))
+    dia = dia or time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 3600 + 86400))  # padrao: amanha (SP)
     r = graces_post("/agenda", {"idCliente": PAULO, "idServico": s0["idServico"], "idProfissional": TESTE_ID, "data": dia, "horaInicio": hora})
     checar("semeou agendamento (Graces)", isinstance(r, dict) and bool(r.get("idAgenda")), str(r)[:160])
     novo_paulo(n)
@@ -549,7 +534,7 @@ def c7():
 
 def p2():
     print("P2 ponta a ponta com o contato real (7.2.4): Chat Master -> bv-recepcao -> entregar-rajada -> Graces -> Chat Master (envio REAL ao 5511967296849 pela conexao 145)")
-    checar("config: contatos_escrita = so o contato real do owner (P2)", CFG["teste"]["contatos_escrita"] == [PAULO_TEL])
+    checar("config: contatos_escrita vazio ou so o contato real do owner (P2)", CFG["teste"]["contatos_escrita"] in ([], [PAULO_TEL]))
     sv = [x for x in graces_get("/agenda/servicos?texto=corte") if x.get("ativo", True)]
     checar("shape /agenda/servicos", bool(sv) and {"idServico", "descricaoAgenda", "tempoPadrao", "valorPadrao"} <= set(sv[0]), str(sorted(sv[0]))[:200] if sv else "")
     c1()

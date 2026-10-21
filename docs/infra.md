@@ -58,7 +58,7 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 - Workflow `bv-recepcao` (TESTE): id `iaUbATlT7xkZArVd`, webhook `POST /webhook/<webhook.path do config>`; auth por SHA-256 de `body.token_origin` (hash em `.env.n8n`, nao versionado; premissa: `token_origin` = `CHATMASTER_TOKEN_TESTE`, confirmar com evento real). Sem historico de execucoes salvo (FR-019). Smoke sintetico em 2026-10-18: sem token = 401, com token = 200, mensagem gravada e marcada `processada_em` pelo stub.
 - Sub-workflow `entregar_rajada` (stub, TESTE): id `ilzXqBWGtcczlGEu`, em `workflows_sub` do config; devolve `{ok:true}` apos `teste.atraso_entrega_s`.
 - Validacao pelo MCP do n8n (task 9.1.1, 2026-10-18, feita pela sessao principal): `validate_node_config` dos 2 nos (Webhook `n8n-nodes-base.webhook` v2.2 e Responder `n8n-nodes-base.respondToWebhook` v1.1, parametros identicos ao JSON) -> `valid:true` nos dois; `validate_workflow` do equivalente em Workflow SDK (webhook com credencial httpHeaderAuth `i7qS8QNvswOIbepF` -> respondToWebhook) -> `{"valid":true,"nodeCount":2}`; `get_workflow_details uoDF0RFEgzAtKUay` -> `active:true`, `versionId == activeVersionId 7df58dd2-790e-4b6b-8c7a-6b1af4b13a06`, 2 nos, 1 trigger, `POST https://n8n2.todo-tips.com/webhook/bv-verificacao` exigindo header `X-BV-Token`. Limite: a comparacao entre o publicado e o JSON do repo foi so por contagem de nos e trigger, nao campo a campo.
-- A API key do n8n vem de `.env.n8n` (do Gold, fora do git) via `BV_ENV_N8N`.
+- A API key do n8n vem de `.env.n8n` (fora do git): raiz da worktree e, em fallback, o checkout principal (`BV_ENV_N8N` so vale para criar-credenciais-n8n e capturar-webhook).
 
 ## Backup (fase 6)
 
