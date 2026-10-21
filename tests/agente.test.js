@@ -176,5 +176,11 @@ console.log('agente.test.js turno com midia ok');
   m = a.bvCompor('Temos estas opções de barba:\n1 | barba design — R$ 65\n- 2 | corte adulto\n9 | inventada', of, cfg);
   assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['1', '2']);
   assert.ok(m[0].texto.includes('9 | inventada')); // id fora da oferta fica no texto, nunca vira opcao
-  assert.ok(!m[0].texto.includes('barba design —'));
+  assert.ok(!m[0].texto.includes('2 | corte'));
+  // preco na linha de opcao fica no texto, na ordem, sem id (suite R2); sem preco, so na lista
+  m = a.bvCompor('Temos estas opções de corte:\n1 | corte adulto — R$ 85\n2 | barba design — R$ 65\nQuer agendar?', of, cfg);
+  assert.equal(m[0].texto, 'Temos estas opções de corte: corte adulto — R$ 85 barba design — R$ 65 Quer agendar?');
+  assert.deepEqual(m[0].opcoes.map((o) => o.id), ['1', '2']);
+  assert.equal(a.bvCompor('Qual?\nOPCOES:\n1 | corte adulto\n2 | barba design', of, cfg)[0].texto, 'Qual?');
+  assert.ok(a.bvCompor('Preços:\n**OPCOES:**\n1 | corte adulto — R$ 85', of, cfg)[0].texto.includes('corte adulto — R$ 85'));
 }

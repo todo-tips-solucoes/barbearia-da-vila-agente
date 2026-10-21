@@ -59,12 +59,18 @@ function bvCortar(s, max) {
 // opcao as linhas cujo id existe na oferta; o resto fica no texto.
 const BV_MARCA_OPCOES = /^\s*[*_]*\s*OPCOES\s*:?\s*[*_]*\s*$/i;
 const BV_LINHA_OPCAO = /^\s*(?:[-*]\s*)?([A-Za-z0-9_-]{1,12})\s*\|\s*\S/;
+// Linha de opcao com preco tambem fica no texto, no mesmo lugar e sem o id: o titulo da lista vem da ferramenta, sem
+// preco, e a pergunta "quanto custa?" ficava sem resposta (suite R2).
+const bvTextoDaOpcao = (l) => (/R\$\s*\d/.test(l) ? [l.replace(/^[^|]*\|\s*/, '').trim()] : []);
 function bvSepararOpcoes(texto, oferta) {
   const linhas = String(texto || '').split('\n');
   const i = linhas.findIndex((l) => BV_MARCA_OPCOES.test(l));
-  if (i >= 0) return { corpo: linhas.slice(0, i).join('\n'), bloco: linhas.slice(i + 1).join('\n') };
+  if (i >= 0) {
+    const ops = linhas.slice(i + 1);
+    return { corpo: [...linhas.slice(0, i), ...ops.flatMap(bvTextoDaOpcao)].join('\n'), bloco: ops.join('\n') };
+  }
   const eOpcao = (l) => { const m = l.match(BV_LINHA_OPCAO); return !!m && bvResolverOpcao(m[1], oferta).ok; };
-  return { corpo: linhas.filter((l) => !eOpcao(l)).join('\n'), bloco: linhas.filter(eOpcao).join('\n') };
+  return { corpo: linhas.flatMap((l) => (eOpcao(l) ? bvTextoDaOpcao(l) : [l])).join('\n'), bloco: linhas.filter(eOpcao).join('\n') };
 }
 
 function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
