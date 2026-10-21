@@ -71,6 +71,15 @@ assert.ok(pl.includes('Rua X, 1') && pl.includes('(11) 0000-0000') && /funcionam
 assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
 console.log('agente.test.js ok');
 
+// Modelo omitiu OPCOES depois de a ferramenta montar lista nova: o compositor anexa a lista da ferramenta; sem oferta nova, nao.
+m = a.bvCompor('Temos estes serviços. Qual prefere?', oferta, cfg, true);
+assert.equal(m[m.length - 1].tipo, 'lista');
+assert.equal(m[m.length - 1].opcoes.length, 10);
+assert.ok(m.every((x) => x.tipo === 'texto' || x === m[m.length - 1]));
+assert.equal(a.bvCompor('Temos estes serviços. Qual prefere?', oferta, cfg, false)[0].tipo, 'texto');
+m = a.bvCompor('Escolha:\nOPCOES:\n2 | B', oferta, cfg, true);
+assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['2']);
+
 // u2: oferta completa de 23 horarios, modelo cita 2 ids: 3 listas (10, 10, 3) em ordem, dentro de 4 mensagens.
 {
   const of = a.bvMontarOferta('horario', Array.from({ length: 23 }, (_, k) => ({ rotulo: `${String(8 + Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`, valor: k })), cfg, true);

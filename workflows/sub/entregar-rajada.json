@@ -1311,7 +1311,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\nconst cfg = { saida: { max_mensagens: {{BV:saida.max_mensagens}}, max_chars_mensagem: {{BV:saida.max_chars_mensagem}} },\n  lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} },\n  graces: { barbeiro_teste_id: '{{BV:graces.barbeiro_teste_id}}' },\n  digitando: { ms_por_char: {{BV:digitando.ms_por_char}}, min_ms: {{BV:digitando.min_ms}}, max_ms: {{BV:digitando.max_ms}} } };\nconst out = String(($('Agente').first().json || {}).output || '');\nconst oferta = $input.first().json.opcoes || null;\nlet saida = bvCompor(out, oferta, cfg);\nif (!saida.length) saida = [{ n: 1, tipo: 'texto', texto: \"{{BV:textos.reformular}}\" }];\nreturn [{ json: { saida } }];"
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\nconst cfg = { saida: { max_mensagens: {{BV:saida.max_mensagens}}, max_chars_mensagem: {{BV:saida.max_chars_mensagem}} },\n  lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} },\n  graces: { barbeiro_teste_id: '{{BV:graces.barbeiro_teste_id}}' },\n  digitando: { ms_por_char: {{BV:digitando.ms_por_char}}, min_ms: {{BV:digitando.min_ms}}, max_ms: {{BV:digitando.max_ms}} } };\nconst out = String(($('Agente').first().json || {}).output || '');\nconst oferta = $input.first().json.opcoes || null;\nconst antes = (($('Ler contexto').first().json) || {}).opcoes || null;\nlet saida = bvCompor(out, oferta, cfg, JSON.stringify(oferta) !== JSON.stringify(antes));\nif (!saida.length) saida = [{ n: 1, tipo: 'texto', texto: \"{{BV:textos.reformular}}\" }];\nreturn [{ json: { saida } }];"
       },
       "id": "65ad8c38-44e4-5ea8-97f9-ec318f831cbd",
       "name": "Compor",

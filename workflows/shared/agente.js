@@ -53,7 +53,8 @@ function bvCortar(s, max) {
 
 // FR-015: ate max_mensagens, max_chars cada, no maximo 1 "?" por mensagem, sem o nome/id do barbeiro de teste no texto.
 // `oferta` = conversas.opcoes; o bloco "OPCOES:\n<id> | <titulo>" do modelo so vale para ids da oferta.
-function bvCompor(textoModelo, oferta, cfg) {
+// `ofertaNova` = a oferta mudou neste turno (uma ferramenta montou lista): sem bloco OPCOES do modelo, anexa a lista da ferramenta.
+function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   const { max_mensagens: maxMsg, max_chars_mensagem: maxChars } = cfg.saida;
   const [corpo, bloco = ''] = String(textoModelo || '').split(/^\s*OPCOES:\s*$/m);
   const testeId = cfg.graces && cfg.graces.barbeiro_teste_id;
@@ -70,7 +71,8 @@ function bvCompor(textoModelo, oferta, cfg) {
   }
   fecha();
   const todos = oferta && oferta.completa && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
-  const ids = bloco.split('\n').map((l) => l.split('|')[0].trim()).filter(Boolean);
+  const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].trim()).filter(Boolean);
+  const ids = !idsModelo.length && ofertaNova && oferta && Array.isArray(oferta.itens) ? oferta.itens.map((i) => i.id) : idsModelo;
   const maxIt = cfg.lista.max_itens;
   // Oferta completa de horarios: o modelo so sinaliza que e uma lista; o codigo envia todos os itens, em ordem, em listas de ate max_itens.
   // shortcut: acima de max_mensagens*max_itens (40) corta no fim; upgrade: linha "ver mais" (research Decision 3), nunca observado.
