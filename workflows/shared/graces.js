@@ -9,7 +9,7 @@ const BVG_CAMPOS = ['operacao', 'contato_id', 'telefone', 'turno_id', 'ambiente'
   'id_opcao_barbeiro', 'qualquer', 'data', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento',
   'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos'];
 const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente', 'listar_servicos', 'listar_barbeiros',
-  'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro'];
+  'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro', 'funcionamento'];
 const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BVG_OPC = /^[A-Za-z0-9_-]{1,12}$/;
 const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto', cadastrar_terceiro: 'cadastrar_terceiro' };
@@ -182,6 +182,8 @@ function bvGPlano(i, ctx0, cfg) {
       const reqs = bs.slice(0, 10).map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.idProfissional, data: i.data } }));
       return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data });
     }
+    case 'funcionamento': // horario da loja por dia da semana (graces-api/03 GET /agenda/configuracao), so leitura
+      return chamar([{ m: 'GET', path: '/agenda/configuracao' }]);
     case 'meus_agendamentos':
       if (!idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
       return chamar([{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente, proximos: true } }]);
@@ -409,6 +411,11 @@ function bvgPassoUm(st, resps0, cfg) {
       const res = { ok: true, data: meta.data, total: horas.length, completa: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.hora, barbeiro: x.valor.apelido })) };
       if (!horas.length) res.orientacao = 'dia lotado; sugira outro dia';
       return bvgFim(res, { opcoes: of, pedido: { servico: s } });
+    }
+    case 'funcionamento': {
+      const hs = (r0.body && Array.isArray(r0.body.horarios) ? r0.body.horarios : []).filter((h) => h && h.dia)
+        .map((h) => ({ dia: String(h.dia), abre: String(h.horaInicio || ''), fecha: String(h.horaFim || '') }));
+      return bvgFim({ ok: true, horarios: hs, orientacao: hs.length ? 'dia fora da lista: diga que não tem essa informação e passe os contatos da loja' : 'sem horário de funcionamento; passe os contatos da loja' });
     }
     case 'meus_agendamentos': {
       const ags = lista.filter((a) => a && a.idAgenda && (cfg.ambiente !== 'producao' || (a.idProfissional !== cfg.testeId && !/\bteste\b/i.test(String(a.profissional || '')))));

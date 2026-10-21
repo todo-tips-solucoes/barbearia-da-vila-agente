@@ -67,6 +67,14 @@ const comBarbeiro = entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2
 assert.equal(g.bvGPlano(comBarbeiro, ctxH, cfg).reqs.length, 1);
 assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '99', data: '2026-10-20' }), ctxH, cfg).final.resultado.code, 'opcao_desconhecida');
 
+// funcionamento (suite-validacao R3): so leitura de /agenda/configuracao, sem cliente identificado; dia fora da lista vira contato da loja.
+p = g.bvGPlano(entrada({ operacao: 'funcionamento' }), ctxOp({}, {}), cfg);
+assert.deepEqual(p.reqs, [{ m: 'GET', path: '/agenda/configuracao' }]);
+r = g.bvGPasso(p.st, [ok({ prazoMinimoAntecedencia: 0, horarios: [{ dia: 'Domingo', horaInicio: '08:00', horaFim: '16:00' }, null] })], cfg).final;
+assert.deepEqual(r.resultado.horarios, [{ dia: 'Domingo', abre: '08:00', fecha: '16:00' }]);
+assert.match(g.bvGPasso(p.st, [ok({})], cfg).final.resultado.orientacao, /contatos da loja/);
+assert.equal(g.bvGPasso(p.st, [resp(500, {})], cfg).final.resultado.ok, false);
+
 // meus_agendamentos: usa so pedido.idCliente (FR-020); nunca /agenda/completa.
 assert.equal(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, {}), cfg).final.resultado.code, 'cliente_nao_identificado');
 p = g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg);

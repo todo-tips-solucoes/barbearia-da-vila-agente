@@ -64,6 +64,11 @@ assert.equal(a.bvDigitacaoMs('a'.repeat(500), cfg), 4000);
 const p = a.bvPrompt(cfg);
 for (const k of ['IA', 'remarcar', 'vamos marcar outro'.slice(0, 0) + 'cancelei', 'DADO', 'confirmação']) assert.ok(p.includes(k), k);
 assert.ok(!/sk-|Bearer|X-Api-Key/.test(p));
+assert.deepEqual(a.bvFrases('Fale com contato@loja.com.br. Ou no site loja.com.br! Quer?! Ok... sim'), ['Fale com contato@loja.com.br.', 'Ou no site loja.com.br!', 'Quer?!', 'Ok...', 'sim']);
+// suite-validacao: loja da config no prompt (K4), contato da loja em vez de prometer humano, convite apos duvida (K5), saudacao (K1).
+const pl = a.bvPrompt({ ...cfg, loja: { endereco: 'Rua X, 1', contatos: '(11) 0000-0000' } });
+assert.ok(pl.includes('Rua X, 1') && pl.includes('(11) 0000-0000') && /funcionamento/.test(pl) && /convite leve/.test(pl) && /não prometa chamar/.test(pl) && /cumprimente/.test(pl));
+assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
 console.log('agente.test.js ok');
 
 // u2: oferta completa de 23 horarios, modelo cita 2 ids: 3 listas (10, 10, 3) em ordem, dentro de 4 mensagens.
