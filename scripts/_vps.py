@@ -10,8 +10,11 @@ import shlex
 import subprocess
 import sys
 
+# Uma conexao reaproveitada (ControlMaster): a suite abre centenas de ssh curtos e parte deles tomava "Connection timed
+# out" no porto 22 (2026-10-21). ControlPath com %C (hash) fica curto e sem dados do host no nome.
 SSH = ["ssh", "-i", os.path.expanduser("~/.ssh/id_ed25519_n8n_vps"), "-o", "BatchMode=yes", "-o", "LogLevel=ERROR",
-       "root@178.156.134.167"]
+       "-o", "ConnectTimeout=15", "-o", "ControlMaster=auto", "-o", "ControlPath=" + os.path.expanduser("~/.ssh/bv-%C"),
+       "-o", "ControlPersist=120", "root@178.156.134.167"]
 BANCOS = {"barbearia_vila_teste": "PG_TESTE_PASSWORD"}
 BANCO_PROD = ("barbearia_vila", "PG_PASSWORD")  # so com BV_DEPLOY_PRODUCAO_AUTORIZADO=sim
 INFRA_ENV = "/root/barbearia_vila/infra.env"

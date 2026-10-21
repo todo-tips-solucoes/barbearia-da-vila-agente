@@ -54,9 +54,22 @@ function bvCortar(s, max) {
 // FR-015: ate max_mensagens, max_chars cada, no maximo 1 "?" por mensagem, sem o nome/id do barbeiro de teste no texto.
 // `oferta` = conversas.opcoes; o bloco "OPCOES:\n<id> | <titulo>" do modelo so vale para ids da oferta.
 // `ofertaNova` = a oferta mudou neste turno (uma ferramenta montou lista): sem bloco OPCOES do modelo, anexa a lista da ferramenta.
+// Separa texto e bloco de opcoes. O modelo as vezes poe o marcador em negrito ("**OPCOES:**") ou manda as linhas
+// "<id> | <titulo>" sem marcador: sem isso a lista vazava como texto (suite-validacao R2/R12). Sem marcador, so viram
+// opcao as linhas cujo id existe na oferta; o resto fica no texto.
+const BV_MARCA_OPCOES = /^\s*[*_]*\s*OPCOES\s*:?\s*[*_]*\s*$/i;
+const BV_LINHA_OPCAO = /^\s*(?:[-*]\s*)?([A-Za-z0-9_-]{1,12})\s*\|\s*\S/;
+function bvSepararOpcoes(texto, oferta) {
+  const linhas = String(texto || '').split('\n');
+  const i = linhas.findIndex((l) => BV_MARCA_OPCOES.test(l));
+  if (i >= 0) return { corpo: linhas.slice(0, i).join('\n'), bloco: linhas.slice(i + 1).join('\n') };
+  const eOpcao = (l) => { const m = l.match(BV_LINHA_OPCAO); return !!m && bvResolverOpcao(m[1], oferta).ok; };
+  return { corpo: linhas.filter((l) => !eOpcao(l)).join('\n'), bloco: linhas.filter(eOpcao).join('\n') };
+}
+
 function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   const { max_mensagens: maxMsg, max_chars_mensagem: maxChars } = cfg.saida;
-  const [corpo, bloco = ''] = String(textoModelo || '').split(/^\s*OPCOES:\s*$/m);
+  const { corpo, bloco } = bvSepararOpcoes(textoModelo, oferta);
   const testeId = cfg.graces && cfg.graces.barbeiro_teste_id;
   const frases = bvFrases(corpo).filter((f) => !BV_NOME_TESTE.test(f) && !(testeId && f.includes(testeId)));
   const msgs = [];
@@ -71,7 +84,7 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   }
   fecha();
   const todos = oferta && oferta.completa && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
-  const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].trim()).filter(Boolean);
+  const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].replace(/^\s*[-*]\s*/, '').trim()).filter(Boolean);
   const ids = !idsModelo.length && ofertaNova && oferta && Array.isArray(oferta.itens) ? oferta.itens.map((i) => i.id) : idsModelo;
   const maxIt = cfg.lista.max_itens;
   // Oferta completa de horarios: o modelo so sinaliza que e uma lista; o codigo envia todos os itens, em ordem, em listas de ate max_itens.
@@ -91,6 +104,19 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
     }
   }
   return saida;
+}
+
+// Latencia (owner, 2026-10-21): o que a sessao ja sabe vai como DADO, para o modelo nao repetir identificar_cliente e
+// listar_servicos a cada turno (cada rodada do modelo custa 3-5 s). horarios_livres ja usa o servico do pedido.
+function bvContextoPedido(pedido, sessaoNova, neutralizar) {
+  if (sessaoNova || !pedido) return '';
+  let t = '';
+  if (pedido.idCliente) t += '\nCliente já identificado nesta conversa: não chame identificar_cliente de novo.';
+  if (pedido.servico && pedido.servico.nome) {
+    t += '\nServiço já escolhido (dado): ' + neutralizar(String(pedido.servico.nome))
+      + '. Para horários dele, chame horarios_livres direto (sem listar_servicos), a menos que o cliente mude de serviço.';
+  }
+  return t;
 }
 
 // K1 (suite-validacao): 1a resposta da sessao sempre cumprimenta; o modelo as vezes esquece.
@@ -177,5 +203,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar };
+  module.exports = { bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }

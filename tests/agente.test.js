@@ -154,3 +154,27 @@ console.log('agente.test.js turno com midia ok');
   assert.equal(a.bvCompor('Estes horários estão disponíveis:\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Estes horários estão disponíveis. Qual fica melhor pra você?');
   assert.equal(a.bvCompor('Qual serviço?\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Qual serviço?');
 }
+
+// bvContextoPedido (latencia): so fora da sessao nova; cliente e servico do pedido viram dado; nome neutralizado
+{
+  const { bvContextoPedido, bvNeutralizar } = require('../workflows/shared/agente.js');
+  assert.equal(bvContextoPedido({ idCliente: 'c1' }, true, bvNeutralizar), '');
+  assert.equal(bvContextoPedido(null, false, bvNeutralizar), '');
+  const t = bvContextoPedido({ idCliente: 'c1', servico: { nome: 'corte adulto', idServico: 's1' } }, false, bvNeutralizar);
+  assert.match(t, /não chame identificar_cliente/);
+  assert.match(t, /Serviço já escolhido \(dado\): corte adulto/);
+  assert.ok(!t.includes('c1') && !t.includes('s1')); // ids nunca vao ao modelo
+  assert.ok(!bvContextoPedido({ servico: { nome: 'x' } }, false, bvNeutralizar).includes('identificar_cliente'));
+}
+
+// bvSepararOpcoes: marcador em negrito e linhas sem marcador nao vazam como texto (suite R2/R12)
+{
+  const of = { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte adulto', valor: {} }, { id: '2', rotulo: 'barba design', valor: {} }] };
+  let m = a.bvCompor('O mais próximo é corte adulto. Qual prefere?\n**OPCOES:**\n1 | corte adulto — R$ 85\n2 | barba design', of, cfg);
+  assert.ok(!JSON.stringify(m).includes('OPCOES') && !m[0].texto.includes('|'), JSON.stringify(m));
+  assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['1', '2']);
+  m = a.bvCompor('Temos estas opções de barba:\n1 | barba design — R$ 65\n- 2 | corte adulto\n9 | inventada', of, cfg);
+  assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['1', '2']);
+  assert.ok(m[0].texto.includes('9 | inventada')); // id fora da oferta fica no texto, nunca vira opcao
+  assert.ok(!m[0].texto.includes('barba design —'));
+}
