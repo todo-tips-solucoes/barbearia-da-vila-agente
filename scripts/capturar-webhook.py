@@ -45,7 +45,14 @@ def http(metodo, url, cab, corpo=None):
 
 
 def carregar_env(raiz):
-    for c in (os.path.join(raiz, ".env.smoke"), os.environ.get("BV_ENV_N8N", os.path.join(raiz, ".env.n8n"))):
+    # worktree primeiro e, em fallback, o checkout principal (dirname do git-common-dir), como em _smoke.carregar_env
+    sys.path.insert(0, os.path.join(RAIZ, "scripts"))
+    import _smoke
+    principal = _smoke._raiz_principal() if raiz == RAIZ else None
+    cands = [os.path.join(raiz, ".env.smoke"), os.environ.get("BV_ENV_N8N", os.path.join(raiz, ".env.n8n"))]
+    if principal and os.path.abspath(principal) != os.path.abspath(raiz):
+        cands += [os.path.join(principal, ".env.smoke"), os.path.join(principal, ".env.n8n")]
+    for c in cands:
         if os.path.exists(c):
             for l in open(c, encoding="utf-8"):
                 if "=" in l and not l.startswith("#"):
