@@ -85,6 +85,10 @@ já existente) e ambiente (n8n2 TESTE) vêm do projeto.
   o que foi medido, com o aviso no relatório. Não há estimativa.
 - **Rationale**: o banco não guarda tokens (`db/migrations` não tem coluna de uso); Constituição V.
 
+- **Resultado da sonda (2026-10-21)**: `GET /executions?workflowId=<id>&includeData=true` para `entregar-rajada` e os demais
+  workflows devolve lista vazia (ou execução sem `runData`), então não há uso de tokens do agente pela API do n8n2:
+  tokens do agente = "não medido"; o teto de 3.000.000 conta só os tokens da avaliadora, com o aviso no relatório.
+
 ## Decision 9: paralelismo
 
 - **Decision**: `concurrent.futures.ThreadPoolExecutor` com `--concorrencia` (padrão 2) para os roteiros sem

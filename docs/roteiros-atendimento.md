@@ -5,8 +5,9 @@ Proposta do agente. O owner delegou a escolha em 2026-10-21 ("vou seguir com as 
 **Objetivo:** atendimento acolhedor e comercial. O cliente agenda ou tira a dúvida sem atrito, e o agente conduz para o
 agendamento sem pressionar.
 
-**Como roda:** cada roteiro dispara contra o webhook do TESTE com um contato simulado (`n < 520`). A Graces é usada só
-com o barbeiro de teste, e o que o roteiro criar é cancelado no fim. A LLM avaliadora (`gpt-5.6-luna`) dá nota a cada
+**Como roda:** cada roteiro dispara contra o webhook do TESTE. Sem agendamento: contato simulado 510-519 (505-509 são do
+`smoke-mensagens`). Roteiros que agendam (R1, R5 a R9 e R11): índice >= 520, em fila serial, com o cliente de teste autorizado e a escrita
+redirecionada ao barbeiro de teste (ZZ TESTE, nunca oferecido). A Graces é usada só com o barbeiro de teste, e o que o roteiro criar é cancelado no fim. A LLM avaliadora (`gpt-5.6-luna`) dá nota a cada
 critério com a transcrição.
 
 ## Critérios comuns (valem para todos)
@@ -64,3 +65,8 @@ critério com a transcrição.
     sobram rodam na próxima execução, então a tarefa é sempre concluída.
 - **Aprovação:** nota ≥ 4 de 5 em cada critério K1 a K6 e K7 dentro do limite. Todo dado factual tem de ter fonte
   (K4 eliminatório).
+
+## Aprovação para o princípio XV
+
+Só vale a rodada **completa com 17/17 roteiros aprovados** (e K7 da rodada dentro do limite). Relatório parcial, com roteiro
+pulado, pendente ou `erro_infra` nunca conta como aprovação.
