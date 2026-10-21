@@ -87,6 +87,16 @@ class CronMidia(unittest.TestCase):  # 2.5
             self.assertEqual(sum(f"/workflows/{wid};" in x for x in linhas), 1, amb)
 
 
+class Liberacao(unittest.TestCase):  # producao: so o owner ate o ok dele
+    def codigo_normalizar(self, amb):
+        n = next(x for x in render("bv-recepcao.json", amb)["nodes"] if x["name"] == "Normalizar")
+        return n["parameters"]["jsCode"]
+
+    def test_prod_so_o_owner_e_teste_todos(self):
+        self.assertIn("liberados: ['5511967296849'] }", self.codigo_normalizar("producao"))
+        self.assertIn("liberados: [] }", self.codigo_normalizar("integracao"))
+
+
 class MensagensAtivo(unittest.TestCase):  # 2.7
     def test_bv_mensagens_nao_consulta_a_flag(self):
         # evidencia da 2.7: so recepcao e bv-graces leem mensagens.ativo; a varredura/reconciliacao do bv-mensagens nao.

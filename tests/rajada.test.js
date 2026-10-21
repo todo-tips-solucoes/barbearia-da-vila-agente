@@ -49,3 +49,13 @@ const o = consolidar([
 ]);
 assert.deepEqual(o.map((x) => x.id), [1, 2, 3]);
 console.log('rajada.test.js ok');
+
+// liberacao gradual (producao): lista vazia atende todos; com numeros, so eles (digitos comparados)
+{
+  const ev = fx('02');
+  ev.body.sender = '5511967296849';
+  assert.equal(bvNormalizar(ev, { liberados: [] }).status, 'aceita');
+  assert.equal(bvNormalizar(ev, { liberados: ['+55 11 96729-6849'] }).status, 'aceita');
+  const outro = bvNormalizar({ body: { ...ev.body, sender: '5511900000000' } }, { liberados: ['5511967296849'] });
+  assert.deepEqual(outro, { status: 'descartada', motivo: 'nao_liberado' });
+}

@@ -23,8 +23,8 @@ Credenciais da instancia (47) listadas por `GET /api/v1/credentials`: **nenhuma*
 | Credencial | Tipo | Id (saida do script, 2026-10-18) |
 |---|---|---|
 | `Barbearia Vila Postgres TESTE` | postgres | `X3WoZnCScCKqBdg2` |
+| `Barbearia Vila Postgres PROD` | postgres | `lKwTwGxPO9zHbthQ` (criada em 2026-10-21; database `barbearia_vila`) |
 | `Barbearia Vila Redis` (DB 2) | redis | `chtScO4j08LclN89` |
-| `Barbearia Vila Postgres PROD` | postgres | nao criada (PROD exige a trava) |
 | `Barbearia Vila Verificacao` (header `X-BV-Token`; token so em `infra.env` na VPS) | httpHeaderAuth | `i7qS8QNvswOIbepF` |
 | `Barbearia Vila OpenAI` | openAiApi | `3e2ki13KTZskEv7O` |
 | `Barbearia Vila Graces` (header `X-Api-Key`) | httpHeaderAuth | `NCWLnCOpE4DgIUVU` |

@@ -206,5 +206,8 @@
   "verificacao": {
     "path": "bv-verificacao",
     "webhook_id": "9d789ec6-5ed3-50ab-951a-5c25c2676822"
+  },
+  "liberacao": {
+    "contatos": []
   }
 }
