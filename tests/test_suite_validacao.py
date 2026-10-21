@@ -237,5 +237,42 @@ class Relatorio(unittest.TestCase):
         self.assertEqual(len(sv.pendencias()), 5)
 
 
+class Converge(unittest.TestCase):  # achados da rodada real 20261021-031240 (research.md, converge)
+    def test_lista_velha_nao_parece_reenviada(self):
+        self.assertEqual(sv.nova_oferta(["08:00"], ["08:00"]), [])
+        self.assertEqual(sv.nova_oferta([], ["Kiel"]), ["Kiel"])
+
+    def test_semente_cai_no_dia_da_fala(self):
+        import datetime as dt
+        quarta = dt.date(2026, 10, 21)
+        self.assertEqual(sv.proximo_dia(4, quarta), "2026-10-23")  # sexta
+        self.assertEqual(sv.proximo_dia(3, quarta), "2026-10-22")  # quinta = amanha
+        self.assertEqual(sv.proximo_dia(2, quarta), "2026-10-28")  # nunca hoje
+        self.assertIsNone(sv.proximo_dia(None, quarta))
+
+    def test_referencia_tem_barbeiros_teste_funcionamento_e_loja(self):
+        T = sv.sa.TESTE_ID
+        resp = {"/agenda/servicos?texto=": [{"descricaoAgenda": "corte adulto", "valorPadrao": 85, "idServico": "s1"}],
+                "/servicos/profissionais?idServico=s1": [{"idProfissional": "p1", "apelido": "Kiel"}, {"idProfissional": T, "apelido": "ZZ X "}],
+                "/agenda/configuracao": {"horarios": [{"dia": "Domingo", "horaInicio": "08:00", "horaFim": "16:00"}]}}
+        r = sv.referencia_graces(resp.__getitem__)
+        self.assertIn("Barbeiros reais: Kiel", r)
+        self.assertIn("nunca pode aparecer ao cliente): ZZ X", r)
+        self.assertIn("Domingo", r)
+        self.assertIn("Loja:", r)
+        self.assertIn("Loja:", sv.referencia_graces(lambda c: (_ for _ in ()).throw(OSError())))  # sem Graces: so a loja
+
+    def test_telefone_da_loja_nao_e_mascarado(self):
+        with mock.patch.dict(sv.sa.CFG, {"loja": {"contatos": "Telefone/WhatsApp (11) 97126-5299"}}):
+            self.assertEqual(sv.sanitizar("loja (11) 97126-5299, cliente +5511967296849"), "loja (11) 97126-5299, cliente <telefone>")
+
+    def test_pedido_listas_sao_fonte_e_esforco_fixo(self):
+        r = dict(roteiros()[0])
+        p = sv.montar_pedido(r, "Cliente: oi", "")
+        self.assertIn("Agente (lista)", p["input"][0]["content"])
+        self.assertEqual(p["reasoning"], {"effort": "medium"})
+        self.assertNotIn("temperature", p)
+
+
 if __name__ == "__main__":
     unittest.main()

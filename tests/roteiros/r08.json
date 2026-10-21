@@ -18,5 +18,6 @@
   ],
   "agenda": true,
   "antes_da_c": false,
-  "preparo": "agendamento_previo"
+  "preparo": "agendamento_previo",
+  "preparo_dia_semana": 4
 }

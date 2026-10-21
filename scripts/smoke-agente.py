@@ -471,12 +471,12 @@ def c4():
     checar("avisou e/ou ofereceu novas opcoes", bool(t) and (estado(521)["opcoes"].get("tipo") == "horario" or any("hor" in x.lower() for x in t["saidas"])), str(t and t["saidas"])[:200])
 
 
-def _semear_agendamento(n, hora="15:00"):
+def _semear_agendamento(n, hora="15:00", dia=None):
     """Agendamento do Paulo no barbeiro de teste, direto na Graces (o roteiro seguinte o cancela em encerrar)."""
     for a in _agendas_paulo():  # roteiros anteriores deixam agendamentos do Paulo no barbeiro de teste: cancela antes
         urllib.request.urlopen(urllib.request.Request(f"https://{os.environ['GRACES_BASE_URL_PROD']}/public/v1/agenda/{a['idAgenda']}", method="DELETE", headers={"X-Api-Key": os.environ["GRACES_API_KEY"]}), timeout=30)
     s0 = next(x for x in graces_get("/agenda/servicos?texto=corte") if x.get("ativo", True) and "adulto" in x["descricaoAgenda"].lower())
-    dia = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 3600 + 86400))
+    dia = dia or time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 3600 + 86400))  # padrao: amanha (SP)
     r = graces_post("/agenda", {"idCliente": PAULO, "idServico": s0["idServico"], "idProfissional": TESTE_ID, "data": dia, "horaInicio": hora})
     checar("semeou agendamento (Graces)", isinstance(r, dict) and bool(r.get("idAgenda")), str(r)[:160])
     novo_paulo(n)
