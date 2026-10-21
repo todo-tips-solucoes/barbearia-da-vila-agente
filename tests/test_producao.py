@@ -74,7 +74,7 @@ class Retencao(unittest.TestCase):  # 2.3
         self.assertIn("tail -n +15", sh)  # mantem os 14 mais recentes
         linhas = [x for x in cron.splitlines() if x and not x.startswith("#")]
         self.assertEqual(len(linhas), 1)
-        self.assertTrue(linhas[0].startswith("30 3 * * * root sh /root/barbearia_vila/barbearia-backup-limpeza.sh"))
+        self.assertTrue(linhas[0].startswith("30 6 * * * root sh /root/barbearia_vila/barbearia-backup-limpeza.sh"))
 
 
 class CronMidia(unittest.TestCase):  # 2.5

@@ -101,8 +101,8 @@ Ref: research.md Decision 2 "Verificar na implementação"; checklists/producao.
 
 Ref: spec.md FR-001, FR-002; plan.md Fases 1 e 2; quickstart.md Cenário 1
 
-- [ ] 3.1.1 `preparar-bancos --alvo producao` (idempotente; não recria banco existente); rollback: `DROP` só se criado nesta execução e sem dado
-- [ ] 3.1.2 `migrar --alvo producao --dry-run` e depois real (0001 a 0010); falha parcial: parar e restaurar do dump
+- [x] 3.1.1 `preparar-bancos --alvo producao` (idempotente; não recria banco existente); rollback: `DROP` só se criado nesta execução e sem dado (2026-10-21: role e banco criados agora, `alteracoes: 3`; rollback = DROP, banco vazio)
+- [x] 3.1.2 `migrar --alvo producao --dry-run` e depois real (0001 a 0010); falha parcial: parar e restaurar do dump (10 migrações aplicadas; 2a rodada `alteracoes: 0`; 0 contatos e 0 mensagens)
 - [ ] 3.1.3 `criar-credenciais-n8n --alvo producao` (nome `[PROD]`), sem imprimir segredos; rollback: apagar credenciais criadas
 - [ ] 3.1.4 Conferir banco sem dado de TESTE e credenciais só no n8n2/`.env` fora do repositório
 
@@ -110,10 +110,10 @@ Ref: spec.md FR-001, FR-002; plan.md Fases 1 e 2; quickstart.md Cenário 1
 
 Ref: spec.md FR-003, FR-011; research.md Decision 4
 
-- [ ] 3.2.1 `backup-bancos --alvo producao --retencao 14 --validar` manual
-- [ ] 3.2.2 Restore de teste em banco descartável `barbearia_vila_restore`, criado e apagado no mesmo passo
+- [x] 3.2.1 `backup-bancos --alvo producao --retencao 14 --validar` manual (`bv-barbearia_vila-20261021T150819Z.dump`, `pg_restore --list` 89 linhas)
+- [x] 3.2.2 Restore de teste em banco descartável `barbearia_vila_restore`, criado e apagado no mesmo passo (`backup-bancos.py --restaurar-teste`: `barbearia_vila_restore` criado, restaurado com 10 migrações e apagado; achado e corrigido: o `trap` com aspas duplas expandia `$POSTGRES_USER` no host e o DROP falhava calado)
 - [ ] 3.2.3 Instalar `barbearia-backup-limpeza.cron` em `/etc/cron.d/` na VPS (só stack n8n); rollback: remover o arquivo
-- [ ] 3.2.4 Rodar o Cenário 5 do quickstart (mensagem de 13 meses sai, recente fica, segunda execução apaga 0) no banco descartável
+- [x] 3.2.4 Rodar o Cenário 5 do quickstart (mensagem de 13 meses sai, recente fica, segunda execução apaga 0) no banco descartável (no descartável: `apagadas_1a=1 apagadas_2a=0 restantes=1 contatos=1`)
 
 ### 3.3 Completar `producao.json` `[A]`
 
