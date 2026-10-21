@@ -111,6 +111,15 @@ A suíte exercita e registra o resultado de: toque na lista voltando ao agente; 
 - Roteiros de áudio/imagem sem o arquivo local de mídia real: ficam "pulados" com motivo.
 - Transcrição com dado pessoal real: proibido; os roteiros usam só dados fictícios.
 
+## Clarifications
+
+### Session 2026-10-21
+
+- Q: Falas do cliente simulado fixas ou geradas por LLM? → A: Fixas e deterministicas do roteiro; o LLM so avalia (FR-001, FR-003).
+- Q: Regra de aprovacao da rodada com pulados/pendentes/falha de infra? → A: Aprovada somente com 17/17 aprovados; pulado, pendente ou falha de infra => saida diferente de zero.
+- Q: Reexecucao automatica de roteiro reprovado? → A: Nao; o dev reexecuta manualmente pendentes/reprovados.
+- Q: Escrita dos contatos simulados e falha de restauracao? → A: Libera so os contatos simulados usados (<520) e restaura teste.contatos_escrita ao final, inclusive em Ctrl+C; se a restauracao falhar, sai com erro e imprime a acao manual (FR-012).
+
 ## Requirements
 
 ### Functional Requirements
