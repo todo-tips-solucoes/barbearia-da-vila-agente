@@ -62,6 +62,9 @@
             },
             {
               "name": "id_opcoes_agendamentos"
+            },
+            {
+              "name": "periodo"
             }
           ]
         }

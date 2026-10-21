@@ -7,13 +7,15 @@ if (typeof module !== 'undefined' && typeof bvMProgramar === 'undefined') Object
 
 const BVG_CAMPOS = ['operacao', 'contato_id', 'telefone', 'turno_id', 'ambiente', 'texto', 'id_opcao', 'id_opcao_servico',
   'id_opcao_barbeiro', 'qualquer', 'data', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento',
-  'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos'];
+  'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos', 'periodo'];
 const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente', 'listar_servicos', 'listar_barbeiros',
   'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro', 'funcionamento'];
 const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BVG_OPC = /^[A-Za-z0-9_-]{1,12}$/;
 const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto', cadastrar_terceiro: 'cadastrar_terceiro' };
 
+// Periodo pedido pelo cliente (suite R1: pediu tarde e recebeu o dia inteiro a partir das 08:00): [inicio, fim) em HH:MM.
+const BVG_PERIODOS = { manha: ['00:00', '12:00'], tarde: ['12:00', '18:00'], noite: ['18:00', '24:00'] };
 const bvgRecusa = (code, orientacao) => ({ ok: false, code, orientacao });
 const bvgFim = (resultado, efeitos = {}) => ({ final: { resultado, efeitos } });
 const bvgOpcaoInvalida = () => bvgRecusa('opcao_desconhecida', 'opção não oferecida, pergunte de novo');
@@ -37,6 +39,7 @@ function bvGNormalizar(raw, cfg) {
   if (v.ambiente !== cfg.ambiente) return { ok: false, resultado: bvgRecusa('ambiente_incorreto', 'configuração inválida') };
   if (v.data !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(v.data) || Number.isNaN(Date.parse(v.data)))) return ruim('data');
   if (v.proposta_id !== undefined && !BVG_UUID.test(v.proposta_id)) return ruim('proposta_id');
+  if (v.periodo !== undefined && !BVG_PERIODOS[v.periodo]) return ruim('periodo');
   for (const k of ['id_opcao', 'id_opcao_servico', 'id_opcao_barbeiro', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento']) {
     if (v[k] !== undefined && !BVG_OPC.test(String(v[k]))) return ruim(k);
   }
@@ -182,12 +185,12 @@ function bvGPlano(i, ctx0, cfg) {
       const s = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : (i.id_opcao_servico ? bvgResolver(i.id_opcao_servico, 'servico', ctx) : ctx.pedido.servico);
       if (!s) return bvgFim(bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
       // Reagendar sem barbeiro escolhido: barbeiros do servico do agendamento neste passo (poupa duas rodadas do modelo, R8)
-      if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data });
+      if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data, periodo: i.periodo });
       // FR-002/FR-012: defesa extra, o barbeiro de teste nunca entra na uniao nem se vier no pedido.
       const bs = bvFiltrarBarbeiros(i.qualquer ? (ctx.pedido.barbeiros || []) : [bvgResolver(i.id_opcao_barbeiro, 'barbeiro', ctx)].filter(Boolean), cfg.testeId);
       if (!bs.length) return bvgFim(i.qualquer ? bvgRecusa('barbeiros_nao_listados', 'chame listar_barbeiros antes') : bvgOpcaoInvalida());
       const reqs = bs.slice(0, 10).map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.idProfissional, data: i.data } }));
-      return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data });
+      return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data, periodo: i.periodo });
     }
     case 'funcionamento': // horario da loja por dia da semana (graces-api/03 GET /agenda/configuracao), so leitura
       return chamar([{ m: 'GET', path: '/agenda/configuracao' }]);
@@ -417,14 +420,16 @@ function bvgPassoUm(st, resps0, cfg) {
         const b = meta.barbeiros[k];
         r.body.horarios.forEach((hh) => { if (/^\d{2}:\d{2}$/.test(hh) && !porHora.has(hh)) porHora.set(hh, { b, minutos: r.body.minutos }); });
       });
-      const horas = [...porHora.keys()].sort();
+      const todas = [...porHora.keys()].sort();
+      const faixa = meta.periodo && BVG_PERIODOS[meta.periodo];
+      const horas = faixa ? todas.filter((hh) => hh >= faixa[0] && hh < faixa[1]) : todas;
       const s = meta.servico;
       const of = bvMontarOferta('horario', horas.map((hh) => {
         const { b, minutos } = porHora.get(hh);
         return { rotulo: meta.qualquer ? `${hh} ${b.apelido}` : hh, valor: { data: meta.data, hora: hh, idProfissional: b.idProfissional, apelido: b.apelido, idServico: s.idServico, servico: s.nome, preco: s.preco, minutos } };
       }), cfg, true); // FR-001: oferta completa; o Compor divide em listas
       const res = { ok: true, data: meta.data, total: horas.length, completa: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.hora, barbeiro: x.valor.apelido })) };
-      if (!horas.length) res.orientacao = 'dia lotado; sugira outro dia';
+      if (!horas.length) res.orientacao = todas.length ? `sem horário livre de ${meta.periodo} nesse dia; ofereça outro período ou outro dia` : 'dia lotado; sugira outro dia';
       return bvgFim(res, { opcoes: of, pedido: { servico: s } });
     }
     case 'funcionamento': {
