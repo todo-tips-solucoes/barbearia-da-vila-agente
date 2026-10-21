@@ -41,7 +41,7 @@ Tudo o que a suíte cria na agenda (Graces) usa só o profissional de teste e é
 1. **Given** um roteiro que cria agendamento, **When** ele termina com falha, **Then** o agendamento é cancelado.
 2. **Given** qualquer roteiro, **When** a suíte roda, **Then** nenhuma escrita atinge profissional diferente do de teste.
 3. **Given** qualquer transcrição, **When** a avaliadora checa K6, **Then** o profissional de teste nunca foi oferecido ao cliente.
-4. **Given** contatos simulados, **When** a suíte roda, **Then** todos têm índice menor que 520 e nenhum envio real sai (exceto o número do owner, se liberado).
+4. **Given** contatos simulados, **When** a suíte roda, **Then** só os roteiros que agendam usam índice >= 520 (cliente de teste autorizado), `teste.contatos_escrita` segue vazio e nenhum envio real sai.
 
 ---
 
@@ -118,14 +118,15 @@ A suíte exercita e registra o resultado de: toque na lista voltando ao agente; 
 - Q: Falas do cliente simulado fixas ou geradas por LLM? → A: Fixas e deterministicas do roteiro; o LLM so avalia (FR-001, FR-003).
 - Q: Regra de aprovacao da rodada com pulados/pendentes/falha de infra? → A: Aprovada somente com 17/17 aprovados; pulado, pendente ou falha de infra => saida diferente de zero.
 - Q: Reexecucao automatica de roteiro reprovado? → A: Nao; o dev reexecuta manualmente pendentes/reprovados.
-- Q: Escrita dos contatos simulados e falha de restauracao? → A: Libera so os contatos simulados usados (<520) e restaura teste.contatos_escrita ao final, inclusive em Ctrl+C; se a restauracao falhar, sai com erro e imprime a acao manual (FR-012).
+- ~~Q: Escrita dos contatos simulados e falha de restauracao? → A: Libera so os contatos simulados usados (<520) e restaura teste.contatos_escrita ao final, inclusive em Ctrl+C; se a restauracao falhar, sai com erro e imprime a acao manual (FR-012).~~ **Revogada na etapa plan (Decision registrada na onda-003):** liberar numeros simulados em `teste.contatos_escrita` faria o Chat Master tentar WhatsApp real para numeros que podem ser de terceiros, contrariando o padrao seguro de `scripts/smoke-agente.py` (saida conferida em `mensagens`, `contatos_escrita` vazio).
+- Correcao (plan, 2026-10-21): a suite NUNCA adiciona numero a `teste.contatos_escrita` e exige que ele esteja vazio antes de rodar; a resposta do agente e lida em `mensagens` (direcao `saida`). Roteiros que agendam reusam exatamente o mecanismo do smoke-agente: contato de indice >= 520 (`tel(n)` devolve o cliente de teste autorizado `+5511967296849`, semeado por `novo_paulo(n)`), escrita redirecionada ao profissional ZZ TESTE por `teste.redirecionar_escrita` (trava `bvgEscritaPermitida` em `workflows/shared/graces.js`, incluida no `bv-graces`), sem envio real. Como esses roteiros compartilham o mesmo telefone, rodam em serie. Envio real so para `5511967296849` e so se um roteiro exigir (nenhum previsto; R16 ja coberto pelo smoke-mensagens) (FR-002, FR-012, FR-016).
 
 ## Requirements
 
 ### Functional Requirements
 
 - **FR-001**: A suíte MUST manter os roteiros R1 a R17 versionados no repositório, cada um com falas do cliente, expectativas e critérios aplicáveis.
-- **FR-002**: A suíte MUST executar cada roteiro contra o webhook do TESTE com um contato simulado de índice menor que 520.
+- **FR-002**: A suíte MUST executar cada roteiro contra o webhook do TESTE com um contato simulado de índice menor que 520; roteiros que agendam MUST usar o mecanismo do smoke-agente (índice >= 520, cliente de teste autorizado, escrita redirecionada ao profissional de teste).
 - **FR-003**: A suíte MUST avaliar cada roteiro por LLM avaliadora (`gpt-5.6-luna`) nos critérios K1 a K6 com nota de 1 a 5 e justificativa, recebendo apenas a transcrição simulada e as expectativas.
 - **FR-004**: A chave da avaliadora MUST vir do ambiente local fora do repositório e nunca ser impressa nem gravada em relatório.
 - **FR-005**: Um roteiro MUST ser aprovado só com nota maior ou igual a 4 em K1 a K6 e K7 dentro do limite; K4 reprovado MUST reprovar o roteiro.
@@ -135,11 +136,11 @@ A suíte exercita e registra o resultado de: toque na lista voltando ao agente; 
 - **FR-009**: Uma execução seguinte MUST poder rodar só os roteiros pendentes.
 - **FR-010**: A suíte MUST escrever na Graces somente com o profissional de teste e cancelar/apagar tudo que criou ao final, mesmo em falha ou interrupção.
 - **FR-011**: A suíte MUST verificar (K6) que o profissional de teste não aparece para o cliente.
-- **FR-012**: A suíte MUST NOT alterar `teste.contatos_escrita` de forma permanente; qualquer liberação temporária é restaurada ao final.
+- **FR-012**: A suíte MUST NOT alterar `teste.contatos_escrita` (nem temporariamente) e MUST recusar rodar se ele não estiver vazio; a saída do agente MUST ser lida na tabela `mensagens` (direção `saida`), sem envio real ao Chat Master.
 - **FR-013**: R16 MUST reaproveitar os cenários m2, m3 e m7 do smoke de mensagens; R15 e R17 MUST esperar apenas o contato da loja.
 - **FR-014**: Os helpers comuns dos smokes MUST ficar num módulo único importado por `smoke-recepcao`, `smoke-agente`, `smoke-mensagens` e pela suíte, sem mudar o comportamento dos smokes.
 - **FR-015**: A leitura de ambiente MUST procurar primeiro na raiz da worktree e, em fallback, no checkout principal; MUST NOT copiar nem imprimir valores de segredo.
-- **FR-016**: A suíte MUST executar roteiros em paralelo, um contato por roteiro, com concorrência configurável (padrão conservador).
+- **FR-016**: A suíte MUST executar roteiros em paralelo, um contato por roteiro, com concorrência configurável (padrão conservador); roteiros que usam o cliente de teste (índice >= 520) MUST rodar em série entre si.
 - **FR-017**: O relatório MUST trazer por roteiro: transcrição, notas, veredito, latências, tokens; e global: p50/p95, tokens totais, parcial ou completo.
 - **FR-018**: O relatório MUST incluir a seção de pendências (toque na lista voltando ao agente; `cadastrar_cliente` real; busca por nome vazia; `contato_falhou`; timeout de 300 s), cada uma com resultado ou "não medido" e motivo.
 - **FR-019**: Falha de infraestrutura MUST ser distinguida de reprovação de conteúdo no relatório.
