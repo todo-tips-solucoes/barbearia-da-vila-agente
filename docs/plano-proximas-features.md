@@ -155,11 +155,17 @@ Nada de workflow agendado novo.
 5. Quickstart de cada feature em PROD com o número do owner (5511967296849) como único contato autorizado. Só depois liberar a todos e ligar `mensagens.ativo`.
 6. Promoção `develop` → `main` pela PR de promoção.
 
-**Insumos:**
-- o número e a conexão de PROD;
-- a autorização explícita do deploy;
-- a política de backup;
-- alerta fora de banda (Postgres fora, cota e gasto da OpenAI: CHK032);
+**Insumos respondidos pelo owner em 2026-10-21:**
+- **Conexão:** PROD usa, por enquanto, a mesma conexão do TESTE (145). Hoje ninguém atende nesse número, então não há
+  cutover de atendimento. Consequência a tratar na E: a conexão tem um webhook só, que passa a apontar para a PROD; o
+  TESTE segue com disparos diretos ao webhook com contatos simulados (como a suíte já faz).
+- **Banco:** autorização explícita para criar o `barbearia_vila` na VPS.
+- **Backup:** diário às 03:30, guardando 14 dias (recomendação do agente; owner delegou).
+- **Alerta fora de banda** (Postgres fora, cota e gasto da OpenAI: CHK032): WhatsApp 5511967296849.
+
+**Insumos ainda abertos** (confirmar no início da E):
+- a autorização explícita de publicar os workflows em PROD (`BV_DEPLOY_PRODUCAO_AUTORIZADO`); o owner autorizou o banco
+  e pediu as features 1 a 6 em produção, mas o deploy em si é confirmado na hora;
 - LGPD: retenção do histórico e base legal (infra P7, fora de escopo até agora);
 - revisão dos valores `[PROPOSTA]`: `execucao.timeout_s` 300, `atraso_max_min` 30, `agente.iteracoes_max` 8, `midia.*`,
   `lista.*`, `digitando.*`, `graces.timeout_ms` e os textos.
