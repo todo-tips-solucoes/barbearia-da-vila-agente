@@ -1,0 +1,30 @@
+{
+  "id": "R1",
+  "situacao": "Primeiro contato, agenda direto",
+  "falas": [
+    "Oi, boa tarde!",
+    "Queria cortar o cabelo amanhã à tarde",
+    {
+      "tocar": 1
+    },
+    "Pode confirmar"
+  ],
+  "expectativas": [
+    "Saudação acolhedora",
+    "Identifica ou cadastra o cliente",
+    "Oferece serviços e barbeiros por lista",
+    "Todos os inícios em que o serviço cabe",
+    "Resumo e confirmação",
+    "Agendamento criado"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "agenda": true,
+  "antes_da_c": false
+}

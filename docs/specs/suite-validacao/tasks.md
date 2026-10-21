@@ -36,10 +36,10 @@ Ref: FR-014, FR-015; research.md D3/D4; contracts/cli.md; User Story 4
 
 Ref: FR-001, FR-020; data-model.md "Roteiro"
 
-- [ ] 2.1.1 Criar `tests/roteiros/r01.json` a `r17.json` conforme data-model.md (`id`, `situacao`, `falas`, `expectativas`, `criterios` ⊆ K1-K6, `agenda`, `preparo`, `delegado`, `antes_da_c`), com as falas e expectativas de `docs/roteiros-atendimento.md`
-- [ ] 2.1.2 Marcar `agenda=true` em R1, R5, R6, R7, R8, R9 e R11; `preparo=agendamento_previo` em R7-R9 e `coleta_abandonada` em R10; `delegado=smoke-mensagens:m2,m3,m7` em R16; `antes_da_c=true` em R15 e R17
-- [ ] 2.1.3 R2: expectativa explícita de que o pacote "4 serviços com 20%" não pode ser ofertado (FR-006); R11/R12 apontam a mídia local real e ficam "pulados com motivo" sem o arquivo
-- [ ] 2.1.4 `tests/test_suite_validacao.py` (parte roteiros): ids únicos R1-R17, `criterios` válidos, nenhum dígito de telefone/CPF/e-mail nas falas, `agenda=true` só nos sete previstos
+- [x] 2.1.1 Criar `tests/roteiros/r01.json` a `r17.json` conforme data-model.md (`id`, `situacao`, `falas`, `expectativas`, `criterios` ⊆ K1-K6, `agenda`, `preparo`, `delegado`, `antes_da_c`), com as falas e expectativas de `docs/roteiros-atendimento.md`
+- [x] 2.1.2 Marcar `agenda=true` em R1, R5, R6, R7, R8, R9 e R11; `preparo=agendamento_previo` em R7-R9 e `coleta_abandonada` em R10; `delegado=smoke-mensagens:m2,m3,m7` em R16; `antes_da_c=true` em R15 e R17
+- [x] 2.1.3 R2: expectativa explícita de que o pacote "4 serviços com 20%" não pode ser ofertado (FR-006); R11/R12 apontam a mídia local real e ficam "pulados com motivo" sem o arquivo
+- [x] 2.1.4 `tests/test_suite_validacao.py` (parte roteiros): ids únicos R1-R17, `criterios` válidos, nenhum dígito de telefone/CPF/e-mail nas falas, `agenda=true` só nos sete previstos
 
 ---
 

@@ -1,0 +1,14 @@
+{
+  "id": "R16",
+  "situacao": "Confirmação da véspera",
+  "falas": [],
+  "expectativas": [
+    "Status 3 na Graces ao tocar em Confirmo",
+    "Status 10 e oferta de remarcar ao tocar em Não vou poder",
+    "Coberto pelo smoke-mensagens m2, m3 e m7"
+  ],
+  "criterios": [],
+  "agenda": false,
+  "antes_da_c": false,
+  "delegado": "smoke-mensagens:m2,m3,m7"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "R13",
+  "situacao": "Pergunta sem resposta conhecida",
+  "falas": [
+    "Vocês aceitam pix? Tem estacionamento?"
+  ],
+  "expectativas": [
+    "Não inventa (K4)",
+    "Diz que não tem essa informação e passa o contato da loja",
+    "Convite para agendar"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "agenda": false,
+  "antes_da_c": false
+}
