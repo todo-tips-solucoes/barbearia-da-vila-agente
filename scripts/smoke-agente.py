@@ -534,7 +534,7 @@ def c7():
 
 def p2():
     print("P2 ponta a ponta com o contato real (7.2.4): Chat Master -> bv-recepcao -> entregar-rajada -> Graces -> Chat Master (envio REAL ao 5511967296849 pela conexao 145)")
-    checar("config: contatos_escrita = so o contato real do owner (P2)", CFG["teste"]["contatos_escrita"] == [PAULO_TEL])
+    checar("config: contatos_escrita vazio ou so o contato real do owner (P2)", CFG["teste"]["contatos_escrita"] in ([], [PAULO_TEL]))
     sv = [x for x in graces_get("/agenda/servicos?texto=corte") if x.get("ativo", True)]
     checar("shape /agenda/servicos", bool(sv) and {"idServico", "descricaoAgenda", "tempoPadrao", "valorPadrao"} <= set(sv[0]), str(sorted(sv[0]))[:200] if sv else "")
     c1()

@@ -389,7 +389,10 @@ def executar(r, n, orc, parar, referencia=""):
             feitas = [p["acao"] for p in sa.propostas(n) if p["estado"] == "executada"] if sa.cid(n) else []
             extra = ("\nSistema (Graces): escrita executada nesta conversa: " + ", ".join(feitas)) if feitas else ""
             hoje = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)).strftime("%Y-%m-%d (%A)")
-            notas, tokens, erro = avaliar(r, transcricao(ex["turnos"], nome) + extra, referencia + "\nHoje em Sao Paulo: " + hoje)
+            ref = referencia + "\nHoje em Sao Paulo: " + hoje
+            if r.get("preparo") == "agendamento_previo":  # a avaliadora nao ve meus_agendamentos: o preparo e fonte do K4
+                ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + "."
+            notas, tokens, erro = avaliar(r, transcricao(ex["turnos"], nome) + extra, ref)
             ex.update(notas=notas, erro_avaliadora=erro)
             ex["tokens"]["avaliadora"] = tokens
             orc.somar(tokens)
@@ -609,6 +612,7 @@ def main(argv=None):
         interrompido = True
         parar.set()
     finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a limpeza (cancelar na Graces) nao pode ser cortada por um 2o sinal
         lim = limpar()
     if interrompido:
         print("interrompido: limpeza " + ("ok" if lim["ok"] else lim["acao_manual"]), file=sys.stderr)
