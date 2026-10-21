@@ -14,30 +14,22 @@ import urllib.request
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(RAIZ, "scripts"))
+import _smoke  # noqa: E402
 import _vps  # noqa: E402
 
 BANCO = "barbearia_vila_teste"
 PREFIXO_TEL = "+55000000"
 FIX = os.path.join(RAIZ, "tests", "fixtures", "chatmaster")
-CFG = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
-URL = f"{CFG['n8n_url']}/webhook/{CFG['webhook']['path']}"
+CFG, URL = _smoke.CFG, _smoke.URL
 _falhas = []
 INICIO = int(time.time()) - 5
 
 
-def _env(*arquivos):
-    for a in arquivos:
-        try:
-            for linha in open(os.path.join(RAIZ, a), encoding="utf-8"):
-                k, _, v = linha.strip().partition("=")
-                if k and not k.startswith("#"):
-                    os.environ.setdefault(k, v.strip().strip('"').strip("'"))
-        except FileNotFoundError:
-            pass
+_env = _smoke.carregar_env
 
 
 def tel(n):
-    return f"{PREFIXO_TEL}{n:04d}"
+    return _smoke.tel(PREFIXO_TEL, n, 4)
 
 
 def fixture(nome):
@@ -59,13 +51,7 @@ def evento_imagem(n, url):
 
 
 def post(corpo, raw=None):
-    dados = raw if raw is not None else json.dumps(corpo).encode()
-    req = urllib.request.Request(URL, data=dados, headers={"Content-Type": "application/json"}, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return r.status
-    except urllib.error.HTTPError as e:
-        return e.code
+    return _smoke.post(corpo, raw=raw, timeout=30)[0]
 
 
 def linhas():
@@ -105,9 +91,7 @@ def latencia(turno):
 
 
 def checar(nome, ok, detalhe=""):
-    print(f"  [{'ok' if ok else 'FALHA'}] {nome} {detalhe}")
-    if not ok:
-        _falhas.append(nome)
+    _smoke.checar(_falhas, nome, ok, detalhe)
 
 
 def recepcao():

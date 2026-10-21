@@ -23,10 +23,10 @@ Escopo: suíte de validação por conversas roteirizadas (`scripts/suite-validac
 
 Ref: FR-014, FR-015; research.md D3/D4; contracts/cli.md; User Story 4
 
-- [ ] 1.1.1 Criar `scripts/_smoke.py` com `RAIZ`, `carregar_env(*arquivos)` (raiz da worktree, depois `dirname(git rev-parse --path-format=absolute --git-common-dir)`; `setdefault`; nunca copia nem imprime valor), `CFG`/`URL`, `post(corpo, url, raw, timeout)`, `checar(falhas, nome, ok, detalhe)`, `sql` via `_vps.psql` e o formatador comum de telefone
-- [ ] 1.1.2 `smoke-agente.py` e `smoke-recepcao.py` importam `_smoke` e mantêm `_env`, `post`, `checar`, `sql` como aliases (comportamento e saída iguais); `smoke-mensagens.py` segue via `sa.*`; `tel` fica em cada smoke
-- [ ] 1.1.3 `tests/test_smoke_comum.py`: fallback para o checkout principal, `setdefault` não sobrescreve ambiente, nada é impresso, `checar` acumula falhas
-- [ ] 1.1.4 `python3 -m pytest tests/` verde sem alterar expectativa dos testes existentes dos smokes (SC-006); `python3 -I scripts/smoke-recepcao.py --help`/modo seco igual ao de antes
+- [x] 1.1.1 Criar `scripts/_smoke.py` com `RAIZ`, `carregar_env(*arquivos)` (raiz da worktree, depois `dirname(git rev-parse --path-format=absolute --git-common-dir)`; `setdefault`; nunca copia nem imprime valor), `CFG`/`URL`, `post(corpo, url, raw, timeout)`, `checar(falhas, nome, ok, detalhe)`, `sql` via `_vps.psql` e o formatador comum de telefone
+- [x] 1.1.2 `smoke-agente.py` e `smoke-recepcao.py` importam `_smoke` e mantêm `_env`, `post`, `checar`, `sql` como aliases (comportamento e saída iguais); `smoke-mensagens.py` segue via `sa.*`; `tel` fica em cada smoke
+- [x] 1.1.3 `tests/test_smoke_comum.py`: fallback para o checkout principal, `setdefault` não sobrescreve ambiente, nada é impresso, `checar` acumula falhas
+- [x] 1.1.4 `python3 -m pytest tests/` verde sem alterar expectativa dos testes existentes dos smokes (SC-006); `python3 -I scripts/smoke-recepcao.py --help`/modo seco igual ao de antes
 
 ---
 

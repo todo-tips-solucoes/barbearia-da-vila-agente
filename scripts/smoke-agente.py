@@ -15,12 +15,12 @@ import uuid
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(RAIZ, "scripts"))
+import _smoke  # noqa: E402
 import _vps  # noqa: E402
 
 BANCO = "barbearia_vila_teste"
 PREFIXO = "+5500000000"  # + 3 digitos (faixa 500-599, longe do smoke-recepcao)
-CFG = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
-URL = f"{CFG['n8n_url']}/webhook/{CFG['webhook']['path']}"
+CFG, URL = _smoke.CFG, _smoke.URL
 TESTE_ID = CFG["graces"]["barbeiro_teste_id"]
 _falhas, _info, _lat = [], [], []
 PAULO = "95e69175-6021-4280-a001-5ef2a0135bf8"  # cliente de teste autorizado pelo owner (P1): GET /agenda/clientes?celular=5511967296849
@@ -28,15 +28,7 @@ _ocupados = []  # idAgenda criados pelo c4 para ocupar horario
 FANTASMA = "00000000-0000-0000-0000-0000000000aa"  # cliente/profissional ficticios: so alimentam a fase 1 (nada vai a Graces)
 
 
-def _env(*arquivos):
-    for a in arquivos:
-        try:
-            for linha in open(os.path.join(RAIZ, a), encoding="utf-8"):
-                k, _, v = linha.strip().partition("=")
-                if k and not k.startswith("#"):
-                    os.environ.setdefault(k, v.strip().strip('"').strip("'"))
-        except FileNotFoundError:
-            pass
+_env = _smoke.carregar_env
 
 
 PAULO_TEL = "+5511967296849"  # P1/P2: telefone real do cliente de teste; no TESTE nada e enviado (contatos_escrita vazio)
@@ -45,17 +37,15 @@ PAULO_TEL = "+5511967296849"  # P1/P2: telefone real do cliente de teste; no TES
 def tel(n):
     if n >= 520:
         return PAULO_TEL
-    return f"{PREFIXO}{n:03d}"
+    return _smoke.tel(PREFIXO, n, 3)
 
 
 def checar(nome, ok, detalhe=""):
-    print(f"  [{'ok' if ok else 'FALHA'}] {nome} {detalhe}")
-    if not ok:
-        _falhas.append(nome)
+    _smoke.checar(_falhas, nome, ok, detalhe)
 
 
 def sql(q):
-    return _vps.psql(BANCO, q).strip()
+    return _smoke.sql(BANCO, q)
 
 
 def cid(n):
@@ -81,12 +71,7 @@ def evento_audio(n):
 
 
 def post(corpo, url=URL):
-    req = urllib.request.Request(url, data=json.dumps(corpo).encode(), headers={"Content-Type": "application/json"}, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            return r.status, r.read().decode()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode()
+    return _smoke.post(corpo, url)
 
 
 def semear(n, pedido=None, opcoes=None):
