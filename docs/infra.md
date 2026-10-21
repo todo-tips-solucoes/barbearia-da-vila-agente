@@ -104,7 +104,7 @@ Feita pela sessão coordenadora com `get_workflow_details`:
 
 ## Agente: ids, ordem do fluxo e politica de teste (feature `agente-conversacional-graces`, TESTE, 2026-10-18)
 
-- Ids (TESTE): `bv-graces` `mjhd7O0AzrqNVrf0`; `entregar-rajada` `ilzXqBWGtcczlGEu` (mesmo id do stub). PROD: nada criado (`config/ambientes/producao.json` sem workflows; REST conferida em 2026-10-18: os 6 workflows `bv-*` existentes terminam em `[TESTE]`).
+- Ids (TESTE): `bv-graces` `mjhd7O0AzrqNVrf0`; `entregar-rajada` `ilzXqBWGtcczlGEu` (mesmo id do stub). PROD: ver "Producao (2026-10-21)" abaixo.
 - Ordem do fluxo: Chat Master -> `bv-recepcao` (buffer 8 s, lock) -> `entregar-rajada` (`Registrar turno` -> contexto -> agente `gpt-5.6-luna` -> ferramentas `bv-graces` -> `Compor` -> ate 4 saidas) -> Chat Master. Sem historico de execucao salvo (`saveData*Execution=none`), entao o diagnostico de falha exige ligar `saveDataErrorExecution` temporariamente e restaurar pelo deploy.
 - Politica de teste: `python3 -I scripts/smoke-agente.py [--so c2 c3 c5 c9 c10 c11 c14 c15 c12 c13 r1 ... r10]` (r1-r10: roteiros da feature regras-negocio-agenda, chamada direta ao `bv-graces`, escrita real so no barbeiro de teste com o Paulo; tudo cancelado no `finally`). So contatos simulados; `teste.contatos_escrita` vazio (conferido tambem no workflow implantado); chamador temporario (webhook de path aleatorio, apagado no `finally`) para chamar `bv-graces`/`entregar-rajada` direto; c12/c13 trocam a credencial so no TESTE e restauram pelo deploy; ao fim, SC-010 (nenhuma proposta `executada` fica sem cancelar na Graces) e limpeza de Postgres/Redis.
 - Limites medidos: c14 (pergunta longa) = 2 mensagens, ate 1 "?" por mensagem, <= 700 caracteres. S1/S2 (lista renderizada e formato do toque) continuam dependentes do contato de teste real (P2). `falhas_agente` do agente que falha = `agente|agente_falhou` (nao distingue modelo de ferramenta).
@@ -135,3 +135,36 @@ Feita pela sessão coordenadora com `get_workflow_details`:
 - Politica de teste: so o barbeiro de teste (`graces.barbeiro_teste_id`) e so contatos de `teste.contatos_escrita` recebem; contato simulado nunca vai ao Chat Master (a varredura cancela com `fora_da_lista`, o `bv-confirmacao` so grava a saida). Tolerancia de atraso `mensagens.atraso_max_min` = 30 (proposta; o owner foi informado e nao objetou).
 - Medido (pai, sonda da lista e P1): a selecao da lista chega como `from_internal` com `selectedRowID` + `stanzaID` e como `start` so com o titulo; `POST /agenda` nasce `idStatusAgenda` 2; `POST /agenda/confirmacao` `{confirmado:true}` devolve 200 e status 3; repetir devolve 409 (tratado como ja confirmado). Pendente: P2 (envio x handoff aberto) e P4 (exibicao da lista de 2 linhas), no smoke da FASE 6 com o numero do owner.
 
+
+## Producao (2026-10-21, feature `producao`)
+
+Autorizacao do owner em 2026-10-21 (banco, deploy e webhook). Tudo pela n8n2; nunca `n8n.todo-tips.com`.
+
+| Workflow [PROD] | Id | Nos |
+|---|---|---|
+| Ferramentas da Graces (`bv_graces`) | `K0yVUwFr5gucXRQd` | 19 |
+| Interpretar midia (`interpretar_midia`) | `IiVgK4hASaCzzbVM` | 18 |
+| Confirmacao de presenca (`bv_confirmacao`) | `jI5eK7tHfFYuqCJS` | 23 |
+| Entregar rajada (`entregar_rajada`) | `QTP7ezx661uFp7Wj` | 76 |
+| Recepcao (`bv-recepcao`) | `yUEWTZpNYMfIotdg` | 62 |
+| Vigia da recepcao (`bv-vigia`) | `hbHUY1RLNS5SJ3sP` | 3 |
+| Verificacao (`bv-verificacao`) | `M07jjghR3IJClmDW` | 2 |
+
+- Conferidos com `get_workflow_details` depois da publicacao: ativos, `versionId` = `activeVersionId`, mesma contagem de nos do TESTE. O `validate_node_config` rodou so no no novo (`Normalizar`, liberacao); os demais nos sao os do TESTE.
+- `bv-mensagens` **nao** foi publicado: a reconciliacao dele programa envios sem consultar `mensagens.ativo` (tasks 2.7). Vai para PROD so com `mensagens.ativo` true, depois do ok do owner (`deploy-n8n` recusa antes).
+- **Liberacao:** `liberacao.contatos` = `["5511967296849"]`; a recepcao de PROD descarta outros numeros sem gravar nem responder. Liberar a todos = lista vazia + deploy da recepcao, so com o ok do owner.
+- Credenciais: Postgres `lKwTwGxPO9zHbthQ`; Redis, OpenAI, Graces, Chat Master e Verificacao reaproveitam as do TESTE (mesmas chaves e mesma conexao 145; Redis isolado pelo prefixo `bv:prod:`).
+- Banco `barbearia_vila`: migracoes 0001 a 0010. Backup manual e restore em banco descartavel verificados (`backup-bancos.py --restaurar-teste`).
+- Backup diario: `config/vps/barbearia-backup-limpeza.{sh,cron}`, 06:30 UTC (03:30 de Sao Paulo; a VPS esta em `Etc/UTC` e o cron do Ubuntu nao tem `CRON_TZ`), 14 dias, e a limpeza LGPD de mensagens com mais de 12 meses logo apos um backup ok. A instalacao em `/etc/cron.d/` e do owner.
+- Cron de midia: linha de PROD (`IiVgK4hASaCzzbVM`) em `config/vps/barbearia-limpar-midia.cron`; reinstalar o arquivo na VPS (owner).
+- Hook de guarda de PROD (proposto na secao de riscos): **nao instalado**; a instalacao e do owner.
+
+**Rollback por passo:**
+
+| Passo | Rollback |
+|---|---|
+| Banco `barbearia_vila` | `DROP DATABASE barbearia_vila; DROP ROLE barbearia_vila;` (so enquanto vazio; senao restaurar o dump) |
+| Credencial Postgres PROD | apagar `lKwTwGxPO9zHbthQ` no n8n2 |
+| Workflows [PROD] | despublicar (`unpublish`) e arquivar pelos ids acima; os [TESTE] nao foram tocados alem da recepcao (liberacao com lista vazia) |
+| Webhook da 145 | `capturar-webhook.py restaurar --destino recepcao-producao` (volta a URL anotada em `.webhook-145-antes-prod.url`) |
+| Crons | remover `/etc/cron.d/barbearia-backup-limpeza` e a linha de PROD do cron de midia |
