@@ -179,6 +179,15 @@ Ref: revisão independente do pai (itens 1-12); research D2/D6/D7/D9/D12; contra
 
 - [x] 6.3.12 E2E (2026-10-20): `dataJson` codificado duas vezes (`bvMReconhecer` decodifica até virar objeto); o toque pelo id tira da rajada o título gêmeo (CTE `tg` no `Registrar`) e o re-toque conta como recente (`conf-%` em `recentes`); smoke m7
 
+### 6.4 Segundo E2E com o owner (2026-10-20, após o merge) `[A]` {humano:pai}
+
+Ref: research Decision 15
+
+- [x] 6.4.1 "Não vou poder" pelo id com o número real: Graces 10, lembrete e pós cancelados, uma resposta, sem turno do agente
+- [x] 6.4.2 Lembrete e pós entregues ao número real
+- [x] 6.4.3 Trava de handoff (P2, lado n8n): retido com `handoffs` aberto por 150 s; enviado < 60 s após encerrar
+- [ ] 6.4.4 Detectar atendimento humano real (nenhum workflow grava `handoffs`; sinal do ticket `userId`/`queueId`): na `crm-etiquetas-handoff`
+
 ---
 
 ## Matriz de Dependencias

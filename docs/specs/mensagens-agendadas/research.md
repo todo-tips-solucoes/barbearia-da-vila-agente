@@ -249,11 +249,38 @@ igual a um dos títulos, sem turno, dos últimos `2 x espera_texto_s` (a rajada 
 chega depois do id é consumido porque `recentes` conta também as respostas `conf-%` dessa janela. Limite: um
 "Confirmo" digitado na mesma janela de um toque é descartado junto (mesmo texto, mesmo efeito).
 
+## Decision 15: segundo E2E com o owner (pai, 2026-10-20, após o merge da #13)
+
+Medido com o número do owner em `teste.contatos_escrita` (temporário, restaurado para `[]` e republicado), 2
+agendamentos no barbeiro de teste em 23/10 (08:00 e 10:40), linhas criadas pela reconciliação disparada pelo MCP.
+Envio antecipado com `UPDATE previsto_para = now()` nas linhas existentes.
+
+- **Horários gerados**: confirmação 22/10 18:00, lembrete 2 h antes, pós 1 h após o fim (America/Sao_Paulo): conferem com a spec.
+- **A, "Não vou poder" pelo id (número real)**: Graces 10 "Não Confirmado"; lembrete e pós do horário `cancelada/recusada`;
+  `conversas.pedido.confirmacao_recusada` gravado; uma resposta só (`textos.confirmacao_recusada`), nenhuma entrada no
+  agente (título gêmeo consumido).
+- **C, handoff aberto (P2, parte do n8n)**: `handoffs` aberto inserido à mão; lembrete com `previsto_para = now()` ficou
+  `pendente` sem reserva nem tentativa por 150 s (> 2 varreduras), nenhuma saída. Ao encerrar o handoff, enviado em < 60 s.
+- **B, lembrete e pós (número real)**: os dois enviados e recebidos.
+- **Artefatos do teste, não defeitos**: o lembrete diz "hoje" porque foi antecipado; mudar `previsto_para` à mão fez a
+  reconciliação criar uma confirmação duplicada (linha 46, cancelada `e2e_duplicada`): a reconciliação reconhece a linha
+  pelo horário previsto. Para antecipar em testes futuros, o smoke deve fazê-lo e limpar a duplicada.
+- **Achado**: o texto usa o nome do profissional vindo da Graces (`ZZ TESTE INTEGRACAO - NAO AGENDAR` no TESTE), enquanto o
+  `bv-graces` mostra o alias "barbeiro de teste". Em PROD sai o nome real; no TESTE só o owner recebe.
+- **Achado (bloqueia o valor prático da trava)**: nenhum workflow grava em `handoffs`; a trava só vale quando a feature
+  `crm-etiquetas-handoff` abrir handoff. Atendimento humano feito direto no painel do Chat Master não é visto.
+- **Sinal disponível no canal** (`GET /api/contacts/alltickets`, leitura, só campos estruturais): cada ticket traz `status`
+  (`open`/`pending`/`closed`), `queueId`, `userId`, `whatsappId`. O da 145 do owner estava `pending`, `queueId` 1,
+  `userId` null. Candidato a detector de atendimento humano: ticket da 145 com `userId` diferente de 100 ou `queueId` 78.
+  Não medido com atendente real: fica para a `crm-etiquetas-handoff`.
+- Limpeza: 2 agendamentos apagados na Graces (0 no barbeiro de teste), 0 linhas pendentes, 0 handoffs abertos, 4 workflows
+  republicados e conferidos com `get_workflow_details`.
+
 ## Pendências
 
 | Id | Item | Como fecha |
 |----|------|------------|
 | P1 | Status inicial do `POST /agenda` (Decision 11) | **MEDIDO (pai, sonda-botao.md "P1")**: nasce `idStatusAgenda` 2; `POST /agenda/confirmacao` `{confirmado:true}` → 200 e status 3; repetir → 409 "não está com status 'A confirmar'" (tratar 409 como já confirmado, idempotente) |
-| P2 | Efeito de `openTicket: '0'` em ticket de handoff (Decision 10) | smoke com handoff aberto |
+| P2 | Efeito de `openTicket: '0'` em ticket de handoff (Decision 10) | **PARCIAL** (Decision 15): a trava do n8n medida (não envia com `handoffs` aberto; envia ao encerrar). Sem envio com handoff aberto, o efeito no ticket não se aplica. Aberto: detectar atendimento humano real (ninguém grava `handoffs`; sinal `userId`/`queueId` do ticket), na `crm-etiquetas-handoff` |
 | P3 | **FECHADO** (ver Decision 6, atualização medida). Formato do evento de seleção de lista no webhook QR Pro: `start` só com título + `from_internal` com `selectedRowID`/`stanzaID` | o pai captura UMA seleção real pelo `bv-captura` (owner autorizou); vira fixture `evento-26+` e ativa o caminho id (Decision 6) |
 | P4 | **FECHADO** (E2E 2026-10-20: lista de 2 linhas `bvc:<id>:s/n` exibida e tocada pelo owner) Lista de 2 linhas com `RowId` `bvc:<id>:s` aceita e exibida | primeiro envio real ao owner no smoke |
