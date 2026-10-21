@@ -150,10 +150,10 @@ Ref: plan.md "Project Structure"; recomendação do agente; owner delegou
 
 Ref: SC-001 a SC-007; quickstart.md cenários 2, 3 e 5
 
-- [ ] 5.4.1 Smokes sem regressão: `smoke-recepcao.py recepcao`, `smoke-agente.py --so c2` e `smoke-mensagens.py m1` com as mesmas linhas `[ok]` de antes
-- [ ] 5.4.2 Rodada completa: `python3 -I scripts/suite-validacao.py` numa worktree sem `.env.smoke` (segredo pelo fallback, sem impressão); conferir um veredito por roteiro, p50/p95, tokens, `contatos_escrita == []` e 0 resíduos
-- [ ] 5.4.3 Rodada parcial: `--teto-tokens 50000` e depois `--pendentes <relatório>`; só os pendentes rodam
-- [ ] 5.4.4 `node --test tests/*.test.js` e `python3 -m pytest tests/` verdes; reprovações de conteúdo encontradas viram achados no relatório da PR (nenhum workflow alterado nesta feature; se um achado exigir, deploy só TESTE via `scripts/deploy-n8n.sh integracao --so <nome>` com `validate_node_config` antes e `get_workflow_details` depois)
+- [x] 5.4.1 Smokes sem regressão: `smoke-recepcao.py recepcao`, `smoke-agente.py --so c2` e `smoke-mensagens.py m1` com as mesmas linhas `[ok]` de antes
+- [x] 5.4.2 Rodada completa: `python3 -I scripts/suite-validacao.py` numa worktree sem `.env.smoke` (segredo pelo fallback, sem impressão); conferir um veredito por roteiro, p50/p95, tokens, `contatos_escrita == []` e 0 resíduos
+- [x] 5.4.3 Rodada parcial: `--teto-tokens 50000` e depois `--pendentes <relatório>`; só os pendentes rodam
+- [x] 5.4.4 `node --test tests/*.test.js` e `python3 -m pytest tests/` verdes; reprovações de conteúdo encontradas viram achados no relatório da PR (nenhum workflow alterado nesta feature; se um achado exigir, deploy só TESTE via `scripts/deploy-n8n.sh integracao --so <nome>` com `validate_node_config` antes e `get_workflow_details` depois)
 
 ---
 
