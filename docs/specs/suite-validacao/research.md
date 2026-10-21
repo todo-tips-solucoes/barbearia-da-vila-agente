@@ -110,3 +110,32 @@ já existente) e ambiente (n8n2 TESTE) vêm do projeto.
 
 - **Decision**: a feature não altera workflows; não há deploy. Se um achado exigir, o deploy é só no TESTE via
   `scripts/deploy-n8n.sh integracao --so <nome>`, com `validate_node_config` antes e `get_workflow_details` depois.
+
+## Decision 12: converge — triagem da rodada real e correções (2026-10-21)
+
+Rodada real `relatorios/suite-validacao/20261021-031240` deu **5/17** (R12 pulado). Triagem de cada reprovação pela transcrição:
+
+**(a) Defeitos da suíte/avaliadora** (corrigidos em `scripts/suite-validacao.py`):
+- R1: `tocar` seguia tocando "08:00" enquanto a oferta antiga continuava no estado e o agente pedia confirmação (4 confirmações repetidas → K2/K5 falsos). Agora o toque só continua se o turno trouxe lista nova (`nova_oferta`) e a transcrição só mostra a lista enviada naquele turno.
+- K4 falso em R1/R7/R8/R9: a avaliadora não tinha fonte para horários livres, barbeiros e agendamentos do cliente. As linhas `Agente (lista)` passam a ser declaradas fonte (montadas pelo código com a resposta da Graces), a referência ganha barbeiros reais, funcionamento (`GET /agenda/configuracao`), loja e a data de hoje, e a transcrição informa a escrita executada (propostas `executada`).
+- K6 falso em R7/R8: "Pedro Henrique" é barbeiro real (GET `/agenda/agendamentos?idCliente=<Paulo>&proximos=true` traz agendamentos recorrentes reais dele com `a7ec6dd6…`). A referência agora nomeia o barbeiro de teste exato (`ZZ TESTE INTEGRACAO - NAO AGENDAR`, lido de `/servicos/profissionais`); a K6 determinística segue valendo.
+- K5 aplicado a turno de condução (R4/R5/R6): a instrução diz que K5 vale para dúvida informativa; e as `<expectativas>` prevalecem.
+- R7/R8: a semente caía em "amanhã" e a fala diz "sexta". `preparo_dia_semana: 4` semeia na próxima sexta (`proximo_dia`; `_semear_agendamento(..., dia=)` com padrão inalterado para o smoke).
+- R13/R14/R15/R17: `sanitizar` mascarava o telefone público da loja como `<telefone>` (K4 falso). O telefone da `loja` não é mais mascarado; o do cliente segue mascarado.
+- `rotulos_oferta` quebrava (SQL com `contato_id=` vazio) antes da 1ª fala de contato novo → erro_infra; agora devolve `[]`.
+
+**Variância da avaliadora**: sonda de 2026-10-21 na API Responses com `gpt-5.6-luna`: `temperature` → HTTP 400 "is not supported with this model"; `seed` → HTTP 400 "Unknown parameter". Não há como fixar amostragem; o pedido fixa `reasoning.effort = "medium"` e a variância é reduzida por regras explícitas (listas são fonte, alcance do K5, barbeiro de teste nomeado, expectativas prevalecem) e pelas regras determinísticas (K2/K6/2ª vez/pacote 20%).
+
+**(b) Defeitos reais do agente** (corrigidos na fonte e publicados só no TESTE: `bv_graces`, `entregar_rajada`, `interpretar_midia` por `scripts/deploy-n8n.sh integracao --so <nome>`; `validate_node_config` antes e `get_workflow_details` depois de cada publicação: ativos, rascunho = publicado, 19/76/18 nós, `executionTimeout` como no repositório):
+- Config `loja` nunca chegava ao prompt (R3 sem endereço, R13 inventou "Aceitamos Pix", R17 prometeu chamar humano sem handoff). `Preparar` passa `cfg.loja`; o prompt traz endereço/contatos como DADO, manda dizer "não tenho essa informação" + contatos para o resto, e no pedido de humano passa os contatos sem prometer transferência (antes da C).
+- Sem horário de funcionamento: nova ferramenta `funcionamento` (só leitura de `GET /agenda/configuracao`, `workflows/shared/graces.js` + nó `Ferramenta funcionamento`).
+- K5: convite leve para agendar depois de dúvida respondida; K1: saudação na 1ª resposta e empatia com cliente apressado/irritado.
+- K4: nome de serviço exatamente como a ferramenta devolveu ("corte adulto" virava "cabelo adulto", R11).
+- `bvFrases` partia frases em `contato@barbeariadavila.com.br` → "barbeariadavila. com. br"; pontuação colada no texto seguinte não fecha mais frase.
+- K3: pedir escolha de serviço/barbeiro/horário com a ferramenta e lista, não em texto aberto.
+
+**Resultado**: rodada completa `20261021-035407` 11/17 → após as correções do telefone/e-mail, re-rodada `--so` dos afetados `20261021-035821` 5/5 → rodada completa final `20261021-040704` **14/17** (R4 e R6 só por K3 = 3/2, R12 pulado), p50 11,97 s, p95 15,55 s (K7 ok), 26.792 tokens da avaliadora (teto 3M). Re-rodada `20261021-041138` de R1/R4/R5/R6 após a regra de lista: só R5 aprovou. Restam oscilações de K3/K5 entre rodadas e um defeito real: o modelo às vezes não emite o bloco `OPCOES:` depois de uma ferramenta que montou oferta nova. O cliente então não vê a lista, e "pode ser o primeiro" escolhe um item invisível (R1 em 041138). A correção precisa ser em código (`bvCompor` enviar a oferta nova mesmo sem `OPCOES`), não no prompt.
+
+**Resíduos** após a rodada final: `teste.contatos_escrita = []`; 0 agendamentos futuros do Paulo no ZZ TESTE (SC-008), 0 criados pela rodada ativos (SC-010), Redis `bv:teste:*` limpo.
+
+**R12** segue **pulado**: `tests/fixtures/midia-real.local.json` do checkout principal só tem áudio (sem `imagem_referencia`); a leitura com fallback para o checkout principal funciona (R11 usa o áudio de lá). A imagem fica com o owner.
