@@ -15,18 +15,20 @@ roda com `/feature-00c <short-name>`, pelo rito (`docs/rito-dev.md`). O owner ap
   PROD não foram informados (`decisoes-pre-00c.md`).
 - O princípio XV da constituição exige a suíte de conversas roteirizadas antes de qualquer promoção a PROD.
 
-## Ordem proposta
+## Ordem proposta (revisada em 2026-10-21)
+
+O owner pediu as features 1 a 6 em produção, com o número dele (5511967296849) como contato de teste dos envios. O
+princípio XV exige a suíte antes de PROD, então a ordem fica:
 
 | # | short-name | Depende de | Por que nesta posição |
 |---|---|---|---|
-| A | `suite-validacao` | develop atual | Bloqueia PROD (XV) e é a rede de segurança para a refatoração B, que mexe em quase todos os workflows |
-| B | `refatoracao-compartilhados` | A | Tira a duplicação antes que C e D repitam os mesmos trechos (envio, travas de teste, falhas) |
+| A | `suite-validacao` | develop atual | Bloqueia PROD (XV). Roteiros e parâmetros em `docs/roteiros-atendimento.md` |
+| E | `producao` | A | As features 1 a 6 em PROD. Só o número do owner recebe até o quickstart de cada feature passar; depois, todos |
+| B | `refatoracao-compartilhados` | E | Tira a duplicação antes de C e D; a suíte A valida que nada mudou, no TESTE e depois em PROD |
 | C | `crm-etiquetas-handoff` | B | Torna a trava de handoff real: hoje nenhum workflow grava em `handoffs` (mensagens-agendadas, Decision 15) |
 | D | `followup` | C, A | Usa o estado do funil e do handoff; validada pela suíte |
-| E | `producao` | A a D | Primeira subida a PROD, com a trava `BV_DEPLOY_PRODUCAO_AUTORIZADO`, e a promoção `develop` → `main` |
 
-A e B podem trocar de ordem se o owner preferir reduzir a duplicação primeiro. Nesse caso, a B se valida pelos smokes
-que já existem: `smoke-recepcao`, `smoke-agente` e `smoke-mensagens`.
+As features B, C e D sobem a PROD cada uma ao final, pela suíte e pelo rito.
 
 ## A. `suite-validacao`
 
@@ -139,7 +141,7 @@ Nada de workflow agendado novo.
 
 ## E. `producao`
 
-**Pré-requisitos:** A a D mescladas e a suíte verde no TESTE.
+**Pré-requisitos:** A mesclada e a suíte verde no TESTE. Escopo: as features 1 a 6 já mescladas.
 
 **Passos**, cada um com rollback anotado (rito):
 1. Bancos e credenciais: `preparar-bancos`, `migrar` (0001 a 0010) e `criar-credenciais-n8n` com `--alvo producao`;
@@ -150,7 +152,7 @@ Nada de workflow agendado novo.
 3. Deploy na ordem dos sub-workflows para a recepção, com `validate_node_config` antes e `get_workflow_details` depois de
    cada um.
 4. VPS: o id de PROD no cron da mídia, o nome do container e o hook de guarda de PROD (infra 8.1.3).
-5. Quickstart de cada feature em PROD com um contato autorizado. Só depois liberar a todos e ligar `mensagens.ativo`.
+5. Quickstart de cada feature em PROD com o número do owner (5511967296849) como único contato autorizado. Só depois liberar a todos e ligar `mensagens.ativo`.
 6. Promoção `develop` → `main` pela PR de promoção.
 
 **Insumos:**
