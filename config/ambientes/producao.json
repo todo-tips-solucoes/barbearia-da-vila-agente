@@ -25,7 +25,8 @@
     "bv-mensagens": "",
     "bv-recepcao": "yUEWTZpNYMfIotdg",
     "bv-vigia": "hbHUY1RLNS5SJ3sP",
-    "bv-verificacao": "M07jjghR3IJClmDW"
+    "bv-verificacao": "M07jjghR3IJClmDW",
+    "bv-alerta": "qbA6tXtfzHLZr11T"
   },
   "webhook": {
     "path": "bv-recepcao-680eee2d-fd37-4883-8743-60c83b0b55c1",
@@ -195,5 +196,11 @@
     "contatos": [
       "5511967296849"
     ]
+  },
+  "alerta": {
+    "contato": "5511967296849",
+    "falhas_agente_limiar": 3,
+    "janela_min": 10,
+    "repetir_min": 60
   }
 }

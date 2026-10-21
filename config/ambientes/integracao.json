@@ -209,5 +209,11 @@
   },
   "liberacao": {
     "contatos": []
+  },
+  "alerta": {
+    "contato": "5511967296849",
+    "falhas_agente_limiar": 3,
+    "janela_min": 10,
+    "repetir_min": 60
   }
 }

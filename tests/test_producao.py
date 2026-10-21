@@ -97,6 +97,18 @@ class Liberacao(unittest.TestCase):  # producao: so o owner ate o ok dele
         self.assertIn("liberados: [] }", self.codigo_normalizar("integracao"))
 
 
+class Alerta(unittest.TestCase):  # 3.6
+    def test_render_prod_envia_ao_owner_e_so_em_prod(self):
+        w = render("bv-alerta.json", "producao")
+        self.assertTrue(w["name"].endswith("[PROD]"))
+        nos = {n["name"]: n for n in w["nodes"]}
+        self.assertEqual(nos["Checar banco"]["onError"], "continueRegularOutput")  # banco fora vira alerta, nao erro mudo
+        self.assertIn("number: '5511967296849'", nos["Enviar alerta"]["parameters"]["jsonBody"])
+        self.assertIn("function bvAlertaDecidir", nos["Decidir"]["parameters"]["jsCode"])
+        self.assertIn("bv-alerta", cfg("producao")["workflows"])
+        self.assertNotIn("bv-alerta", cfg("integracao")["workflows"])  # TESTE dispara falhas de proposito (smokes)
+
+
 class MensagensAtivo(unittest.TestCase):  # 2.7
     def test_bv_mensagens_nao_consulta_a_flag(self):
         # evidencia da 2.7: so recepcao e bv-graces leem mensagens.ativo; a varredura/reconciliacao do bv-mensagens nao.

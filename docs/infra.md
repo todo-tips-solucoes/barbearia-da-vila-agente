@@ -149,6 +149,7 @@ Autorizacao do owner em 2026-10-21 (banco, deploy e webhook). Tudo pela n8n2; nu
 | Recepcao (`bv-recepcao`) | `yUEWTZpNYMfIotdg` | 62 |
 | Vigia da recepcao (`bv-vigia`) | `hbHUY1RLNS5SJ3sP` | 3 |
 | Verificacao (`bv-verificacao`) | `M07jjghR3IJClmDW` | 2 |
+| Alerta fora de banda (`bv-alerta`, so PROD) | `qbA6tXtfzHLZr11T` | 4 |
 
 - Conferidos com `get_workflow_details` depois da publicacao: ativos, `versionId` = `activeVersionId`, mesma contagem de nos do TESTE. O `validate_node_config` rodou so no no novo (`Normalizar`, liberacao); os demais nos sao os do TESTE.
 - `bv-mensagens` **nao** foi publicado: a reconciliacao dele programa envios sem consultar `mensagens.ativo` (tasks 2.7). Vai para PROD so com `mensagens.ativo` true, depois do ok do owner (`deploy-n8n` recusa antes).
@@ -158,6 +159,7 @@ Autorizacao do owner em 2026-10-21 (banco, deploy e webhook). Tudo pela n8n2; nu
 - Backup diario: `config/vps/barbearia-backup-limpeza.{sh,cron}`, 06:30 UTC (03:30 de Sao Paulo; a VPS esta em `Etc/UTC` e o cron do Ubuntu nao tem `CRON_TZ`), 14 dias, e a limpeza LGPD de mensagens com mais de 12 meses logo apos um backup ok. A instalacao em `/etc/cron.d/` e do owner.
 - Cron de midia: linha de PROD (`IiVgK4hASaCzzbVM`) em `config/vps/barbearia-limpar-midia.cron`; reinstalar o arquivo na VPS (owner).
 - Hook de guarda de PROD (proposto na secao de riscos): **nao instalado**; a instalacao e do owner.
+- **Alerta fora de banda** (`bv-alerta`, FR-016): a cada 10 min consulta `falhas_agente`. Consulta com erro = "Postgres nao respondeu"; 3+ `agente_falhou` em 10 min = "pode ser cota ou gasto da OpenAI" (proxy: sem chave de admin para ler o custo). Envia pelo Chat Master (conexao 145) para `alerta.contato` (5511967296849), no maximo 1 por tipo por hora (staticData). Limite: se o proprio n8n2 cair, nao ha alerta. Teste em 2026-10-21: execucao com o banco no ar e 0 falhas nao enviou nada (sem execucao de erro); o envio real nao foi exercitado (inserir falhas sinteticas em PROD foi negado ao agente).
 
 **Rollback por passo:**
 
