@@ -139,3 +139,10 @@ Rodada real `relatorios/suite-validacao/20261021-031240` deu **5/17** (R12 pulad
 **Resíduos** após a rodada final: `teste.contatos_escrita = []`; 0 agendamentos futuros do Paulo no ZZ TESTE (SC-008), 0 criados pela rodada ativos (SC-010), Redis `bv:teste:*` limpo.
 
 **R12** segue **pulado**: `tests/fixtures/midia-real.local.json` do checkout principal só tem áudio (sem `imagem_referencia`); a leitura com fallback para o checkout principal funciona (R11 usa o áudio de lá). A imagem fica com o owner.
+
+**Rodada de 17/17 (2026-10-21, `20261021-133335`)**: rodada completa, **17/17 aprovados**, p50 12,8 s, p95 17,72 s (K7 ok), 28.340 tokens da avaliadora; limpeza ok. Cumpre a regra do princípio XV. O que mudou desde a 14/17:
+- **R12**: imagem de referência do owner recebida pela 145 e registrada em `midia-real.local.json` (`imagem_referencia`, fora do git). A suíte reenviava o mesmo `fileUrl` (descartado pelo dedupe) com o mime mascarado do evento-13; agora usa `?smoke=`, `image/jpeg` e legenda vazia. O prompt pede descrever o estilo, sugerir o serviço real mais próximo e não prometer resultado.
+- **R8 (latência)**: medido com `saveDataSuccessExecution=all` temporário no TESTE (desligado depois). As ferramentas levam de 0,2 a 0,7 s; as 5 rodadas do modelo levam de 2 a 5 s cada (cerca de 16 s). `meus_agendamentos` agora identifica o cliente no mesmo passo, e `horarios_livres` com `id_opcao_agendamento` busca os barbeiros do serviço no mesmo passo, o que poupa 3 rodadas. Resultado: o R8 caiu de 26–32 s para 16–20 s.
+- **R7**: o `cancelar` fase 1 devolve as opções `Remarcar` / `Cancelar mesmo` (`decisao_cancelamento`). O agendamento continua no `pedido` para o `horarios_livres`.
+- **K1/K5 determinísticos**: `bvSaudar` põe "Oi!" na 1ª resposta da sessão (histórico vazio) quando o modelo não cumprimenta. Na mensagem da lista sem pergunta, `bvCompor` acrescenta "Qual fica melhor pra você?".
+- **Infra**: OpenAI devolveu 503 ("Service unavailable") em parte das re-rodadas; o turno caiu na contingência, como previsto. As rodadas com turnos de 28 a 42 s coincidiram com essa instabilidade.

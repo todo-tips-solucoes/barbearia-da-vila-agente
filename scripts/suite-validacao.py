@@ -22,6 +22,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(RAIZ, "scripts"))
@@ -326,7 +327,10 @@ def corpo_midia(n, tipo):
         return None
     b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-13.json"), encoding="utf-8"))["body"]
     b.update(sender=sa.tel(n), token_origin=sa.TOKEN)
-    b["mensagem"][0]["fileUrl"] = d["url"]
+    m = b["mensagem"][0]
+    # evento-13 vem mascarado: mime e legenda reais; ?smoke= evita o dedupe pelo fileUrl (o storage ignora a query)
+    m.update(fileUrl=f"{d['url']}?smoke={uuid.uuid4().hex[:10]}", fileMimeType="image/jpeg", text="")
+    m["originalData"]["imageMessage"].update(mimetype="image/jpeg", caption="")
     return b, "[imagem de referência]"
 
 

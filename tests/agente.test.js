@@ -136,3 +136,21 @@ assert.ok(/e-mails, telefones/.test(pi) && /só atende assuntos da Barbearia/.te
   assert.ok(inj.linhas[0].startsWith('[áudio transcrito] '));
 }
 console.log('agente.test.js turno com midia ok');
+
+// bvSaudar (K1): so na sessao nova e so quando o modelo nao cumprimentou
+{
+  const { bvSaudar } = require('../workflows/shared/agente.js');
+  const s = [{ n: 1, tipo: 'texto', texto: 'Você prefere remarcar?' }, { n: 2, tipo: 'lista', texto: 'x' }];
+  assert.equal(bvSaudar(s, true)[0].texto, 'Oi! Você prefere remarcar?');
+  assert.equal(bvSaudar(s, true)[1].texto, 'x');
+  assert.equal(bvSaudar(s, false)[0].texto, 'Você prefere remarcar?');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Olá, Ana! Tudo bem?' }], true)[0].texto, 'Olá, Ana! Tudo bem?');
+  assert.deepEqual(bvSaudar([], true), []);
+}
+
+// K5: mensagem com lista sem pergunta ganha a pergunta curta; com pergunta fica como veio
+{
+  const of = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Corte', valor: {} }] };
+  assert.equal(a.bvCompor('Estes horários estão disponíveis:\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Estes horários estão disponíveis. Qual fica melhor pra você?');
+  assert.equal(a.bvCompor('Qual serviço?\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Qual serviço?');
+}
