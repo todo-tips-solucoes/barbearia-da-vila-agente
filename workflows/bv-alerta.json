@@ -1,0 +1,132 @@
+{
+  "name": "Barbearia Vila - Alerta fora de banda [{{BV:rotulo}}]",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": "{{BV:NUM:alerta.janela_min}}"
+            }
+          ]
+        }
+      },
+      "id": "a1e7a000-0000-4000-8000-000000000001",
+      "name": "A cada janela",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*)::int AS falhas FROM falhas_agente WHERE motivo = 'agente_falhou' AND criado_em > now() - make_interval(mins => $1::int)",
+        "options": {
+          "queryReplacement": "={{ [{{BV:alerta.janela_min}}] }}"
+        }
+      },
+      "id": "a1e7a000-0000-4000-8000-000000000002",
+      "name": "Checar banco",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/alerta.js}}\nconst cfg = { rotulo: '{{BV:rotulo}}', limiar: {{BV:alerta.falhas_agente_limiar}}, janela_min: {{BV:alerta.janela_min}}, repetir_min: {{BV:alerta.repetir_min}} };\nconst falhas = $input.first().json.error ? null : $input.first().json.falhas;\nreturn bvAlertaFiltrar(bvAlertaDecidir(falhas, cfg), $getWorkflowStaticData('global'), Date.now(), cfg).map((a) => ({ json: a }));"
+      },
+      "id": "a1e7a000-0000-4000-8000-000000000003",
+      "name": "Decidir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.chatmasterveloz.com/api/messages/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: '{{BV:alerta.contato}}', openTicket: '0', queueId: '0', whatsappId: '{{BV:chatmaster.whatsapp_id}}', body: $json.texto }) }}",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}"
+        }
+      },
+      "id": "a1e7a000-0000-4000-8000-000000000004",
+      "name": "Enviar alerta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "A cada janela": {
+      "main": [
+        [
+          {
+            "node": "Checar banco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checar banco": {
+      "main": [
+        [
+          {
+            "node": "Decidir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": false
+  }
+}

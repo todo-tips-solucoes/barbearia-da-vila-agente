@@ -1,0 +1,97 @@
+{
+  "name": "Barbearia Vila - Vigia da recepcao [{{BV:rotulo}}]",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "b1d0a5e2-4c11-5a0e-9c3a-2f6a7c1d0001",
+      "name": "A cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH v AS (DELETE FROM tentativas_recepcao WHERE iniciada_em < now() - make_interval(secs => $1::int + 30) RETURNING mensagem_id) INSERT INTO falhas_recepcao (tipo, motivo, contato_id) SELECT 'redis_indisponivel', 'tempo_esgotado', m.contato_id FROM v JOIN mensagens m ON m.id = v.mensagem_id RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [{{BV:execucao.timeout_s}}] }}"
+        }
+      },
+      "id": "b1d0a5e2-4c11-5a0e-9c3a-2f6a7c1d0002",
+      "name": "Registrar estouradas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE mensagens SET midia_url = NULL, midia_mime = NULL, conteudo = NULL, conteudo_derivado = NULL, mensagem_id_canal = 'sha256:' || encode(sha256(convert_to(mensagem_id_canal || ':' || id, 'UTF8')), 'hex') WHERE tipo IN ('audio','imagem','outro') AND criado_em < now() - make_interval(secs => $1::float8 * 3600) AND mensagem_id_canal NOT LIKE 'sha256:%' RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [{{BV:midia.retencao_h}}] }}"
+        }
+      },
+      "id": "58e6ea98-b1f9-5f00-89d2-b9d535694a14",
+      "name": "Reter midia",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        200
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "A cada 5 minutos": {
+      "main": [
+        [
+          {
+            "node": "Registrar estouradas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Reter midia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": false
+  }
+}

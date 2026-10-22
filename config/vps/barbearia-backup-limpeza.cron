@@ -1,0 +1,4 @@
+# Barbearia da Vila (PROD): backup 03:30 de Sao Paulo (14 dias) e, em seguida, limpeza de mensagens > 12 meses.
+# A VPS esta em UTC e o cron do Ubuntu nao aceita CRON_TZ: 06:30 UTC = 03:30 em Sao Paulo (UTC-3, sem horario de verao).
+# Instalar em /etc/cron.d/barbearia-backup-limpeza e o .sh em /root/barbearia_vila/.
+30 6 * * * root sh /root/barbearia_vila/barbearia-backup-limpeza.sh >> /root/barbearia_vila/backup-limpeza.log 2>&1

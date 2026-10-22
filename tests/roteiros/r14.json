@@ -1,0 +1,19 @@
+{
+  "id": "R14",
+  "situacao": "Fora do assunto",
+  "falas": [
+    "Me indica um restaurante aí perto?"
+  ],
+  "expectativas": [
+    "Recusa gentil",
+    "Reconduz para a barbearia"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "antes_da_c": false
+}

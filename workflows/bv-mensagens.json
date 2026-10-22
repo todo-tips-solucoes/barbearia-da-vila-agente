@@ -1,0 +1,680 @@
+{
+  "name": "Barbearia Vila - Mensagens agendadas [{{BV:rotulo}}]",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": "{{BV:NUM:mensagens.varredura_s}}"
+            }
+          ]
+        }
+      },
+      "id": "ec0c02ae-bc08-5838-9ddd-29510d838dd1",
+      "name": "A cada varredura",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH exp AS (UPDATE mensagens_agendadas SET situacao = 'falhou', motivo = 'incerto', reservada_em = NULL, atualizado_em = now() WHERE situacao = 'pendente' AND reservada_em < now() - make_interval(secs => $1::int) RETURNING contato_id, tipo), fx AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', 'mensagem|envio_incerto', tipo, 'RESERVA_VENCIDA', 0, contato_id FROM exp RETURNING 1), vel AS (UPDATE mensagens_agendadas SET situacao = 'cancelada', motivo = 'ja_passou', atualizado_em = now() WHERE situacao = 'pendente' AND reservada_em IS NULL AND previsto_para < now() - make_interval(mins => $3::int) RETURNING 1), pick AS (SELECT m.id FROM mensagens_agendadas m WHERE m.situacao = 'pendente' AND m.reservada_em IS NULL AND m.previsto_para <= now() AND m.previsto_para >= now() - make_interval(mins => $3::int) AND (m.proxima_tentativa_em IS NULL OR m.proxima_tentativa_em <= now()) AND (SELECT count(*) FROM mensagens_agendadas s WHERE s.contato_id = m.contato_id AND s.enviada_em >= date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo') < $4::int ORDER BY m.previsto_para LIMIT $2::int FOR UPDATE SKIP LOCKED), res AS (UPDATE mensagens_agendadas m SET reservada_em = clock_timestamp() FROM pick WHERE m.id = pick.id RETURNING m.*) SELECT r.id, r.contato_id, r.tipo, r.graces_agendamento_id, r.graces_cliente_id, r.id_profissional, to_char(r.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS inicio, r.dados, r.tentativas, extract(epoch from r.reservada_em)::text AS reserva, c.telefone, EXISTS (SELECT 1 FROM handoffs h WHERE h.contato_id = r.contato_id AND h.situacao = 'aberto') AS handoff_aberto FROM res r JOIN contatos c ON c.id = r.contato_id ORDER BY r.previsto_para",
+        "options": {
+          "queryReplacement": "={{ [{{BV:mensagens.reserva_s}}, {{BV:mensagens.max_por_varredura}}, {{BV:mensagens.atraso_max_min}}, {{BV:mensagens.max_por_contato_dia}}] }}"
+        }
+      },
+      "id": "041bb2db-46e0-5c33-b2d1-2d345025d46b",
+      "name": "Reservar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6d093e8c-b900-5351-b4f4-1ec839f7248b",
+              "leftValue": "={{ String(!!$json.graces_cliente_id) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3a183b05-941c-53e1-9e0b-9c4f46117d3f",
+      "name": "Tem cliente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{BV:graces.host}}/public/v1/agenda/agendamentos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ idCliente: $json.graces_cliente_id, proximos: $json.tipo !== 'pos_atendimento', pageSize: 200 }) }}",
+        "sendBody": false
+      },
+      "id": "a7cf78c2-7dfb-5398-afb1-2b6ebba6d1bc",
+      "name": "Graces agendamentos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', botao: \"{{BV:textos.lista_botao}}\", topo: \"{{BV:textos.lista_topo}}\", titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\", retentativas_min: {{BV:mensagens.retentativas_min}},\n  textos: { confirmacao: \"{{BV:textos.confirmacao}}\", lembrete: \"{{BV:textos.lembrete}}\", pos: \"{{BV:textos.pos}}\" },\n  teste: '{{BV:ambiente}}' === 'integracao' ? { testeId: '{{BV:graces.barbeiro_teste_id}}', escrita: {{BV:teste.contatos_escrita}} } : null }; // trava so no TESTE\nconst l = $('Reservar').item.json;\nconst r = $input.item.json;\n// com graces_cliente_id: GET /agenda/agendamentos; sem (reconciliacao): /agenda/completa do dia. Falha da chamada vira `adiar`, nunca envio as cegas\nconst resp = { status: Number(r.statusCode || 0), body: r.body };\nconst d = bvMDecidir(l, resp, cfg);\nreturn { json: { id: l.id, reserva: l.reserva, tentativas: l.tentativas, tipo: l.tipo, ...d } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "eed6c5e2-7f96-51f2-8ac3-b7bb7cfb9665",
+      "name": "Decidir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4d08e90a-b2d3-5212-8f2c-7fbcd0c19be9",
+              "leftValue": "={{ $json.acao }}",
+              "rightValue": "enviar",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c76edcde-69c1-5863-829b-763f74c809c9",
+      "name": "Enviar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chatmasterveloz.com{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "1cade623-5747-5f68-b43d-22a37a16c801",
+      "name": "Enviar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', botao: \"{{BV:textos.lista_botao}}\", topo: \"{{BV:textos.lista_topo}}\", titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\", retentativas_min: {{BV:mensagens.retentativas_min}},\n  textos: { confirmacao: \"{{BV:textos.confirmacao}}\", lembrete: \"{{BV:textos.lembrete}}\", pos: \"{{BV:textos.pos}}\" },\n  teste: '{{BV:ambiente}}' === 'integracao' ? { testeId: '{{BV:graces.barbeiro_teste_id}}', escrita: {{BV:teste.contatos_escrita}} } : null }; // trava so no TESTE\nconst d = $('Decidir').item.json;\nconst base = { id: d.id, reserva: d.reserva };\nif (d.acao === 'cancelar') return { json: { ...base, situacao: 'cancelada', motivo: d.motivo } };\nif (d.acao === 'adiar') return { json: { ...base, situacao: 'pendente' } }; // libera a reserva; tenta na proxima varredura\nconst status = Number($input.item.json.statusCode || 0); // 0 = timeout/sem resposta: incerto, nunca reenvia\nconst r = bvMResultadoEnvio(status, d.tentativas, cfg, new Date());\nconst falha = r.situacao === 'enviada' ? {} : { falha_motivo: status === 0 ? 'mensagem|envio_incerto' : 'mensagem|envio_falhou', code: status === 0 ? 'SEM_RESPOSTA' : `HTTP_${status}`, status };\nreturn { json: { ...base, situacao: r.situacao, motivo: r.motivo, tentativas: r.tentativas, proxima: r.proxima_tentativa_em, ...(r.situacao === 'enviada' ? { tipo_msg: d.tipo_msg, texto: d.texto } : {}), ...falha } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "467694b2-b159-592e-b213-1de59f8f64d4",
+      "name": "Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH u AS (UPDATE mensagens_agendadas SET situacao = $3::text, motivo = $4::text, tentativas = COALESCE($5::int, tentativas), proxima_tentativa_em = $6::timestamptz, enviada_em = CASE WHEN $3::text = 'enviada' THEN now() END, reservada_em = NULL, atualizado_em = now() WHERE id = $1::bigint AND situacao = 'pendente' AND extract(epoch from reservada_em)::text = $2::text RETURNING id, contato_id, tipo), ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT contato_id, 'agendada-' || id, 'saida', $7::text, $8::text FROM u WHERE $3::text = 'enviada' ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', $9::text, u.tipo, $10::text, $11::int, u.contato_id FROM u WHERE $9::text IS NOT NULL RETURNING 1) SELECT (SELECT count(*) FROM u) AS gravado",
+        "options": {
+          "queryReplacement": "={{ [$json.id, $json.reserva, $json.situacao, $json.motivo || null, $json.tentativas ?? null, $json.proxima || null, $json.tipo_msg || null, $json.texto || null, $json.falha_motivo || null, $json.code || null, $json.status ?? null] }}"
+        }
+      },
+      "id": "7d9d952a-b500-5073-ae21-112ef715e2c4",
+      "name": "Gravar resultado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1920,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": "{{BV:NUM:mensagens.reconciliacao_min}}"
+            }
+          ]
+        }
+      },
+      "id": "11847d35-266f-510d-8065-1b02a58ac7da",
+      "name": "A cada reconciliacao",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());\nconst dia = (n) => new Date(Date.parse(hoje + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);\n// inicio = ontem: o Ler estado le desde ontem; sem isso o pos_atendimento de ontem viraria orfa\nreturn [{ json: { hoje, inicio: dia(-1), fim: dia({{BV:mensagens.reconciliacao_dias}}) } }];"
+      },
+      "id": "97e60e40-ac6a-5f63-b9c6-5a2678fcbc1f",
+      "name": "Janela",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{BV:graces.host}}/public/v1/agenda/completa",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ dataInicio: $json.inicio, dataFim: $json.fim, pageSize: 200 }) }}",
+        "sendBody": false
+      },
+      "id": "17ec99ae-254b-5f8f-bd60-fa1442df91d5",
+      "name": "Agenda completa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// TESTE (integracao): so a agenda do barbeiro de teste; fora do TESTE: todos menos o de teste (nunca vai a cliente)\nconst r = $input.first().json;\nif (Number(r.statusCode) !== 200 || !Array.isArray(r.body)) return [{ json: { ok: false, status: Number(r.statusCode || 0) } }];\nconst teste = '{{BV:graces.barbeiro_teste_id}}', soTeste = '{{BV:ambiente}}' === 'integracao';\nconst agenda = bvMAgendaDe(r.body.filter((p) => p && (p.idProfissional === teste) === soTeste));\nreturn [{ json: { ok: true, agenda } }];"
+      },
+      "id": "a8009200-3018-5d9c-9e9d-06e94e1655db",
+      "name": "Achatar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "49cfc2bd-535b-5fea-8f48-11ac3b5a2754",
+              "leftValue": "={{ String($json.ok) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "88aac5a8-52e9-5588-a781-86da5947c642",
+      "name": "Agenda ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http) VALUES ('mensagem', 'mensagem|reconciliacao', 'completa', $1::text, $2::int) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$json.status ? 'HTTP_' + $json.status : 'SEM_RESPOSTA', $json.status || 0] }}"
+        }
+      },
+      "id": "ac19bb93-b84e-53e9-8a57-1c442a62236e",
+      "name": "Falha reconciliacao",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        640
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE((SELECT json_agg(json_build_object('id', m.id, 'graces_agendamento_id', m.graces_agendamento_id, 'tipo', m.tipo, 'situacao', m.situacao, 'previsto_para', m.previsto_para, 'inicio', to_char(m.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS'))) FROM mensagens_agendadas m WHERE m.inicio >= ($1::date - 1)), '[]'::json) AS linhas, COALESCE((SELECT json_agg(json_build_object('id', c.id, 'telefone', c.telefone)) FROM contatos c WHERE regexp_replace(c.telefone, '[^0-9]', '', 'g') IN (SELECT jsonb_array_elements_text($2::jsonb))), '[]'::json) AS contatos",
+        "options": {
+          "queryReplacement": "={{ [$('Janela').first().json.hoje, JSON.stringify(('{{BV:ambiente}}' === 'integracao' ? {{BV:teste.contatos_escrita}} : $('Achatar').first().json.agenda.map((a) => String(a.ddiCelular || '') + String(a.celularCliente || ''))).map((x) => String(x).replace(/\\D/g, '')))] }}"
+        }
+      },
+      "id": "cd0c9ca8-287b-5461-b4df-50b512dd017c",
+      "name": "Ler estado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { reconciliacao_dias: {{BV:mensagens.reconciliacao_dias}}, confirmacao_hora: \"{{BV:mensagens.confirmacao_hora}}\", lembrete_antes_min: {{BV:mensagens.lembrete_antes_min}}, pos_depois_min: {{BV:mensagens.pos_depois_min}} };\nconst agenda = $('Achatar').first().json.agenda;\nconst e = $input.first().json;\nconst r = bvMReconciliar(agenda, e.linhas || [], e.contatos || [], new Date(), cfg);\n// 'reagendada' e substituida pelo upsert do Aplicar (mesmo idAgenda e tipo): cancelar a antiga aqui disputaria a mesma linha\nconst cancelar = r.cancelar.filter((c) => c.motivo !== 'reagendada').map((c) => ({ id: c.id, motivo: c.motivo }));\nconst criar = r.criar.map((c) => ({ contato_id: c.contato_id, tipo: c.tipo, previsto_para: c.previsto_para, idAgenda: c.idAgenda, idProfissional: c.idProfissional, inicio: c.horaInicio,\n  dados: { servico: c.nomeServico, barbeiro: c.profissional, fim: c.horaFim } }));\nreturn [{ json: { cancelar, criar, sem_contato: [...new Set(r.sem_contato)], recorrente: r.recorrente } }];"
+      },
+      "id": "d51effe4-f346-5fbe-9056-8b1ddc42dfdd",
+      "name": "Reconciliar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH mc AS (UPDATE mensagens_agendadas m SET situacao = 'cancelada', motivo = x.motivo, reservada_em = NULL, atualizado_em = now() FROM jsonb_to_recordset($1::jsonb) AS x(id bigint, motivo text) WHERE m.id = x.id AND m.situacao = 'pendente' AND m.reservada_em IS NULL RETURNING 1), ma AS (INSERT INTO mensagens_agendadas (contato_id, tipo, previsto_para, graces_agendamento_id, situacao, id_profissional, inicio, dados) SELECT x.contato_id, x.tipo, x.previsto_para::timestamptz, x.\"idAgenda\", 'pendente', x.\"idProfissional\", x.inicio::timestamp, COALESCE(x.dados, '{}'::jsonb) FROM jsonb_to_recordset($2::jsonb) AS x(contato_id bigint, tipo text, previsto_para text, \"idAgenda\" text, \"idProfissional\" text, inicio text, dados jsonb) WHERE NOT EXISTS (SELECT 1 FROM mensagens_agendadas m WHERE m.graces_agendamento_id = x.\"idAgenda\" AND m.tipo = x.tipo AND m.previsto_para = x.previsto_para::timestamptz AND m.situacao <> 'pendente') ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE SET previsto_para = EXCLUDED.previsto_para, inicio = EXCLUDED.inicio, dados = EXCLUDED.dados, tentativas = 0, proxima_tentativa_em = NULL, atualizado_em = now() WHERE mensagens_agendadas.reservada_em IS NULL RETURNING 1), sc AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code) SELECT 'mensagem', 'mensagem|reconciliacao', 'sem_contato', 'sem_contato:' || s FROM jsonb_array_elements_text($3::jsonb) s WHERE NOT EXISTS (SELECT 1 FROM falhas_agente f WHERE f.code = 'sem_contato:' || s) RETURNING 1), rc AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code) SELECT 'mensagem', 'mensagem|reconciliacao', 'recorrente', 'recorrente:' || s FROM jsonb_array_elements_text($4::jsonb) s WHERE NOT EXISTS (SELECT 1 FROM falhas_agente f WHERE f.code = 'recorrente:' || s) RETURNING 1) SELECT (SELECT count(*) FROM ma) AS criadas",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.cancelar), JSON.stringify($json.criar), JSON.stringify($json.sem_contato), JSON.stringify($json.recorrente || [])] }}"
+        }
+      },
+      "id": "005d45f4-d3fe-5139-b725-3376890e0b5c",
+      "name": "Aplicar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1680,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{BV:graces.host}}/public/v1/agenda/completa",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ dataInicio: String($json.inicio).slice(0, 10), dataFim: String($json.inicio).slice(0, 10), pageSize: 200 }) }}",
+        "sendBody": false
+      },
+      "id": "00d739d0-04fa-52a6-82f1-e01a35deb84f",
+      "name": "Graces dia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        150
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "A cada varredura": {
+      "main": [
+        [
+          {
+            "node": "Reservar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservar": {
+      "main": [
+        [
+          {
+            "node": "Tem cliente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem cliente?": {
+      "main": [
+        [
+          {
+            "node": "Graces agendamentos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Graces dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces agendamentos": {
+      "main": [
+        [
+          {
+            "node": "Decidir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir": {
+      "main": [
+        [
+          {
+            "node": "Enviar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar?": {
+      "main": [
+        [
+          {
+            "node": "Enviar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar": {
+      "main": [
+        [
+          {
+            "node": "Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado": {
+      "main": [
+        [
+          {
+            "node": "Gravar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada reconciliacao": {
+      "main": [
+        [
+          {
+            "node": "Janela",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Janela": {
+      "main": [
+        [
+          {
+            "node": "Agenda completa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agenda completa": {
+      "main": [
+        [
+          {
+            "node": "Achatar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Achatar": {
+      "main": [
+        [
+          {
+            "node": "Agenda ok?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agenda ok?": {
+      "main": [
+        [
+          {
+            "node": "Ler estado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha reconciliacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler estado": {
+      "main": [
+        [
+          {
+            "node": "Reconciliar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconciliar": {
+      "main": [
+        [
+          {
+            "node": "Aplicar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces dia": {
+      "main": [
+        [
+          {
+            "node": "Decidir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": "{{BV:NUM:execucao.timeout_s}}"
+  }
+}

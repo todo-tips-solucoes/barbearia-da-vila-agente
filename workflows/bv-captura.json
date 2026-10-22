@@ -1,0 +1,52 @@
+{
+  "name": "Barbearia Vila - Captura [TESTE]",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bv-captura-b889464c-5ec6-4aba-9ff3-5617408bec13",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "35e220bd-6e76-5318-a69e-704192d04cef",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "36773219-e73a-4a9d-a8d8-25d26afcdeb5"
+    },
+    {
+      "parameters": {},
+      "id": "81a64ec2-747f-53b0-995e-2ae56f15e2f6",
+      "name": "Fim",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  }
+}

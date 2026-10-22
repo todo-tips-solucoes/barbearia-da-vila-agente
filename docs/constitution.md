@@ -1,3 +1,18 @@
+<!--
+Sync Impact Report
+- Version: 2.0.0 → 3.0.0 (MAJOR)
+- Princípios modificados: XI (Escrita segura na agenda) redefinido. O agente deixa de perguntar
+  "pacote ou avulso" e não trata de pacote: abatimento é feito pela equipe na Graces (decisão do
+  owner em 2026-10-19). X perde "pacote ou avulso" da lista de exemplos.
+- Seções adicionadas: nenhuma
+- Seções removidas: nenhuma
+- Artefatos que precisam atualização: docs/briefing.md, docs/roadmap.md e docs/decisoes-pre-00c.md
+  (atualizados nesta mesma PR); spec de regras-negocio-agenda (em andamento)
+- TODOs pendentes: nenhum
+- Histórico: 1.0.0 → 1.1.0 (MINOR) acrescentou os princípios IX-XVI; 1.1.0 → 2.0.0 (MAJOR) redefiniu
+  o X para múltipla escolha sempre por botão de lista
+-->
+
 # Constituição de Barbearia da Vila - Agente
 
 > Governança do desenvolvimento deste projeto. Gerada pelo cockpit a partir do `cockpit.config`;
@@ -132,8 +147,84 @@ repositório são código como qualquer outro.
 
 ## Princípios próprios do projeto
 
-> Seção reservada. Acrescente aqui os princípios específicos de Barbearia da Vila - Agente, numerados a
-> partir de IX. Nenhum princípio próprio vem preenchido pelo cockpit.
+> Princípios específicos de Barbearia da Vila - Agente, numerados a partir de IX. Adicionados na
+> emenda 1.1.0 (2026-10-18), autorizada pelo operador.
+
+### IX. A Graces é a fonte da verdade
+
+**MUST:**
+
+- O agente MUST oferecer apenas horários, serviços, barbeiros, preços e faixas de idade que vieram
+  da Graces na própria conversa; `informacaoes_barbearia.txt` MUST NOT prevalecer sobre ela.
+- O agente MUST NOT expor nem agendar com o barbeiro de teste (o que tem "TESTE" no nome).
+- Serviços "2ª vez" MUST NOT ser oferecidos nem agendados.
+
+### X. Conversa humanizada e identidade
+
+**MUST:**
+
+- O agente MUST assumir que é IA (assistente virtual da Barbearia da Vila), com tom humanizado.
+- O agente MUST responder em até 4 mensagens curtas, com "digitando…" proporcional e uma pergunta
+  por mensagem.
+- Toda múltipla escolha (horários, barbeiros, serviços etc.) MUST ser enviada como
+  botão de lista (mensagem de lista da biblioteca Pro), acompanhada de um texto curto e humano. Se o
+  cliente responder escrevendo em vez de tocar, o agente MUST entender a resposta do mesmo jeito.
+  A confirmação de presença usa botão Quick Reply.
+- O agente MUST NOT retomar uma coleta antiga a partir de um simples "Oi".
+
+### XI. Escrita segura na agenda
+
+**MUST:**
+
+- O agente MUST confirmar com o cliente antes de agendar, reagendar ou cancelar.
+- Erros da Graces MUST ser tratados pelo campo `code`; uma escrita MUST NOT ser repetida às cegas
+  após timeout, e sim verificada antes.
+- O agente MUST NOT tratar de pacote nem de abatimento de sessão: isso é feito pela equipe da
+  barbearia dentro da Graces. O agente agenda o serviço normalmente, sem perguntar sobre pacote.
+
+### XII. Skills e validação de n8n
+
+**MUST:**
+
+- Workflows MUST ser construídos com as skills de n8n disponíveis e validados antes de cada commit.
+- O agente MUST ser um nó AI Agent com sub-workflows como ferramentas; o Agent de primeira
+  classe do n8n MUST NOT ser usado.
+
+### XIII. Isolamento TESTE/PROD e da VPS
+
+**MUST:**
+
+- TESTE e PROD MUST ter banco (`barbearia_vila_teste` / `barbearia_vila`), prefixos Redis, path e
+  webhookId próprios.
+- Alterações na VPS MUST ficar restritas à stack `n8n`.
+- O agente-00c MUST fazer deploy apenas no TESTE; push, PR e PROD MUST ter aprovação humana do owner.
+
+### XIV. Nenhum segredo no repositório; dados de clientes mínimos
+
+**MUST:**
+
+- Credenciais, tokens e senhas MUST viver apenas nas credenciais do n8n e em `.env` fora do
+  repositório, e MUST NOT aparecer em workflow JSON, script, documento, log ou mensagem de commit.
+- Dados de clientes (nome, telefone, histórico) MUST ser coletados e persistidos apenas no
+  necessário (LGPD).
+
+### XV. Teste antes de produção
+
+**MUST:**
+
+- Toda mudança de workflow MUST passar pela suíte de conversas roteirizadas contra o webhook de
+  TESTE antes de ser promovida a PROD.
+- Testes na Graces MUST usar sempre o barbeiro de teste e MUST cancelar o que criaram.
+
+### XVI. Veracidade de Dados — Zero Fabricação (NON-NEGOTIABLE)
+
+**MUST:**
+
+- Nenhum artefato pode conter dado factual inventado. Assinaturas de request/response, URLs,
+  endpoints, querystrings (inclusive payloads do Chat Master e da Graces) e valores concretos
+  (financeiros, quantidades, status, IDs, datas, resultados de API) só podem ser escritos se
+  vierem de fonte rastreável (código, OpenAPI, documentação oficial, resposta real observada).
+  Esgotadas as fontes, a ação correta é bloqueio humano, nunca suposição plausível.
 
 ## Governança
 
@@ -142,4 +233,4 @@ de um humano registrada no corpo da PR; a versão segue SemVer (MAJOR: princípi
 redefinido; MINOR: princípio ou regra adicionada; PATCH: redação). A primeira versão é a 1.0.0,
 ratificada no merge da PR que adota esta constituição.
 
-**Version**: 1.0.0 | **Ratified**: no merge da PR que adota esta constituição
+**Version**: 3.0.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-10-19

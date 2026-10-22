@@ -1,0 +1,765 @@
+{
+  "name": "Barbearia Vila - Ferramentas da Graces [{{BV:rotulo}}]",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "operacao"
+            },
+            {
+              "name": "contato_id"
+            },
+            {
+              "name": "telefone"
+            },
+            {
+              "name": "turno_id"
+            },
+            {
+              "name": "ambiente"
+            },
+            {
+              "name": "texto"
+            },
+            {
+              "name": "id_opcao"
+            },
+            {
+              "name": "id_opcao_servico"
+            },
+            {
+              "name": "id_opcao_barbeiro"
+            },
+            {
+              "name": "qualquer"
+            },
+            {
+              "name": "data"
+            },
+            {
+              "name": "id_opcao_horario"
+            },
+            {
+              "name": "id_opcao_agendamento"
+            },
+            {
+              "name": "substitui_id_opcao_agendamento"
+            },
+            {
+              "name": "proposta_id"
+            },
+            {
+              "name": "nome"
+            },
+            {
+              "name": "celular"
+            },
+            {
+              "name": "id_opcoes_servicos"
+            },
+            {
+              "name": "id_opcoes_agendamentos"
+            },
+            {
+              "name": "periodo"
+            }
+          ]
+        }
+      },
+      "id": "c36a34d7-203f-5564-aa68-ca661d755397",
+      "name": "Gatilho",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', testeLiberado: {{BV:graces.teste_contatos}}.includes(String(($('Gatilho').first().json || {}).telefone || '').replace(/\\D/g, '')), cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} } };\nreturn [{ json: bvGNormalizar($input.first().json, cfg) }];"
+      },
+      "id": "3da5809e-751c-57c5-8b21-b733b63ed7c9",
+      "name": "Normalizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a2ae96c6-030e-588b-8aa9-a92c8257893e",
+              "leftValue": "={{ String($json.ok) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7f0a86e2-80ae-5f09-91ce-2b79e3a3559a",
+      "name": "Entrada valida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND criada_em > now() - make_interval(mins => $4::int) RETURNING id::text AS id, acao, dados), i AS (SELECT estado, turno_id::text = $3::text AS mesmo_turno FROM propostas WHERE id::text = $2::text AND contato_id = $1::bigint) SELECT c.pedido, c.opcoes, (SELECT to_jsonb(k) FROM k) AS proposta, (SELECT to_jsonb(i) FROM i) AS info, (SELECT ticket_id FROM contatos WHERE id = x.cid) AS ticket_id, jsonb_build_object('buscas', (SELECT count(*)::int FROM falhas_agente WHERE contato_id = x.cid AND motivo = 'busca_pessoa' AND (criado_em AT TIME ZONE 'America/Sao_Paulo')::date = (now() AT TIME ZONE 'America/Sao_Paulo')::date), 'cadastros', (SELECT count(*)::int FROM propostas WHERE contato_id = x.cid AND acao = 'cadastrar_terceiro' AND estado = 'executada' AND (atualizada_em AT TIME ZONE 'America/Sao_Paulo')::date = (now() AT TIME ZONE 'America/Sao_Paulo')::date)) AS dia FROM (SELECT $1::bigint AS cid) x LEFT JOIN conversas c ON c.contato_id = x.cid",
+        "options": {
+          "queryReplacement": "={{ [$json.in.contato_id, $json.in.proposta_id || '', $json.in.turno_id, {{BV:proposta.validade_min}}, {\"agendar\": \"agendar,trocar_servico,agendar_conjunto\", \"reagendar\": \"reagendar\", \"cancelar\": \"cancelar,cancelar_conjunto\", \"cadastrar_terceiro\": \"cadastrar_terceiro\"}[$json.in.operacao] || ''] }}"
+        }
+      },
+      "id": "686d55b9-7190-5401-9c23-fe210d5459dc",
+      "name": "Contexto",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', testeLiberado: {{BV:graces.teste_contatos}}.includes(String(($('Gatilho').first().json || {}).telefone || '').replace(/\\D/g, '')), cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} } };\nconst i = $('Normalizar').first().json.in;\nconst p = bvGPlano(i, $input.first().json, cfg);\nif (p.final) return [{ json: { final: p.final, st: { in: i } } }];\nreturn p.reqs.map((req, k) => ({ json: k === 0 ? { req, st: p.st } : { req } }));"
+      },
+      "id": "ecf7ba7f-be38-52d9-ad95-31354c6dc012",
+      "name": "Planejar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "82805716-e759-55af-a07d-756c092f443e",
+              "leftValue": "={{ String(!!$json.req) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "86e956f4-78c4-5070-a3b3-dcd07cc3ec8d",
+      "name": "Tem chamada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.req.m }}",
+        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
+        "sendBody": false,
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "56c8a1a8-ffef-5efd-b6d0-8d6af65eee07",
+      "name": "Graces",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', testeLiberado: {{BV:graces.teste_contatos}}.includes(String(($('Gatilho').first().json || {}).telefone || '').replace(/\\D/g, '')), cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} }, graces: { max_estagios: {{BV:graces.max_estagios}}, max_consultas_estagio: {{BV:graces.max_consultas_estagio}} } };\nconst st = $('Tem chamada?').all(0)[0].json.st;\nconst r = bvGPasso(st, $input.all().map((x) => ({ status: x.json.statusCode, body: x.json.body })), cfg);\nif (r.final) return [{ json: { final: r.final, st: { in: st.in } } }];\nreturn r.reqs.map((req, k) => ({ json: k === 0 ? { req, st: r.st } : { req } }));"
+      },
+      "id": "aa2f1cfa-2541-5fe6-b75c-d21136e193ed",
+      "name": "Passo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/graces.js}}\nconst cfg = { ambiente: '{{BV:ambiente}}', redirecionar: '{{BV:teste.redirecionar_escrita}}' === 'True', testeId: '{{BV:graces.barbeiro_teste_id}}', testeLiberado: {{BV:graces.teste_contatos}}.includes(String(($('Gatilho').first().json || {}).telefone || '').replace(/\\D/g, '')), cadastroLiberado: false, terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True', lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} }, encadeamento: { max_servicos: {{BV:encadeamento.max_servicos}} }, terceiro: { buscas_max_sessao: {{BV:terceiro.buscas_max_sessao}}, buscas_max_dia: {{BV:terceiro.buscas_max_dia}}, cadastros_max_dia: {{BV:terceiro.cadastros_max_dia}} } };\nconst msg = { ativo: '{{BV:mensagens.ativo}}' === 'True', agora: new Date().toISOString(), escrita: '{{BV:ambiente}}' === 'integracao' ? {{BV:teste.contatos_escrita}} : null, // trava fora_da_lista so no TESTE\n  cfg: { confirmacao_hora: '{{BV:mensagens.confirmacao_hora}}', lembrete_antes_min: {{BV:mensagens.lembrete_antes_min}}, pos_depois_min: {{BV:mensagens.pos_depois_min}} } };\nconst j = $input.first().json;\nreturn [{ json: { params: bvGParams(j.st.in, j.final.efeitos, msg), resultado: j.final.resultado, nova: !!(j.final.efeitos || {}).proposta_nova,\n  handoff: (j.final.efeitos || {}).handoff ? { queueId: j.final.efeitos.handoff.queueId, ticketId: $('Contexto').first().json.ticket_id || null } : null } }];"
+      },
+      "id": "6f16f52f-d55e-52a4-8e2c-c86cc2d2089a",
+      "name": "Efeitos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE propostas SET estado = 'substituida', atualizada_em = now() WHERE contato_id = $1::bigint AND estado = 'pendente' AND $2::boolean RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$json.params[0], $json.nova] }}"
+        }
+      },
+      "id": "bdbce45e-cd71-5750-8406-22c680d32b8f",
+      "name": "Substituir pendente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3600,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH c AS (INSERT INTO conversas (contato_id, opcoes, pedido) VALUES ($1::bigint, COALESCE($2::jsonb, '{}'::jsonb), COALESCE($3::jsonb, '{}'::jsonb)) ON CONFLICT (contato_id) DO UPDATE SET opcoes = COALESCE($2::jsonb, conversas.opcoes), pedido = conversas.pedido || COALESCE($3::jsonb, '{}'::jsonb), atualizado_em = now() RETURNING 1), np AS (INSERT INTO propostas (id, contato_id, turno_id, acao, dados) SELECT gen_random_uuid(), $1::bigint, $4::uuid, $5::text, $6::jsonb WHERE $5::text IS NOT NULL RETURNING id::text AS id), up AS (UPDATE propostas SET estado = $8::text, resultado = COALESCE($9::jsonb, '{}'::jsonb), atualizada_em = now() WHERE id::text = $7::text AND contato_id = $1::bigint AND $8::text IS NOT NULL RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, trace_id, contato_id) SELECT 'graces', $10::text, $11::text, $12::text, $13::int, $14::text, $1::bigint WHERE $10::text IS NOT NULL RETURNING 1), mc AS (UPDATE mensagens_agendadas m SET situacao = 'cancelada', motivo = x.motivo, reservada_em = NULL, atualizado_em = now() FROM jsonb_to_recordset(COALESCE($16::jsonb, '[]'::jsonb)) AS x(\"idAgenda\" text, motivo text) WHERE m.graces_agendamento_id = x.\"idAgenda\" AND m.situacao = 'pendente' AND m.reservada_em IS NULL AND NOT EXISTS (SELECT 1 FROM jsonb_to_recordset(COALESCE($15::jsonb, '[]'::jsonb)) AS y(tipo text, \"idAgenda\" text, motivo text) WHERE y.\"idAgenda\" = m.graces_agendamento_id AND y.tipo = m.tipo AND y.motivo IS NULL) RETURNING 1), me AS (UPDATE mensagens_agendadas m SET motivo = x.motivo, atualizado_em = now() FROM jsonb_to_recordset(COALESCE($16::jsonb, '[]'::jsonb)) AS x(\"idAgenda\" text, motivo text) WHERE m.graces_agendamento_id = x.\"idAgenda\" AND m.tipo = 'confirmacao' AND m.situacao = 'enviada' AND m.resposta IS NULL AND m.motivo IS NULL RETURNING 1), ma AS (INSERT INTO mensagens_agendadas (contato_id, tipo, previsto_para, graces_agendamento_id, situacao, graces_cliente_id, id_profissional, inicio, dados, motivo) SELECT $1::bigint, x.tipo, x.previsto_para::timestamptz, x.\"idAgenda\", CASE WHEN x.motivo IS NOT NULL OR f.fora THEN 'cancelada' ELSE 'pendente' END, x.\"idCliente\", x.\"idProfissional\", x.inicio::timestamp, COALESCE(x.dados, '{}'::jsonb), COALESCE(x.motivo, CASE WHEN f.fora THEN 'fora_da_lista' END) FROM jsonb_to_recordset(COALESCE($15::jsonb, '[]'::jsonb)) AS x(tipo text, previsto_para text, \"idAgenda\" text, \"idCliente\" text, \"idProfissional\" text, inicio text, dados jsonb, motivo text) CROSS JOIN LATERAL (SELECT $17::jsonb IS NOT NULL AND NOT EXISTS (SELECT 1 FROM contatos c, jsonb_array_elements_text(COALESCE($17::jsonb, '[]'::jsonb)) e WHERE c.id = $1::bigint AND e = regexp_replace(c.telefone, '[^0-9]', '', 'g')) AS fora) f WHERE NOT EXISTS (SELECT 1 FROM mensagens_agendadas m WHERE m.graces_agendamento_id = x.\"idAgenda\" AND m.tipo = x.tipo AND m.previsto_para = x.previsto_para::timestamptz AND m.situacao <> 'pendente') ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE SET previsto_para = EXCLUDED.previsto_para, inicio = EXCLUDED.inicio, dados = EXCLUDED.dados, tentativas = 0, proxima_tentativa_em = NULL, atualizado_em = now() WHERE mensagens_agendadas.reservada_em IS NULL RETURNING 1) SELECT (SELECT id FROM np) AS proposta_id, (SELECT count(*) FROM c) AS gravado",
+        "options": {
+          "queryReplacement": "={{ $('Efeitos').first().json.params }}"
+        }
+      },
+      "id": "2b324570-d932-5778-aa30-e1ffc835e576",
+      "name": "Persistir",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3840,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Efeitos').first().json.resultado;\nconst id = $('Persistir').first().json.proposta_id;\nreturn [{ json: id ? { ...r, proposta_id: id } : r }];"
+      },
+      "id": "7855bf2e-5e10-5694-9fbb-aa85bddf23bc",
+      "name": "Saida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nreturn [{ json: j.resultado }];"
+      },
+      "id": "f0d81b9a-76b0-5c4f-a4c4-2278a9bda496",
+      "name": "Saida recusa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.req.m }}",
+        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
+        "sendBody": true,
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "88d976db-11d1-5db7-86de-d8df4bf16da5",
+      "name": "Graces corpo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "63ac5643-24b9-561c-b4ba-fb14db1ecdbc",
+              "leftValue": "={{ String(!!$json.req.body) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ea2f80ab-a7d4-591a-9a14-7d34a4594509",
+      "name": "Corpo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a401ca30-b6ce-54c1-9bd5-a06e66cea483",
+              "leftValue": "={{ String(!!$('Efeitos').first().json.handoff) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3cbe7d46-d83e-5b8f-b615-fe7e0cefdff0",
+      "name": "Handoff?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "addd44b6-d19f-573b-aee8-11ed6ccc77ed",
+              "leftValue": "={{ String(!!$('Efeitos').first().json.handoff.ticketId) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9ed5bc5c-9737-549f-88ef-a78bc87c49e3",
+      "name": "Ticket conhecido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chatmasterveloz.com{{ '/api/tickets/updateAPI' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ticketId: String($('Efeitos').first().json.handoff.ticketId), queueId: String($('Efeitos').first().json.handoff.queueId) }) }}",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "b408b90b-f1b8-5616-bc90-0193c5fb7cc2",
+      "name": "Transferir ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4560,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'handoff_falhou', 'updateAPI', 'handoff_falhou', $2::int, $1::bigint WHERE $2::int IS NULL OR $2::int NOT BETWEEN 200 AND 299",
+        "options": {
+          "queryReplacement": "={{ [$('Efeitos').first().json.params[0], $json.statusCode || null] }}"
+        }
+      },
+      "id": "076616bf-a2ab-5c1f-8e1a-b5f0232b3fcd",
+      "name": "Registrar handoff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Gatilho": {
+      "main": [
+        [
+          {
+            "node": "Normalizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida?": {
+      "main": [
+        [
+          {
+            "node": "Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Saida recusa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contexto": {
+      "main": [
+        [
+          {
+            "node": "Planejar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Planejar": {
+      "main": [
+        [
+          {
+            "node": "Tem chamada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem chamada?": {
+      "main": [
+        [
+          {
+            "node": "Corpo?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Efeitos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Efeitos": {
+      "main": [
+        [
+          {
+            "node": "Substituir pendente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Substituir pendente": {
+      "main": [
+        [
+          {
+            "node": "Persistir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persistir": {
+      "main": [
+        [
+          {
+            "node": "Handoff?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff?": {
+      "main": [
+        [
+          {
+            "node": "Ticket conhecido?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket conhecido?": {
+      "main": [
+        [
+          {
+            "node": "Transferir ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transferir ticket": {
+      "main": [
+        [
+          {
+            "node": "Registrar handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar handoff": {
+      "main": [
+        [
+          {
+            "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Corpo?": {
+      "main": [
+        [
+          {
+            "node": "Graces corpo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Graces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces": {
+      "main": [
+        [
+          {
+            "node": "Passo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces corpo": {
+      "main": [
+        [
+          {
+            "node": "Passo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Passo": {
+      "main": [
+        [
+          {
+            "node": "Tem chamada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": "{{BV:NUM:execucao.timeout_s}}"
+  }
+}
