@@ -96,7 +96,7 @@ class Liberacao(unittest.TestCase):  # producao liberada a todos (owner, 2026-10
         self.assertIn("liberados: [] }", self.codigo_normalizar("producao"))
         for arq, no, chave in (("sub/bv-graces.json", "Planejar", "testeLiberado: "), ("sub/entregar-rajada.json", "Compor", "teste_liberado: ")):
             c = next(x for x in render(arq, "producao")["nodes"] if x["name"] == no)["parameters"]["jsCode"]
-            self.assertIn(chave + "['5511967296849', '5511971634416', '5511995164884'].includes(String(($('Gatilho')", c)
+            self.assertIn(chave + "['5511967296849', '5511971634416', '5511995164884', '559184617250', '554797565968', '5511948903182'].includes(String(($('Gatilho')", c)
             c = next(x for x in render(arq, "integracao")["nodes"] if x["name"] == no)["parameters"]["jsCode"]
             self.assertIn(chave + "[].includes(", c)
         self.assertIn("liberados: [] }", self.codigo_normalizar("integracao"))
