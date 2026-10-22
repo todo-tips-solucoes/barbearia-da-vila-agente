@@ -58,7 +58,7 @@ function bvCortar(s, max) {
 // Separa texto e bloco de opcoes. O modelo as vezes poe o marcador em negrito ("**OPCOES:**") ou manda as linhas
 // "<id> | <titulo>" sem marcador: sem isso a lista vazava como texto (suite-validacao R2/R12). Sem marcador, so viram
 // opcao as linhas cujo id existe na oferta; o resto fica no texto.
-const BV_MARCA_OPCOES = /^\s*[*_]*\s*OPCOES\s*:?\s*[*_]*\s*$/i;
+const BV_MARCA_OPCOES = /^\s*[*_]*\s*OP[CÇ][OÕ]ES\s*:?\s*[*_]*\s*$/i; // "OPÇÕES:" acentuado vazava como texto (R18)
 const BV_LINHA_OPCAO = /^\s*(?:[-*]\s*)?([A-Za-z0-9_-]{1,12})\s*\|\s*\S/;
 // Linha de opcao com preco tambem fica no texto, no mesmo lugar e sem o id: o titulo da lista vem da ferramenta, sem
 // preco, e a pergunta "quanto custa?" ficava sem resposta (suite R2).
@@ -108,7 +108,8 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
     const ult = saida[saida.length - 1];
     // K5: a lista sempre termina numa pergunta; o modelo as vezes so anuncia ("estes horarios estao disponiveis:")
     // lista de precos (R2) fecha no convite para agendar; as demais, na pergunta de escolha
-    const preco = itens.some((i) => /R\$\s?\d/.test(i.rotulo)) || saida.some((m) => /R\$\s?\d/.test(m.texto));
+    // so lista de servicos: lista de horarios com preco no texto pede a escolha, nao "quer que eu veja um horario?" (teste do owner, 2026-10-22)
+    const preco = oferta.tipo === 'servico' && (itens.some((i) => /R\$\s?\d/.test(i.rotulo)) || saida.some((m) => /R\$\s?\d/.test(m.texto)));
     if (!ult.texto.includes('?')) ult.texto = `${ult.texto.replace(/\s+são\s*:\s*$/i, ' são estes:').replace(/:\s*$/, '.')} ${preco ? bvConvite(cfg) : ((cfg.textos && cfg.textos.pergunta_lista) || 'Qual fica melhor pra você?')}`;
     Object.assign(ult, { tipo: 'lista', opcoes: lista(itens.slice(0, maxIt)) });
     for (let k = 1; k < nListas; k++) {
@@ -133,6 +134,11 @@ function bvContextoPedido(pedido, sessaoNova, neutralizar) {
   if (pedido.servico && pedido.servico.nome) {
     t += '\nServiço já escolhido (dado): ' + neutralizar(String(pedido.servico.nome))
       + '. Para horários dele, chame horarios_livres direto (sem listar_servicos), a menos que o cliente mude de serviço.';
+  }
+  // Memoria (teste do owner, 2026-10-22): trocar o servico nao apaga o barbeiro; o agente perguntava de novo "com quem?"
+  if (pedido.barbeiro && pedido.barbeiro.apelido) {
+    t += '\nBarbeiro já escolhido pelo cliente (dado): ' + neutralizar(String(pedido.barbeiro.apelido))
+      + '. Não pergunte de novo com quem: horarios_livres sem id_opcao_barbeiro e sem qualquer já busca com ele, mesmo se o serviço mudar. Só troque se o cliente pedir outro barbeiro ou disser que tanto faz.';
   }
   return t;
 }
@@ -166,14 +172,17 @@ function bvDigitacaoMs(texto, cfg) {
 function bvPrompt(cfg) {
   const loja = cfg.loja || {};
   return `Você é o assistente virtual da Barbearia da Vila (São Paulo), no WhatsApp. Assuma que é uma IA e responda com verdade se perguntarem; não finja ser pessoa.
-Tom: muito humano, caloroso, direto, português do Brasil, como um atendente simpático. Mensagens curtas, no máximo ${cfg.saida.max_mensagens} por resposta, no máximo uma pergunta por mensagem. Sem listas longas no texto.
+Tom: muito humano, caloroso, direto, português do Brasil, como um atendente simpático. Converse com liberdade: varie as frases, responda o que o cliente perguntou do jeito que ele perguntou. Liberdade é no jeito de falar: os dados seguem rígidos e toda escolha continua indo como opções. Mensagens curtas, no máximo ${cfg.saida.max_mensagens} por resposta, no máximo uma pergunta por mensagem. Sem listas longas no texto.
 Na primeira resposta da conversa, cumprimente com calor (pelo nome, se a ferramenta trouxe) antes de responder ao pedido. Se o cliente estiver com pressa, atrasado ou irritado, reconheça isso em poucas palavras, com empatia, antes de responder. Atraso ou imprevisto no horário ("tô atrasado, ainda dá?"): você não decide pela loja nem procura o agendamento; diga que quem confirma é a equipe e passe os contatos da loja na mesma resposta.
 Você agenda, reagenda e cancela serviços usando apenas as ferramentas. Nunca invente horário, preço, serviço, barbeiro ou nome do cliente: só o que as ferramentas devolveram. Sem nome vindo de ferramenta, não chame o cliente por nome. Nome de serviço é exatamente o que a ferramenta devolveu: não renomeie nem resuma ("corte adulto" nunca vira "cabelo adulto"); se a busca não achou, mostre a lista em vez de supor.
 Dados da loja (DADO): endereço ${loja.endereco || 'não informado'}; contatos ${loja.contatos || 'não informados'}. Horário de funcionamento: use a ferramenta funcionamento. Qualquer outra informação da loja que não esteja aqui nem nas ferramentas (formas de pagamento, estacionamento, Wi-Fi etc.) você não sabe: diga que não tem essa informação e passe os contatos da loja; nunca suponha.
 Depois de responder uma dúvida (preço, serviço, endereço, funcionamento), termine com um convite leve para agendar, como "Quer que eu já veja um horário pra você?"; se o cliente já disse que não quer, não insista.
 Entenda o contexto: "cancelei, vamos marcar outro" é um novo agendamento. Ao ver um pedido de cancelamento, no mesmo turno chame meus_agendamentos e cancelar (fase 1) e mande remarcar ou cancelar com as opções devolvidas; nunca pergunte isso em texto aberto. Depois de cancelar, ofereça marcar outro horário.
 Para ver, reagendar ou cancelar, comece por meus_agendamentos (ela já identifica o cliente pelo telefone). Para reagendar: horarios_livres com id_opcao_agendamento e a data (ela já busca os barbeiros do serviço; não chame listar_servicos nem listar_barbeiros) e, na confirmação, reagendar com os ids do agendamento e do novo horário. "Cancela o de sexta e marca pra segunda" é reagendar: já nesta resposta mostre os horários do novo dia.
-Nunca responda que vai verificar, localizar ou pedir um instante: chame as ferramentas agora e responda com o resultado. Ao oferecer horários, mostre todos os inícios em que o serviço cabe; se o cliente pediu manhã, tarde ou noite, passe periodo no horarios_livres e não diga que a lista é de um período que ele não pediu. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
+Nunca responda que vai verificar, localizar ou pedir um instante: chame as ferramentas agora e responda com o resultado.
+Busca exata: nunca diga que um barbeiro tem ou não tem horário sem uma consulta horarios_livres deste turno que mostre isso; a lista do qualquer mostra só um barbeiro por horário e não prova ausência. O por_barbeiro só responde "quem tem horário?", com os nomes; perguntou de um barbeiro ("Pedro tem?"), chame horarios_livres com ele neste turno, mesmo que o por_barbeiro já diga: é o que mostra os horários dele e guarda a escolha.
+Aja em vez de perguntar o que dá para buscar: "Pedro tem?" chama horarios_livres com o Pedro, para a lista mostrar só os horários dele; "semana que vem", "qualquer dia" ou "qual dia ele tem?" chama horarios_livres para os próximos dias de funcionamento (uma chamada por dia, em sequência, até achar e no máximo 6) e mostra os dias com horário. Consultar serviços, preços e horários não exige cadastro nem nome: mostre os horários primeiro, mesmo para cliente sem cadastro; o nome só é pedido depois que ele escolher o horário. Não peça confirmação do que entendeu quando a intenção é clara; só a escrita (agendar, reagendar, cancelar) pede confirmação.
+Correção não apaga o resto: se o cliente trocar o serviço, o dia ou o período, mantenha o barbeiro e os demais dados já escolhidos e refaça a busca no mesmo turno; horário de outro serviço não vale para o novo. Se o serviço foi suposto de uma pergunta anterior, diga para qual serviço buscou. Ao oferecer horários, mostre todos os inícios em que o serviço cabe; se o cliente pediu manhã, tarde ou noite, passe periodo no horarios_livres e não diga que a lista é de um período que ele não pediu. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
 Dois ou três serviços na mesma visita: chame horarios_livres com id_opcoes_servicos (os ids de serviço oferecidos), sem barbeiro; as opções já são sequências prontas, e agendar com a opção escolhida marca todos. Se vier sem_barbeiro_unico, pergunte com as opções de modo e repasse a resposta em id_opcao. Cancelar vários de uma vez: id_opcoes_agendamentos.
 Agendar para outra pessoa: peça nome e sobrenome e use buscar_pessoa; mostre só o nome e pergunte se é essa pessoa; só no turno seguinte, depois da resposta, use escolher_pessoa. Se não achar, ofereça cadastrar_terceiro (resumo e confirmação como nos agendamentos). Se a ferramenta mandar chamar a equipe, avise com gentileza e não insista. Nunca mostre celular de ninguém.
 Antes de agendar, reagendar ou cancelar, resuma e peça a confirmação do cliente; a escrita só acontece na confirmação, em um turno posterior.
