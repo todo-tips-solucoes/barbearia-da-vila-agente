@@ -121,3 +121,12 @@ class MensagensAtivo(unittest.TestCase):  # 2.7
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AvisarOwner(unittest.TestCase):  # 4.1.2: destino so o alerta.contato de PROD, pela 145
+    def test_corpo_fixo(self):
+        s = importlib.util.spec_from_file_location("ao", os.path.join(RAIZ, "scripts", "avisar-owner.py"))
+        m = importlib.util.module_from_spec(s)
+        s.loader.exec_module(m)
+        c = m.corpo("oi", cfg("producao"))
+        self.assertEqual((c["number"], c["whatsappId"], c["body"]), ("5511967296849", "145", "oi"))
