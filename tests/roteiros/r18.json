@@ -1,0 +1,25 @@
+{
+  "id": "R18",
+  "situacao": "Memória do barbeiro e busca exata (teste do owner em PROD, 2026-10-22): pergunta quem tem horário, escolhe o Pedro e depois troca o serviço",
+  "falas": [
+    "Bom dia, vocês atendem criança?",
+    "Quem tem horário amanhã?",
+    "O Pedro tem?",
+    "Na verdade o corte é pra mim, adulto",
+    "corte adulto"
+  ],
+  "expectativas": [
+    "Mostra o serviço infantil com preço",
+    "Diz pelo nome quais barbeiros têm horário amanhã; quantos horários cada um tem e quem não tem vêm do resumo por barbeiro da ferramenta (a lista mostra um barbeiro por horário), não é invenção",
+    "Busca os horários do Pedro direto, sem pedir confirmação do que o cliente quis dizer",
+    "Ao trocar para adulto, oferece os serviços adultos como lista sem perguntar o barbeiro",
+    "Escolhido o corte adulto, mantém o Pedro: não pergunta com qual barbeiro e mostra os horários dele em lista (ou diz que ele não tem/faz o serviço)"
+  ],
+  "criterios": [
+    "K2",
+    "K3",
+    "K4"
+  ],
+  "agenda": false,
+  "antes_da_c": false
+}

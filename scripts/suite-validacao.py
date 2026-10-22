@@ -109,13 +109,18 @@ def checar_precondicoes(cfg, env, implantado_ok):
 
 
 # ---------------------------------------------------------------- regras deterministicas e veredito
-def deterministicas(turnos):
-    """K6 ('TESTE' em saida/oferta), K2 (> 4 mensagens no turno), 2a vez oferecida, pacote 20% ofertado (reprova K4)."""
+BARBEIRO_TESTE = re.compile(r"ZZ\s*TESTE|N[AÃ]O\s+AGENDAR|1cee0bb9", re.I)
+
+
+def deterministicas(turnos, nome=None):
+    """K6 ('TESTE' em saida/oferta), K2 (> 4 mensagens no turno), 2a vez oferecida, pacote 20% ofertado (reprova K4).
+    O nome do cliente de teste ("Teste", semeado pelo smoke) nao conta como K6; o nome do barbeiro de teste sempre conta."""
     f = []
+    sem_nome = (lambda x: re.sub(rf"\b{re.escape(nome)}\b", "", str(x), flags=re.I)) if nome else str
     for i, t in enumerate(turnos, 1):
         textos = list(t["saidas"]) + list(t.get("oferta", []))
         junto = " ".join(map(str, textos))
-        if sa.tem_teste(textos):
+        if BARBEIRO_TESTE.search(junto) or sa.tem_teste([sem_nome(x) for x in textos]):
             f.append(f"K6: turno {i} mostra o barbeiro de teste")
         if len(t["saidas"]) > 4:
             f.append(f"K2: turno {i} tem {len(t['saidas'])} mensagens (maximo 4)")
@@ -386,7 +391,7 @@ def executar(r, n, orc, parar, referencia=""):
             else:
                 dizer(ex, n, sa.evento(n, fala), fala, parar)
         nome = (sa.estado(n)["pedido"] or {}).get("cliente_nome")
-        ex["deterministicas"] = deterministicas(ex["turnos"])
+        ex["deterministicas"] = deterministicas(ex["turnos"], nome)
         for t in ex["turnos"]:  # relatorio sem telefone, nome do cliente de teste ou segredo
             t["fala"], t["saidas"], t["oferta"] = sanitizar(t["fala"], nome), [sanitizar(x, nome) for x in t["saidas"]], [sanitizar(x, nome) for x in t["oferta"]]
         if r["criterios"]:
@@ -511,13 +516,13 @@ def montar_relatorio(execs, orc, teto, limpeza, parcial_por_teto, completo_flag=
     lat = [t["latencia_s"] for e in execs for t in e.get("turnos", []) if t.get("latencia_s") is not None]
     k7 = k7_rodada(lat)
     st = [e["status"] for e in execs]
-    completo = completo_flag if completo_flag is not None else all(s not in ("pendente", "pulado", "erro_infra") for s in st) and len(st) == 17
+    completo = completo_flag if completo_flag is not None else all(s not in ("pendente", "pulado", "erro_infra") for s in st) and len(st) == len(carregar_roteiros())
     medidos = orc.usados
     return dict(gerado_em=datetime.datetime.now().isoformat(timespec="seconds"), modelo_avaliadora=MODELO, roteiros=execs,
                 global_=dict(p50_s=k7["p50"], p95_s=k7["p95"], k7_rodada_ok=k7["ok"], tokens_medidos=medidos,
                              tokens_agente=NAO_MEDIDO, teto=teto, completo=completo, parcial_por_teto=parcial_por_teto,
                              proximo_teto=proximo_teto(medidos, completo), aprovados=st.count("aprovado"), total=len(st),
-                             aprovada_para_principio_xv=bool(completo and k7["ok"] and st.count("aprovado") == 17)),
+                             aprovada_para_principio_xv=bool(completo and k7["ok"] and st.count("aprovado") == len(st))),
                 limpeza=limpeza, pendencias=pend if pend is not None else pendencias(False))
 
 
@@ -565,6 +570,14 @@ def referencia_graces(get=None):
         partes.append("Barbeiros reais: " + ", ".join(str(p.get("apelido", "")).strip() for p in ps if p.get("idProfissional") != sa.TESTE_ID))
         partes.append("Barbeiro de teste (K6: nunca pode aparecer ao cliente): " + (teste[0] if teste else "ZZ TESTE INTEGRACAO - NAO AGENDAR"))
     except Exception:  # noqa: BLE001 - sem Graces a avaliadora fica so com a loja
+        pass
+    try:  # R18: sem isso a avaliadora so via a lista (um barbeiro por horario) e lia o resumo por barbeiro como invencao
+        amanha = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))) + datetime.timedelta(days=1)).date().isoformat()
+        for s in [x for x in ss if re.search(r"^corte adulto$|infantil", str(x.get("descricaoAgenda", "")), re.I)][:2]:
+            ps = [p for p in get(f"/servicos/profissionais?idServico={s['idServico']}") if p.get("idProfissional") != sa.TESTE_ID]
+            livres = {str(p.get("apelido", "")).strip(): get(f"/agenda/horarios-livres?idServico={s['idServico']}&idProfissional={p['idProfissional']}&data={amanha}").get("horarios", []) for p in ps}
+            partes.append(f"Horarios livres em {amanha} para {s.get('descricaoAgenda')} (so este dia e servico; outros dias e servicos nao constam aqui e nao sao invencao): " + json.dumps(livres, ensure_ascii=False))
+    except Exception:  # noqa: BLE001 - dia fechado ou Graces fora: a avaliadora fica sem disponibilidade
         pass
     try:
         partes.append("Funcionamento: " + json.dumps(get("/agenda/configuracao").get("horarios"), ensure_ascii=False))
@@ -623,7 +636,7 @@ def main(argv=None):
     if interrompido:
         print("interrompido: limpeza " + ("ok" if lim["ok"] else lim["acao_manual"]), file=sys.stderr)
         return 3 if not lim["ok"] else 1
-    rel = montar_relatorio(execs, orc, a.teto_tokens, lim, orc.estourou(), completo_flag=None if len(execs) == 17 else False, pend=pend)
+    rel = montar_relatorio(execs, orc, a.teto_tokens, lim, orc.estourou(), completo_flag=None if len(execs) == len(carregar_roteiros()) else False, pend=pend)
     base = gravar_relatorio(rel)
     g = rel["global_"]
     print(f"relatorio: {os.path.relpath(base + '.md', RAIZ)}\np50={g['p50_s']} s p95={g['p95_s']} s tokens={g['tokens_medidos']} (agente: {g['tokens_agente']})")

@@ -13,8 +13,8 @@ def roteiros():
 
 
 class Roteiros(unittest.TestCase):
-    def test_ids_unicos_r1_a_r17(self):
-        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 18)])
+    def test_ids_unicos_r1_a_r18(self):
+        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 19)])
 
     def test_criterios_validos(self):
         for r in roteiros():
@@ -147,6 +147,9 @@ class Veredito(unittest.TestCase):
     def test_deterministicas(self):
         t = lambda saidas, oferta=(): [dict(saidas=saidas, oferta=list(oferta))]
         self.assertTrue(sv.deterministicas(t(["Com o ZZ TESTE amanhã"])))
+        self.assertFalse(sv.deterministicas(t(["Bom dia, Teste! Atendemos sim."]), "Teste"))  # nome do cliente de teste
+        self.assertTrue(sv.deterministicas(t(["Bom dia, Teste! Com o ZZ TESTE INTEGRACAO amanhã"]), "Teste"))
+        self.assertTrue(sv.deterministicas(t(["Bom dia, Teste!"])))  # sem o nome, segue estrito
         self.assertTrue(sv.deterministicas(t(["a", "b", "c", "d", "e"])))
         self.assertTrue(sv.deterministicas(t(["Corte 2ª vez"])))
         self.assertTrue(sv.deterministicas(t(["Pacote de 4 serviços com 20% de desconto"])))
@@ -261,6 +264,9 @@ class Converge(unittest.TestCase):  # achados da rodada real 20261021-031240 (re
         self.assertIn("Domingo", r)
         self.assertIn("Loja:", r)
         self.assertIn("Loja:", sv.referencia_graces(lambda c: (_ for _ in ()).throw(OSError())))  # sem Graces: so a loja
+        resp2 = {**resp, "/agenda/servicos?texto=": [{"descricaoAgenda": "corte adulto", "valorPadrao": 85, "idServico": "s1"}]}
+        get = lambda c: {"horarios": ["17:20"]} if c.startswith("/agenda/horarios-livres?idServico=s1&idProfissional=p1&") else resp2[c]
+        self.assertRegex(sv.referencia_graces(get), r'Horarios livres em \d{4}-\d{2}-\d{2} para corte adulto \(so este dia[^)]*\): \{"Kiel": \["17:20"\]\}')
 
     def test_telefone_da_loja_nao_e_mascarado(self):
         with mock.patch.dict(sv.sa.CFG, {"loja": {"contatos": "Telefone/WhatsApp (11) 97126-5299"}}):
