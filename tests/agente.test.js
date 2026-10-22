@@ -165,6 +165,9 @@ console.log('agente.test.js turno com midia ok');
   assert.match(t, /Serviço já escolhido \(dado\): corte adulto/);
   assert.ok(!t.includes('c1') && !t.includes('s1')); // ids nunca vao ao modelo
   assert.ok(!bvContextoPedido({ servico: { nome: 'x' } }, false, bvNeutralizar).includes('identificar_cliente'));
+  const tb = bvContextoPedido({ barbeiro: { idProfissional: 'p9', apelido: 'Pedro Henrique' } }, false, bvNeutralizar);
+  assert.match(tb, /Barbeiro já escolhido pelo cliente \(dado\): Pedro Henrique\. Não pergunte de novo/);
+  assert.ok(!tb.includes('p9'));
 }
 
 // bvSepararOpcoes: marcador em negrito e linhas sem marcador nao vazam como texto (suite R2/R12)
@@ -224,5 +227,14 @@ console.log('agente.test.js saudacao no meio e teste liberado ok');
   const r = a.bvCompor('A barba sai por R$ 40:\nOPCOES:\n1 | Barba', of2, c);
   assert.equal(r[r.length - 1].tipo, 'lista');
   assert.ok(r[r.length - 1].texto.endsWith('Quer que eu já veja um horário pra você?'));
+  // lista de horarios com o preco do servico no texto (teste do owner, 07:38): pede a escolha, nao o convite
+  const oh = { tipo: 'horario', itens: [{ id: '1', rotulo: '10:40', valor: {} }] };
+  assert.ok(a.bvCompor('Estes horários estão livres para o corte adulto — R$ 85.\nOPCOES:\n1 | 10:40', oh, c)[0].texto.endsWith('Qual fica melhor pra você?'));
+}
+{
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  const oh = { tipo: 'horario', itens: [{ id: '1', rotulo: '17:20', valor: {} }] };
+  const r = a.bvCompor('Ele tem este horário:\n**OPÇÕES:**\n1 | 17:20', oh, c);
+  assert.ok(!r[0].texto.includes('OP') && r[0].tipo === 'lista' && r[0].opcoes[0].rotulo === '17:20'); // marcador acentuado (R18)
 }
 console.log('agente.test.js convite K5 ok');

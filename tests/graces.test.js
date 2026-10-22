@@ -75,6 +75,22 @@ const comBarbeiro = entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2
 assert.equal(g.bvGPlano(comBarbeiro, ctxH, cfg).reqs.length, 1);
 assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '99', data: '2026-10-20' }), ctxH, cfg).final.resultado.code, 'opcao_desconhecida');
 
+// Memoria do barbeiro (teste do owner, 2026-10-22): escolheu o Kiel, trocou o servico e nao precisa escolher de novo.
+{
+  const pl = g.bvGPlano(comBarbeiro, ctxH, cfg);
+  const rb = g.bvGPasso(pl.st, [ok({ minutos: 40, horarios: ['10:00'] })], cfg).final;
+  assert.deepEqual(rb.efeitos.pedido.barbeiro, { idProfissional: 'b2', apelido: 'Kiel' });
+  assert.equal(rb.resultado.por_barbeiro, undefined);
+  const ped = { ...pedido, ...rb.efeitos.pedido, servico: { idServico: 's9', nome: 'barba', opcao_id: '3' } }; // conversas.pedido || efeitos
+  const sem = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-21' }), ctxOp({}, ped), cfg);
+  assert.deepEqual(sem.reqs.map((q) => [q.qs.idProfissional, q.qs.idServico]), [['b2', 's9']]);
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-21' }), ctxOp({}, pedido), cfg).final.resultado.code, 'barbeiro_nao_escolhido');
+  const lb = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: '3' }), ctxOp({}, ped), cfg);
+  const fala = (lista) => g.bvGPasso(lb.st, [ok(lista)], cfg).final.resultado.orientacao;
+  assert.match(fala([{ idProfissional: 'b1', apelido: 'Rodrigo' }, { idProfissional: 'b2', apelido: 'Kiel' }]), /já escolheu Kiel/);
+  assert.match(fala([{ idProfissional: 'b1', apelido: 'Rodrigo' }]), /Kiel, que o cliente escolheu, não faz/);
+}
+
 // funcionamento (suite-validacao R3): so leitura de /agenda/configuracao, sem cliente identificado; dia fora da lista vira contato da loja.
 p = g.bvGPlano(entrada({ operacao: 'funcionamento' }), ctxOp({}, {}), cfg);
 assert.deepEqual(p.reqs, [{ m: 'GET', path: '/agenda/configuracao' }]);
@@ -205,7 +221,10 @@ assert.equal(g.bvGPasso(s3.st, [resp(500, {})], cfg).final.resultado.code, 'novo
   const ru = g.bvGPasso(pu.st, [ok({ minutos: 40, horarios: h14.slice(0, 8) }), ok({ minutos: 40, horarios: h14.slice(4) })], cfg).final;
   assert.deepEqual(ru.efeitos.opcoes.itens.map((x) => x.valor.hora), h14);
   assert.equal(ru.efeitos.opcoes.completa, true);
-  assert.equal(ru.resultado.orientacao, undefined);
+  assert.match(ru.resultado.orientacao, /por_barbeiro/);
+  // a lista esconde o Kiel em 09:00-11:40 (o Rodrigo vem antes): o resumo diz quantos inicios cada um tem
+  assert.deepEqual(ru.resultado.por_barbeiro, [{ barbeiro: 'Rodrigo', total: 8, primeiro: '09:00' }, { barbeiro: 'Kiel', total: 10, primeiro: '11:40' }]);
+  assert.equal(ru.efeitos.pedido.barbeiro, undefined); // "qualquer" nao vira escolha do cliente
   assert.equal(ru.efeitos.opcoes.itens[5].valor.apelido, 'Rodrigo'); // inicio livre nos dois: o primeiro da ordem de listar_barbeiros
   assert.ok(ru.efeitos.opcoes.itens.every((x) => x.valor.idProfissional !== TESTE));
 }

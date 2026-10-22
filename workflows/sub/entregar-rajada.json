@@ -728,7 +728,7 @@
     {
       "parameters": {
         "name": "horarios_livres",
-        "description": "Lista todos os inícios livres do serviço num dia, como opções. Informe o barbeiro escolhido ou qualquer=true. Se o cliente pediu manhã, tarde ou noite, informe periodo. Para 2 ou 3 serviços em sequência, informe id_opcoes_servicos (sem barbeiro). Se devolver sem_barbeiro_unico, ofereça as opções de modo e, com a resposta do cliente, chame de novo com id_opcao.",
+        "description": "Lista todos os inícios livres do serviço num dia, como opções. Sem barbeiro, usa o que o cliente já escolheu; qualquer=true busca todos e devolve por_barbeiro (quantos horários cada um tem). Se o cliente pediu manhã, tarde ou noite, informe periodo. Para 2 ou 3 serviços em sequência, informe id_opcoes_servicos (sem barbeiro). Se devolver sem_barbeiro_unico, ofereça as opções de modo e, com a resposta do cliente, chame de novo com id_opcao.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -744,7 +744,7 @@
             "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
             "ambiente": "{{BV:ambiente}}",
             "id_opcao_servico": "={{ $fromAI('id_opcao_servico', 'id da opção de serviço', 'string') }}",
-            "id_opcao_barbeiro": "={{ $fromAI('id_opcao_barbeiro', 'id da opção de barbeiro; vazio se qualquer=true', 'string') }}",
+            "id_opcao_barbeiro": "={{ $fromAI('id_opcao_barbeiro', 'id da opção de barbeiro; vazio se qualquer=true ou para usar o barbeiro que o cliente já escolheu', 'string') }}",
             "qualquer": "={{ $fromAI('qualquer', 'true para qualquer barbeiro; vazio caso contrário', 'string') }}",
             "data": "={{ $fromAI('data', 'dia no formato AAAA-MM-DD', 'string') }}",
             "id_opcoes_servicos": "={{ $fromAI('id_opcoes_servicos', '2 ou 3 ids de opcoes de servico, como oferecidos, separados por virgula, para encadear servicos em sequencia; vazio se for um servico so', 'string') }}",
