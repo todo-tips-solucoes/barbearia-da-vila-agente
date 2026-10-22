@@ -63,7 +63,7 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 ## Backup (fase 6)
 
 - `scripts/backup-bancos.py --alvo teste|producao|todos --retencao N [--validar]`: `pg_dump -Fc` em `/root/barbearia_vila/backups/bv-<banco>-<UTC>.dump` (modo 600, diretorio 700), arquivo novo por execucao; rotacao so de `bv-<banco>-*.dump`. PROD (inclusive em `todos`) exige a trava. Validado em 2026-10-18 para TESTE (`pg_restore --list` ok).
-- `[PENDENTE-OWNER]` (CHK020/P3, task 6.1.4): frequencia e retencao do backup. Nenhum cron foi instalado e nenhum valor foi escolhido.
+- CHK020/P3 resolvido (owner, 2026-10-21): diario 03:30 de Sao Paulo, 14 dias; cron instalado em 2026-10-22 (secao Producao).
 
 ## Verificacao do repositorio e CI (fase 7)
 
@@ -73,10 +73,9 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 ## Pendencias abertas
 
 - CHK010: isolamento Redis so por prefixo (risco aceito, dec-030; ver secao Redis).
-- CHK020/P3: frequencia e retencao de backup (owner decide; sem cron instalado).
-- P7: retencao do historico de mensagens e base legal/aviso de tratamento (LGPD; CHK008/CHK009) `[PENDENTE-OWNER]`: o owner decidiu em 2026-10-18 que esta fora do escopo por agora; o historico fica "apagado junto com o contato", sem expurgo e sem job de limpeza, e nenhuma base legal e afirmada ate nova decisao.
+- P7 resolvido (owner, 2026-10-21): mensagens guardadas 12 meses com limpeza diaria apos o backup (contato e agendamentos ficam), base legal art. 7o V; o aviso de tratamento ao cliente segue a cargo do owner.
 - `CONNECT` no database `n8n`: fechado em 2026-10-18 (REVOKE FROM PUBLIC, dec-025); nada aberto.
-- PROD: `preparar-bancos`, `migrar`, `criar-credenciais-n8n` e backup com `--alvo producao` sao do owner (trava `BV_DEPLOY_PRODUCAO_AUTORIZADO`).
+- PROD: `preparar-bancos`, `migrar`, `criar-credenciais-n8n`, backup e `instalar-crons` exigem a trava `BV_DEPLOY_PRODUCAO_AUTORIZADO` (o agente executa; owner autorizou ponta a ponta em 2026-10-22).
 - Checar o cron do Gold (~03:00 de 19/10) apos o REVOKE no database `n8n`.
 
 ## Recomendacao: hook de guarda de PROD (task 8.1.3, NAO aplicada)

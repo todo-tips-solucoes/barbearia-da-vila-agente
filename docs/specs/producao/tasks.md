@@ -73,8 +73,8 @@ Ref: research.md Decision 7; spec.md FR-009
 Ref: research.md Decision 6; spec.md FR-010
 
 - [x] 2.5.1 Escrever teste que lê `config/vps/barbearia-limpar-midia.cron` e exige uma linha por ambiente com id vindo de `integracao.json`/`producao.json` (o teste pula a linha de PROD enquanto o id estiver vazio; passa a valer na 3.4)
-- [ ] 2.5.2 Acrescentar a linha de PROD (id real preenchido só após o deploy, tarefa 3.4) com o container `n8n-n8n-1`
-- [ ] 2.5.3 Conferir que o teste falha enquanto o id de PROD estiver vazio e passa após a 3.4
+- [x] 2.5.2 Acrescentar a linha de PROD (id real preenchido só após o deploy, tarefa 3.4) com o container `n8n-n8n-1`
+- [x] 2.5.3 Conferir que o teste falha enquanto o id de PROD estiver vazio e passa após a 3.4
 
 ### 2.6 `verificar-repo.py`: regra de `mensagens.ativo` em PROD `[A]`
 
@@ -103,8 +103,8 @@ Ref: spec.md FR-001, FR-002; plan.md Fases 1 e 2; quickstart.md Cenário 1
 
 - [x] 3.1.1 `preparar-bancos --alvo producao` (idempotente; não recria banco existente); rollback: `DROP` só se criado nesta execução e sem dado (2026-10-21: role e banco criados agora, `alteracoes: 3`; rollback = DROP, banco vazio)
 - [x] 3.1.2 `migrar --alvo producao --dry-run` e depois real (0001 a 0010); falha parcial: parar e restaurar do dump (10 migrações aplicadas; 2a rodada `alteracoes: 0`; 0 contatos e 0 mensagens)
-- [ ] 3.1.3 `criar-credenciais-n8n --alvo producao` (nome `[PROD]`), sem imprimir segredos; rollback: apagar credenciais criadas
-- [ ] 3.1.4 Conferir banco sem dado de TESTE e credenciais só no n8n2/`.env` fora do repositório
+- [x] 3.1.3 `criar-credenciais-n8n --alvo producao` (nome `[PROD]`), sem imprimir segredos; rollback: apagar credenciais criadas
+- [x] 3.1.4 Conferir banco sem dado de TESTE e credenciais só no n8n2/`.env` fora do repositório
 
 ### 3.2 Backup, restore verificável e cron `[C]`
 
@@ -112,42 +112,42 @@ Ref: spec.md FR-003, FR-011; research.md Decision 4
 
 - [x] 3.2.1 `backup-bancos --alvo producao --retencao 14 --validar` manual (`bv-barbearia_vila-20261021T150819Z.dump`, `pg_restore --list` 89 linhas)
 - [x] 3.2.2 Restore de teste em banco descartável `barbearia_vila_restore`, criado e apagado no mesmo passo (`backup-bancos.py --restaurar-teste`: `barbearia_vila_restore` criado, restaurado com 10 migrações e apagado; achado e corrigido: o `trap` com aspas duplas expandia `$POSTGRES_USER` no host e o DROP falhava calado)
-- [ ] 3.2.3 Instalar `barbearia-backup-limpeza.cron` em `/etc/cron.d/` na VPS (só stack n8n); rollback: remover o arquivo
+- [x] 3.2.3 Instalar `barbearia-backup-limpeza.cron` em `/etc/cron.d/` na VPS (só stack n8n); rollback: remover o arquivo
 - [x] 3.2.4 Rodar o Cenário 5 do quickstart (mensagem de 13 meses sai, recente fica, segunda execução apaga 0) no banco descartável (no descartável: `apagadas_1a=1 apagadas_2a=0 restantes=1 contatos=1`)
 
 ### 3.3 Completar `producao.json` `[A]`
 
 Ref: spec.md FR-004; research.md Decision 3
 
-- [ ] 3.3.1 Preencher credenciais, `chatmaster.whatsapp_id`=145, `midia.hosts_imagem` e demais chaves com valores de fonte real (n8n2/`criar-credenciais-n8n`)
-- [ ] 3.3.2 `scripts/verificar-repo.py` sem chave obrigatória vazia
-- [ ] 3.3.3 Conferir que nenhum id de PROD aponta para recurso `[TESTE]` (teste da US2)
+- [x] 3.3.1 Preencher credenciais, `chatmaster.whatsapp_id`=145, `midia.hosts_imagem` e demais chaves com valores de fonte real (n8n2/`criar-credenciais-n8n`)
+- [x] 3.3.2 `scripts/verificar-repo.py` sem chave obrigatória vazia
+- [x] 3.3.3 Conferir que nenhum id de PROD aponta para recurso `[TESTE]` (teste da US2)
 
 ### 3.4 Deploy ordenado em PROD `[C]`
 
 Ref: spec.md FR-005 a FR-008; plan.md Fase 6; quickstart.md Cenário 2
 
-- [ ] 3.4.1 Para cada sub-workflow, `validate_node_config`, `deploy-n8n.sh producao --criar` com a trava, depois `get_workflow_details` (ativo, `versionId` == `activeVersionId`, nós, settings)
-- [ ] 3.4.2 Mesmo ciclo para `bv-recepcao`, depois `bv-vigia`, `bv-verificacao`, `bv-mensagens` e `bv_confirmacao` (conforme 2.7), todos `[PROD]`
-- [ ] 3.4.3 Gravar os ids reais em `producao.json` e preencher a linha de PROD do cron de mídia (2.5)
-- [ ] 3.4.4 Conferir que os `[TESTE]` ficaram intactos e que só a n8n2 foi usada; rollback: despublicar o criado
+- [x] 3.4.1 Para cada sub-workflow, `validate_node_config`, `deploy-n8n.sh producao --criar` com a trava, depois `get_workflow_details` (ativo, `versionId` == `activeVersionId`, nós, settings)
+- [x] 3.4.2 Mesmo ciclo para `bv-recepcao`, depois `bv-vigia`, `bv-verificacao`, `bv-mensagens` e `bv_confirmacao` (conforme 2.7), todos `[PROD]`
+- [x] 3.4.3 Gravar os ids reais em `producao.json` e preencher a linha de PROD do cron de mídia (2.5)
+- [x] 3.4.4 Conferir que os `[TESTE]` ficaram intactos e que só a n8n2 foi usada; rollback: despublicar o criado
 
 ### 3.5 Webhook da 145 e VPS `[A]`
 
 Ref: spec.md FR-009, FR-010; research.md Decision 6, 7
 
-- [ ] 3.5.1 `capturar-webhook anotar` e depois `trocar --destino recepcao-producao` somente após 3.4; rollback: `restaurar`
-- [ ] 3.5.2 Mensagem do número do owner gera execução em PROD e nenhuma em TESTE
+- [x] 3.5.1 `capturar-webhook anotar` e depois `trocar --destino recepcao-producao` somente após 3.4; rollback: `restaurar`
+- [x] 3.5.2 Mensagem do número do owner gera execução em PROD e nenhuma em TESTE
 - [ ] 3.5.3 `scripts/suite-validacao.py` no TESTE segue 17/17
-- [ ] 3.5.4 Instalar a linha do cron de mídia de PROD na VPS; registrar em `docs/infra.md` e `docs/rito-dev.md` P3/P7 resolvidos, rollbacks e que o hook de guarda de PROD não está instalado
+- [x] 3.5.4 Instalar a linha do cron de mídia de PROD na VPS; registrar em `docs/infra.md` e `docs/rito-dev.md` P3/P7 resolvidos, rollbacks e que o hook de guarda de PROD não está instalado
 
 ### 3.6 Alerta fora de banda `[M]`
 
 Ref: spec.md FR-016
 
-- [ ] 3.6.1 Verificar o caminho do alerta (Postgres fora, cota/gasto OpenAI) para 5511967296849 e registrar falha como visível, não silenciosa
+- [x] 3.6.1 Verificar o caminho do alerta (Postgres fora, cota/gasto OpenAI) para 5511967296849 e registrar falha como visível, não silenciosa
 - [ ] 3.6.2 Teste do caminho de alerta com destino fixo do owner
-- [ ] 3.6.3 Anotar no `docs/infra.md` o gatilho e o destino
+- [x] 3.6.3 Anotar no `docs/infra.md` o gatilho e o destino
 
 ---
 
@@ -157,7 +157,7 @@ Ref: spec.md FR-016
 
 Ref: spec.md FR-013 a FR-015, SC-003; quickstart.md Cenário 4
 
-- [ ] 4.1.1 Exercitar as features 1 a 6 só em leitura/conversa com 5511967296849; qualquer passo com escrita em agenda real não é executado e vira bloqueio humano
+- [x] 4.1.1 Exercitar as features 1 a 6 só em leitura/conversa com 5511967296849; qualquer passo com escrita em agenda real não é executado e vira bloqueio humano
 - [ ] 4.1.2 Enviar o resultado do quickstart ao WhatsApp do owner
 - [ ] 4.1.3 Registrar bloqueio humano único pedindo o ok para liberar a todos e ligar `mensagens.ativo`; manter ambos desligados até a resposta
 - [ ] 4.1.4 Abrir PR base `develop` com título `feat(producao): ...` (sem aprovar nem mesclar)
