@@ -216,4 +216,13 @@ console.log('agente.test.js saudacao no meio e teste liberado ok');
   const of = { tipo: 'horario', itens: [{ id: '1', rotulo: '09:00', valor: {} }] };
   assert.equal(a.bvCompor('Os primeiros horários são:\nOPCOES:\n1 | 09:00', of, c)[0].texto, 'Os primeiros horários são estes. Qual fica melhor pra você?');
 }
+{
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  const of = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Barba — R$ 40', valor: {} }] };
+  assert.equal(a.bvCompor('Temos estas opções de barba:\nOPCOES:\n1 | Barba — R$ 40', of, c)[0].texto, 'Temos estas opções de barba: Barba — R$ 40 Quer que eu já veja um horário pra você?');
+  const of2 = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Barba', valor: {} }] };
+  const r = a.bvCompor('A barba sai por R$ 40:\nOPCOES:\n1 | Barba', of2, c);
+  assert.equal(r[r.length - 1].tipo, 'lista');
+  assert.ok(r[r.length - 1].texto.endsWith('Quer que eu já veja um horário pra você?'));
+}
 console.log('agente.test.js convite K5 ok');
