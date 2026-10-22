@@ -87,13 +87,18 @@ class CronMidia(unittest.TestCase):  # 2.5
             self.assertEqual(sum(f"/workflows/{wid};" in x for x in linhas), 1, amb)
 
 
-class Liberacao(unittest.TestCase):  # producao: owner e os 2 clientes de teste ate o ok dele
+class Liberacao(unittest.TestCase):  # producao liberada a todos (owner, 2026-10-22); barbeiro de teste so para os numeros de teste
     def codigo_normalizar(self, amb):
         n = next(x for x in render("bv-recepcao.json", amb)["nodes"] if x["name"] == "Normalizar")
         return n["parameters"]["jsCode"]
 
     def test_prod_so_o_owner_e_teste_todos(self):
-        self.assertIn("liberados: ['5511967296849', '5511971634416', '5511995164884'] }", self.codigo_normalizar("producao"))
+        self.assertIn("liberados: [] }", self.codigo_normalizar("producao"))
+        for arq, no, chave in (("sub/bv-graces.json", "Planejar", "testeLiberado: "), ("sub/entregar-rajada.json", "Compor", "teste_liberado: ")):
+            c = next(x for x in render(arq, "producao")["nodes"] if x["name"] == no)["parameters"]["jsCode"]
+            self.assertIn(chave + "['5511967296849', '5511971634416', '5511995164884'].includes(String(($('Gatilho')", c)
+            c = next(x for x in render(arq, "integracao")["nodes"] if x["name"] == no)["parameters"]["jsCode"]
+            self.assertIn(chave + "[].includes(", c)
         self.assertIn("liberados: [] }", self.codigo_normalizar("integracao"))
 
 

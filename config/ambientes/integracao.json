@@ -139,7 +139,7 @@
     "host": "api.gracesonline.com.br",
     "timeout_ms": 15000,
     "barbeiro_teste_id": "1cee0bb9-e58b-4428-9e9b-1db184db7943",
-    "teste_liberado": false,
+    "teste_contatos": [],
     "max_estagios": 16,
     "max_consultas_estagio": 20
   },
