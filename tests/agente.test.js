@@ -184,3 +184,25 @@ console.log('agente.test.js turno com midia ok');
   assert.equal(a.bvCompor('Qual?\nOPCOES:\n1 | corte adulto\n2 | barba design', of, cfg)[0].texto, 'Qual?');
   assert.ok(a.bvCompor('Preços:\n**OPCOES:**\n1 | corte adulto — R$ 85', of, cfg)[0].texto.includes('corte adulto — R$ 85'));
 }
+
+// bvSaudar no meio da sessao: o "Oi, Paulo!" do modelo sai; texto sem saudacao fica como veio
+{
+  const { bvSaudar } = require('../workflows/shared/agente.js');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Oi, Paulo! Pela imagem, é um corte adulto.' }], false)[0].texto, 'Pela imagem, é um corte adulto.');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Olá! temos estes' }], false)[0].texto, 'Temos estes');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Oi!' }], false)[0].texto, 'Oi!');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Opção boa: 10h.' }], false)[0].texto, 'Opção boa: 10h.');
+}
+
+// PROD em teste fechado (graces.teste_liberado): o barbeiro de teste aparece na lista e no texto, o id nunca
+{
+  const { bvFiltrarBarbeiros, bvCompor } = require('../workflows/shared/agente.js');
+  const bs = [{ id: 't', nome: 'ZZ TESTE INTEGRACAO - NAO AGENDAR' }, { id: 'j', nome: 'Jayme' }];
+  assert.equal(bvFiltrarBarbeiros(bs, 't').length, 1);
+  assert.equal(bvFiltrarBarbeiros(bs, 't', true).length, 2);
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  const txt = 'Fica com ZZ TESTE às 10h. Confirma?';
+  assert.ok(!bvCompor(txt, null, { ...c, graces: { barbeiro_teste_id: 't' } }).some((m) => /ZZ TESTE/.test(m.texto)));
+  assert.ok(bvCompor(txt, null, { ...c, graces: { barbeiro_teste_id: 't', teste_liberado: true } }).some((m) => /ZZ TESTE/.test(m.texto)));
+}
+console.log('agente.test.js saudacao no meio e teste liberado ok');

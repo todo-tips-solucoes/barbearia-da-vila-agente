@@ -85,7 +85,7 @@ function bvgResolver(id, tipo, ctx) {
 const bvgNaoOferecido = () => bvgRecusa('servico_nao_oferecido', 'esse serviço não é oferecido por aqui; ofereça o serviço regular, sem falar em desconto');
 
 function bvgEscritaPermitida(cfg) {
-  if (cfg.ambiente === 'producao' || !cfg.redirecionar) {
+  if (cfg.ambiente === 'producao' ? !cfg.testeLiberado : !cfg.redirecionar) { // PROD: so com o barbeiro de teste liberado (owner, 2026-10-22)
     return bvgRecusa('escrita_desabilitada', 'agendar por aqui ainda não está liberado; chame a equipe da loja');
   }
   return null;
@@ -187,7 +187,7 @@ function bvGPlano(i, ctx0, cfg) {
       // Reagendar sem barbeiro escolhido: barbeiros do servico do agendamento neste passo (poupa duas rodadas do modelo, R8)
       if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data, periodo: i.periodo });
       // FR-002/FR-012: defesa extra, o barbeiro de teste nunca entra na uniao nem se vier no pedido.
-      const bs = bvFiltrarBarbeiros(i.qualquer ? (ctx.pedido.barbeiros || []) : [bvgResolver(i.id_opcao_barbeiro, 'barbeiro', ctx)].filter(Boolean), cfg.testeId);
+      const bs = bvFiltrarBarbeiros(i.qualquer ? (ctx.pedido.barbeiros || []) : [bvgResolver(i.id_opcao_barbeiro, 'barbeiro', ctx)].filter(Boolean), cfg.testeId, cfg.testeLiberado);
       if (!bs.length) return bvgFim(i.qualquer ? bvgRecusa('barbeiros_nao_listados', 'chame listar_barbeiros antes') : bvgOpcaoInvalida());
       const reqs = bs.slice(0, 10).map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.idProfissional, data: i.data } }));
       return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data, periodo: i.periodo });
@@ -210,9 +210,11 @@ function bvgFase1(i, ctx, cfg) {
   if (bloq) return bvgFim(bloq);
   if (!ctx.pedido.idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
   const fora = bvgRecusa('escrita_fora_do_teste', 'só é possível mexer em agendamentos de teste neste ambiente');
+  const prod = cfg.ambiente === 'producao'; // PROD: toda escrita so no barbeiro de teste
   const sq = i.operacao === 'agendar' && i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'sequencia', ctx) : null;
   if (sq) { // FR-008: um POST por servico, em sequencia, confirmados num unico resumo
-    if (i.substitui_id_opcao_agendamento || sq.itens.some((x) => x.idProfissional === cfg.testeId)) return bvgFim(bvgOpcaoInvalida());
+    if (i.substitui_id_opcao_agendamento || sq.itens.some((x) => x.idProfissional === cfg.testeId) !== prod) return bvgFim(bvgOpcaoInvalida());
+    if (prod && sq.itens.some((x) => x.idProfissional !== cfg.testeId)) return bvgFim(fora);
     if (sq.itens.some((x) => bvSegundaVez(x.servico))) return bvgFim(bvgNaoOferecido());
     const itens = sq.itens.map((x, k) => ({ ordem: k + 1, idServico: x.idServico, servico: x.servico, idProfissional: x.idProfissional, barbeiro: x.apelido, data: sq.data, hora: x.hora, minutos: x.minutos, valor: x.valor }));
     const mesmo = itens.every((x) => x.idProfissional === itens[0].idProfissional);
@@ -233,7 +235,8 @@ function bvgFase1(i, ctx, cfg) {
   const antigo = i.substitui_id_opcao_agendamento ? bvgResolver(i.substitui_id_opcao_agendamento, 'agendamento', ctx) : null;
   const ag0 = (antigo || ag);
   if (ag0 && ag0.idProfissional !== cfg.testeId) return bvgFim(fora); // nunca altera agenda de barbeiro real
-  if (h && h.idProfissional === cfg.testeId) return bvgFim(bvgOpcaoInvalida()); // FR-012: o modelo nao escolhe o de teste
+  if (h && prod && h.idProfissional !== cfg.testeId) return bvgFim(fora); // nunca escreve na agenda de barbeiro real
+  if (h && !prod && h.idProfissional === cfg.testeId) return bvgFim(bvgOpcaoInvalida()); // FR-012: o modelo nao escolhe o de teste
   const alvo = i.operacao === 'reagendar' ? ag : h; // serviço que seria escrito; cancelar segue permitido
   if (i.operacao !== 'cancelar' && alvo && bvSegundaVez(alvo.servico)) return bvgFim(bvgNaoOferecido()); // FR-005
   const agAnt = { idAgenda: ag0 && ag0.idAgenda, horaInicio: ag0 && ag0.horaInicio, recorrente: !!(ag0 && ag0.recorrente) };
@@ -270,8 +273,9 @@ function bvgFase2(i, ctx, cfg, chamar) {
   }
   const d = p.dados || {};
   if (p.acao !== 'cancelar' && bvSegundaVez(d.servico)) return bvgFim(bvgNaoOferecido(), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'servico_nao_oferecido' } } });
-  const prof = cfg.redirecionar ? cfg.testeId : d.idProfissional; // research Decision 10: toda escrita vai ao barbeiro de teste
-  const meta = { fase2: true, proposta: p, prof, redir: !!cfg.redirecionar };
+  const redir = !!cfg.redirecionar || cfg.ambiente === 'producao'; // PROD: defesa extra, a escrita so vai ao de teste
+  const prof = redir ? cfg.testeId : d.idProfissional; // research Decision 10: toda escrita vai ao barbeiro de teste
+  const meta = { fase2: true, proposta: p, prof, redir };
   if (p.acao === 'cadastrar_terceiro') {
     if (!cfg.terceiroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'cadastro_desabilitado' } } });
     return chamar([{ m: 'POST', path: '/agenda/clientes', body: { nomeCliente: d.nome, ddiCelular: '55', celular: d.celular } }], { ...meta, etapa: 'cadastro' });
@@ -402,14 +406,14 @@ function bvgPassoUm(st, resps0, cfg) {
       return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of });
     }
     case 'listar_barbeiros': {
-      const bs = bvFiltrarBarbeiros(lista.map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId);
+      const bs = bvFiltrarBarbeiros(lista.map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado);
       const of = bvMontarOferta('barbeiro', bs.map((b) => ({ rotulo: b.apelido, valor: { idProfissional: b.id, apelido: b.apelido } })), cfg);
       return bvgFim({ ok: true, barbeiros: of.itens.map((x) => ({ id: x.id, nome: x.rotulo })), orientacao: of.itens.length ? undefined : 'nenhum barbeiro disponível para este serviço' },
         { opcoes: of, pedido: { servico: meta.servico, barbeiros: of.itens.map((x) => ({ opcao_id: x.id, ...x.valor })), horario: null } });
     }
     case 'horarios_livres': {
       if (meta.etapa === 'ag_prof') {
-        const bs = bvFiltrarBarbeiros(lista.map((b) => ({ idProfissional: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId).slice(0, 10);
+        const bs = bvFiltrarBarbeiros(lista.map((b) => ({ idProfissional: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado).slice(0, 10);
         if (!bs.length) return bvgFim({ ok: true, total: 0, orientacao: 'nenhum barbeiro disponível para este serviço' });
         const reqs = bs.map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: meta.servico.idServico, idProfissional: b.idProfissional, data: meta.data } }));
         return { reqs, st: { ...st, meta: { ...meta, etapa: null, barbeiros: bs } } };
@@ -444,7 +448,7 @@ function bvgPassoUm(st, resps0, cfg) {
         if (!ped.idCliente) return id;
         return { reqs: [{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: ped.idCliente, proximos: true } }], st: { ...st, meta: { ...meta, etapa: null, ident: ped } } };
       }
-      const ags = lista.filter((a) => a && a.idAgenda && (cfg.ambiente !== 'producao' || (a.idProfissional !== cfg.testeId && !/\bteste\b/i.test(String(a.profissional || '')))));
+      const ags = lista.filter((a) => a && a.idAgenda && (cfg.ambiente !== 'producao' || cfg.testeLiberado || (a.idProfissional !== cfg.testeId && !/\bteste\b/i.test(String(a.profissional || '')))));
       const of = bvMontarOferta('agendamento', ags.map((a) => ({
         rotulo: `${bvgDia(String(a.horaInicio))} ${String(a.horaInicio).slice(11, 16)} ${a.descricaoServico || ''}`.trim(),
         valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico, idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
@@ -467,7 +471,7 @@ function bvgPassoEnc(st, resps, cfg) {
     return bvgFim({ ok: true, sem_barbeiro_unico: true, opcoes: of.itens.map((x) => ({ id: x.id, rotulo: x.rotulo })), orientacao: 'nenhum barbeiro faz todos os serviços em sequência; pergunte por opção se prefere barbeiros diferentes ou agendar separado' }, { opcoes: of, pedido });
   };
   if (meta.etapa === 'enc_prof') {
-    const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId));
+    const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado));
     const teto = Math.max(1, Math.floor(((cfg.graces || {}).max_consultas_estagio || 20) / n));
     const comuns = sets[0].filter((b) => sets.every((x) => x.some((y) => y.id === b.id))).slice(0, teto);
     if (!comuns.length) return semUnico();
@@ -503,7 +507,7 @@ function bvgDifProf(st, resps, cfg) {
   const { meta } = st;
   const n = meta.servicos.length;
   const teto = Math.max(1, Math.floor(((cfg.graces || {}).max_consultas_estagio || 20) / n));
-  const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId).slice(0, teto));
+  const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado).slice(0, teto));
   if (sets.some((x) => !x.length)) return bvgFim(bvgRecusa('sem_barbeiro_servico', 'nenhum barbeiro disponível para um dos serviços; ofereça chamar a equipe da loja'));
   const reqs = sets.flatMap((bs, k) => bs.map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: meta.servicos[k].idServico, idProfissional: b.id, data: meta.data } })));
   return { reqs, st: { ...st, meta: { ...meta, etapa: 'dif_grade', sets } } };

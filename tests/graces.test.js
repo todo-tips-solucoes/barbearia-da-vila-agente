@@ -142,6 +142,13 @@ assert.equal(f2({ operacao: 'agendar' }, { pedido: {}, info: { estado: 'pendente
 assert.equal(f2({ operacao: 'agendar' }, { pedido: {} }).final.resultado.code, 'proposta_invalida');
 const prop = (acao, dados) => ({ pedido: { idCliente: 'c1' }, proposta: { id: PID, acao, dados } });
 assert.equal(f2({ operacao: 'agendar' }, prop('agendar', dadosAg), { ...cfg, ambiente: 'producao' }).final.efeitos.proposta_upd.estado, 'falhou');
+// PROD com o de teste liberado: so escreve no de teste; barbeiro real recusa; a fase 2 vai sempre ao de teste
+const cfgP = { ...cfg, ambiente: 'producao', redirecionar: false, testeLiberado: true };
+assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora), cfgP).final.resultado.code, 'escrita_fora_do_teste');
+assert.ok(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(oHoraTeste), cfgP).final.efeitos.proposta_nova);
+assert.equal(g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), ctxE(oAgReal), cfgP).final.resultado.code, 'escrita_fora_do_teste');
+assert.equal(f2({ operacao: 'agendar' }, prop('agendar', { ...dadosAg, idProfissional: 'real' }), cfgP).reqs[0].qs.idProfissional, TESTE);
+assert.equal(g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfgP).st, [ok(agBruto)], cfgP).final.efeitos.opcoes.itens.length, 1);
 
 // agendar fase 2: revalida (barbeiro de teste), horario tomado -> falhou + novas opcoes; ok -> POST so no barbeiro de teste.
 p = f2({ operacao: 'agendar' }, prop('agendar', dadosAg));

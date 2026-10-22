@@ -10,9 +10,10 @@ const bvNormalizarDescricao = (s) => String(s || '').normalize('NFKD').replace(/
 const bvSegundaVez = (s) => BV_SEGUNDA_VEZ.test(bvNormalizarDescricao(s));
 
 // FR-012: barbeiro de teste (id fixo OU "TESTE" no nome/apelido) nunca chega ao modelo.
-function bvFiltrarBarbeiros(lista, testeId) {
+function bvFiltrarBarbeiros(lista, testeId, liberado) {
   return (Array.isArray(lista) ? lista : []).filter((b) => {
     if (!b || typeof b !== 'object') return false;
+    if (liberado) return true; // PROD em teste fechado: o de teste aparece (owner, 2026-10-22)
     if (testeId && String(b.id || b.idProfissional || '') === testeId) return false;
     return !BV_TESTE.test(`${b.nome || ''} ${b.apelido || ''}`);
   });
@@ -77,7 +78,8 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   const { max_mensagens: maxMsg, max_chars_mensagem: maxChars } = cfg.saida;
   const { corpo, bloco } = bvSepararOpcoes(textoModelo, oferta);
   const testeId = cfg.graces && cfg.graces.barbeiro_teste_id;
-  const frases = bvFrases(corpo).filter((f) => !BV_NOME_TESTE.test(f) && !(testeId && f.includes(testeId)));
+  const liberado = cfg.graces && cfg.graces.teste_liberado; // PROD em teste fechado: o nome do de teste pode sair
+  const frases = bvFrases(corpo).filter((f) => !(testeId && f.includes(testeId)) && (liberado || !BV_NOME_TESTE.test(f)));
   const msgs = [];
   let atual = '';
   const fecha = () => { if (atual) msgs.push(atual); atual = ''; };
@@ -128,7 +130,12 @@ function bvContextoPedido(pedido, sessaoNova, neutralizar) {
 // K1 (suite-validacao): 1a resposta da sessao sempre cumprimenta; o modelo as vezes esquece.
 const BV_SAUDACAO = /^\s*(oi|olá|ola|opa|bom dia|boa tarde|boa noite|e aí|eai|fala|hey)(?=[\s,!.?]|$)/i; // sem \b: ele nao fecha palavra depois de á/í
 function bvSaudar(saida, sessaoNova) {
-  if (!sessaoNova || !saida.length || BV_SAUDACAO.test(saida[0].texto || '')) return saida;
+  if (!saida.length) return saida;
+  if (!sessaoNova) { // no meio da conversa, o "Oi, Paulo!" do modelo sai
+    const resto = String(saida[0].texto || '').replace(new RegExp(`${BV_SAUDACAO.source}(,\\s*\\p{L}+(?:\\s\\p{L}+)?)?\\s*[!.,]\\s*`, 'iu'), '');
+    return resto && resto !== saida[0].texto ? [{ ...saida[0], texto: resto[0].toUpperCase() + resto.slice(1) }, ...saida.slice(1)] : saida;
+  }
+  if (BV_SAUDACAO.test(saida[0].texto || '')) return saida;
   return [{ ...saida[0], texto: `Oi! ${saida[0].texto}` }, ...saida.slice(1)];
 }
 
