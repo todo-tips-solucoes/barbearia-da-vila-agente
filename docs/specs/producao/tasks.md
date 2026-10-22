@@ -138,7 +138,7 @@ Ref: spec.md FR-009, FR-010; research.md Decision 6, 7
 
 - [x] 3.5.1 `capturar-webhook anotar` e depois `trocar --destino recepcao-producao` somente após 3.4; rollback: `restaurar`
 - [x] 3.5.2 Mensagem do número do owner gera execução em PROD e nenhuma em TESTE
-- [ ] 3.5.3 `scripts/suite-validacao.py` no TESTE segue 17/17
+- [x] 3.5.3 `scripts/suite-validacao.py` no TESTE segue 17/17
 - [x] 3.5.4 Instalar a linha do cron de mídia de PROD na VPS; registrar em `docs/infra.md` e `docs/rito-dev.md` P3/P7 resolvidos, rollbacks e que o hook de guarda de PROD não está instalado
 
 ### 3.6 Alerta fora de banda `[M]`
@@ -158,7 +158,7 @@ Ref: spec.md FR-016
 Ref: spec.md FR-013 a FR-015, SC-003; quickstart.md Cenário 4
 
 - [x] 4.1.1 Exercitar as features 1 a 6 só em leitura/conversa com 5511967296849; qualquer passo com escrita em agenda real não é executado e vira bloqueio humano
-- [ ] 4.1.2 Enviar o resultado do quickstart ao WhatsApp do owner
+- [x] 4.1.2 Enviar o resultado do quickstart ao WhatsApp do owner
 - [ ] 4.1.3 Registrar bloqueio humano único pedindo o ok para liberar a todos e ligar `mensagens.ativo`; manter ambos desligados até a resposta
 - [ ] 4.1.4 Abrir PR base `develop` com título `feat(producao): ...` (sem aprovar nem mesclar)
 
