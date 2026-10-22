@@ -30,6 +30,12 @@ SONDAS = {  # leitura pura; sql roda como superusuario do container postgres
     "backup-existente": ("shell", "ls -la /root/ 2>/dev/null | grep -i -E 'backup|dump' ; "
                                   "crontab -l 2>/dev/null | grep -i -E 'pg_dump|backup' ; true"),
 }
+# Arquivos de config/vps instalados na VPS (owner, 2026-10-22): origem -> (destino, modo). Nada fora desta lista.
+CRONS = {
+    "barbearia-backup-limpeza.sh": ("/root/barbearia_vila/barbearia-backup-limpeza.sh", "700"),
+    "barbearia-backup-limpeza.cron": ("/etc/cron.d/barbearia-backup-limpeza", "644"),
+    "barbearia-limpar-midia.cron": ("/etc/cron.d/barbearia-limpar-midia", "644"),
+}
 _SEGREDO = re.compile(r"(?i)(password|senha|token|api[_-]?key)\s*[=:]\s*\S+")
 
 
@@ -187,13 +193,32 @@ def pg_dump(banco):
     return cmd_pg_dump(banco)
 
 
+def cmd_instalar(origem):
+    """Grava atomico (tmp + mv) com dono root; o .sh passa por sh -n antes de entrar no lugar."""
+    destino, modo = CRONS[origem]
+    tmp = shlex.quote(destino + ".tmp")
+    checa = f"sh -n {tmp} && " if destino.endswith(".sh") else ""
+    return f"umask 077; cat > {tmp} && {checa}chown root:root {tmp} && chmod {modo} {tmp} && mv {tmp} {shlex.quote(destino)}"
+
+
+def instalar_crons(pasta):
+    if not _prod():
+        raise Recusado("instalar-crons e de PROD: exige BV_DEPLOY_PRODUCAO_AUTORIZADO=sim")
+    for origem in CRONS:
+        with open(os.path.join(pasta, origem), encoding="utf-8") as f:
+            _ok(*_ssh(cmd_instalar(origem), f.read()), f"instalar {origem}")
+    return _ok(*_ssh("ls -l " + " ".join(shlex.quote(d) for d, _ in CRONS.values())), "conferir")
+
+
 def main(argv):
-    """Uso: _vps.py psql <banco> < sql | redis <db> <verbo> [args] | sondar <item>. Fora da lista -> exit 2."""
+    """Uso: _vps.py psql <banco> < sql | redis <db> <verbo> [args] | sondar <item> | instalar-crons. Fora da lista -> exit 2."""
     try:
         if argv[:1] == ["psql"] and len(argv) == 2:
             sys.stdout.write(psql(argv[1], sys.stdin.read()))
         elif argv[:1] == ["redis"] and len(argv) >= 3:
             sys.stdout.write(redis(int(argv[1]), *argv[2:]))
+        elif argv == ["instalar-crons"]:
+            sys.stdout.write(instalar_crons(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "vps")))
         elif argv[:1] == ["sondar"] and len(argv) == 2:
             sys.stdout.write(sondar(argv[1]))
         else:
