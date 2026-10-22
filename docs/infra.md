@@ -23,8 +23,8 @@ Credenciais da instancia (47) listadas por `GET /api/v1/credentials`: **nenhuma*
 | Credencial | Tipo | Id (saida do script, 2026-10-18) |
 |---|---|---|
 | `Barbearia Vila Postgres TESTE` | postgres | `X3WoZnCScCKqBdg2` |
+| `Barbearia Vila Postgres PROD` | postgres | `lKwTwGxPO9zHbthQ` (criada em 2026-10-21; database `barbearia_vila`) |
 | `Barbearia Vila Redis` (DB 2) | redis | `chtScO4j08LclN89` |
-| `Barbearia Vila Postgres PROD` | postgres | nao criada (PROD exige a trava) |
 | `Barbearia Vila Verificacao` (header `X-BV-Token`; token so em `infra.env` na VPS) | httpHeaderAuth | `i7qS8QNvswOIbepF` |
 | `Barbearia Vila OpenAI` | openAiApi | `3e2ki13KTZskEv7O` |
 | `Barbearia Vila Graces` (header `X-Api-Key`) | httpHeaderAuth | `NCWLnCOpE4DgIUVU` |
@@ -63,7 +63,7 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 ## Backup (fase 6)
 
 - `scripts/backup-bancos.py --alvo teste|producao|todos --retencao N [--validar]`: `pg_dump -Fc` em `/root/barbearia_vila/backups/bv-<banco>-<UTC>.dump` (modo 600, diretorio 700), arquivo novo por execucao; rotacao so de `bv-<banco>-*.dump`. PROD (inclusive em `todos`) exige a trava. Validado em 2026-10-18 para TESTE (`pg_restore --list` ok).
-- `[PENDENTE-OWNER]` (CHK020/P3, task 6.1.4): frequencia e retencao do backup. Nenhum cron foi instalado e nenhum valor foi escolhido.
+- CHK020/P3 resolvido (owner, 2026-10-21): diario 03:30 de Sao Paulo, 14 dias; cron instalado em 2026-10-22 (secao Producao).
 
 ## Verificacao do repositorio e CI (fase 7)
 
@@ -73,10 +73,9 @@ Campos do schema da API (`GET /credentials/schema/{tipo}`):
 ## Pendencias abertas
 
 - CHK010: isolamento Redis so por prefixo (risco aceito, dec-030; ver secao Redis).
-- CHK020/P3: frequencia e retencao de backup (owner decide; sem cron instalado).
-- P7: retencao do historico de mensagens e base legal/aviso de tratamento (LGPD; CHK008/CHK009) `[PENDENTE-OWNER]`: o owner decidiu em 2026-10-18 que esta fora do escopo por agora; o historico fica "apagado junto com o contato", sem expurgo e sem job de limpeza, e nenhuma base legal e afirmada ate nova decisao.
+- P7 resolvido (owner, 2026-10-21): mensagens guardadas 12 meses com limpeza diaria apos o backup (contato e agendamentos ficam), base legal art. 7o V; o aviso de tratamento ao cliente segue a cargo do owner.
 - `CONNECT` no database `n8n`: fechado em 2026-10-18 (REVOKE FROM PUBLIC, dec-025); nada aberto.
-- PROD: `preparar-bancos`, `migrar`, `criar-credenciais-n8n` e backup com `--alvo producao` sao do owner (trava `BV_DEPLOY_PRODUCAO_AUTORIZADO`).
+- PROD: `preparar-bancos`, `migrar`, `criar-credenciais-n8n`, backup e `instalar-crons` exigem a trava `BV_DEPLOY_PRODUCAO_AUTORIZADO` (o agente executa; owner autorizou ponta a ponta em 2026-10-22).
 - Checar o cron do Gold (~03:00 de 19/10) apos o REVOKE no database `n8n`.
 
 ## Recomendacao: hook de guarda de PROD (task 8.1.3, NAO aplicada)
@@ -104,7 +103,7 @@ Feita pela sessão coordenadora com `get_workflow_details`:
 
 ## Agente: ids, ordem do fluxo e politica de teste (feature `agente-conversacional-graces`, TESTE, 2026-10-18)
 
-- Ids (TESTE): `bv-graces` `mjhd7O0AzrqNVrf0`; `entregar-rajada` `ilzXqBWGtcczlGEu` (mesmo id do stub). PROD: nada criado (`config/ambientes/producao.json` sem workflows; REST conferida em 2026-10-18: os 6 workflows `bv-*` existentes terminam em `[TESTE]`).
+- Ids (TESTE): `bv-graces` `mjhd7O0AzrqNVrf0`; `entregar-rajada` `ilzXqBWGtcczlGEu` (mesmo id do stub). PROD: ver "Producao (2026-10-21)" abaixo.
 - Ordem do fluxo: Chat Master -> `bv-recepcao` (buffer 8 s, lock) -> `entregar-rajada` (`Registrar turno` -> contexto -> agente `gpt-5.6-luna` -> ferramentas `bv-graces` -> `Compor` -> ate 4 saidas) -> Chat Master. Sem historico de execucao salvo (`saveData*Execution=none`), entao o diagnostico de falha exige ligar `saveDataErrorExecution` temporariamente e restaurar pelo deploy.
 - Politica de teste: `python3 -I scripts/smoke-agente.py [--so c2 c3 c5 c9 c10 c11 c14 c15 c12 c13 r1 ... r10]` (r1-r10: roteiros da feature regras-negocio-agenda, chamada direta ao `bv-graces`, escrita real so no barbeiro de teste com o Paulo; tudo cancelado no `finally`). So contatos simulados; `teste.contatos_escrita` vazio (conferido tambem no workflow implantado); chamador temporario (webhook de path aleatorio, apagado no `finally`) para chamar `bv-graces`/`entregar-rajada` direto; c12/c13 trocam a credencial so no TESTE e restauram pelo deploy; ao fim, SC-010 (nenhuma proposta `executada` fica sem cancelar na Graces) e limpeza de Postgres/Redis.
 - Limites medidos: c14 (pergunta longa) = 2 mensagens, ate 1 "?" por mensagem, <= 700 caracteres. S1/S2 (lista renderizada e formato do toque) continuam dependentes do contato de teste real (P2). `falhas_agente` do agente que falha = `agente|agente_falhou` (nao distingue modelo de ferramenta).
@@ -135,3 +134,40 @@ Feita pela sessão coordenadora com `get_workflow_details`:
 - Politica de teste: so o barbeiro de teste (`graces.barbeiro_teste_id`) e so contatos de `teste.contatos_escrita` recebem; contato simulado nunca vai ao Chat Master (a varredura cancela com `fora_da_lista`, o `bv-confirmacao` so grava a saida). Tolerancia de atraso `mensagens.atraso_max_min` = 30 (proposta; o owner foi informado e nao objetou).
 - Medido (pai, sonda da lista e P1): a selecao da lista chega como `from_internal` com `selectedRowID` + `stanzaID` e como `start` so com o titulo; `POST /agenda` nasce `idStatusAgenda` 2; `POST /agenda/confirmacao` `{confirmado:true}` devolve 200 e status 3; repetir devolve 409 (tratado como ja confirmado). Pendente: P2 (envio x handoff aberto) e P4 (exibicao da lista de 2 linhas), no smoke da FASE 6 com o numero do owner.
 
+
+## Producao (2026-10-21, feature `producao`)
+
+Autorizacao do owner em 2026-10-21 (banco, deploy e webhook). Tudo pela n8n2; nunca `n8n.todo-tips.com`.
+
+| Workflow [PROD] | Id | Nos |
+|---|---|---|
+| Ferramentas da Graces (`bv_graces`) | `K0yVUwFr5gucXRQd` | 19 |
+| Interpretar midia (`interpretar_midia`) | `IiVgK4hASaCzzbVM` | 18 |
+| Confirmacao de presenca (`bv_confirmacao`) | `jI5eK7tHfFYuqCJS` | 23 |
+| Entregar rajada (`entregar_rajada`) | `QTP7ezx661uFp7Wj` | 76 |
+| Recepcao (`bv-recepcao`) | `yUEWTZpNYMfIotdg` | 62 |
+| Vigia da recepcao (`bv-vigia`) | `hbHUY1RLNS5SJ3sP` | 3 |
+| Verificacao (`bv-verificacao`) | `M07jjghR3IJClmDW` | 2 |
+| Alerta fora de banda (`bv-alerta`, so PROD) | `qbA6tXtfzHLZr11T` | 4 |
+
+- Conferidos com `get_workflow_details` depois da publicacao: ativos, `versionId` = `activeVersionId`, mesma contagem de nos do TESTE. O `validate_node_config` rodou so no no novo (`Normalizar`, liberacao); os demais nos sao os do TESTE.
+- `bv-mensagens` **nao** foi publicado: a reconciliacao dele programa envios sem consultar `mensagens.ativo` (tasks 2.7). Vai para PROD so com `mensagens.ativo` true, depois do ok do owner (`deploy-n8n` recusa antes).
+- **Liberacao (2026-10-22, ok do owner):** `liberacao.contatos` = `[]`: a recepcao de PROD atende todos os numeros. Rollback: voltar a lista com os numeros de teste + deploy da recepcao.
+- **Barbeiro de teste em PROD (2026-10-22, pedido do owner):** `graces.teste_contatos` (owner, `5511971634416`, `5511995164884`) ve o ZZ TESTE em listas e no texto e so esses numeros escrevem, e **so** na agenda dele (fase 1 recusa barbeiro real, fase 2 sempre redireciona ao de teste). Para os demais clientes o de teste segue oculto e a escrita segue desligada. Retirar: lista vazia + deploy de `bv_graces` e `entregar_rajada`.
+- **Confirmacao da vespera:** `mensagens.ativo=false` e `bv-mensagens` fora de PROD ate novo ok do owner.
+- Credenciais: Postgres `lKwTwGxPO9zHbthQ`; Redis, OpenAI, Graces, Chat Master e Verificacao reaproveitam as do TESTE (mesmas chaves e mesma conexao 145; Redis isolado pelo prefixo `bv:prod:`).
+- Banco `barbearia_vila`: migracoes 0001 a 0010. Backup manual e restore em banco descartavel verificados (`backup-bancos.py --restaurar-teste`).
+- Backup diario: `config/vps/barbearia-backup-limpeza.{sh,cron}`, 06:30 UTC (03:30 de Sao Paulo; a VPS esta em `Etc/UTC` e o cron do Ubuntu nao tem `CRON_TZ`), 14 dias, e a limpeza LGPD de mensagens com mais de 12 meses logo apos um backup ok. Instalado em 2026-10-22 com `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim python3 -I scripts/_vps.py instalar-crons` (atomico, `sh -n` antes); 1a execucao manual: rc 0, dump de 34 KB legivel por `pg_restore --list` (12 tabelas), limpeza apagou 0. Log em `/root/barbearia_vila/backup-limpeza.log`.
+- Cron de midia: linha de PROD (`IiVgK4hASaCzzbVM`) em `config/vps/barbearia-limpar-midia.cron`; instalado pelo mesmo `instalar-crons`.
+- Hook de guarda de PROD (proposto na secao de riscos): **nao instalado**; a instalacao e do owner.
+- **Alerta fora de banda** (`bv-alerta`, FR-016): a cada 10 min consulta `falhas_agente`. Consulta com erro = "Postgres nao respondeu"; 3+ `agente_falhou` em 10 min = "pode ser cota ou gasto da OpenAI" (proxy: sem chave de admin para ler o custo). Envia pelo Chat Master (conexao 145) para `alerta.contato` (5511967296849), no maximo 1 por tipo por hora (staticData). Limite: se o proprio n8n2 cair, nao ha alerta. Teste em 2026-10-21: execucao com o banco no ar e 0 falhas nao enviou nada (sem execucao de erro); o envio real nao foi exercitado (inserir falhas sinteticas em PROD foi negado ao agente).
+
+**Rollback por passo:**
+
+| Passo | Rollback |
+|---|---|
+| Banco `barbearia_vila` | `DROP DATABASE barbearia_vila; DROP ROLE barbearia_vila;` (so enquanto vazio; senao restaurar o dump) |
+| Credencial Postgres PROD | apagar `lKwTwGxPO9zHbthQ` no n8n2 |
+| Workflows [PROD] | despublicar (`unpublish`) e arquivar pelos ids acima; os [TESTE] nao foram tocados alem da recepcao (liberacao com lista vazia) |
+| Webhook da 145 | `capturar-webhook.py restaurar --destino recepcao-producao` (volta a URL anotada em `.webhook-145-antes-prod.url`) |
+| Crons | remover `/etc/cron.d/barbearia-backup-limpeza` e a linha de PROD do cron de midia |

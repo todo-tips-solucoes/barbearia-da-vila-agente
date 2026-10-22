@@ -50,6 +50,20 @@ class T(unittest.TestCase):
         self.assertEqual(len(self.cmds), 2)
         self.assertIn("pg_restore --list", self.cmds[1])
 
+    def test_restaurar_teste_em_banco_descartavel(self):
+        rc, out, _ = self.rodar(["--alvo", "teste", "--retencao", "3", "--restaurar-teste"])
+        self.assertEqual(rc, 0)
+        c = self.cmds[1]
+        self.assertIn("CREATE DATABASE barbearia_vila_teste_restore OWNER barbearia_vila_teste", c)
+        self.assertIn("trap limpa EXIT", c)  # DROP do descartavel mesmo em erro, sem expandir nada no host
+        self.assertNotIn('trap "', c)
+        self.assertIn("DROP DATABASE IF EXISTS barbearia_vila_teste_restore", c)
+        self.assertIn("-d barbearia_vila_teste_restore", c)
+        self.assertNotIn("-d barbearia_vila_teste ", c)  # nunca escreve no banco real
+        self.assertEqual(c.count("12 months"), 2)  # limpeza rodada duas vezes (idempotencia)
+        with self.assertRaises(bk._vps.Recusado):
+            bk.cmd_restaurar_teste("teste", "/etc/passwd")
+
     def test_validar_recusa_caminho_alheio(self):
         with self.assertRaises(bk._vps.Recusado):
             bk.cmd_validar("/etc/passwd")

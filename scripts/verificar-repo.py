@@ -95,8 +95,8 @@ def regras_mensagens(amb, c):
             erros.append(f"{amb}: mensagens.{k} deve ter 1..lista.max_titulo caracteres, sem espaco nas pontas")
     if m["titulo_sim"] == m["titulo_nao"]:
         erros.append(f"{amb}: mensagens.titulo_sim e titulo_nao devem ser diferentes")
-    if amb == "producao" and (m["ativo"] or c.get("workflows", {}).get("bv-mensagens") or c.get("workflows_sub", {}).get("bv_confirmacao")):
-        erros.append("producao: mensagens agendadas devem estar inativas (mensagens.ativo falso, sem ids de bv-mensagens/bv_confirmacao)")
+    if amb == "producao" and m["ativo"] is not False:  # publicadas em PROD, mas desligadas ate o ok do owner
+        erros.append("producao: mensagens agendadas devem estar inativas (mensagens.ativo falso) ate o ok do owner")
     return erros
 
 

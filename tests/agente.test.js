@@ -154,3 +154,75 @@ console.log('agente.test.js turno com midia ok');
   assert.equal(a.bvCompor('Estes horários estão disponíveis:\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Estes horários estão disponíveis. Qual fica melhor pra você?');
   assert.equal(a.bvCompor('Qual serviço?\nOPCOES:\n1 | Corte', of, cfg)[0].texto, 'Qual serviço?');
 }
+
+// bvContextoPedido (latencia): so fora da sessao nova; cliente e servico do pedido viram dado; nome neutralizado
+{
+  const { bvContextoPedido, bvNeutralizar } = require('../workflows/shared/agente.js');
+  assert.equal(bvContextoPedido({ idCliente: 'c1' }, true, bvNeutralizar), '');
+  assert.equal(bvContextoPedido(null, false, bvNeutralizar), '');
+  const t = bvContextoPedido({ idCliente: 'c1', servico: { nome: 'corte adulto', idServico: 's1' } }, false, bvNeutralizar);
+  assert.match(t, /não chame identificar_cliente/);
+  assert.match(t, /Serviço já escolhido \(dado\): corte adulto/);
+  assert.ok(!t.includes('c1') && !t.includes('s1')); // ids nunca vao ao modelo
+  assert.ok(!bvContextoPedido({ servico: { nome: 'x' } }, false, bvNeutralizar).includes('identificar_cliente'));
+}
+
+// bvSepararOpcoes: marcador em negrito e linhas sem marcador nao vazam como texto (suite R2/R12)
+{
+  const of = { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte adulto', valor: {} }, { id: '2', rotulo: 'barba design', valor: {} }] };
+  let m = a.bvCompor('O mais próximo é corte adulto. Qual prefere?\n**OPCOES:**\n1 | corte adulto — R$ 85\n2 | barba design', of, cfg);
+  assert.ok(!JSON.stringify(m).includes('OPCOES') && !m[0].texto.includes('|'), JSON.stringify(m));
+  assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['1', '2']);
+  m = a.bvCompor('Temos estas opções de barba:\n1 | barba design — R$ 65\n- 2 | corte adulto\n9 | inventada', of, cfg);
+  assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['1', '2']);
+  assert.ok(m[0].texto.includes('9 | inventada')); // id fora da oferta fica no texto, nunca vira opcao
+  assert.ok(!m[0].texto.includes('2 | corte'));
+  // preco na linha de opcao fica no texto, na ordem, sem id (suite R2); sem preco, so na lista
+  m = a.bvCompor('Temos estas opções de corte:\n1 | corte adulto — R$ 85\n2 | barba design — R$ 65\nQuer agendar?', of, cfg);
+  assert.equal(m[0].texto, 'Temos estas opções de corte: corte adulto — R$ 85 barba design — R$ 65 Quer agendar?');
+  assert.deepEqual(m[0].opcoes.map((o) => o.id), ['1', '2']);
+  assert.equal(a.bvCompor('Qual?\nOPCOES:\n1 | corte adulto\n2 | barba design', of, cfg)[0].texto, 'Qual?');
+  assert.ok(a.bvCompor('Preços:\n**OPCOES:**\n1 | corte adulto — R$ 85', of, cfg)[0].texto.includes('corte adulto — R$ 85'));
+}
+
+// bvSaudar no meio da sessao: o "Oi, Paulo!" do modelo sai; texto sem saudacao fica como veio
+{
+  const { bvSaudar } = require('../workflows/shared/agente.js');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Oi, Paulo! Pela imagem, é um corte adulto.' }], false)[0].texto, 'Pela imagem, é um corte adulto.');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Olá! temos estes' }], false)[0].texto, 'Temos estes');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Oi!' }], false)[0].texto, 'Oi!');
+  assert.equal(bvSaudar([{ n: 1, texto: 'Opção boa: 10h.' }], false)[0].texto, 'Opção boa: 10h.');
+}
+
+// PROD em teste fechado (graces.teste_liberado): o barbeiro de teste aparece na lista e no texto, o id nunca
+{
+  const { bvFiltrarBarbeiros, bvCompor } = require('../workflows/shared/agente.js');
+  const bs = [{ id: 't', nome: 'ZZ TESTE INTEGRACAO - NAO AGENDAR' }, { id: 'j', nome: 'Jayme' }];
+  assert.equal(bvFiltrarBarbeiros(bs, 't').length, 1);
+  assert.equal(bvFiltrarBarbeiros(bs, 't', true).length, 2);
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  const txt = 'Fica com ZZ TESTE às 10h. Confirma?';
+  assert.ok(!bvCompor(txt, null, { ...c, graces: { barbeiro_teste_id: 't' } }).some((m) => /ZZ TESTE/.test(m.texto)));
+  assert.ok(bvCompor(txt, null, { ...c, graces: { barbeiro_teste_id: 't', teste_liberado: true } }).some((m) => /ZZ TESTE/.test(m.texto)));
+}
+console.log('agente.test.js saudacao no meio e teste liberado ok');
+
+// K5: preco sem pergunta ganha o convite; com pergunta ou com lista fica como veio; "sao:" antes da lista some
+{
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  assert.equal(a.bvCompor('A barba sai por R$ 45.', null, c)[0].texto, 'A barba sai por R$ 45. Quer que eu já veja um horário pra você?');
+  assert.equal(a.bvCompor('A barba sai por R$ 45. Quer marcar?', null, c)[0].texto, 'A barba sai por R$ 45. Quer marcar?');
+  assert.equal(a.bvCompor('Abrimos às 8h.', null, c)[0].texto, 'Abrimos às 8h.');
+  const of = { tipo: 'horario', itens: [{ id: '1', rotulo: '09:00', valor: {} }] };
+  assert.equal(a.bvCompor('Os primeiros horários são:\nOPCOES:\n1 | 09:00', of, c)[0].texto, 'Os primeiros horários são estes. Qual fica melhor pra você?');
+}
+{
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  const of = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Barba — R$ 40', valor: {} }] };
+  assert.equal(a.bvCompor('Temos estas opções de barba:\nOPCOES:\n1 | Barba — R$ 40', of, c)[0].texto, 'Temos estas opções de barba: Barba — R$ 40 Quer que eu já veja um horário pra você?');
+  const of2 = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Barba', valor: {} }] };
+  const r = a.bvCompor('A barba sai por R$ 40:\nOPCOES:\n1 | Barba', of2, c);
+  assert.equal(r[r.length - 1].tipo, 'lista');
+  assert.ok(r[r.length - 1].texto.endsWith('Quer que eu já veja um horário pra você?'));
+}
+console.log('agente.test.js convite K5 ok');

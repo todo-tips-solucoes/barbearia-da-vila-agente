@@ -120,8 +120,8 @@ class BvGraces(unittest.TestCase):
             self.assertIn(acao, self.js[i:i + 300])
 
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
-        self.assertIn("cfg.ambiente === 'producao' || !cfg.redirecionar", self.js)
-        self.assertIn("cfg.redirecionar ? cfg.testeId", self.js)
+        self.assertIn("cfg.ambiente === 'producao' ? !cfg.testeLiberado : !cfg.redirecionar", self.js)
+        self.assertIn("const prof = redir ? cfg.testeId", self.js)
         self.assertIn("escrita_fora_do_teste", self.js)
         self.assertIn("'{{BV:teste.redirecionar_escrita}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
         self.assertIn("cadastroLiberado: false", self.nos["Planejar"]["parameters"]["jsCode"])  # 4.2.6: sem P1 nao cadastra

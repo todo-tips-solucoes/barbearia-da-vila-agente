@@ -22,6 +22,15 @@ class Vps(unittest.TestCase):
         self.assertIn("DBSIZE", _vps.cmd_redis(2, ["DBSIZE"]))
         self.assertIn("SET", _vps.cmd_redis(2, ["SET", "bv:teste:verif:a", "1"]))
 
+    def test_instalar_crons(self):  # so os arquivos da lista, atomico, com trava de PROD
+        with mock.patch.dict(os.environ, {"BV_DEPLOY_PRODUCAO_AUTORIZADO": ""}), self.assertRaises(_vps.Recusado):
+            _vps.instalar_crons("config/vps")
+        c = _vps.cmd_instalar("barbearia-backup-limpeza.sh")
+        self.assertIn("sh -n /root/barbearia_vila/barbearia-backup-limpeza.sh.tmp &&", c)
+        self.assertTrue(c.endswith("mv /root/barbearia_vila/barbearia-backup-limpeza.sh.tmp /root/barbearia_vila/barbearia-backup-limpeza.sh"))
+        self.assertNotIn("sh -n", _vps.cmd_instalar("barbearia-backup-limpeza.cron"))
+        self.assertEqual(sorted(_vps.CRONS), sorted(f for f in os.listdir("config/vps")))
+
     def test_sonda_fora_da_lista(self):
         with self.assertRaises(_vps.Recusado):
             _vps.cmd_sondar("rm-rf")

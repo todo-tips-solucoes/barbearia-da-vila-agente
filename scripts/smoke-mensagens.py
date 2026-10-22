@@ -86,6 +86,16 @@ def status_graces(ag):
     return None
 
 
+def status_graces_em(ag, alvo, limite_s=20, passo=4):
+    """A Graces as vezes demora a refletir o PUT de status (R16 falhou na suite com a resposta ja gravada)."""
+    fim = time.time() + limite_s
+    while True:
+        st = status_graces(ag)
+        if st == alvo or time.time() >= fim:
+            return st
+        time.sleep(passo)
+
+
 def evento_lista(n, rowid, titulo="Confirmo"):
     b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-25.json"), encoding="utf-8"))["body"]
     dj = {"rawData": {"event": {"Message": {"listResponseMessage": {"title": titulo, "listType": 1, "singleSelectReply": {"selectedRowID": rowid}, "contextInfo": {"stanzaID": "SMOKE"}}}}}}
@@ -124,7 +134,7 @@ def m2():
     checar("agendamento nasce A confirmar (status 2)", status_graces(ag) == 2, str(status_graces(ag)))
     sa.post(evento_lista(506, f"bvc:{i}:s"))
     checar("resposta gravada", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='confirmada'", 40) == "1", estado_linha(i))
-    checar("Graces confirmou (status 3)", status_graces(ag) == 3, str(status_graces(ag)))
+    checar("Graces confirmou (status 3)", (st := status_graces_em(ag, 3)) == 3, str(st))
     checar("resposta ao cliente gravada (saida)", sa.sql(f"SELECT count(*) FROM mensagens WHERE contato_id={cid} AND mensagem_id_canal LIKE 'conf-confirmada-%';") == "1")
     sa.post(evento_lista(506, f"bvc:{i}:s"))  # reenvio: evento identico
     time.sleep(25)
@@ -138,7 +148,7 @@ def m3():
     cid, i, ag = confirmacao_aberta(507)
     sa.post(sa.evento(507, M["titulo_nao"]))
     checar("recusada gravada (espera do id + chamada)", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='recusada'", M["espera_texto_s"] + 60) == "1", estado_linha(i))
-    checar("Graces registrou recusa (status 10)", status_graces(ag) == 10, str(status_graces(ag)))
+    checar("Graces registrou recusa (status 10)", (st := status_graces_em(ag, 10)) == 10, str(st))
     checar("conversas.pedido.confirmacao_recusada gravado para o agente", sa.sql(f"SELECT count(*) FROM conversas WHERE contato_id={cid} AND pedido ? 'confirmacao_recusada';") == "1")
     checar("o titulo nao virou turno do agente", sa.sql(f"SELECT count(*) FROM mensagens WHERE contato_id={cid} AND direcao='entrada';") == "0")
 
@@ -173,7 +183,7 @@ def m7():
     sa.post(sa.evento(509, M["titulo_nao"]))  # chega antes do id, como medido
     sa.post(evento_lista(509, f"bvc:{i}:n", M["titulo_nao"]))
     checar("recusada pelo id", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='recusada'", 60) == "1", estado_linha(i))
-    checar("Graces registrou recusa (status 10)", status_graces(ag) == 10, str(status_graces(ag)))
+    checar("Graces registrou recusa (status 10)", (st := status_graces_em(ag, 10)) == 10, str(st))
     checar("lembrete e pos cancelados (recusada)", estado_linha(lem) == "cancelada/recusada/" and estado_linha(pos) == "cancelada/recusada/", f"{estado_linha(lem)} {estado_linha(pos)}")
     time.sleep(M["espera_texto_s"] + 15)
     sem_agente = f"SELECT count(*) FROM mensagens WHERE contato_id={cid} AND (mensagem_id_canal LIKE 'out-%' OR (direcao='entrada' AND processada_em IS NULL))"

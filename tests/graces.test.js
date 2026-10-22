@@ -63,6 +63,14 @@ assert.equal(r.resultado.total, 3);
 assert.equal(g.bvGPasso(p.st, [resp(400, { code: 'PARAMETRO_INVALIDO' }), resp(400, {})], cfg).final.resultado.orientacao, 'dia fechado ou fora do prazo; sugira outro dia');
 assert.match(g.bvGPasso(p.st, [ok({ horarios: [] }), ok({ horarios: [] })], cfg).final.resultado.orientacao, /lotado/);
 const opcoesHora = r.efeitos.opcoes;
+// periodo (suite R1): pediu tarde, so horarios de 12:00 a 17:59; nada no periodo vira orientacao, nao "dia lotado"
+p = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: 'tarde' }), ctxH, cfg);
+r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00', '11:40', '12:00', '17:20', '18:00'] }), ok({ minutos: 40, horarios: [] })], cfg).final;
+assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['12:00', '17:20']);
+r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00'] }), ok({ minutos: 40, horarios: [] })], cfg).final;
+assert.match(r.resultado.orientacao, /sem horário livre de tarde/);
+assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: 'madrugada' }, cfg).resultado.code, 'entrada_invalida');
+assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: '' }, cfg).ok, true);
 const comBarbeiro = entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2', data: '2026-10-20' });
 assert.equal(g.bvGPlano(comBarbeiro, ctxH, cfg).reqs.length, 1);
 assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '99', data: '2026-10-20' }), ctxH, cfg).final.resultado.code, 'opcao_desconhecida');
@@ -134,6 +142,13 @@ assert.equal(f2({ operacao: 'agendar' }, { pedido: {}, info: { estado: 'pendente
 assert.equal(f2({ operacao: 'agendar' }, { pedido: {} }).final.resultado.code, 'proposta_invalida');
 const prop = (acao, dados) => ({ pedido: { idCliente: 'c1' }, proposta: { id: PID, acao, dados } });
 assert.equal(f2({ operacao: 'agendar' }, prop('agendar', dadosAg), { ...cfg, ambiente: 'producao' }).final.efeitos.proposta_upd.estado, 'falhou');
+// PROD com o de teste liberado: so escreve no de teste; barbeiro real recusa; a fase 2 vai sempre ao de teste
+const cfgP = { ...cfg, ambiente: 'producao', redirecionar: false, testeLiberado: true };
+assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora), cfgP).final.resultado.code, 'escrita_fora_do_teste');
+assert.ok(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(oHoraTeste), cfgP).final.efeitos.proposta_nova);
+assert.equal(g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), ctxE(oAgReal), cfgP).final.resultado.code, 'escrita_fora_do_teste');
+assert.equal(f2({ operacao: 'agendar' }, prop('agendar', { ...dadosAg, idProfissional: 'real' }), cfgP).reqs[0].qs.idProfissional, TESTE);
+assert.equal(g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfgP).st, [ok(agBruto)], cfgP).final.efeitos.opcoes.itens.length, 1);
 
 // agendar fase 2: revalida (barbeiro de teste), horario tomado -> falhou + novas opcoes; ok -> POST so no barbeiro de teste.
 p = f2({ operacao: 'agendar' }, prop('agendar', dadosAg));

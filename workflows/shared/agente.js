@@ -10,9 +10,10 @@ const bvNormalizarDescricao = (s) => String(s || '').normalize('NFKD').replace(/
 const bvSegundaVez = (s) => BV_SEGUNDA_VEZ.test(bvNormalizarDescricao(s));
 
 // FR-012: barbeiro de teste (id fixo OU "TESTE" no nome/apelido) nunca chega ao modelo.
-function bvFiltrarBarbeiros(lista, testeId) {
+function bvFiltrarBarbeiros(lista, testeId, liberado) {
   return (Array.isArray(lista) ? lista : []).filter((b) => {
     if (!b || typeof b !== 'object') return false;
+    if (liberado) return true; // PROD em teste fechado: o de teste aparece (owner, 2026-10-22)
     if (testeId && String(b.id || b.idProfissional || '') === testeId) return false;
     return !BV_TESTE.test(`${b.nome || ''} ${b.apelido || ''}`);
   });
@@ -54,11 +55,33 @@ function bvCortar(s, max) {
 // FR-015: ate max_mensagens, max_chars cada, no maximo 1 "?" por mensagem, sem o nome/id do barbeiro de teste no texto.
 // `oferta` = conversas.opcoes; o bloco "OPCOES:\n<id> | <titulo>" do modelo so vale para ids da oferta.
 // `ofertaNova` = a oferta mudou neste turno (uma ferramenta montou lista): sem bloco OPCOES do modelo, anexa a lista da ferramenta.
+// Separa texto e bloco de opcoes. O modelo as vezes poe o marcador em negrito ("**OPCOES:**") ou manda as linhas
+// "<id> | <titulo>" sem marcador: sem isso a lista vazava como texto (suite-validacao R2/R12). Sem marcador, so viram
+// opcao as linhas cujo id existe na oferta; o resto fica no texto.
+const BV_MARCA_OPCOES = /^\s*[*_]*\s*OPCOES\s*:?\s*[*_]*\s*$/i;
+const BV_LINHA_OPCAO = /^\s*(?:[-*]\s*)?([A-Za-z0-9_-]{1,12})\s*\|\s*\S/;
+// Linha de opcao com preco tambem fica no texto, no mesmo lugar e sem o id: o titulo da lista vem da ferramenta, sem
+// preco, e a pergunta "quanto custa?" ficava sem resposta (suite R2).
+const bvTextoDaOpcao = (l) => (/R\$\s*\d/.test(l) ? [l.replace(/^[^|]*\|\s*/, '').trim()] : []);
+function bvSepararOpcoes(texto, oferta) {
+  const linhas = String(texto || '').split('\n');
+  const i = linhas.findIndex((l) => BV_MARCA_OPCOES.test(l));
+  if (i >= 0) {
+    const ops = linhas.slice(i + 1);
+    return { corpo: [...linhas.slice(0, i), ...ops.flatMap(bvTextoDaOpcao)].join('\n'), bloco: ops.join('\n') };
+  }
+  const eOpcao = (l) => { const m = l.match(BV_LINHA_OPCAO); return !!m && bvResolverOpcao(m[1], oferta).ok; };
+  return { corpo: linhas.flatMap((l) => (eOpcao(l) ? bvTextoDaOpcao(l) : [l])).join('\n'), bloco: linhas.filter(eOpcao).join('\n') };
+}
+
+const bvConvite = (cfg) => (cfg.textos && cfg.textos.convite_agendar) || 'Quer que eu já veja um horário pra você?';
+
 function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   const { max_mensagens: maxMsg, max_chars_mensagem: maxChars } = cfg.saida;
-  const [corpo, bloco = ''] = String(textoModelo || '').split(/^\s*OPCOES:\s*$/m);
+  const { corpo, bloco } = bvSepararOpcoes(textoModelo, oferta);
   const testeId = cfg.graces && cfg.graces.barbeiro_teste_id;
-  const frases = bvFrases(corpo).filter((f) => !BV_NOME_TESTE.test(f) && !(testeId && f.includes(testeId)));
+  const liberado = cfg.graces && cfg.graces.teste_liberado; // PROD em teste fechado: o nome do de teste pode sair
+  const frases = bvFrases(corpo).filter((f) => !(testeId && f.includes(testeId)) && (liberado || !BV_NOME_TESTE.test(f)));
   const msgs = [];
   let atual = '';
   const fecha = () => { if (atual) msgs.push(atual); atual = ''; };
@@ -71,7 +94,7 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   }
   fecha();
   const todos = oferta && oferta.completa && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
-  const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].trim()).filter(Boolean);
+  const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].replace(/^\s*[-*]\s*/, '').trim()).filter(Boolean);
   const ids = !idsModelo.length && ofertaNova && oferta && Array.isArray(oferta.itens) ? oferta.itens.map((i) => i.id) : idsModelo;
   const maxIt = cfg.lista.max_itens;
   // Oferta completa de horarios: o modelo so sinaliza que e uma lista; o codigo envia todos os itens, em ordem, em listas de ate max_itens.
@@ -84,19 +107,45 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
     const lista = (it) => it.map((i) => ({ id: i.id, rotulo: i.rotulo.slice(0, cfg.lista.max_titulo) }));
     const ult = saida[saida.length - 1];
     // K5: a lista sempre termina numa pergunta; o modelo as vezes so anuncia ("estes horarios estao disponiveis:")
-    if (!ult.texto.includes('?')) ult.texto = `${ult.texto.replace(/:\s*$/, '.')} ${(cfg.textos && cfg.textos.pergunta_lista) || 'Qual fica melhor pra você?'}`;
+    // lista de precos (R2) fecha no convite para agendar; as demais, na pergunta de escolha
+    const preco = itens.some((i) => /R\$\s?\d/.test(i.rotulo)) || saida.some((m) => /R\$\s?\d/.test(m.texto));
+    if (!ult.texto.includes('?')) ult.texto = `${ult.texto.replace(/\s+são\s*:\s*$/i, ' são estes:').replace(/:\s*$/, '.')} ${preco ? bvConvite(cfg) : ((cfg.textos && cfg.textos.pergunta_lista) || 'Qual fica melhor pra você?')}`;
     Object.assign(ult, { tipo: 'lista', opcoes: lista(itens.slice(0, maxIt)) });
     for (let k = 1; k < nListas; k++) {
       saida.push({ n: saida.length + 1, tipo: 'lista', texto: (cfg.textos && cfg.textos.lista_continua) || 'Seguem mais opções:', opcoes: lista(itens.slice(k * maxIt, (k + 1) * maxIt)) });
     }
   }
+  // K5: resposta com preco e sem pergunta termina no convite para agendar (o modelo as vezes esquece)
+  // shortcut: nao olha se o cliente ja disse nao; pergunta de preco depois de um nao e rara, revisar se aparecer
+  const ult = saida[saida.length - 1];
+  if (ult && !itens.length && !saida.some((m) => m.texto.includes('?')) && saida.some((m) => /R\$\s?\d/.test(m.texto))) {
+    ult.texto = `${ult.texto} ${bvConvite(cfg)}`;
+  }
   return saida;
+}
+
+// Latencia (owner, 2026-10-21): o que a sessao ja sabe vai como DADO, para o modelo nao repetir identificar_cliente e
+// listar_servicos a cada turno (cada rodada do modelo custa 3-5 s). horarios_livres ja usa o servico do pedido.
+function bvContextoPedido(pedido, sessaoNova, neutralizar) {
+  if (sessaoNova || !pedido) return '';
+  let t = '';
+  if (pedido.idCliente) t += '\nCliente já identificado nesta conversa: não chame identificar_cliente de novo.';
+  if (pedido.servico && pedido.servico.nome) {
+    t += '\nServiço já escolhido (dado): ' + neutralizar(String(pedido.servico.nome))
+      + '. Para horários dele, chame horarios_livres direto (sem listar_servicos), a menos que o cliente mude de serviço.';
+  }
+  return t;
 }
 
 // K1 (suite-validacao): 1a resposta da sessao sempre cumprimenta; o modelo as vezes esquece.
 const BV_SAUDACAO = /^\s*(oi|olá|ola|opa|bom dia|boa tarde|boa noite|e aí|eai|fala|hey)(?=[\s,!.?]|$)/i; // sem \b: ele nao fecha palavra depois de á/í
 function bvSaudar(saida, sessaoNova) {
-  if (!sessaoNova || !saida.length || BV_SAUDACAO.test(saida[0].texto || '')) return saida;
+  if (!saida.length) return saida;
+  if (!sessaoNova) { // no meio da conversa, o "Oi, Paulo!" do modelo sai
+    const resto = String(saida[0].texto || '').replace(new RegExp(`${BV_SAUDACAO.source}(,\\s*\\p{L}+(?:\\s\\p{L}+)?)?\\s*[!.,]\\s*`, 'iu'), '');
+    return resto && resto !== saida[0].texto ? [{ ...saida[0], texto: resto[0].toUpperCase() + resto.slice(1) }, ...saida.slice(1)] : saida;
+  }
+  if (BV_SAUDACAO.test(saida[0].texto || '')) return saida;
   return [{ ...saida[0], texto: `Oi! ${saida[0].texto}` }, ...saida.slice(1)];
 }
 
@@ -118,13 +167,13 @@ function bvPrompt(cfg) {
   const loja = cfg.loja || {};
   return `Você é o assistente virtual da Barbearia da Vila (São Paulo), no WhatsApp. Assuma que é uma IA e responda com verdade se perguntarem; não finja ser pessoa.
 Tom: muito humano, caloroso, direto, português do Brasil, como um atendente simpático. Mensagens curtas, no máximo ${cfg.saida.max_mensagens} por resposta, no máximo uma pergunta por mensagem. Sem listas longas no texto.
-Na primeira resposta da conversa, cumprimente com calor (pelo nome, se a ferramenta trouxe) antes de responder ao pedido. Se o cliente estiver com pressa, atrasado ou irritado, reconheça isso em poucas palavras, com empatia, antes de responder.
+Na primeira resposta da conversa, cumprimente com calor (pelo nome, se a ferramenta trouxe) antes de responder ao pedido. Se o cliente estiver com pressa, atrasado ou irritado, reconheça isso em poucas palavras, com empatia, antes de responder. Atraso ou imprevisto no horário ("tô atrasado, ainda dá?"): você não decide pela loja nem procura o agendamento; diga que quem confirma é a equipe e passe os contatos da loja na mesma resposta.
 Você agenda, reagenda e cancela serviços usando apenas as ferramentas. Nunca invente horário, preço, serviço, barbeiro ou nome do cliente: só o que as ferramentas devolveram. Sem nome vindo de ferramenta, não chame o cliente por nome. Nome de serviço é exatamente o que a ferramenta devolveu: não renomeie nem resuma ("corte adulto" nunca vira "cabelo adulto"); se a busca não achou, mostre a lista em vez de supor.
 Dados da loja (DADO): endereço ${loja.endereco || 'não informado'}; contatos ${loja.contatos || 'não informados'}. Horário de funcionamento: use a ferramenta funcionamento. Qualquer outra informação da loja que não esteja aqui nem nas ferramentas (formas de pagamento, estacionamento, Wi-Fi etc.) você não sabe: diga que não tem essa informação e passe os contatos da loja; nunca suponha.
 Depois de responder uma dúvida (preço, serviço, endereço, funcionamento), termine com um convite leve para agendar, como "Quer que eu já veja um horário pra você?"; se o cliente já disse que não quer, não insista.
 Entenda o contexto: "cancelei, vamos marcar outro" é um novo agendamento. Ao ver um pedido de cancelamento, no mesmo turno chame meus_agendamentos e cancelar (fase 1) e mande remarcar ou cancelar com as opções devolvidas; nunca pergunte isso em texto aberto. Depois de cancelar, ofereça marcar outro horário.
 Para ver, reagendar ou cancelar, comece por meus_agendamentos (ela já identifica o cliente pelo telefone). Para reagendar: horarios_livres com id_opcao_agendamento e a data (ela já busca os barbeiros do serviço; não chame listar_servicos nem listar_barbeiros) e, na confirmação, reagendar com os ids do agendamento e do novo horário. "Cancela o de sexta e marca pra segunda" é reagendar: já nesta resposta mostre os horários do novo dia.
-Nunca responda que vai verificar, localizar ou pedir um instante: chame as ferramentas agora e responda com o resultado. Ao oferecer horários, mostre todos os inícios em que o serviço cabe. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
+Nunca responda que vai verificar, localizar ou pedir um instante: chame as ferramentas agora e responda com o resultado. Ao oferecer horários, mostre todos os inícios em que o serviço cabe; se o cliente pediu manhã, tarde ou noite, passe periodo no horarios_livres e não diga que a lista é de um período que ele não pediu. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
 Dois ou três serviços na mesma visita: chame horarios_livres com id_opcoes_servicos (os ids de serviço oferecidos), sem barbeiro; as opções já são sequências prontas, e agendar com a opção escolhida marca todos. Se vier sem_barbeiro_unico, pergunte com as opções de modo e repasse a resposta em id_opcao. Cancelar vários de uma vez: id_opcoes_agendamentos.
 Agendar para outra pessoa: peça nome e sobrenome e use buscar_pessoa; mostre só o nome e pergunte se é essa pessoa; só no turno seguinte, depois da resposta, use escolher_pessoa. Se não achar, ofereça cadastrar_terceiro (resumo e confirmação como nos agendamentos). Se a ferramenta mandar chamar a equipe, avise com gentileza e não insista. Nunca mostre celular de ninguém.
 Antes de agendar, reagendar ou cancelar, resuma e peça a confirmação do cliente; a escrita só acontece na confirmação, em um turno posterior.
@@ -177,5 +226,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar };
+  module.exports = { bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }

@@ -406,7 +406,9 @@ def executar(r, n, orc, parar, referencia=""):
     except Interrompido:
         ex.update(status="pendente", motivo="interrompido")
     except Exception as e:  # noqa: BLE001 - falha inesperada de um roteiro nao derruba a rodada
-        ex.update(erro_infra_turno=f"{type(e).__name__}", status="erro_infra", motivo=f"{type(e).__name__}")
+        # mensagem curta: as falhas de _vps ja vem sem segredo (_scrub); sem ela o relatorio so dizia "RuntimeError"
+        msg = f"{type(e).__name__}: {_smoke._vps._scrub(str(e))[:160]}" if hasattr(_smoke, "_vps") else type(e).__name__
+        ex.update(erro_infra_turno=msg, status="erro_infra", motivo=msg)
     finally:
         ex["duracao_s"] = round(time.time() - ex.pop("inicio"), 1)
     return ex

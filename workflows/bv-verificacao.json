@@ -1,10 +1,10 @@
 {
-  "name": "Barbearia Vila - Verificacao [TESTE]",
+  "name": "Barbearia Vila - Verificacao [{{BV:rotulo}}]",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "bv-verificacao",
+        "path": "{{BV:verificacao.path}}",
         "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {}
@@ -23,7 +23,7 @@
           "name": "Barbearia Vila Verificacao"
         }
       },
-      "webhookId": "9d789ec6-5ed3-50ab-951a-5c25c2676822"
+      "webhookId": "{{BV:verificacao.webhook_id}}"
     },
     {
       "parameters": {

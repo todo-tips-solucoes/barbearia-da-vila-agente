@@ -14,6 +14,9 @@ function bvNormalizar(evento, opcoes) {
   if (typeof b.sender !== 'string' || !b.sender || !m || typeof m !== 'object') {
     return { status: 'invalida', motivo: 'campos_ausentes' };
   }
+  // Liberacao gradual (producao): lista nao vazia = so esses numeros sao atendidos; os demais nao geram gravacao nem resposta.
+  const lib = (opcoes && Array.isArray(opcoes.liberados)) ? opcoes.liberados.map((x) => String(x).replace(/\D/g, '')) : [];
+  if (lib.length && !lib.includes(b.sender.replace(/\D/g, ''))) return { status: 'descartada', motivo: 'nao_liberado' };
   const od = m.originalData && typeof m.originalData === 'object' ? m.originalData : {};
   const eAudio = (typeof m.type === 'string' && m.type.startsWith('audio/')) || !!od.audioMessage;
   const bloco = eAudio ? od.audioMessage : od.imageMessage;

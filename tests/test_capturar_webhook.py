@@ -45,6 +45,40 @@ class T(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(cm.chamadas, [])
 
+    def prod(self, path="bv-recepcao-p", url="https://n8n2.exemplo"):
+        json.dump({"n8n_url": url, "webhook": {"path": path}}, open(f"{self.d}/config/ambientes/producao.json", "w"))
+
+    def test_recepcao_producao_exige_trava_anota_e_restaura(self):
+        self.prod()
+        cm = FakeCm("https://n8n2.exemplo/webhook/bv-recepcao-teste")
+        os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO", None)
+        self.assertEqual(self.run_main("trocar", cm, "--destino", "recepcao-producao")[0], 2)
+        self.assertEqual(cm.chamadas, [])
+        os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
+        try:
+            self.assertEqual(self.run_main("anotar", cm, "--destino", "recepcao-producao")[0], 2)  # so trocar/restaurar
+            for _ in range(2):  # repetir o trocar nao perde a URL de antes
+                self.assertEqual(self.run_main("trocar", cm, "--destino", "recepcao-producao")[0], 0)
+                self.assertEqual(cm.url, "https://n8n2.exemplo/webhook/bv-recepcao-p")
+            arq = f"{self.d}/.webhook-145-antes-prod.url"
+            self.assertEqual(open(arq).read().strip(), "https://n8n2.exemplo/webhook/bv-recepcao-teste")
+            self.assertEqual(oct(os.stat(arq).st_mode & 0o777), "0o600")
+            self.assertEqual(self.run_main("restaurar", cm, "--destino", "recepcao-producao")[0], 0)
+            self.assertEqual(cm.url, "https://n8n2.exemplo/webhook/bv-recepcao-teste")
+        finally:
+            os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
+
+    def test_recepcao_producao_recusa_sem_path_e_instancia_antiga(self):
+        os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
+        try:
+            for path, url in (("", "https://n8n2.exemplo"), ("p", "https://n8n.todo-tips.com")):
+                self.prod(path, url)
+                cm = FakeCm("orig")
+                self.assertEqual(self.run_main("trocar", cm, "--destino", "recepcao-producao")[0], 1)
+                self.assertNotIn(("POST", "/api/whatsapp/update"), cm.chamadas)
+        finally:
+            os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
+
     def test_anotar_nao_sobrescreve(self):
         cm = FakeCm("orig")
         self.assertEqual(self.run_main("anotar", cm)[0], 0)

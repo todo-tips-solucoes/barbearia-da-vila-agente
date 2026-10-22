@@ -114,32 +114,51 @@ class T(unittest.TestCase):
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
-    def test_producao_recusa_mensagens_agendadas(self):
+    def test_producao_bv_mensagens_so_com_ativo(self):
         os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
         try:
-            self.pcfg["workflows"]["bv-mensagens"] = ""
-            self.pcfg["workflows_sub"] = {"bv_confirmacao": ""}
+            self.pcfg["workflows"]["bv-mensagens"] = "wfM"
+            self.pcfg["workflows_sub"] = {"bv_confirmacao": "wfC"}
+            os.makedirs(f"{self.d}/workflows/sub")
+            json.dump(dict(WF, name="M"), open(f"{self.d}/workflows/bv-mensagens.json", "w"))
+            json.dump(dict(WF, name="C"), open(f"{self.d}/workflows/sub/bv-confirmacao.json", "w"))
+            for ativo in (False, None):  # desligado ou sem a chave: bv-mensagens fica fora
+                self.pcfg["mensagens"] = {} if ativo is None else {"ativo": ativo}
+                json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+                api = FakeApi()
+                rc, _, err = self.run_main(["producao", "--confirmar-id", "wfM", "--so", "bv-mensagens"], api)
+                self.assertEqual((rc, api.chamadas), (2, []))
+                self.assertIn("mensagens.ativo true", err)
+                api = FakeApi()  # deploy geral publica o resto, inclusive bv_confirmacao, e pula bv-mensagens
+                self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], api)[0], 0)
+                self.assertIn(("POST", "/workflows/wfC/publish"), api.chamadas)
+                self.assertTrue(all("wfM" not in r for _, r in api.chamadas))
+            self.pcfg["mensagens"] = {"ativo": True}
             json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
             api = FakeApi()
-            for nome in ("bv-mensagens", "bv_confirmacao"):
-                rc, _, err = self.run_main(["producao", "--confirmar-id", "wfP", "--so", nome], api)
-                self.assertEqual(rc, 2)
-                self.assertIn("so do TESTE", err)
-            # deploy geral de PROD ignora os dois (nao ha arquivo de workflow para eles neste fixture)
-            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], api)[0], 0)
-            self.assertTrue(all("bv-mensagens" not in r and "confirmacao" not in r for _, r in api.chamadas))
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfM", "--so", "bv-mensagens"], api)[0], 0)
+            self.assertIn(("POST", "/workflows/wfM/publish"), api.chamadas)
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
-    def test_producao_recusa_chave_teste(self):
+    def test_producao_chave_teste_so_inerte(self):
         os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
         try:
             json.dump(dict(WF, name="{{BV:teste.contato}}"), open(f"{self.d}/workflows/bv-verificacao.json", "w"))
             api = FakeApi()
             rc, _, err = self.run_main(["producao", "--confirmar-id", "wfP"], api)
-            self.assertEqual(rc, 2)
+            self.assertEqual((rc, api.chamadas), (2, []))  # chave desconhecida
             self.assertIn("teste.*", err)
-            self.assertEqual(api.chamadas, [])
+            json.dump(dict(WF, name="x {{BV:teste.redirecionar_escrita}} {{BV:teste.contatos_escrita}}"),
+                      open(f"{self.d}/workflows/bv-verificacao.json", "w"))
+            for t in ({}, {"redirecionar_escrita": True, "contatos_escrita": []}, {"redirecionar_escrita": False, "contatos_escrita": ["+55"]}):
+                self.pcfg["teste"] = t
+                json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+                api = FakeApi()
+                self.assertEqual((self.run_main(["producao", "--confirmar-id", "wfP"], api)[0], api.chamadas), (2, []), t)
+            self.pcfg["teste"] = {"redirecionar_escrita": False, "contatos_escrita": []}
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], FakeApi())[0], 0)
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
@@ -206,13 +225,24 @@ class T(unittest.TestCase):
         cfg = json.load(open(f"{self.d}/config/ambientes/integracao.json"))
         self.assertEqual((cfg["workflows"]["bv-verificacao"], cfg["workflows_sub"]), ("novo1", {}))
 
-    def test_criar_producao_recusado(self):
+    def test_criar_producao_exige_trava_e_grava_id(self):
+        json.dump({"workflows": {"bv-verificacao": ""}}, open(f"{self.d}/config/ambientes/producao.json", "w"))
+        api = FakeApi()
+        self.assertEqual(self.run_main(["producao", "--criar", "bv-verificacao"], api)[0], 2)  # sem a trava
+        self.assertEqual(api.chamadas, [])
         os.environ["BV_DEPLOY_PRODUCAO_AUTORIZADO"] = "sim"
         try:
-            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP", "--criar", "bv-verificacao"], FakeApi())[0], 2)
+            self.assertEqual(self.run_main(["producao", "--criar", "bv-verificacao"], FakeApi(existentes=["BV Verificacao"]))[0], 1)
+            rc, out, _ = self.run_main(["producao", "--criar", "bv-verificacao"], api)
+            self.assertEqual((rc, out.strip()), (0, "bv-verificacao -> novo1"))
+            self.assertEqual(json.load(open(f"{self.d}/config/ambientes/producao.json"))["workflows"]["bv-verificacao"], "novo1")
+            self.assertEqual(self.run_main(["producao", "--criar", "bv-verificacao"], FakeApi())[0], 1)  # id preenchido
+            # atualizar segue exigindo --confirmar-id de um id de PROD
+            self.assertEqual(self.run_main(["producao", "--so", "bv-verificacao"], FakeApi())[0], 2)
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wf1", "--so", "bv-verificacao"], FakeApi())[0], 2)
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "novo1", "--so", "bv-verificacao"], FakeApi())[0], 0)
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
-
 
 if __name__ == "__main__":
     unittest.main()

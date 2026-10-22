@@ -4,7 +4,7 @@
   "n8n_url": "https://n8n2.todo-tips.com",
   "postgres": {
     "database": "barbearia_vila",
-    "credencial_id": ""
+    "credencial_id": "lKwTwGxPO9zHbthQ"
   },
   "redis": {
     "prefixo": "bv:prod:",
@@ -15,20 +15,25 @@
     }
   },
   "credenciais": {
-    "redis": "",
-    "openai": "",
-    "graces": "",
-    "chatmaster": ""
+    "redis": "chtScO4j08LclN89",
+    "openai": "3e2ki13KTZskEv7O",
+    "graces": "NCWLnCOpE4DgIUVU",
+    "chatmaster": "FKqysWSzX8p4X1re",
+    "verificacao": "i7qS8QNvswOIbepF"
   },
   "workflows": {
-    "bv-mensagens": ""
+    "bv-mensagens": "",
+    "bv-recepcao": "yUEWTZpNYMfIotdg",
+    "bv-vigia": "hbHUY1RLNS5SJ3sP",
+    "bv-verificacao": "M07jjghR3IJClmDW",
+    "bv-alerta": "qbA6tXtfzHLZr11T"
   },
   "webhook": {
-    "path": "",
-    "webhook_id": ""
+    "path": "bv-recepcao-680eee2d-fd37-4883-8743-60c83b0b55c1",
+    "webhook_id": "b0784483-4a86-4130-a3d5-7a31524460c2"
   },
   "chatmaster": {
-    "whatsapp_id": ""
+    "whatsapp_id": "145"
   },
   "buffer": {
     "janela_s": 8,
@@ -79,6 +84,7 @@
     "host": "api.gracesonline.com.br",
     "timeout_ms": 15000,
     "barbeiro_teste_id": "1cee0bb9-e58b-4428-9e9b-1db184db7943",
+    "teste_contatos": ["5511967296849", "5511971634416", "5511995164884"],
     "max_estagios": 16,
     "max_consultas_estagio": 20
   },
@@ -112,7 +118,9 @@
     "hosts_audio": [
       "object.ce1.eveo.com.br"
     ],
-    "hosts_imagem": [],
+    "hosts_imagem": [
+      "object.ce1.eveo.com.br"
+    ],
     "mimes_audio": [
       "audio/ogg"
     ],
@@ -137,10 +145,10 @@
     "retencao_h": 23.9
   },
   "workflows_sub": {
-    "entregar_rajada": "",
-    "bv_graces": "",
-    "interpretar_midia": "",
-    "bv_confirmacao": ""
+    "entregar_rajada": "QTP7ezx661uFp7Wj",
+    "bv_graces": "K0yVUwFr5gucXRQd",
+    "interpretar_midia": "IiVgK4hASaCzzbVM",
+    "bv_confirmacao": "jI5eK7tHfFYuqCJS"
   },
   "encadeamento": {
     "max_servicos": 3
@@ -180,5 +188,18 @@
   "teste": {
     "contatos_escrita": [],
     "redirecionar_escrita": false
+  },
+  "verificacao": {
+    "path": "bv-verificacao-98149456-156e-441b-af93-13b728f80a4d",
+    "webhook_id": "aa3f8b3c-bdda-4d5c-844b-b3576fbde593"
+  },
+  "liberacao": {
+    "contatos": []
+  },
+  "alerta": {
+    "contato": "5511967296849",
+    "falhas_agente_limiar": 3,
+    "janela_min": 10,
+    "repetir_min": 60
   }
 }
