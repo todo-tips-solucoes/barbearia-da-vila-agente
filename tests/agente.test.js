@@ -206,3 +206,14 @@ console.log('agente.test.js turno com midia ok');
   assert.ok(bvCompor(txt, null, { ...c, graces: { barbeiro_teste_id: 't', teste_liberado: true } }).some((m) => /ZZ TESTE/.test(m.texto)));
 }
 console.log('agente.test.js saudacao no meio e teste liberado ok');
+
+// K5: preco sem pergunta ganha o convite; com pergunta ou com lista fica como veio; "sao:" antes da lista some
+{
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  assert.equal(a.bvCompor('A barba sai por R$ 45.', null, c)[0].texto, 'A barba sai por R$ 45. Quer que eu já veja um horário pra você?');
+  assert.equal(a.bvCompor('A barba sai por R$ 45. Quer marcar?', null, c)[0].texto, 'A barba sai por R$ 45. Quer marcar?');
+  assert.equal(a.bvCompor('Abrimos às 8h.', null, c)[0].texto, 'Abrimos às 8h.');
+  const of = { tipo: 'horario', itens: [{ id: '1', rotulo: '09:00', valor: {} }] };
+  assert.equal(a.bvCompor('Os primeiros horários são:\nOPCOES:\n1 | 09:00', of, c)[0].texto, 'Os primeiros horários são estes. Qual fica melhor pra você?');
+}
+console.log('agente.test.js convite K5 ok');

@@ -105,11 +105,17 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
     const lista = (it) => it.map((i) => ({ id: i.id, rotulo: i.rotulo.slice(0, cfg.lista.max_titulo) }));
     const ult = saida[saida.length - 1];
     // K5: a lista sempre termina numa pergunta; o modelo as vezes so anuncia ("estes horarios estao disponiveis:")
-    if (!ult.texto.includes('?')) ult.texto = `${ult.texto.replace(/:\s*$/, '.')} ${(cfg.textos && cfg.textos.pergunta_lista) || 'Qual fica melhor pra você?'}`;
+    if (!ult.texto.includes('?')) ult.texto = `${ult.texto.replace(/\s+são\s*:\s*$/i, ' são estes:').replace(/:\s*$/, '.')} ${(cfg.textos && cfg.textos.pergunta_lista) || 'Qual fica melhor pra você?'}`;
     Object.assign(ult, { tipo: 'lista', opcoes: lista(itens.slice(0, maxIt)) });
     for (let k = 1; k < nListas; k++) {
       saida.push({ n: saida.length + 1, tipo: 'lista', texto: (cfg.textos && cfg.textos.lista_continua) || 'Seguem mais opções:', opcoes: lista(itens.slice(k * maxIt, (k + 1) * maxIt)) });
     }
+  }
+  // K5: resposta com preco e sem pergunta termina no convite para agendar (o modelo as vezes esquece)
+  // shortcut: nao olha se o cliente ja disse nao; pergunta de preco depois de um nao e rara, revisar se aparecer
+  const ult = saida[saida.length - 1];
+  if (ult && !itens.length && !saida.some((m) => m.texto.includes('?')) && saida.some((m) => /R\$\s?\d/.test(m.texto))) {
+    ult.texto = `${ult.texto} ${(cfg.textos && cfg.textos.convite_agendar) || 'Quer que eu já veja um horário pra você?'}`;
   }
   return saida;
 }
