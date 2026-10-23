@@ -62,9 +62,15 @@ Docker Swarm de um nó, com uma stack (`bv`) e segredos em `docker secret`:
 - **Limites:** reservas e limites de memória por serviço, porque o servidor divide a RAM com as sessões do Claude Code.
 - **Arquivos:** compose e scripts no repo (`infra/stack-bv.yml`); segredos em `/root/barbearia_vila/` (modo 600), nunca no git.
 
-### Preservação dos ids
+### Ids: TESTE recriado, PROD a decidir
 
-A ideia é exportar com o CLI do n8n (`export:workflow` e `export:credentials --decrypted`) e importar com `import:*`. Assim **os ids dos workflows, das credenciais e os `webhookId` continuam os mesmos**: `config/ambientes/*.json`, os paths dos webhooks e o `deploy-n8n.sh` seguem valendo, e só muda o host. O arquivo de credenciais decifradas vai de servidor para servidor por `scp`, fica em modo 600 e é apagado logo após a importação. Nunca entra no repositório nem nesta conversa.
+O plano original exportava workflows e credenciais da origem com o CLI do n8n (`export:credentials --decrypted`) para manter os ids. Na F4 a leitura de segredos da VPS de produção foi barrada pelo classificador de segurança da sessão, e o TESTE não precisa dela: foi **recriado do zero pelo próprio repo**, com ids novos gravados em `config/ambientes/integracao.json`:
+
+- banco `barbearia_vila_teste` vazio (`preparar-bancos.py` + `migrar.py`, 0001–0010), com senha nova gerada aqui;
+- credenciais por `criar-credenciais-n8n.py` (segredos do `.env.smoke` local e do `infra.env` daqui; token de verificação novo);
+- workflows por `deploy-n8n.sh integracao --criar` e depois o deploy normal.
+
+Para a PROD (F6), o banco `barbearia_vila` tem dados reais de clientes e precisa vir da origem (dump), o que exige autorização explícita do owner para essa leitura. As credenciais e os workflows de PROD podem ser recriados do mesmo jeito que os do TESTE.
 
 ## 3. Fases
 
@@ -74,7 +80,7 @@ A ideia é exportar com o CLI do n8n (`export:workflow` e `export:credentials --
 | F1 | Instalar Docker Engine (repo oficial; se o `resolute` não tiver pacote, usar o `noble`), `swarm init`, `ufw`. **Feito em 2026-10-23:** Docker 29.9.2 pelo repo `resolute` (chave `9DC8…CD88` conferida); Swarm de um nó com `--advertise-addr`/`--listen-addr` em `127.0.0.1` (2377 e 7946 fora da internet). `ufw` adiado para a F2, porque as sessões do Claude Code escutam portas em todas as interfaces e é preciso confirmar antes que bloqueá-las não derruba o acesso remoto | não |
 | F2 | Subir a stack `bv` (Traefik, n8n, Postgres, Redis) com um domínio novo; certificado emitido; owner criado no n8n novo. **Feito em 2026-10-23:** `infra/stack-bv.yml` (Traefik v3.7.15, n8n 2.43.5, Postgres 17.10, Redis 7.2.16 com senha por secret) e `infra/stack-portainer.yml` (2.45.2, admin por secret). Segredos por `infra/criar-segredos.sh`, com cópia em `/root/barbearia_vila/infra.env` (600). `https://n8nv.todo-tips.com` (healthz 200, owner criado por dentro do container antes de abrir) e `https://portainerv.todo-tips.com` (login admin ok); certificados Let's Encrypt até 2027-01-21; HTTP redireciona para HTTPS. Postgres e Redis só na rede interna `bv_bv` | não |
 | F3 | **Feita (2026-10-23).** `_vps.py` roda local e acha o container pelo serviço do Swarm (`bv_postgres`, `bv_redis`); senha do Redis em `REDIS_PASSWORD` do `infra.env`. Crons, `backup-bancos.py` e `criar-credenciais-n8n.py` adaptados; `verificar-infra.py` não precisou de mudança. TESTE aponta para o n8nv; a PROD (`producao.json`) segue no n8n2 até a F6. Docs, `CLAUDE.md`, `referencia.md` (local) e memória atualizados | não |
-| F4 | Copiar o TESTE: dump/restore de `barbearia_vila_teste`, importar os 17 workflows e as 7 credenciais (todos inativos), ativar os [TESTE] no destino e desativá-los na origem. Validar com o MCP (`get_workflow_details`), a verificação (`X-BV-Token`) e os smokes (`smoke-recepcao`, `smoke-agente`, `smoke-mensagens`) | não |
+| F4 | **Feita (2026-10-23), recriando o TESTE no n8nv** (ver "Ids" acima): banco, 6 credenciais e 9 workflows publicados; `database n8n` fechado ao PUBLIC (`REVOKE CONNECT`); verificação 200 com token e 403 sem; `smoke-recepcao` ok, exceto o cenário SC-007, que dependia do stub `__falha__` que o agente real substituiu (obsoleto antes da migração). Faltam: `smoke-agente`, `smoke-mensagens` e desativar os [TESTE] no n8n2 | não |
 | F5 | Ensaio da troca: dump/restore de `barbearia_vila` no destino, sem ativar a PROD, para medir o tempo real da janela | não |
 | F6 | **Janela de troca da PROD** (combinada com o owner, em horário de pouco tráfego); passo a passo abaixo | **sim, ~10 min** |
 | F7 | Pós-troca: crons de backup e mídia no destino, primeiro backup e restore de teste, observação por 48 h | não |

@@ -4,7 +4,7 @@
   "n8n_url": "https://n8nv.todo-tips.com",
   "postgres": {
     "database": "barbearia_vila_teste",
-    "credencial_id": "X3WoZnCScCKqBdg2"
+    "credencial_id": "n75mQT1Mp61R2eQb"
   },
   "redis": {
     "prefixo": "bv:teste:",
@@ -15,18 +15,18 @@
     }
   },
   "credenciais": {
-    "redis": "chtScO4j08LclN89",
-    "verificacao": "i7qS8QNvswOIbepF",
-    "openai": "3e2ki13KTZskEv7O",
-    "graces": "NCWLnCOpE4DgIUVU",
-    "chatmaster": "FKqysWSzX8p4X1re"
+    "redis": "635v0i1zcY8h3jDM",
+    "verificacao": "VVbK8DkOhfW3nRg2",
+    "openai": "tVRedGvpa2XF0gX1",
+    "graces": "lSsJYIq9jbpkmYlr",
+    "chatmaster": "Gt9C67GDkOEnB4BZ"
   },
   "workflows": {
-    "bv-verificacao": "uoDF0RFEgzAtKUay",
-    "bv-captura": "wXcRwAdqRnGgRzA9",
-    "bv-recepcao": "iaUbATlT7xkZArVd",
-    "bv-vigia": "fzJA2yWESqiPXyib",
-    "bv-mensagens": "0B7Fe4qIe3eWipWI"
+    "bv-verificacao": "mAKBRCHQ1Bd78S7R",
+    "bv-captura": "KV66loTQW9KHtW86",
+    "bv-recepcao": "n2Dy8IyVnDHQ6KyF",
+    "bv-vigia": "ehT7ludsTLu6y9z5",
+    "bv-mensagens": "ePWSZ6XnAUztQDrC"
   },
   "captura": {
     "path": "bv-captura-b889464c-5ec6-4aba-9ff3-5617408bec13",
@@ -101,10 +101,10 @@
     "retencao_h": 23.9
   },
   "workflows_sub": {
-    "entregar_rajada": "ilzXqBWGtcczlGEu",
-    "bv_graces": "mjhd7O0AzrqNVrf0",
-    "interpretar_midia": "FbQLbUHauxMMIjI4",
-    "bv_confirmacao": "e9BYiK0G3Xs3uQ3P"
+    "bv_graces": "OHmvqZrPix6fJnpP",
+    "interpretar_midia": "y71ufji64xT2cTaW",
+    "bv_confirmacao": "OPRyWyAE8WNELPOt",
+    "entregar_rajada": "N25Ka2Lp6x6TNQKU"
   },
   "execucao": {
     "timeout_s": 300
