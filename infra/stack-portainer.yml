@@ -1,0 +1,43 @@
+# Portainer (decisao D4 do owner). Deploy depois da stack bv, que cria a rede bv_proxy:
+#   docker stack deploy -c infra/stack-portainer.yml portainer
+# Senha do admin pelo secret bv_portainer_admin (texto puro, lido so pelo container), para a instancia nunca ficar aberta a quem chegar primeiro.
+services:
+  agent:
+    image: portainer/agent:2.45.2
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    networks: [agent]
+    deploy:
+      mode: global
+      placement: {constraints: [node.platform.os == linux]}
+
+  portainer:
+    image: portainer/portainer-ce:2.45.2
+    command: -H tcp://tasks.agent:9001 --tlsskipverify --admin-password-file /run/secrets/bv_portainer_admin
+    secrets: [bv_portainer_admin]
+    volumes:
+      - portainer_data:/data
+    networks: [agent, bv_proxy]
+    deploy:
+      placement: {constraints: [node.role == manager]}
+      resources: {limits: {memory: 256M}}
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.portainer.rule=Host(`portainerv.todo-tips.com`)
+        - traefik.http.routers.portainer.entrypoints=websecure
+        - traefik.http.routers.portainer.tls.certresolver=le
+        - traefik.http.services.portainer.loadbalancer.server.port=9000
+
+networks:
+  agent:
+    driver: overlay
+    internal: true
+  bv_proxy:
+    external: true
+
+volumes:
+  portainer_data:
+
+secrets:
+  bv_portainer_admin: {external: true}

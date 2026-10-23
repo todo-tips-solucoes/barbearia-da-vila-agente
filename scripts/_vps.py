@@ -1,8 +1,9 @@
-"""Unico ponto de acesso a VPS (FR-006/FR-016). Lista fechada de operacoes; o resto e recusado (exit 2).
+"""Unico ponto de acesso ao servidor da stack bv (FR-006/FR-016). Lista fechada de operacoes; o resto e recusado (exit 2).
 
-Segredos ficam na VPS: senha do Postgres vem de /root/barbearia_vila/infra.env e a do Redis do compose da stack,
-ambas lidas pelo shell remoto e passadas ao container por variavel de ambiente; nunca na linha de comando local
-nem na saida. SQL entra por stdin.
+Desde a migracao de 2026-10-23 (docs/migracao-vps.md) a stack roda neste mesmo servidor, num Swarm: os comandos rodam
+num sh local e o container de cada servico e resolvido pelo nome do servico (bv_postgres, bv_redis), nunca fixo.
+Segredos ficam em /root/barbearia_vila/infra.env (senhas do Postgres e do Redis), lidos pelo shell e passados ao
+container por variavel de ambiente; nunca na linha de comando nem na saida. SQL entra por stdin.
 """
 import os
 import re
@@ -10,16 +11,17 @@ import shlex
 import subprocess
 import sys
 
-# Uma conexao reaproveitada (ControlMaster): a suite abre centenas de ssh curtos e parte deles tomava "Connection timed
-# out" no porto 22 (2026-10-21). ControlPath com %C (hash) fica curto e sem dados do host no nome.
-SSH = ["ssh", "-i", os.path.expanduser("~/.ssh/id_ed25519_n8n_vps"), "-o", "BatchMode=yes", "-o", "LogLevel=ERROR",
-       "-o", "ConnectTimeout=15", "-o", "ControlMaster=auto", "-o", "ControlPath=" + os.path.expanduser("~/.ssh/bv-%C"),
-       "-o", "ControlPersist=120", "root@178.156.134.167"]
+
+def container(servico):
+    """Expressao de shell com o id do container da task em execucao do servico bv_<servico> (o Swarm sorteia o nome)."""
+    return f"$(docker ps -q -f name=bv_{servico}. -f status=running | head -1)"
+
+
+PG, REDIS = container("postgres"), container("redis")
 BANCOS = {"barbearia_vila_teste": "PG_TESTE_PASSWORD"}
 BANCO_PROD = ("barbearia_vila", "PG_PASSWORD")  # so com BV_DEPLOY_PRODUCAO_AUTORIZADO=sim
 INFRA_ENV = "/root/barbearia_vila/infra.env"
 BACKUPS = "/root/barbearia_vila/backups"
-COMPOSE = "/var/lib/docker/volumes/portainer_portainer_data/_data/compose/1/docker-compose.yml"
 PREFIXO_ESCRITA = "bv:teste:verif:"
 PREFIXO_LIMPEZA = ("bv:teste:", "bv:prod:")  # DEL em lote de limpar-redis; bv:prod: exige a trava
 LEITURA = {"SCAN", "GET", "TTL", "EXISTS", "DBSIZE"}
@@ -63,19 +65,18 @@ def _banco_var(banco):
 def cmd_psql(banco):
     var = _banco_var(banco)
     return (f"set -a; . {INFRA_ENV}; set +a; "
-            f"docker exec -i -e PGPASSWORD=\"${var}\" n8n-postgres-1 "
+            f"docker exec -i -e PGPASSWORD=\"${var}\" {PG} "
             f"psql -v ON_ERROR_STOP=1 -q -t -A -U {banco} -d {banco}")
 
 
 def cmd_pg_dump(banco):
     var = _banco_var(banco)
     return (f"set -a; . {INFRA_ENV}; set +a; "
-            f"docker exec -e PGPASSWORD=\"${var}\" n8n-postgres-1 pg_dump -Fc -U {banco} -d {banco}")
+            f"docker exec -e PGPASSWORD=\"${var}\" {PG} pg_dump -Fc -U {banco} -d {banco}")
 
 
 def _redis_prefixo(interno):
-    pw = f"$(sed -n 's/.*\"-a\", *\"\\([^\"]*\\)\".*/\\1/p' {COMPOSE} | head -1)"
-    return f"docker exec -e REDISCLI_AUTH=\"{pw}\" n8n-redis-1 sh -c {shlex.quote(interno)}"
+    return f"set -a; . {INFRA_ENV}; set +a; docker exec -e REDISCLI_AUTH=\"$REDIS_PASSWORD\" {REDIS} sh -c {shlex.quote(interno)}"
 
 
 def cmd_redis(db, args):
@@ -103,7 +104,7 @@ def cmd_sondar(item):
         raise Recusado(f"sonda nao permitida: {item}")
     tipo, corpo = SONDAS[item]
     if tipo == "psql-admin":
-        return ("docker exec -i n8n-postgres-1 sh -c "
+        return (f"docker exec -i {PG} sh -c "
                 + shlex.quote("psql -v ON_ERROR_STOP=1 -q -t -A -U \"$POSTGRES_USER\" -d postgres")), corpo
     if tipo == "redis-info":
         return _redis_prefixo("redis-cli --no-auth-warning INFO keyspace"), None
@@ -111,7 +112,7 @@ def cmd_sondar(item):
 
 
 ALVOS = {"teste": ("barbearia_vila_teste", "PG_TESTE_PASSWORD"), "producao": ("barbearia_vila", "PG_PASSWORD")}
-_ADMIN = "docker exec -i n8n-postgres-1 sh -c " + shlex.quote(
+_ADMIN = f"docker exec -i {PG} sh -c " + shlex.quote(
     "psql -v ON_ERROR_STOP=1 -q -t -A -U \"$POSTGRES_USER\" -d postgres")
 
 
@@ -154,7 +155,7 @@ def cmd_acesso_cruzado(alvo, destino):
     d, var = _alvo(alvo)
     if destino not in ("n8n", "barbearia_vila", "goldincision"):
         raise Recusado(f"destino nao permitido: {destino}")
-    return (f"set -a; . {INFRA_ENV}; set +a; docker exec -e PGPASSWORD=\"${var}\" n8n-postgres-1 "
+    return (f"set -a; . {INFRA_ENV}; set +a; docker exec -e PGPASSWORD=\"${var}\" {PG} "
             f"psql -q -t -A -h localhost -U {d} -d {destino} -c 'select 1' 2>&1 | head -2")
 
 
@@ -165,7 +166,8 @@ def acesso_cruzado(alvo, destino):
 
 
 def _ssh(remoto, stdin=None):
-    r = subprocess.run(SSH + [remoto], input=stdin, capture_output=True, text=True)
+    # nome historico (era ssh para a VPS antiga); hoje roda local, mantido para os chamadores e os mocks dos testes
+    r = subprocess.run(["sh", "-c", remoto], input=stdin, capture_output=True, text=True)
     return r.returncode, _scrub(r.stdout), _scrub(r.stderr)
 
 

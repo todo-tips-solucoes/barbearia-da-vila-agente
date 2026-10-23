@@ -1,7 +1,7 @@
 {
   "ambiente": "integracao",
   "rotulo": "TESTE",
-  "n8n_url": "https://n8n2.todo-tips.com",
+  "n8n_url": "https://n8nv.todo-tips.com",
   "postgres": {
     "database": "barbearia_vila_teste",
     "credencial_id": "X3WoZnCScCKqBdg2"
