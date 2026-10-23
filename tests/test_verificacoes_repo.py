@@ -125,6 +125,7 @@ class T(unittest.TestCase):
         import tempfile
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
             f.write("ok\nPASSWORD=" + "abcdefghijklmnopqrstuvwx\n")  # concatenado para o varredor nao acusar o proprio fixture
+            f.write("POSTGRES_PASSWORD_FILE: /run/secrets/" + "bv_pg_n8n_password\n")  # caminho de docker secret: nao acusa
         try:
             achados = vs.varrer([f.name])
         finally:

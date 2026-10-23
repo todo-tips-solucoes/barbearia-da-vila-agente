@@ -55,10 +55,10 @@ def post(corpo, raw=None):
 
 
 def linhas():
-    """Mensagens dos contatos sinteticos: dicts com telefone, id, tipo, turno_id, criado/turno/proc em epoch."""
+    """Mensagens de entrada dos contatos sinteticos (a resposta do agente nao conta): dicts com telefone, id, tipo, turno_id, criado/turno/proc em epoch."""
     sql = ("SELECT c.telefone, m.id, m.tipo, coalesce(m.turno_id::text,''), extract(epoch from m.criado_em), "
            "coalesce(extract(epoch from m.turno_em)::text,''), coalesce(extract(epoch from m.processada_em)::text,'') "
-           f"FROM mensagens m JOIN contatos c ON c.id=m.contato_id WHERE c.telefone LIKE '{PREFIXO_TEL}%' ORDER BY m.id;")
+           f"FROM mensagens m JOIN contatos c ON c.id=m.contato_id WHERE c.telefone LIKE '{PREFIXO_TEL}%' AND m.direcao = 'entrada' ORDER BY m.id;")
     out = []
     for l in _vps.psql(BANCO, sql).strip().splitlines():
         t, i, tp, tu, cr, te, pr = l.split("|")
