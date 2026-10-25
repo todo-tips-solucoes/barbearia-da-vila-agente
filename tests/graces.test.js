@@ -138,6 +138,14 @@ assert.deepEqual(pi.reqs, [{ m: 'GET', path: '/agenda/horarios-livres', qs: { id
 r = g.bvGPasso(pi.st, [ok({ minutos: 40, horarios: ['10:00'] })], cfg).final;
 assert.deepEqual(r.resultado.opcoes, [{ id: '1', hora: '10:00', barbeiro: 'Kiel' }]);
 assert.equal(r.efeitos.opcoes.itens[0].valor.idServico, 's1');
+// C7 (2026-10-25): o modelo chama meus_agendamentos de novo antes de reagendar; a oferta troca, mas o horario mostrado continua valendo
+const oHoraRe = r.efeitos.opcoes;
+const pm = g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), { opcoes: oHoraRe, pedido: { idCliente: 'c1' } }, cfg).st, [ok(agBruto)], cfg).final.efeitos;
+assert.deepEqual(pm.pedido.horarios_oferta, oHoraRe);
+const reag = (pedido) => g.bvGPlano(entrada({ operacao: 'reagendar', id_opcao_agendamento: '1', id_opcao_horario: '1' }), ctxE(pm.opcoes, pedido), cfg).final;
+assert.equal(reag(pm.pedido).efeitos.proposta_nova.dados.hora, '10:00');
+assert.equal(reag({ agendamentos: pm.pedido.agendamentos }).resultado.code, 'opcao_desconhecida'); // sem a oferta guardada: o defeito
+assert.equal(g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg).st, [ok(agBruto)], cfg).final.efeitos.pedido.horarios_oferta, undefined);
 assert.equal(g.bvGPasso(p.st, [ok([{ idProfissional: TESTE, apelido: 'Zé' }])], cfg).final.resultado.total, 0);
 // recusas: producao, sem redirecionamento, barbeiro de teste vindo do modelo, agenda de barbeiro real, sem cliente
 assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora), { ...cfg, ambiente: 'producao' }).final.resultado.code, 'escrita_desabilitada');
