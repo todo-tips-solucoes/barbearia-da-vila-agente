@@ -168,6 +168,11 @@ console.log('agente.test.js turno com midia ok');
   const tb = bvContextoPedido({ barbeiro: { idProfissional: 'p9', apelido: 'Pedro Henrique' } }, false, bvNeutralizar);
   assert.match(tb, /Barbeiro já escolhido pelo cliente \(dado\): Pedro Henrique\. Não pergunte de novo/);
   assert.ok(!tb.includes('p9'));
+  // C7: agendamentos ja listados viram dado com o id de opcao; idAgenda e barbeiro nunca vao ao modelo
+  const ta = bvContextoPedido({ agendamentos: [{ opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-26T17:00:00', servico: 'corte adulto', profissional: 'ZZ TESTE' }] }, false, bvNeutralizar);
+  assert.match(ta, /id 1 = 26\/10 17:00 corte adulto\. .*sem chamar meus_agendamentos de novo/);
+  assert.ok(!ta.includes('a1') && !ta.includes('TESTE'));
+  assert.equal(bvContextoPedido({ agendamentos: null }, false, bvNeutralizar), '');
 }
 
 // bvSepararOpcoes: marcador em negrito e linhas sem marcador nao vazam como texto (suite R2/R12)
