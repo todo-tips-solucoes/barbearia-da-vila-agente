@@ -1,6 +1,6 @@
 """Cria no n8n as credenciais Postgres e Redis do alvo (nome existente -> pula). Imprime so `nome -> id`.
 Uso: --alvo teste|producao. API key: N8N_API_URL/N8N_API_KEY de $BV_ENV_N8N (default .env.n8n, fora do git).
-Senhas: lidas na VPS (infra.env e compose da stack) e enviadas direto ao n8n; nunca impressas."""
+Senhas: lidas do infra.env do servidor e enviadas direto ao n8n; nunca impressas."""
 import argparse
 import json
 import os
@@ -45,7 +45,7 @@ def segredos_vps(alvo):
            .format(f=_vps.INFRA_ENV) if alvo == "teste" else "")
     rc, out, err = _vps._ssh(
         f"umask 077; {tok}set -a; . {_vps.INFRA_ENV}; set +a; printf '%s\\n' \"${var}\"; "
-        f"sed -n 's/.*\"-a\", *\"\\([^\"]*\\)\".*/\\1/p' {_vps.COMPOSE} | head -1; "
+        f"printf '%s\\n' \"$REDIS_PASSWORD\"; "
         f"printf '%s\\n' \"${{BV_VERIFICACAO_TOKEN:-}}\"")
     linhas = out.split("\n")
     if rc or len(linhas) < 3 or not linhas[0] or not linhas[1] or (alvo == "teste" and not linhas[2]):

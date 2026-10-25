@@ -10,7 +10,7 @@ PADROES = {
     "JWT": re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
     "Bearer literal": re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{24,}"),
     "atribuicao de segredo": re.compile(
-        r"(?i)(password|senha|secret|token|api[_-]?key)\w*\s*[=:]\s*['\"]?[A-Za-z0-9+/_-]{20,}"),
+        r"(?i)(password|senha|secret|token|api[_-]?key)\w*\s*[=:]\s*['\"]?(?!/run/secrets/)[A-Za-z0-9+/_-]{20,}"),  # caminho de docker secret nao e o segredo
 }
 
 

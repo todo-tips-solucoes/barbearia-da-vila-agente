@@ -84,7 +84,14 @@
     "host": "api.gracesonline.com.br",
     "timeout_ms": 15000,
     "barbeiro_teste_id": "1cee0bb9-e58b-4428-9e9b-1db184db7943",
-    "teste_contatos": ["5511967296849", "5511971634416", "5511995164884", "559184617250", "554797565968", "5511948903182"],
+    "teste_contatos": [
+      "5511967296849",
+      "5511971634416",
+      "5511995164884",
+      "559184617250",
+      "554797565968",
+      "5511948903182"
+    ],
     "max_estagios": 16,
     "max_consultas_estagio": 20
   },
@@ -145,10 +152,10 @@
     "retencao_h": 23.9
   },
   "workflows_sub": {
-    "entregar_rajada": "QTP7ezx661uFp7Wj",
     "bv_graces": "K0yVUwFr5gucXRQd",
     "interpretar_midia": "IiVgK4hASaCzzbVM",
-    "bv_confirmacao": "jI5eK7tHfFYuqCJS"
+    "bv_confirmacao": "jI5eK7tHfFYuqCJS",
+    "entregar_rajada": "QTP7ezx661uFp7Wj"
   },
   "encadeamento": {
     "max_servicos": 3
