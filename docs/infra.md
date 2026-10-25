@@ -9,7 +9,8 @@ Desde a migracao de 2026-10-23 (plano e andamento em `docs/migracao-vps.md`):
 - Servidor proprio `srv1726158` (`2.25.163.213`), o mesmo onde rodam as sessoes do Claude. Docker Swarm de 1 no; a stack `bv` (`infra/stack-bv.yml`) tem Traefik v3, n8n 2.43.5, Postgres 17 e Redis 7.2, e a stack `portainer` (`infra/stack-portainer.yml`) o Portainer CE. Segredos da stack sao docker secrets criados por `infra/criar-segredos.sh`.
 - Instancia n8n: `https://n8nv.todo-tips.com`; Portainer: `https://portainerv.todo-tips.com`. Certificados Let's Encrypt pelo Traefik (HTTP-01).
 - `scripts/_vps.py` (lista fechada de operacoes) roda local e acha o container pelo servico do Swarm (`bv_postgres`, `bv_redis`, `bv_n8n`; o nome do container e sorteado). A senha do Redis vem de `REDIS_PASSWORD` no `infra.env`. Postgres e Redis ficam so na rede interna `bv_bv`; para o n8n, os hosts sao `postgres` e `redis`.
-- Ate a troca da PROD (fase F6 do plano), a PROD segue na origem: VPS `178.156.134.167`, stack `n8n`, `https://n8n2.todo-tips.com` (containers `n8n-postgres-1`, `n8n-redis-1`, `n8n-n8n-1`). As secoes abaixo sao o historico dessa origem.
+- Desde a F6 (2026-10-24, 12:16 UTC) a PROD tambem roda aqui: banco `barbearia_vila` local e workflows [PROD] no n8nv; a conexao 145 aponta para `https://n8nv.todo-tips.com/webhook/bv-recepcao-680eee2d-…`. A origem (VPS `178.156.134.167`, stack `n8n`, `https://n8n2.todo-tips.com`, containers `n8n-postgres-1`, `n8n-redis-1`, `n8n-n8n-1`) fica com os gatilhos de PROD desligados e o banco intacto ate a F8. As secoes abaixo sao o historico dessa origem.
+- Guarda de PROD: hook `PreToolUse` local (`.claude/hooks/guarda-prod.sh`, fora do git) recusa comandos do agente com `BV_DEPLOY_PRODUCAO_AUTORIZADO`; so o owner libera PROD.
 
 ### TESTE no n8nv (recriado em 2026-10-23, F4)
 
@@ -32,6 +33,22 @@ Recriado pelo repo, sem copiar segredos da origem: banco `barbearia_vila_teste` 
 | `interpretar_midia` | `y71ufji64xT2cTaW` |
 | `bv_confirmacao` | `OPRyWyAE8WNELPOt` |
 | `entregar_rajada` | `N25Ka2Lp6x6TNQKU` |
+
+### PROD no n8nv (F6, 2026-10-24)
+
+Banco criado por `preparar-bancos.py --alvo producao` e preenchido pelo dump final da origem (`scripts/janela-prod.py dump-origem` + `restaurar`: 12 tabelas do role `barbearia_vila`, migracoes 0001-0010). Credencial Postgres por `criar-credenciais-n8n.py --alvo producao`; as demais reusam as do TESTE (como no n8n2). Workflows por `deploy-n8n.sh producao --criar`, em ordem de dependencia, e publicados por `--confirmar-id`. `bv-mensagens` e `bv-captura` nao vao a PROD. Crons (`barbearia-backup-limpeza`, `barbearia-limpar-midia`) instalados aqui por `_vps.py instalar-crons`; 1o backup manual: rc 0, 12 tabelas, limpeza apagou 0. Teste do owner: "oi" do 5511967296849 gravado e respondido em 11 s. Rollback: `capturar-webhook.py restaurar --destino recepcao-producao` (URL do n8n2 em `.webhook-145-antes-prod.url`) e `janela-prod.py religar-origem`.
+
+| Item | Id |
+|---|---|
+| Credencial Postgres PROD | `bnAZiTa3htEORYRD` |
+| `bv-verificacao` | `FQ8W178X7MUx1JDK` |
+| `bv-recepcao` | `CgCUXOfOxc6GWDJR` |
+| `bv-vigia` | `uAPtIcqw4wyorff5` |
+| `bv-alerta` | `N62lndxe74YZqZwm` |
+| `bv_graces` | `co2i51aDgVHHHYF8` |
+| `interpretar_midia` | `jzov64mQwqxBmyy9` |
+| `bv_confirmacao` | `Hc8MjSFbzYJXEQOJ` |
+| `entregar_rajada` | `xvz6ujFMpbVKXY6I` |
 
 ## Sondagens read-only (2026-10-18)
 
