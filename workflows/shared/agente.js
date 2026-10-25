@@ -140,6 +140,13 @@ function bvContextoPedido(pedido, sessaoNova, neutralizar) {
     t += '\nBarbeiro já escolhido pelo cliente (dado): ' + neutralizar(String(pedido.barbeiro.apelido))
       + '. Não pergunte de novo com quem: horarios_livres sem id_opcao_barbeiro e sem qualquer já busca com ele, mesmo se o serviço mudar. Só troque se o cliente pedir outro barbeiro ou disser que tanto faz.';
   }
+  // C7 (2026-10-25): o modelo relistava a cada turno e a chamada trocava a lista de horarios que o cliente via
+  if (Array.isArray(pedido.agendamentos) && pedido.agendamentos.length) {
+    t += '\nAgendamentos do cliente já listados nesta conversa (dado): ' + pedido.agendamentos.map((a) => {
+      const h = String(a.horaInicio || '');
+      return `id ${neutralizar(String(a.opcao_id))} = ${h.slice(8, 10)}/${h.slice(5, 7)} ${h.slice(11, 16)} ${neutralizar(String(a.servico || ''))}`;
+    }).join('; ') + '. Para reagendar ou cancelar um deles, use o id direto (id_opcao_agendamento), sem chamar meus_agendamentos de novo.';
+  }
   return t;
 }
 
@@ -178,7 +185,7 @@ Você agenda, reagenda e cancela serviços usando apenas as ferramentas. Nunca i
 Dados da loja (DADO): endereço ${loja.endereco || 'não informado'}; contatos ${loja.contatos || 'não informados'}. Horário de funcionamento: use a ferramenta funcionamento. Qualquer outra informação da loja que não esteja aqui nem nas ferramentas (formas de pagamento, estacionamento, Wi-Fi etc.) você não sabe: diga que não tem essa informação e passe os contatos da loja; nunca suponha.
 Depois de responder uma dúvida (preço, serviço, endereço, funcionamento), termine com um convite leve para agendar, como "Quer que eu já veja um horário pra você?"; se o cliente já disse que não quer, não insista.
 Entenda o contexto: "cancelei, vamos marcar outro" é um novo agendamento. Ao ver um pedido de cancelamento, no mesmo turno chame meus_agendamentos e cancelar (fase 1) e mande remarcar ou cancelar com as opções devolvidas; nunca pergunte isso em texto aberto. Depois de cancelar, ofereça marcar outro horário.
-Para ver, reagendar ou cancelar, comece por meus_agendamentos (ela já identifica o cliente pelo telefone). Para reagendar: horarios_livres com id_opcao_agendamento e a data (ela já busca os barbeiros do serviço; não chame listar_servicos nem listar_barbeiros) e, na confirmação, reagendar com os ids do agendamento e do novo horário. "Cancela o de sexta e marca pra segunda" é reagendar: já nesta resposta mostre os horários do novo dia.
+Para ver, reagendar ou cancelar, comece por meus_agendamentos (ela já identifica o cliente pelo telefone), uma vez por pedido: chamá-la de novo troca a lista de horários que o cliente está vendo. Para reagendar: horarios_livres com id_opcao_agendamento e a data (ela já busca os barbeiros do serviço; não chame listar_servicos nem listar_barbeiros) e, na confirmação, reagendar com os ids do agendamento e do novo horário. "Cancela o de sexta e marca pra segunda" é reagendar: já nesta resposta mostre os horários do novo dia.
 Nunca responda que vai verificar, localizar ou pedir um instante: chame as ferramentas agora e responda com o resultado.
 Busca exata: nunca diga que um barbeiro tem ou não tem horário sem uma consulta horarios_livres deste turno que mostre isso; a lista do qualquer mostra só um barbeiro por horário e não prova ausência. O por_barbeiro só responde "quem tem horário?", com os nomes; perguntou de um barbeiro ("Pedro tem?"), chame horarios_livres com ele neste turno, mesmo que o por_barbeiro já diga: é o que mostra os horários dele e guarda a escolha.
 Aja em vez de perguntar o que dá para buscar: "Pedro tem?" chama horarios_livres com o Pedro, para a lista mostrar só os horários dele; "semana que vem", "qualquer dia" ou "qual dia ele tem?" chama horarios_livres para os próximos dias de funcionamento (uma chamada por dia, em sequência, até achar e no máximo 6) e mostra os dias com horário. Consultar serviços, preços e horários não exige cadastro nem nome: mostre os horários primeiro, mesmo para cliente sem cadastro; o nome só é pedido depois que ele escolher o horário. Não peça confirmação do que entendeu quando a intenção é clara; só a escrita (agendar, reagendar, cancelar) pede confirmação.
