@@ -400,12 +400,20 @@ def novo_paulo(n):
     return semear(n, {})
 
 
+def escolhiveis(op):
+    """Agendamento: so o semeado no barbeiro de teste (o Paulo pode ter agendamento real); demais ofertas: nunca o de teste."""
+    its = op.get("itens") or []
+    if op.get("tipo") == "agendamento":
+        return [i for i in its if (i.get("valor") or {}).get("idProfissional") == TESTE_ID]
+    return [i for i in its if "TESTE" not in str(i.get("rotulo", "")).upper()]
+
+
 def guiar(n, falas, parar, maximo=7):
     """Como conduzir, mas toca cada tipo de oferta uma vez (a oferta de servico pode persistir enquanto o modelo pergunta o dia)."""
     log, falas, tocados = [], list(falas), set()
     for _ in range(maximo):
         op = estado(n)["opcoes"]
-        itens = [i for i in (op.get("itens") or []) if "TESTE" not in str(i.get("rotulo", "")).upper()]
+        itens = escolhiveis(op)
         if itens and op.get("tipo") not in tocados:
             tocados.add(op.get("tipo"))
             fala = itens[0]["rotulo"]
@@ -506,12 +514,14 @@ def c6():
 
 def c7():
     print("C7 reagendar (US3-4): PUT com servico preservado; resumo 'de X para Y'")
-    _semear_agendamento(524, "17:00")
-    _say(524, "queria remarcar meu horário de amanhã")
-    tocados, falas7 = set(), ["amanhã mesmo, depois das 18h", "qualquer barbeiro"]
+    t0 = time.time() - 3 * 3600 + 86400  # amanha (SP); domingo fecha 16:00 e o roteiro pede "depois das 18h": pula para segunda
+    t0 += 86400 if time.gmtime(t0).tm_wday == 6 else 0
+    _semear_agendamento(524, "17:00", time.strftime("%Y-%m-%d", time.gmtime(t0)))
+    _say(524, f"queria remarcar meu horário do dia {time.strftime('%d/%m', time.gmtime(t0))}")
+    tocados, falas7 = set(), ["no mesmo dia, depois das 18h", "qualquer barbeiro"]
     for _ in range(9):
         op = estado(524)["opcoes"]
-        its = [i for i in (op.get("itens") or []) if "TESTE" not in str(i.get("rotulo", "")).upper()]
+        its = escolhiveis(op)
         if op.get("tipo") == "horario" and its:
             alvo = next((i for i in its if "18" in i["rotulo"] or "19" in i["rotulo"]), its[-1])
             _say(524, alvo["rotulo"])
@@ -529,7 +539,7 @@ def c7():
     _dump(524)
     checar("reagendar executado", any(p["acao"] == "reagendar" and p["estado"] == "executada" for p in propostas(524)))
     ag = _agendas_paulo()
-    checar("1 agendamento no barbeiro de teste, em outra hora", len(ag) == 1 and str(ag[0].get("horaInicio", ""))[11:16] != "15:00", str([a.get("horaInicio") for a in ag]))
+    checar("1 agendamento no barbeiro de teste, em outra hora", len(ag) == 1 and str(ag[0].get("horaInicio", ""))[11:16] != "17:00", str([a.get("horaInicio") for a in ag]))
 
 
 def p2():

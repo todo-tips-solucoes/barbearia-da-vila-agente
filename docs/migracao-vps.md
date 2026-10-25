@@ -86,6 +86,15 @@ Para a PROD (F6), o banco `barbearia_vila` tem dados reais de clientes e precisa
 | F7 | **Crons instalados (2026-10-24)**, com o id de PROD novo no cron de mídia; 1º backup manual ok (12 tabelas). Hook de guarda de PROD (D5) instalado logo depois da janela, porque antes barraria a própria janela. Falta: observação por 48 h | não |
 | F8 | Desativar na origem (só com ok do owner, após 7 dias): arquivar os 17 workflows e as 7 credenciais no n8n2, remover os 2 crons da VPS e guardar um dump final dos dois bancos antes de apagá-los | não |
 
+**Pendências da F4, resolvidas em 2026-10-25:**
+
+- `bv_graces` [TESTE] do n8n2 (`mjhd7O0AzrqNVrf0`) despublicado pela API, com o pedido do owner.
+- `ufw` ativo: entrada negada por padrão, só 22, 80 e 443 abertas. As portas das sessões do Claude Code não tinham conexão de fora (o acesso remoto é de saída). Depois de ativar: HTTPS do n8nv e do Portainer 200, containers saindo para Graces e OpenAI, Postgres e Redis ok na rede interna.
+- `smoke-agente` C6/C7: não era bug do agente. O cliente de teste tinha um agendamento real (barbeiro real) e o smoke escolhia a primeira opção sem "TESTE" no rótulo, ou seja, justamente o agendamento real; a trava `escrita_fora_do_teste` recusou, como devia. Agora, em oferta de agendamento, o smoke só escolhe o do barbeiro de teste. O C7 também semeava "amanhã 17:00", que falha no domingo (loja fecha 16:00); pula para segunda. C6, C7 e C8 verdes.
+- `smoke-mensagens`: rodou no n8nv, verde exceto o M1, que tinha corrida com a reconciliação (a cada 15 min ela marca como `orfa` as linhas sintéticas). As linhas do M1 agora têm `inicio` fora da janela da reconciliação; M1 verde.
+- `smoke-agente` M1 (áudio real): fixture copiada para a worktree; verde.
+- SC-007 do `smoke-recepcao` removido (dependia do stub `__falha__`). A falha do modelo segue coberta pelo C13; o ramo `entrega_falhou` da recepção fica sem teste ao vivo.
+
 ### F6: janela de troca
 
 1. Despublicar na origem os gatilhos da PROD: recepção, vigia e alerta.
