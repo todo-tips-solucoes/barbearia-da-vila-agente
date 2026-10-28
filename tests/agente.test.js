@@ -69,7 +69,7 @@ assert.deepEqual(a.bvFrases('Fale com contato@loja.com.br. Ou no site loja.com.b
 const pl = a.bvPrompt({ ...cfg, loja: { endereco: 'Rua X, 1', contatos: '(11) 0000-0000' } });
 assert.ok(pl.includes('Rua X, 1') && pl.includes('(11) 0000-0000') && /funcionamento/.test(pl) && /convite leve/.test(pl) && /não prometa chamar/.test(pl) && /cumprimente/.test(pl));
 // owner, 2026-10-28: pergunta o horario antes de listar; hora aproximada vai em hora=HH:mm
-assert.ok(/Qual horário fica melhor pra você\?/.test(p) && /hora=HH:mm/.test(p) && /tanto faz/.test(p));
+assert.ok(/Qual horário fica melhor pra você\?/.test(p) && /hora=HH:mm/.test(p) && /tanto faz/.test(p) && /ainda não buscou horários/.test(p));
 assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
 console.log('agente.test.js ok');
 
