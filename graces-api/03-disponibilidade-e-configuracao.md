@@ -42,6 +42,8 @@ Regras:
 - **Dia sem vaga → `200` com `horarios: []`**. Não é erro.
 - **`400`** quando: a loja não abre no dia; a data passa do prazo máximo; o serviço não está disponível na loja; ou o profissional não executa o serviço.
 - A consulta é **por profissional**. Se o cliente aceitar "qualquer barbeiro", consulte cada profissional do serviço (sem o de teste) e junte os resultados.
+- **Medido em 2026-10-28 (barbeiro de teste):** a grade é uma treliça fixa de `intervaloMinutos` (40) a partir da abertura, para qualquer serviço (até os de 30 e 80 min). Um atendimento lançado fora dela pelo portal (12:50–13:30) derruba os inícios 12:40 e 13:20, e o início 13:30 **nunca** aparece. Para oferecer esses encaixes, o agente junta a grade com o fim de cada ocupação de `GET /agenda/horarios` e confere se o serviço cabe no livre (`bvgLivre` em `workflows/shared/graces.js`). O `POST /agenda` aceita início fora da treliça.
+- `GET /agenda/horarios` traz também a jornada do barbeiro como bloqueio (`tipo: 2`, ex.: 08:00–09:20 antes de ele começar), então "fora das ocupações e dentro do funcionamento" é livre de verdade.
 
 ## GET `/public/v1/agenda/horarios`
 
