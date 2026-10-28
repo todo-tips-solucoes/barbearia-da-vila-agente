@@ -520,18 +520,20 @@ function bvgPassoEnc(st, resps, cfg) {
   };
   if (meta.etapa === 'enc_prof') {
     const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado));
-    const teto = Math.max(1, Math.floor(((cfg.graces || {}).max_consultas_estagio || 20) / (2 * n)));
+    const teto = Math.max(1, Math.floor(((cfg.graces || {}).max_consultas_estagio || 20) / (n + 1))); // n grades + 1 ocupacoes por barbeiro
     const comuns = sets[0].filter((b) => sets.every((x) => x.some((y) => y.id === b.id))).slice(0, teto);
     if (!comuns.length) return semUnico();
-    const reqs = bvgReqsLivre(comuns.flatMap((b) => meta.servicos.map((s) => ({ idServico: s.idServico, idProfissional: b.id, data: meta.data }))));
+    // as ocupacoes de um barbeiro nao dependem do servico: uma consulta por barbeiro (com o 1o servico), depois das grades
+    const reqs = [...comuns.flatMap((b) => meta.servicos.map((s) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.id, data: meta.data } }))),
+      ...comuns.map((b) => ({ m: 'GET', path: '/agenda/horarios', qs: { idServico: meta.servicos[0].idServico, idProfissional: b.id, data: meta.data } }))];
     return { reqs, st: { ...st, meta: { ...meta, etapa: 'enc_grade', barbeiros: comuns } } };
   }
   if (meta.etapa === 'dif_prof') return bvgDifProf(st, resps, cfg);
   if (meta.etapa === 'dif_grade') return bvgDifGrade(st, resps, cfg);
   const seqs = [];
-  const G = meta.barbeiros.length * n; // grades primeiro, depois as ocupacoes na mesma ordem
+  const G = meta.barbeiros.length * n; // grades primeiro (barbeiro x servico), depois uma ocupacao por barbeiro
   meta.barbeiros.forEach((b, bi) => {
-    const gr = meta.servicos.map((_, k) => bvgLivre(resps[bi * n + k].body || {}, resps[G + bi * n + k]));
+    const gr = meta.servicos.map((_, k) => bvgLivre(resps[bi * n + k].body || {}, resps[G + bi]));
     gr[0].inicios.forEach((ini) => {
       let t = ini;
       const itens = [];
