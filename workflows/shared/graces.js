@@ -7,7 +7,7 @@ if (typeof module !== 'undefined' && typeof bvMProgramar === 'undefined') Object
 
 const BVG_CAMPOS = ['operacao', 'contato_id', 'telefone', 'turno_id', 'ambiente', 'texto', 'id_opcao', 'id_opcao_servico',
   'id_opcao_barbeiro', 'qualquer', 'data', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento',
-  'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos', 'periodo'];
+  'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos', 'periodo', 'hora'];
 const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente', 'listar_servicos', 'listar_barbeiros',
   'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro', 'funcionamento'];
 const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,6 +16,17 @@ const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagenda
 
 // Periodo pedido pelo cliente (suite R1: pediu tarde e recebeu o dia inteiro a partir das 08:00): [inicio, fim) em HH:MM.
 const BVG_PERIODOS = { manha: ['00:00', '12:00'], tarde: ['12:00', '18:00'], noite: ['18:00', '24:00'] };
+// Hora aproximada dita pelo cliente (owner, 2026-10-28): so inicios ate horarios.margem_min (60) dela; sem nenhum, os 2 mais proximos de cada lado.
+const bvgMargemMin = (cfg) => Number((cfg.horarios || {}).margem_min) || 60;
+const bvgAvisoPerto = (hora, cfg) => `nenhum início até ${bvgMargemMin(cfg)} min das ${hora}; a lista traz os mais próximos: diga isso ao cliente`;
+function bvgPertoDaHora(itens, hora, cfg, h = (x) => x.hora) { // itens em ordem de hora
+  if (!hora) return { itens, aproximada: false };
+  const min = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const dif = (x) => min(h(x)) - min(hora);
+  const perto = itens.filter((x) => Math.abs(dif(x)) <= bvgMargemMin(cfg));
+  if (perto.length || !itens.length) return { itens: perto, aproximada: false };
+  return { itens: [...itens.filter((x) => dif(x) < 0).slice(-2), ...itens.filter((x) => dif(x) > 0).slice(0, 2)], aproximada: true };
+}
 const bvgRecusa = (code, orientacao) => ({ ok: false, code, orientacao });
 const bvgFim = (resultado, efeitos = {}) => ({ final: { resultado, efeitos } });
 const bvgOpcaoInvalida = () => bvgRecusa('opcao_desconhecida', 'opção não oferecida, pergunte de novo');
@@ -40,6 +51,7 @@ function bvGNormalizar(raw, cfg) {
   if (v.data !== undefined && (!/^\d{4}-\d{2}-\d{2}$/.test(v.data) || Number.isNaN(Date.parse(v.data)))) return ruim('data');
   if (v.proposta_id !== undefined && !BVG_UUID.test(v.proposta_id)) return ruim('proposta_id');
   if (v.periodo !== undefined && !BVG_PERIODOS[v.periodo]) return ruim('periodo');
+  if (v.hora !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(v.hora)) return ruim('hora');
   for (const k of ['id_opcao', 'id_opcao_servico', 'id_opcao_barbeiro', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento']) {
     if (v[k] !== undefined && !BVG_OPC.test(String(v[k]))) return ruim(k);
   }
@@ -174,26 +186,26 @@ function bvGPlano(i, ctx0, cfg) {
         if (modo === 'separados') {
           return bvgFim({ ok: true, modo: 'separados', servicos: ss.map((x) => ({ id: x.opcao_id, nome: x.nome })), orientacao: `agende um serviço por vez: comece por ${ss[0].nome} (listar_barbeiros com id_opcao_servico ${ss[0].opcao_id}) e, depois de confirmado, siga para o próximo` }, { opcoes: {}, pedido: { modo_encadeamento: 'separados', servico: ss[0] } });
         }
-        return chamar(ss.map((x) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: x.idServico } })), { enc: true, etapa: 'dif_prof', servicos: ss, data: i.data });
+        return chamar(ss.map((x) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: x.idServico } })), { enc: true, etapa: 'dif_prof', servicos: ss, data: i.data, hora: i.hora });
       }
       if (i.id_opcoes_servicos) {
         const ss = i.id_opcoes_servicos.map((x) => bvgResolver(x, 'servico', ctx));
         if (ss.some((x) => !x)) return bvgFim(bvgOpcaoInvalida());
         if (ss.some((x) => bvSegundaVez(x.nome))) return bvgFim(bvgNaoOferecido());
-        return chamar(ss.map((s) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } })), { enc: true, etapa: 'enc_prof', servicos: ss, data: i.data });
+        return chamar(ss.map((s) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } })), { enc: true, etapa: 'enc_prof', servicos: ss, data: i.data, hora: i.hora });
       }
       const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
       const s = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : (i.id_opcao_servico ? bvgResolver(i.id_opcao_servico, 'servico', ctx) : ctx.pedido.servico);
       if (!s) return bvgFim(bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
       // Reagendar sem barbeiro escolhido: barbeiros do servico do agendamento neste passo (poupa duas rodadas do modelo, R8)
-      if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data, periodo: i.periodo });
+      if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data, periodo: i.periodo, hora: i.hora });
       // FR-002/FR-012: defesa extra, o barbeiro de teste nunca entra na uniao nem se vier no pedido.
       // Memoria (teste do owner, 2026-10-22): sem id_opcao_barbeiro, vale o barbeiro que o cliente ja escolheu na sessao
       if (!i.qualquer && !i.id_opcao_barbeiro && !ctx.pedido.barbeiro) return bvgFim(bvgRecusa('barbeiro_nao_escolhido', 'pergunte com qual barbeiro (listar_barbeiros) ou use qualquer'));
       const bs = bvFiltrarBarbeiros(i.qualquer ? (ctx.pedido.barbeiros || []) : [i.id_opcao_barbeiro ? bvgResolver(i.id_opcao_barbeiro, 'barbeiro', ctx) : ctx.pedido.barbeiro].filter(Boolean), cfg.testeId, cfg.testeLiberado);
       if (!bs.length) return bvgFim(i.qualquer ? bvgRecusa('barbeiros_nao_listados', 'chame listar_barbeiros antes') : bvgOpcaoInvalida());
       const reqs = bs.slice(0, 10).map((b) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.idProfissional, data: i.data } }));
-      return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data, periodo: i.periodo });
+      return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data, periodo: i.periodo, hora: i.hora });
     }
     case 'funcionamento': // horario da loja por dia da semana (graces-api/03 GET /agenda/configuracao), so leitura
       return chamar([{ m: 'GET', path: '/agenda/configuracao' }]);
@@ -438,7 +450,8 @@ function bvgPassoUm(st, resps0, cfg) {
         porBarbeiro.push({ barbeiro: b.apelido, total: hp.length, primeiro: hp[0] || null });
       });
       const todas = [...porHora.keys()].sort();
-      const horas = faixa ? todas.filter((hh) => hh >= faixa[0] && hh < faixa[1]) : todas;
+      const perto = bvgPertoDaHora(faixa ? todas.filter((hh) => hh >= faixa[0] && hh < faixa[1]) : todas, meta.hora, cfg, (hh) => hh);
+      const horas = perto.itens;
       const s = meta.servico;
       const of = bvMontarOferta('horario', horas.map((hh) => {
         const { b, minutos } = porHora.get(hh);
@@ -449,6 +462,7 @@ function bvgPassoUm(st, resps0, cfg) {
       if (meta.qualquer) res.por_barbeiro = porBarbeiro;
       if (!horas.length) res.orientacao = todas.length ? `sem horário livre de ${meta.periodo} nesse dia; ofereça outro período ou outro dia` : 'dia lotado; sugira outro dia';
       else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário; por_barbeiro diz quem tem horário; para falar de um barbeiro específico, chame horarios_livres com id_opcao_barbeiro dele';
+      if (perto.aproximada) res.orientacao = bvgAvisoPerto(meta.hora, cfg) + (res.orientacao ? '; ' + res.orientacao : '');
       const um = !meta.qualquer && meta.barbeiros.length === 1 ? { barbeiro: { idProfissional: meta.barbeiros[0].idProfissional, apelido: meta.barbeiros[0].apelido } } : {};
       return bvgFim(res, { opcoes: of, pedido: { servico: s, ...um } });
     }
@@ -513,8 +527,9 @@ function bvgPassoEnc(st, resps, cfg) {
   });
   if (!seqs.length) return semUnico();
   seqs.sort((x, y) => (x.hora < y.hora ? -1 : x.hora > y.hora ? 1 : 0));
-  const of = bvMontarOferta('sequencia', seqs.map((q) => ({ rotulo: `${q.hora} ${q.apelido}`, valor: q.valor })), cfg, true);
-  return bvgFim({ ok: true, data: meta.data, total: seqs.length, completa: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.itens[0].hora, barbeiro: x.valor.itens[0].apelido })) },
+  const perto = bvgPertoDaHora(seqs, meta.hora, cfg);
+  const of = bvMontarOferta('sequencia', perto.itens.map((q) => ({ rotulo: `${q.hora} ${q.apelido}`, valor: q.valor })), cfg, true);
+  return bvgFim({ ok: true, data: meta.data, total: perto.itens.length, completa: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.itens[0].hora, barbeiro: x.valor.itens[0].apelido })), orientacao: perto.aproximada ? bvgAvisoPerto(meta.hora, cfg) : undefined },
     { opcoes: of, pedido: { ...pedido, modo_encadeamento: 'mesmo_barbeiro' } });
 }
 
@@ -549,8 +564,9 @@ function bvgDifGrade(st, resps, cfg) {
     if (itens.length === meta.servicos.length) seqs.push({ hora: ini, apelidos: [...new Set(itens.map((x) => x.apelido))], valor: { data: meta.data, itens } });
   });
   if (!seqs.length) return bvgFim({ ok: true, data: meta.data, total: 0, completa: true, opcoes: [], orientacao: 'nenhuma sequência cabe nesse dia, nem com barbeiros diferentes; ofereça outro dia ou agendar cada serviço separado' }, { pedido });
-  const of = bvMontarOferta('sequencia', seqs.map((q) => ({ rotulo: `${q.hora} ${q.apelidos.join(' e ')}`, valor: q.valor })), cfg, true);
-  return bvgFim({ ok: true, data: meta.data, total: seqs.length, completa: true, barbeiros_diferentes: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.itens[0].hora, barbeiros: x.valor.itens.map((i) => i.apelido) })) }, { opcoes: of, pedido });
+  const perto = bvgPertoDaHora(seqs, meta.hora, cfg);
+  const of = bvMontarOferta('sequencia', perto.itens.map((q) => ({ rotulo: `${q.hora} ${q.apelidos.join(' e ')}`, valor: q.valor })), cfg, true);
+  return bvgFim({ ok: true, data: meta.data, total: perto.itens.length, completa: true, barbeiros_diferentes: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.itens[0].hora, barbeiros: x.valor.itens.map((i) => i.apelido) })), orientacao: perto.aproximada ? bvgAvisoPerto(meta.hora, cfg) : undefined }, { opcoes: of, pedido });
 }
 
 // Conjunto (Decision 10): escrita em ordem; para no primeiro item que falha; nunca recria item criado.

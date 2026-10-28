@@ -5,6 +5,7 @@
 .claude/settings.local.json
 # mídias de clientes (dados pessoais); a transcrição em alteracoes_clientes/transcricoes.md é versionada
 alteracoes_clientes/*.ogg
+alteracoes_clientes/*/*.ogg
 alteracoes_clientes/*.jpeg
 __pycache__/
 tests/conversas/relatorios/

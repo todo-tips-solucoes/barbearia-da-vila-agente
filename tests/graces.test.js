@@ -71,6 +71,21 @@ r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00'] }), ok({ minutos: 40
 assert.match(r.resultado.orientacao, /sem horário livre de tarde/);
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: 'madrugada' }, cfg).resultado.code, 'entrada_invalida');
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: '' }, cfg).ok, true);
+// hora aproximada (owner, 2026-10-28): so inicios ate 60 min da hora dita; sem nenhum, os 2 mais proximos de cada lado, com aviso
+p = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', hora: '14:00' }), ctxH, cfg);
+r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00', '12:40', '13:20', '14:00', '15:20', '18:00'] }), ok({ minutos: 40, horarios: ['14:40'] })], cfg).final;
+assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['13:20', '14:00', '14:40']);
+assert.equal(r.resultado.total, 3);
+assert.ok(!/mais próximos/.test(r.resultado.orientacao || ''));
+r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00', '08:40', '09:20', '17:20', '18:00', '18:40'] }), ok({ minutos: 40, horarios: [] })], cfg).final;
+assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['08:40', '09:20', '17:20', '18:00']);
+assert.match(r.resultado.orientacao, /até 60 min das 14:00.*mais próximos.*por_barbeiro/);
+assert.match(g.bvGPasso(p.st, [ok({ horarios: [] }), ok({ horarios: [] })], cfg).final.resultado.orientacao, /lotado/);
+p = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: 'tarde', hora: '12:30' }), ctxH, cfg);
+r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['11:20', '12:00', '13:20', '14:00'] }), ok({ horarios: [] })], cfg).final;
+assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['12:00', '13:20']);
+assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', hora: '25:00' }, cfg).resultado.code, 'entrada_invalida');
+assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', hora: '9:00' }, cfg).resultado.code, 'entrada_invalida');
 const comBarbeiro = entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2', data: '2026-10-20' });
 assert.equal(g.bvGPlano(comBarbeiro, ctxH, cfg).reqs.length, 1);
 assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '99', data: '2026-10-20' }), ctxH, cfg).final.resultado.code, 'opcao_desconhecida');
@@ -348,6 +363,18 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   assert.equal(dg.reqs.length, 2); // b1 p/ corte, b2 p/ barba (sem o de teste)
   const dr = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00', '11:00'] }), ok({ minutos: 30, horarios: ['10:40'] })], cfg).final;
   assert.deepEqual(dr.resultado.opcoes.map((o) => `${o.hora} ${o.barbeiros.join('+')}`), ['10:00 B1+B2']);
+  // hora aproximada tambem filtra as sequencias (mesmo barbeiro e barbeiros diferentes)
+  const plH = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: '2026-10-20', hora: '10:30' }), ctxOp(ofS), cfg);
+  const eH = g.bvGPasso(plH.st, [profs(['b1']), profs(['b1'])], cfg);
+  const grades = [ok({ minutos: 40, horarios: ['08:00', '10:00', '11:00', '16:00'] }), ok({ minutos: 30, horarios: ['08:40', '10:40', '11:40', '16:40'] })];
+  assert.deepEqual(g.bvGPasso(eH.st, grades, cfg).final.resultado.opcoes.map((o) => o.hora), ['10:00', '11:00']);
+  const plL = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: '2026-10-20', hora: '13:00' }), ctxOp(ofS), cfg);
+  const rL = g.bvGPasso(g.bvGPasso(plL.st, [profs(['b1']), profs(['b1'])], cfg).st, grades, cfg).final;
+  assert.deepEqual(rL.resultado.opcoes.map((o) => o.hora), ['10:00', '11:00', '16:00']);
+  assert.match(rL.resultado.orientacao, /mais próximos/);
+  const dpH = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: idModo('barbeiros_diferentes'), data: '2026-10-20', hora: '16:00' }), ctxM, cfg);
+  const dgH = g.bvGPasso(dpH.st, [profs(['b1']), profs(['b2'])], cfg);
+  assert.deepEqual(g.bvGPasso(dgH.st, grades, cfg).final.resultado.opcoes.map((o) => o.hora), ['16:00']);
   assert.equal(dr.efeitos.opcoes.itens[0].valor.itens[1].idProfissional, 'b2');
   const dsem = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00'] }), ok({ minutos: 30, horarios: ['12:00'] })], cfg).final;
   assert.equal(dsem.resultado.total, 0);

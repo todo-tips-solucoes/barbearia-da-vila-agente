@@ -5,7 +5,7 @@
     "Cancela o de sexta e marca pra segunda"
   ],
   "expectativas": [
-    "Entende o contexto: cancela e já oferece segunda",
+    "Entende o contexto: cancela e já trata de segunda (pergunta o horário que fica melhor ou oferece os horários)",
     "Não pede tudo de novo"
   ],
   "criterios": [

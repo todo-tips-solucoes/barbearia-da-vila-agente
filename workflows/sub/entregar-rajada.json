@@ -728,7 +728,7 @@
     {
       "parameters": {
         "name": "horarios_livres",
-        "description": "Lista todos os inícios livres do serviço num dia, como opções. Sem barbeiro, usa o que o cliente já escolheu; qualquer=true busca todos e devolve por_barbeiro (quantos horários cada um tem). Se o cliente pediu manhã, tarde ou noite, informe periodo. Para 2 ou 3 serviços em sequência, informe id_opcoes_servicos (sem barbeiro). Se devolver sem_barbeiro_unico, ofereça as opções de modo e, com a resposta do cliente, chame de novo com id_opcao.",
+        "description": "Lista todos os inícios livres do serviço num dia, como opções. Sem barbeiro, usa o que o cliente já escolheu; qualquer=true busca todos e devolve por_barbeiro (quantos horários cada um tem). Se o cliente pediu manhã, tarde ou noite, informe periodo; se disse uma hora aproximada, informe hora (HH:mm) e a lista traz só os inícios perto dela. Para 2 ou 3 serviços em sequência, informe id_opcoes_servicos (sem barbeiro). Se devolver sem_barbeiro_unico, ofereça as opções de modo e, com a resposta do cliente, chame de novo com id_opcao.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -750,7 +750,8 @@
             "id_opcoes_servicos": "={{ $fromAI('id_opcoes_servicos', '2 ou 3 ids de opcoes de servico, como oferecidos, separados por virgula, para encadear servicos em sequencia; vazio se for um servico so', 'string') }}",
             "id_opcao": "={{ $fromAI('id_opcao', 'id da opcao de modo de encadeamento (barbeiros diferentes ou agendar separado) que o cliente escolheu; vazio nos demais casos', 'string') }}",
             "id_opcao_agendamento": "={{ $fromAI('id_opcao_agendamento', 'id do agendamento a mudar, so para reagendar; vazio nos demais casos', 'string') }}",
-            "periodo": "={{ $fromAI('periodo', 'manha, tarde ou noite se o cliente pediu um periodo do dia; vazio caso contrario', 'string') }}"
+            "periodo": "={{ $fromAI('periodo', 'manha, tarde ou noite se o cliente pediu um periodo do dia; vazio caso contrario', 'string') }}",
+            "hora": "={{ $fromAI('hora', 'hora aproximada que o cliente disse, no formato HH:mm (ex.: umas 14h = 14:00); vazio caso contrario', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -865,6 +866,15 @@
             {
               "id": "periodo",
               "displayName": "periodo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "hora",
+              "displayName": "hora",
               "required": false,
               "defaultMatch": false,
               "display": true,
