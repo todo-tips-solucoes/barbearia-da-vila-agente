@@ -13,7 +13,7 @@
     "Diz pelo nome quais barbeiros têm horário amanhã; quantos horários cada um tem e quem não tem vêm do resumo por barbeiro da ferramenta (a lista mostra um barbeiro por horário), não é invenção",
     "Busca os horários do Pedro direto, sem pedir confirmação do que o cliente quis dizer",
     "Ao trocar para adulto, oferece os serviços adultos como lista sem perguntar o barbeiro",
-    "Escolhido o corte adulto, mantém o Pedro: não pergunta com qual barbeiro e mostra os horários dele em lista (ou diz que ele não tem/faz o serviço)"
+    "Escolhido o corte adulto, mantém o Pedro: não pergunta com qual barbeiro; pergunta em texto qual horário fica melhor (regra de 2026-10-28) ou mostra os horários dele em lista (ou diz que ele não tem/faz o serviço)"
   ],
   "criterios": [
     "K2",
