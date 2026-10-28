@@ -256,6 +256,8 @@ class EntregarRajadaAgente(unittest.TestCase):
 
     def test_contingencia_limite_e_sem_handoff(self):  # 5.1.3
         self.assertEqual(self.nos["Agente"]["onError"], "continueErrorOutput")
+        # erro intermitente do n8n ("Paired item data ... from node 'Limite?' is unavailable", R8 em 2026-10-28): uma retentativa antes da contingencia
+        self.assertEqual((self.nos["Agente"]["retryOnFail"], self.nos["Agente"]["maxTries"]), (True, 2))
         self.assertEqual(self._destinos("Agente")[1], ["Registrar falha agente"])
         self.assertIn("{{BV:textos.contingencia}}", self.nos["Contingencia"]["parameters"]["jsCode"])
         self.assertIn("'agente_falhou'", self.nos["Registrar falha agente"]["parameters"]["query"])
