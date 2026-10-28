@@ -1,0 +1,30 @@
+{
+  "id": "R19",
+  "situacao": "Pergunta o horário antes de listar (áudio do owner, 2026-10-28): dia definido sem período nem hora; o cliente diz uma hora aproximada e recebe só os inícios perto dela",
+  "falas": [
+    "Oi! Quero cortar o cabelo amanhã, pode ser com qualquer barbeiro",
+    "corte adulto",
+    "umas 2 da tarde",
+    {
+      "tocar": 1
+    },
+    "Pode confirmar"
+  ],
+  "expectativas": [
+    "Oferece os serviços de corte por lista",
+    "Com o serviço escolhido, antes de mostrar horários pergunta em texto, sem lista, qual horário fica melhor para o cliente",
+    "Depois de 'umas 2 da tarde', a lista de horários traz só inícios entre 13:00 e 15:00 (ou avisa que não havia nada perto e trouxe os mais próximos); não lista o dia inteiro",
+    "Resumo e confirmação",
+    "Agendamento criado"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "agenda": true,
+  "antes_da_c": false
+}

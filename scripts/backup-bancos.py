@@ -32,7 +32,7 @@ def cmd_backup(alvo, retencao, ts):
 def cmd_validar(arq):
     if not arq.startswith(_vps.BACKUPS + "/bv-") or not arq.endswith(".dump") or " " in arq or ";" in arq:
         raise _vps.Recusado("caminho de dump invalido")
-    return f"docker exec -i n8n-postgres-1 pg_restore --list < {shlex.quote(arq)} | head -200"
+    return f"docker exec -i {_vps.PG} pg_restore --list < {shlex.quote(arq)} | head -200"
 
 
 def cmd_restaurar_teste(alvo, arq):
@@ -40,15 +40,15 @@ def cmd_restaurar_teste(alvo, arq):
     cmd_validar(arq)  # mesmo filtro de caminho
     d, var = _vps._alvo(alvo)
     r = f"{d}_restore"
-    adm = "docker exec -i n8n-postgres-1 sh -c 'psql -v ON_ERROR_STOP=1 -q -t -A -U \"$POSTGRES_USER\" -d postgres'"
-    ps = f"docker exec -i -e PGPASSWORD=\"${var}\" n8n-postgres-1 psql -v ON_ERROR_STOP=1 -q -t -A -U {d} -d {r}"
+    adm = f"docker exec -i {_vps.PG} sh -c 'psql -v ON_ERROR_STOP=1 -q -t -A -U \"$POSTGRES_USER\" -d postgres'"
+    ps = f"docker exec -i -e PGPASSWORD=\"${var}\" {_vps.PG} psql -v ON_ERROR_STOP=1 -q -t -A -U {d} -d {r}"
     cenario = ("INSERT INTO contatos(telefone) VALUES ('+5500000000999'); "
                "INSERT INTO mensagens(contato_id,direcao,conteudo,criado_em) SELECT id,'entrada','velha',now()-interval '13 months' FROM contatos; "
                "INSERT INTO mensagens(contato_id,direcao,conteudo) SELECT id,'entrada','nova' FROM contatos;")
     # funcao no trap: entre aspas duplas o $POSTGRES_USER do adm seria expandido no host (vazio) e o DROP falharia calado
     return (f"set -e; . {_vps.INFRA_ENV}; limpa() {{ echo 'DROP DATABASE IF EXISTS {r};' | {adm}; }}; trap limpa EXIT; "
             f"echo 'DROP DATABASE IF EXISTS {r}; CREATE DATABASE {r} OWNER {d};' | {adm}; "
-            f"docker exec -i -e PGPASSWORD=\"${var}\" n8n-postgres-1 pg_restore --no-owner -U {d} -d {r} < {shlex.quote(arq)}; "
+            f"docker exec -i -e PGPASSWORD=\"${var}\" {_vps.PG} pg_restore --no-owner -U {d} -d {r} < {shlex.quote(arq)}; "
             f"echo \"SELECT 'migracoes=' || count(*) FROM schema_migrations;\" | {ps}; "
             f"echo {shlex.quote(cenario)} | {ps}; "
             f"echo {shlex.quote(_lm.SQL)} | {ps} | sed 's/^/apagadas_1a=/'; "

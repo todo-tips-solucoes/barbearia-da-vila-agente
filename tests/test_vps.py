@@ -14,6 +14,16 @@ class Vps(unittest.TestCase):
         with mock.patch.dict(os.environ, {"BV_DEPLOY_PRODUCAO_AUTORIZADO": "sim"}):
             self.assertIn("PG_PASSWORD", _vps.cmd_psql("barbearia_vila"))
 
+    def test_containers_do_swarm_e_execucao_local(self):
+        self.assertIn("name=bv_postgres.", _vps.cmd_psql("barbearia_vila_teste"))
+        r = _vps.cmd_redis(2, ["DBSIZE"])
+        self.assertIn("name=bv_redis.", r)
+        self.assertIn("$REDIS_PASSWORD", r)
+        with mock.patch.object(_vps.subprocess, "run") as run:
+            run.return_value = mock.Mock(stdout="", stderr="", returncode=0)
+            _vps._ssh("true")
+        self.assertEqual(run.call_args.args[0], ["sh", "-c", "true"])
+
     def test_redis_db_e_verbos(self):
         for db, args in ((0, ["DBSIZE"]), (1, ["DBSIZE"]), (2, ["FLUSHDB"]), (2, ["FLUSHALL"]),
                          (2, ["SET", "bv:prod:x", "1"]), (2, ["DEL", "bv:teste:verif:a", "alheia"])):

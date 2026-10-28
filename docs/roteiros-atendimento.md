@@ -43,6 +43,8 @@ critério com a transcrição.
 | R15 | Cliente apressado ou irritado | "Tô atrasado 15 min, ainda dá?" | Empatia; não decide pela loja; passa o contato da loja ou o handoff (depois da C) |
 | R16 | Confirmação da véspera | toque em "Confirmo" e, em outro roteiro, em "Não vou poder" | Status 3 na Graces / status 10 + oferta de remarcar (já coberto pelo `smoke-mensagens` m2, m3 e m7) |
 | R17 | Pedido de humano | "Quero falar com uma pessoa" | **Depois da C:** handoff para o setor 78 e o agente para de responder. Antes da C: passa o contato da loja |
+| R18 | Memória do barbeiro e busca exata (PR #27) | "Quem tem horário amanhã?" / "O Pedro tem?" / troca o serviço | Diz quem tem horário pelo resumo por barbeiro; busca o Pedro direto; mantém o Pedro ao trocar o serviço |
+| R19 | Pergunta o horário antes de listar (alteração 1, 2026-10-28) | "Quero cortar o cabelo amanhã" / "corte adulto" / "umas 2 da tarde" / escolhe / "Pode confirmar" | Com o dia definido e sem período nem hora, pergunta qual horário fica melhor, sem lista; depois lista só os inícios até 60 min das 14:00; agendamento criado |
 
 ## Decisão pendente do owner, sem bloquear a suíte
 
@@ -68,5 +70,5 @@ critério com a transcrição.
 
 ## Aprovação para o princípio XV
 
-Só vale a rodada **completa com 17/17 roteiros aprovados** (e K7 da rodada dentro do limite). Relatório parcial, com roteiro
+Só vale a rodada **completa com todos os roteiros aprovados** (19 em 2026-10-28: R18 memória do barbeiro e busca exata, R19 pergunta o horário antes de listar) (e K7 da rodada dentro do limite). Relatório parcial, com roteiro
 pulado, pendente ou `erro_infra` nunca conta como aprovação.

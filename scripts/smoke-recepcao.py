@@ -1,5 +1,5 @@
 """Smoke da recepcao-buffer no TESTE (C2-C5, FR-021). So contatos sinteticos +55000000xxxx; so barbearia_vila_teste e Redis de TESTE.
-Uso: python3 -I scripts/smoke-recepcao.py [recepcao|duplicidade|limite|rajada|posse|concorrencia|falha|gravacao|dedupe|redis|ttl|teto ...] | --limpar
+Uso: python3 -I scripts/smoke-recepcao.py [recepcao|duplicidade|limite|rajada|posse|concorrencia|gravacao|dedupe|redis|ttl|teto ...] | --limpar
 Sem argumentos roda tudo (exceto teto ~80 s e ttl ~5 min: peca por nome) e limpa no fim. Token vem de .env.smoke (nunca impresso).
 Exit 1 se algum cenario falhar."""
 import copy
@@ -55,10 +55,10 @@ def post(corpo, raw=None):
 
 
 def linhas():
-    """Mensagens dos contatos sinteticos: dicts com telefone, id, tipo, turno_id, criado/turno/proc em epoch."""
+    """Mensagens de entrada dos contatos sinteticos (a resposta do agente nao conta): dicts com telefone, id, tipo, turno_id, criado/turno/proc em epoch."""
     sql = ("SELECT c.telefone, m.id, m.tipo, coalesce(m.turno_id::text,''), extract(epoch from m.criado_em), "
            "coalesce(extract(epoch from m.turno_em)::text,''), coalesce(extract(epoch from m.processada_em)::text,'') "
-           f"FROM mensagens m JOIN contatos c ON c.id=m.contato_id WHERE c.telefone LIKE '{PREFIXO_TEL}%' ORDER BY m.id;")
+           f"FROM mensagens m JOIN contatos c ON c.id=m.contato_id WHERE c.telefone LIKE '{PREFIXO_TEL}%' AND m.direcao = 'entrada' ORDER BY m.id;")
     out = []
     for l in _vps.psql(BANCO, sql).strip().splitlines():
         t, i, tp, tu, cr, te, pr = l.split("|")
@@ -197,17 +197,9 @@ def posse_existe(telefone):
     return _vps.redis(CFG["redis"]["db"], "EXISTS", f"{CFG['redis']['prefixo']}lock:{contato_id(telefone)}").strip() == "1"
 
 
-def falha():
-    print("SC-007 falha forcada de entrega (stub devolve ok:false para __falha__)")
-    post(evento_texto(40, "__falha__ teste"))
-    ls = esperar(lambda x: any(l["tel"] == tel(40) and l["turno_em"] for l in x), 30)
-    fim = time.time() + 30
-    while time.time() < fim and not falhas_de(tel(40)):
-        time.sleep(1.5)
-    ls = [l for l in linhas() if l["tel"] == tel(40)]
-    checar("mensagem volta a pendente", len(ls) == 1 and not ls[0]["proc"] and not ls[0]["turno"], str(len(ls)))
-    checar("falha registrada sem conteudo", falhas_de(tel(40)) == ["entrega|entrega_falhou"], str(falhas_de(tel(40))))
-    checar("posse liberada pelo dono", not posse_existe(tel(40)))
+# SC-007 (falha forcada de entrega) saiu em 2026-10-24: dependia do stub devolver ok:false para "__falha__", e o agente real
+# o substituiu. A falha do modelo e coberta pelo C13 do smoke-agente (contingencia); o ramo entrega_falhou da recepcao
+# fica sem teste ao vivo.
 
 
 def _api_deploy():
@@ -386,7 +378,7 @@ def limpar():
 
 
 CENARIOS = dict(recepcao=recepcao, duplicidade=duplicidade, limite=limite, rajada=rajada, posse=posse,
-                concorrencia=concorrencia, falha=falha, gravacao=gravacao, dedupe=dedupe, redis=redis, ttl=ttl, teto=teto)
+                concorrencia=concorrencia, gravacao=gravacao, dedupe=dedupe, redis=redis, ttl=ttl, teto=teto)
 
 if __name__ == "__main__":
     _env(".env.smoke", ".env.n8n")

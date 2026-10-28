@@ -116,10 +116,12 @@ def m1():
     print("M1 travas da varredura (sem envio real)")
     cid = contato(505)
     atraso, reserva = M["atraso_max_min"], M["reserva_s"]
-    a, _ = linha(cid, previsto="now() - interval '1 minute'")
-    b, _ = linha(cid, previsto=f"now() - interval '{atraso + 5} minutes'")
-    c, _ = linha(cid, previsto="now() - interval '2 minutes'", reservada=f"now() - interval '{reserva + 30} seconds'")
-    d, _ = linha(cid, previsto="now() - interval '1 minute'", prof="outro-profissional")
+    # inicio alem da janela da reconciliacao: senao ela pode marcar as linhas sinteticas como orfa antes da varredura
+    fora = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() - 3 * 3600 + (M["reconciliacao_dias"] + 1) * 86400))
+    a, _ = linha(cid, previsto="now() - interval '1 minute'", inicio=fora)
+    b, _ = linha(cid, previsto=f"now() - interval '{atraso + 5} minutes'", inicio=fora)
+    c, _ = linha(cid, previsto="now() - interval '2 minutes'", reservada=f"now() - interval '{reserva + 30} seconds'", inicio=fora)
+    d, _ = linha(cid, previsto="now() - interval '1 minute'", prof="outro-profissional", inicio=fora)
     esperar(f"SELECT (count(*) = 4)::int FROM mensagens_agendadas WHERE id IN ({a},{b},{c},{d}) AND situacao <> 'pendente'", M["varredura_s"] * 3 + 30)  # as 4, nao a primeira
     checar("contato fora de teste.contatos_escrita: cancelada/fora_da_lista (nada enviado)", estado_linha(a) == "cancelada/fora_da_lista/", estado_linha(a))
     checar("passou da tolerancia: cancelada/ja_passou", estado_linha(b) == "cancelada/ja_passou/", estado_linha(b))

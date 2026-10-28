@@ -1,11 +1,54 @@
 # Infraestrutura - Barbearia da Vila
 
-Sem segredos. Atualizado a cada fase de `infra-base`. Segredos vivem na VPS (`/root/barbearia_vila/infra.env`) e em `.env.*` fora do repo.
+Sem segredos. Atualizado a cada fase de `infra-base`. Segredos vivem no servidor (`/root/barbearia_vila/infra.env`, modo 600) e em `.env.*` fora do repo.
 
 ## Ambiente
 
-- VPS `178.156.134.167` (acesso por `scripts/_vps.py`, lista fechada de operacoes). Hospeda outros servicos: mexer so na stack `n8n`.
-- Instancia n8n: `https://n8n2.todo-tips.com`. Containers usados: `n8n-postgres-1`, `n8n-redis-1`.
+Desde a migracao de 2026-10-23 (plano e andamento em `docs/migracao-vps.md`):
+
+- Servidor proprio `srv1726158` (`2.25.163.213`), o mesmo onde rodam as sessoes do Claude. Docker Swarm de 1 no; a stack `bv` (`infra/stack-bv.yml`) tem Traefik v3, n8n 2.43.5, Postgres 17 e Redis 7.2, e a stack `portainer` (`infra/stack-portainer.yml`) o Portainer CE. Segredos da stack sao docker secrets criados por `infra/criar-segredos.sh`.
+- Instancia n8n: `https://n8nv.todo-tips.com`; Portainer: `https://portainerv.todo-tips.com`. Certificados Let's Encrypt pelo Traefik (HTTP-01).
+- `scripts/_vps.py` (lista fechada de operacoes) roda local e acha o container pelo servico do Swarm (`bv_postgres`, `bv_redis`, `bv_n8n`; o nome do container e sorteado). A senha do Redis vem de `REDIS_PASSWORD` no `infra.env`. Postgres e Redis ficam so na rede interna `bv_bv`; para o n8n, os hosts sao `postgres` e `redis`.
+- Desde a F6 (2026-10-24, 12:16 UTC) a PROD tambem roda aqui: banco `barbearia_vila` local e workflows [PROD] no n8nv; a conexao 145 aponta para `https://n8nv.todo-tips.com/webhook/bv-recepcao-680eee2d-…`. A origem (VPS `178.156.134.167`, stack `n8n`, `https://n8n2.todo-tips.com`, containers `n8n-postgres-1`, `n8n-redis-1`, `n8n-n8n-1`) foi desativada na F8 (2026-10-27): workflows arquivados, crons desligados, dump final em `/root/barbearia_vila/final-origem/` neste servidor (ver `docs/migracao-vps.md`). As secoes abaixo sao o historico dessa origem.
+- Guarda de PROD: hook `PreToolUse` local (`.claude/hooks/guarda-prod.sh`, fora do git) recusa comandos do agente com `BV_DEPLOY_PRODUCAO_AUTORIZADO`; so o owner libera PROD.
+
+### TESTE no n8nv (recriado em 2026-10-23, F4)
+
+Recriado pelo repo, sem copiar segredos da origem: banco `barbearia_vila_teste` novo (migracoes 0001-0010), `REVOKE CONNECT ON DATABASE n8n FROM PUBLIC` (aqui a stack e so da Barbearia), credenciais por `criar-credenciais-n8n.py` e workflows por `deploy-n8n.sh integracao --criar`. O deploy completo numa instancia vazia exige os sub-workflows publicados antes de quem os chama; por isso `workflows_sub` esta em ordem de dependencia nos configs.
+
+| Item | Id |
+|---|---|
+| Credencial Postgres TESTE | `n75mQT1Mp61R2eQb` |
+| Credencial Redis | `635v0i1zcY8h3jDM` |
+| Credencial Verificacao | `VVbK8DkOhfW3nRg2` |
+| Credencial OpenAI | `tVRedGvpa2XF0gX1` |
+| Credencial Graces | `lSsJYIq9jbpkmYlr` |
+| Credencial Chat Master | `Gt9C67GDkOEnB4BZ` |
+| `bv-verificacao` | `mAKBRCHQ1Bd78S7R` |
+| `bv-captura` | `KV66loTQW9KHtW86` |
+| `bv-recepcao` | `n2Dy8IyVnDHQ6KyF` |
+| `bv-vigia` | `ehT7ludsTLu6y9z5` |
+| `bv-mensagens` | `ePWSZ6XnAUztQDrC` |
+| `bv_graces` | `OHmvqZrPix6fJnpP` |
+| `interpretar_midia` | `y71ufji64xT2cTaW` |
+| `bv_confirmacao` | `OPRyWyAE8WNELPOt` |
+| `entregar_rajada` | `N25Ka2Lp6x6TNQKU` |
+
+### PROD no n8nv (F6, 2026-10-24)
+
+Banco criado por `preparar-bancos.py --alvo producao` e preenchido pelo dump final da origem (`scripts/janela-prod.py dump-origem` + `restaurar`: 12 tabelas do role `barbearia_vila`, migracoes 0001-0010). Credencial Postgres por `criar-credenciais-n8n.py --alvo producao`; as demais reusam as do TESTE (como no n8n2). Workflows por `deploy-n8n.sh producao --criar`, em ordem de dependencia, e publicados por `--confirmar-id`. `bv-mensagens` e `bv-captura` nao vao a PROD. Crons (`barbearia-backup-limpeza`, `barbearia-limpar-midia`) instalados aqui por `_vps.py instalar-crons`; 1o backup manual: rc 0, 12 tabelas, limpeza apagou 0. Teste do owner: "oi" do 5511967296849 gravado e respondido em 11 s. Rollback: `capturar-webhook.py restaurar --destino recepcao-producao` (URL do n8n2 em `.webhook-145-antes-prod.url`) e `janela-prod.py religar-origem`.
+
+| Item | Id |
+|---|---|
+| Credencial Postgres PROD | `bnAZiTa3htEORYRD` |
+| `bv-verificacao` | `FQ8W178X7MUx1JDK` |
+| `bv-recepcao` | `CgCUXOfOxc6GWDJR` |
+| `bv-vigia` | `uAPtIcqw4wyorff5` |
+| `bv-alerta` | `N62lndxe74YZqZwm` |
+| `bv_graces` | `co2i51aDgVHHHYF8` |
+| `interpretar_midia` | `jzov64mQwqxBmyy9` |
+| `bv_confirmacao` | `Hc8MjSFbzYJXEQOJ` |
+| `entregar_rajada` | `xvz6ujFMpbVKXY6I` |
 
 ## Sondagens read-only (2026-10-18)
 

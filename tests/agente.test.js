@@ -68,6 +68,8 @@ assert.deepEqual(a.bvFrases('Fale com contato@loja.com.br. Ou no site loja.com.b
 // suite-validacao: loja da config no prompt (K4), contato da loja em vez de prometer humano, convite apos duvida (K5), saudacao (K1).
 const pl = a.bvPrompt({ ...cfg, loja: { endereco: 'Rua X, 1', contatos: '(11) 0000-0000' } });
 assert.ok(pl.includes('Rua X, 1') && pl.includes('(11) 0000-0000') && /funcionamento/.test(pl) && /convite leve/.test(pl) && /não prometa chamar/.test(pl) && /cumprimente/.test(pl));
+// owner, 2026-10-28: pergunta o horario antes de listar; hora aproximada vai em hora=HH:mm
+assert.ok(/Qual horário fica melhor pra você\?/.test(p) && /hora=HH:mm/.test(p) && /tanto faz/.test(p) && /ainda não buscou horários/.test(p));
 assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
 console.log('agente.test.js ok');
 
@@ -168,6 +170,11 @@ console.log('agente.test.js turno com midia ok');
   const tb = bvContextoPedido({ barbeiro: { idProfissional: 'p9', apelido: 'Pedro Henrique' } }, false, bvNeutralizar);
   assert.match(tb, /Barbeiro já escolhido pelo cliente \(dado\): Pedro Henrique\. Não pergunte de novo/);
   assert.ok(!tb.includes('p9'));
+  // C7: agendamentos ja listados viram dado com o id de opcao; idAgenda e barbeiro nunca vao ao modelo
+  const ta = bvContextoPedido({ agendamentos: [{ opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-26T17:00:00', servico: 'corte adulto', profissional: 'ZZ TESTE' }] }, false, bvNeutralizar);
+  assert.match(ta, /id 1 = 26\/10 17:00 corte adulto\. .*sem chamar meus_agendamentos de novo/);
+  assert.ok(!ta.includes('a1') && !ta.includes('TESTE'));
+  assert.equal(bvContextoPedido({ agendamentos: null }, false, bvNeutralizar), '');
 }
 
 // bvSepararOpcoes: marcador em negrito e linhas sem marcador nao vazam como texto (suite R2/R12)
