@@ -55,8 +55,8 @@ assert.ok(!JSON.stringify(r).includes(TESTE));
 // horarios_livres: um pedido por barbeiro real no "qualquer"; dia fechado e lotado.
 const ctxH = ctxOp(opcoesBarb, pedido);
 p = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20' }), ctxH, cfg);
-assert.equal(p.reqs.length, 2);
-assert.ok(p.reqs.every((q) => q.path === '/agenda/horarios-livres' && q.qs.idServico === 's1' && q.qs.idProfissional !== TESTE));
+assert.deepEqual(p.reqs.map((q) => q.path), ['/agenda/horarios-livres', '/agenda/horarios-livres', '/agenda/horarios', '/agenda/horarios']); // grades, depois ocupacoes
+assert.ok(p.reqs.every((q) => q.qs.idServico === 's1' && q.qs.idProfissional !== TESTE));
 r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['14:00', '14:40'] }), ok({ minutos: 40, horarios: ['14:00', '15:20'] })], cfg).final;
 assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['14:00', '14:40', '15:20']);
 assert.equal(r.resultado.total, 3);
@@ -86,8 +86,23 @@ r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['11:20', '12:00', '13:20', '1
 assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['12:00', '13:20']);
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', hora: '25:00' }, cfg).resultado.code, 'entrada_invalida');
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', hora: '9:00' }, cfg).resultado.code, 'entrada_invalida');
+// Encaixe (owner, 2026-10-28, ajuste 2): a loja lancou 09:30-10:50 fora da grade de 40; 10:50 cabe ate 11:30 e entra;
+// 14:00 (fim do bloqueio) nao cabe (outro bloqueio em 14:00); 19:00 nao cabe (fecha 19:30); 07:50 fica antes do 1o inicio da grade.
+p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2', data: '2026-10-20' }), ctxH, cfg);
+const grade = ok({ minutos: 40, funcionamento: { horaInicio: '08:00', horaFim: '19:30' }, horarios: ['08:00', '08:40', '11:20', '12:00'] });
+const ocup = ok({ minutos: 40, horarios: [{ horaInicio: '07:00', horaFim: '07:50', tipo: 2 }, { horaInicio: '09:30', horaFim: '10:50', tipo: 1 }, { horaInicio: '12:40', horaFim: '14:00', tipo: 2 }, { horaInicio: '14:00', horaFim: '18:20', tipo: 2 }, { horaInicio: '18:20', horaFim: '19:00', tipo: 1 }] });
+r = g.bvGPasso(p.st, [grade, ocup], cfg).final;
+assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['08:00', '08:40', '10:50', '11:20', '12:00']);
+assert.equal(r.efeitos.opcoes.itens.find((x) => x.valor.hora === '10:50').valor.minutos, 40);
+// ocupacoes sem 200, grade sem funcionamento ou grade vazia: fica so a grade (nunca supoe livre)
+assert.deepEqual(g.bvGPasso(p.st, [grade, resp(500, {})], cfg).final.resultado.opcoes.map((o) => o.hora), ['08:00', '08:40', '11:20', '12:00']);
+assert.deepEqual(g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00'] }), ocup], cfg).final.resultado.opcoes.map((o) => o.hora), ['08:00']);
+assert.match(g.bvGPasso(p.st, [ok({ minutos: 40, funcionamento: { horaFim: '19:30' }, horarios: [] }), ocup], cfg).final.resultado.orientacao, /lotado/);
+// periodo e hora valem tambem para o encaixe
+p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2', data: '2026-10-20', hora: '11:00' }), ctxH, cfg);
+assert.deepEqual(g.bvGPasso(p.st, [grade, ocup], cfg).final.resultado.opcoes.map((o) => o.hora), ['10:50', '11:20', '12:00']);
 const comBarbeiro = entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '2', data: '2026-10-20' });
-assert.equal(g.bvGPlano(comBarbeiro, ctxH, cfg).reqs.length, 1);
+assert.equal(g.bvGPlano(comBarbeiro, ctxH, cfg).reqs.length, 2);
 assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '99', data: '2026-10-20' }), ctxH, cfg).final.resultado.code, 'opcao_desconhecida');
 
 // Memoria do barbeiro (teste do owner, 2026-10-22): escolheu o Kiel, trocou o servico e nao precisa escolher de novo.
@@ -98,7 +113,7 @@ assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro
   assert.equal(rb.resultado.por_barbeiro, undefined);
   const ped = { ...pedido, ...rb.efeitos.pedido, servico: { idServico: 's9', nome: 'barba', opcao_id: '3' } }; // conversas.pedido || efeitos
   const sem = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-21' }), ctxOp({}, ped), cfg);
-  assert.deepEqual(sem.reqs.map((q) => [q.qs.idProfissional, q.qs.idServico]), [['b2', 's9']]);
+  assert.deepEqual(sem.reqs.map((q) => [q.qs.idProfissional, q.qs.idServico]), [['b2', 's9'], ['b2', 's9']]); // grade + ocupacoes
   assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-21' }), ctxOp({}, pedido), cfg).final.resultado.code, 'barbeiro_nao_escolhido');
   const lb = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: '3' }), ctxOp({}, ped), cfg);
   const fala = (lista) => g.bvGPasso(lb.st, [ok(lista)], cfg).final.resultado.orientacao;
@@ -149,7 +164,7 @@ const dadosCanc = p.final.efeitos.proposta_nova.dados;
 p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-26' }), ctxE(opcoesAg), cfg);
 assert.deepEqual(p.reqs, [{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: 's1' } }]);
 pi = g.bvGPasso(p.st, [ok([{ idProfissional: TESTE, apelido: 'Zé' }, { idProfissional: 'b2', apelido: 'Kiel ' }])], cfg);
-assert.deepEqual(pi.reqs, [{ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: 's1', idProfissional: 'b2', data: '2026-10-26' } }]);
+assert.deepEqual(pi.reqs, [{ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: 's1', idProfissional: 'b2', data: '2026-10-26' } }, { m: 'GET', path: '/agenda/horarios', qs: { idServico: 's1', idProfissional: 'b2', data: '2026-10-26' } }]);
 r = g.bvGPasso(pi.st, [ok({ minutos: 40, horarios: ['10:00'] })], cfg).final;
 assert.deepEqual(r.resultado.opcoes, [{ id: '1', hora: '10:00', barbeiro: 'Kiel' }]);
 assert.equal(r.efeitos.opcoes.itens[0].valor.idServico, 's1');
@@ -180,6 +195,14 @@ assert.equal(f2({ operacao: 'agendar' }, { pedido: {}, info: { estado: 'executad
 assert.equal(f2({ operacao: 'agendar' }, { pedido: {}, info: { estado: 'pendente', mesmo_turno: false } }).final.resultado.code, 'proposta_expirada');
 assert.equal(f2({ operacao: 'agendar' }, { pedido: {} }).final.resultado.code, 'proposta_invalida');
 const prop = (acao, dados) => ({ pedido: { idCliente: 'c1' }, proposta: { id: PID, acao, dados } });
+{ // Encaixe na fase 2 (ajuste 2): 10:50 (fim de ocupacao) revalida pelas ocupacoes; sem elas, vale so a grade
+  const pe = f2({ operacao: 'agendar' }, prop('agendar', { ...dadosAg, hora: '10:50' }));
+  assert.deepEqual(pe.reqs.map((q) => q.path), ['/agenda/horarios-livres', '/agenda/agendamentos', '/agenda/horarios']);
+  const ge = ok({ minutos: 40, funcionamento: { horaFim: '19:30' }, horarios: ['08:00', '11:20'] });
+  const oe = ok({ horarios: [{ horaInicio: '09:30', horaFim: '10:50', tipo: 1 }] });
+  assert.equal(g.bvGPasso(pe.st, [ge, ok([]), oe], cfg).reqs[0].body.horaInicio, '10:50');
+  assert.equal(g.bvGPasso(pe.st, [ge, ok([]), resp(500, {})], cfg).final.resultado.code, 'horario_indisponivel');
+}
 assert.equal(f2({ operacao: 'agendar' }, prop('agendar', dadosAg), { ...cfg, ambiente: 'producao' }).final.efeitos.proposta_upd.estado, 'falhou');
 // PROD com o de teste liberado: so escreve no de teste; barbeiro real recusa; a fase 2 vai sempre ao de teste
 const cfgP = { ...cfg, ambiente: 'producao', redirecionar: false, testeLiberado: true };
@@ -240,7 +263,7 @@ assert.equal(g.bvGPasso(s3.st, [resp(500, {})], cfg).final.resultado.code, 'novo
   const h14 = Array.from({ length: 14 }, (_, k) => `${String(9 + Math.floor(k * 40 / 60)).padStart(2, '0')}:${String(k * 40 % 60).padStart(2, '0')}`);
   const pedidoU = { servico: { idServico: 's1', nome: 'corte adulto', preco: 85 }, barbeiros: [{ opcao_id: '1', idProfissional: 'b1', apelido: 'Rodrigo' }, { opcao_id: '9', idProfissional: TESTE, apelido: 'Zé' }, { opcao_id: '2', idProfissional: 'b2', apelido: 'Kiel' }] };
   const pu = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20' }), ctxOp({}, pedidoU), cfg);
-  assert.equal(pu.reqs.length, 2); // o de teste fora
+  assert.equal(pu.reqs.length, 4); // o de teste fora
   const ru = g.bvGPasso(pu.st, [ok({ minutos: 40, horarios: h14.slice(0, 8) }), ok({ minutos: 40, horarios: h14.slice(4) })], cfg).final;
   assert.deepEqual(ru.efeitos.opcoes.itens.map((x) => x.valor.hora), h14);
   assert.equal(ru.efeitos.opcoes.completa, true);
@@ -284,7 +307,7 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   const novo = { idAgenda: 'n1', idServico: 's1', idProfissional: TESTE, horaInicio: '2026-10-20T14:00:00' };
   const escreve = () => { // reval ok + linha de base vazia -> POST
     const pl = f2({ operacao: 'agendar' }, prop('agendar', dA));
-    assert.equal(pl.reqs.length, 2); // horarios + linha de base
+    assert.equal(pl.reqs.length, 3); // horarios + linha de base + ocupacoes
     return g.bvGPasso(pl.st, [ok({ horarios: ['14:00'] }), ok([{ idAgenda: 'velho' }])], cfg);
   };
   let w = escreve();
@@ -336,7 +359,7 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   assert.equal(plE.reqs.length, 2);
   // u14: b1 e b2 fazem os dois; so b1 tem a sequencia (corte 40min -> barba na grade)
   const e1 = g.bvGPasso(plE.st, [profs(['b1', 'b2', TESTE]), profs(['b1', 'b2'])], cfg);
-  assert.equal(e1.reqs.length, 4); // 2 barbeiros reais x 2 servicos, sem o de teste
+  assert.equal(e1.reqs.length, 8); // 2 barbeiros reais x 2 servicos x (grade + ocupacoes), sem o de teste
   const e2 = g.bvGPasso(e1.st, [ok({ minutos: 40, horarios: ['10:00', '11:00'] }), ok({ minutos: 30, horarios: ['10:40', '15:00'] }),
     ok({ minutos: 40, horarios: ['10:00'] }), ok({ minutos: 30, horarios: ['12:00'] })], cfg).final;
   assert.deepEqual(e2.resultado.opcoes.map((o) => `${o.hora} ${o.barbeiro}`), ['10:00 B1']);
@@ -360,7 +383,7 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   const dp = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: idModo('barbeiros_diferentes'), data: '2026-10-20' }), ctxM, cfg);
   assert.equal(dp.reqs.length, 2);
   const dg = g.bvGPasso(dp.st, [profs(['b1', TESTE]), profs(['b2'])], cfg);
-  assert.equal(dg.reqs.length, 2); // b1 p/ corte, b2 p/ barba (sem o de teste)
+  assert.equal(dg.reqs.length, 4); // b1 p/ corte, b2 p/ barba (sem o de teste), grade + ocupacoes
   const dr = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00', '11:00'] }), ok({ minutos: 30, horarios: ['10:40'] })], cfg).final;
   assert.deepEqual(dr.resultado.opcoes.map((o) => `${o.hora} ${o.barbeiros.join('+')}`), ['10:00 B1+B2']);
   // hora aproximada tambem filtra as sequencias (mesmo barbeiro e barbeiros diferentes)
@@ -375,6 +398,17 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   const dpH = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: idModo('barbeiros_diferentes'), data: '2026-10-20', hora: '16:00' }), ctxM, cfg);
   const dgH = g.bvGPasso(dpH.st, [profs(['b1']), profs(['b2'])], cfg);
   assert.deepEqual(g.bvGPasso(dgH.st, grades, cfg).final.resultado.opcoes.map((o) => o.hora), ['16:00']);
+  // encaixe na sequencia (ajuste 2): corte as 09:30 (fim de ocupacao) e barba as 10:10, fora da grade da barba, cabem no livre
+  const eE = g.bvGPasso(plE.st, [profs(['b1']), profs(['b1'])], cfg);
+  const fx = (min, hs) => ok({ minutos: min, funcionamento: { horaFim: '19:30' }, horarios: hs });
+  const oE = ok({ horarios: [{ horaInicio: '08:40', horaFim: '09:30', tipo: 1 }, { horaInicio: '11:20', horaFim: '19:30', tipo: 2 }] });
+  const rE = g.bvGPasso(eE.st, [fx(40, ['08:00', '10:00']), fx(30, ['08:00', '12:00']), oE, oE], cfg).final;
+  assert.deepEqual(rE.resultado.opcoes.map((o) => o.hora), ['09:30', '10:00']);
+  assert.deepEqual(rE.efeitos.opcoes.itens[0].valor.itens.map((x) => x.hora), ['09:30', '10:10']);
+  // barbeiros diferentes: o 2o servico tambem pode cair fora da grade
+  const dE = g.bvGPasso(dp.st, [profs(['b1']), profs(['b2'])], cfg);
+  const rD = g.bvGPasso(dE.st, [fx(40, ['08:00', '10:00']), fx(30, ['08:00', '12:00']), oE, oE], cfg).final;
+  assert.deepEqual(rD.resultado.opcoes.map((o) => o.hora), ['09:30', '10:00']);
   assert.equal(dr.efeitos.opcoes.itens[0].valor.itens[1].idProfissional, 'b2');
   const dsem = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00'] }), ok({ minutos: 30, horarios: ['12:00'] })], cfg).final;
   assert.equal(dsem.resultado.total, 0);
@@ -382,7 +416,7 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   assert.match(dd.resultado.resumo, /corte adulto às 10:00 com B1.*\+ barba às 10:40 com B2/);
   // no TESTE toda escrita do conjunto vai ao barbeiro de teste, mesmo com barbeiros diferentes na proposta
   const pP = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: PID }), prop('agendar_conjunto', dd.efeitos.proposta_nova.dados), cfg);
-  assert.deepEqual(pP.reqs.map((q) => q.qs.idProfissional), [TESTE, TESTE]);
+  assert.deepEqual(pP.reqs.map((q) => q.qs.idProfissional), [TESTE, TESTE, TESTE, TESTE]); // grades + ocupacoes
   // u16: conjunto: 1o POST 200, 2o 409 -> parcial, sem 3a chamada
   const ctxC = ctxOp(e2.efeitos.opcoes, { idCliente: 'c1' });
   const fase1 = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxC, cfg).final;
@@ -390,7 +424,7 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   assert.match(fase1.resultado.resumo, /corte adulto às 10:00.*\+ barba às 10:40/);
   const dC = fase1.efeitos.proposta_nova.dados;
   const pl2 = f2({ operacao: 'agendar' }, prop('agendar_conjunto', dC));
-  assert.equal(pl2.reqs.length, 2);
+  assert.equal(pl2.reqs.length, 4);
   assert.ok(pl2.reqs.every((q) => q.qs.idProfissional === TESTE));
   const w1 = g.bvGPasso(pl2.st, [ok({ horarios: ['10:00'] }), ok({ horarios: ['10:40'] })], cfg);
   assert.equal(w1.reqs[0].body.idServico, 's1');
