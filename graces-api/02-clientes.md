@@ -65,6 +65,17 @@ Corpo (JSON):
 | `apelido` | string | não | Apelido. |
 | `rg` | string | não | RG. |
 
+**Comportamento medido (2026-11-14, fora da documentação oficial):**
+
+- `sobrenomeCliente` é aceito no corpo, embora não esteja documentado, e é gravado exatamente como enviado, mesmo com várias palavras (`"Integracao Nao Agendar"`). `nomeCliente` também fica como enviado: a Graces não redivide o nome. Sem `sobrenomeCliente`, o nome inteiro vai para `nomeCliente` e a loja não acha o cliente pelo sobrenome no portal (queixa da loja; cadastros antigos como "Paulo Sudre" + "Lamarao" mostram a divisão errada).
+- `genero` é texto livre na validação, mas `"Masculino"` devolve `500 ERRO_INTERNO` sem criar nada; `"M"` grava. A GET não devolve o gênero (só o portal mostra).
+- Campos que a API **não** conhece (`sobrenome`, `sexo`, `origem`, `comoConheceu`, `indicacao`, `observacao` e variações): ignorados em silêncio. Não há campo de "como conheceu" pela API; o agente guarda isso em `contatos.como_conheceu` (migração 0011).
+- Sondagem sem criar: um objeto `{}` num campo conhecido dá `400 CORPO_INVALIDO`; num desconhecido, segue para a validação de negócio.
+- Cliente fictício de teste criado nessa medição (sem exclusão pela API): `Zz Teste` / `Integracao Nao Agendar`, celular `11900000017`, id `9503b3d1-6768-4b49-97a3-5320e86e916a`. É o `cadastro.cliente_teste_id` do TESTE.
+- A busca por `busca=` devolve `[]` para qualquer termo nesta loja, inclusive o nome exato desse cliente.
+
+**Para o agente (owner, 2026-11-14):** cadastre com `nomeCliente` = primeira palavra, `sobrenomeCliente` = o resto, celular do WhatsApp da conversa, `genero` `"M"` e `dataNascimento` quando o cliente informar.
+
 Os campos obrigatórios dependem da configuração da loja (`GET /agenda/clientes/configuracao`). **Na Barbearia da Vila (2026-10-18): só o celular é obrigatório**; CPF, e-mail e endereço são opcionais. Ver [Dados da loja](06-dados-da-loja.md#regras-de-cadastro-de-cliente).
 
 ```bash

@@ -2,7 +2,7 @@
   "id": "R7",
   "situacao": "Cancelamento",
   "falas": [
-    "Preciso cancelar meu horário de sexta"
+    "Preciso cancelar meu horário de quarta"
   ],
   "expectativas": [
     "Sugere remarcar antes de cancelar",
@@ -19,5 +19,5 @@
   "agenda": true,
   "antes_da_c": false,
   "preparo": "agendamento_previo",
-  "preparo_dia_semana": 4
+  "preparo_dia_semana": 2
 }

@@ -10,11 +10,10 @@
     "Pode confirmar"
   ],
   "expectativas": [
-    "Saudação acolhedora",
-    "Identifica ou cadastra o cliente",
-    "Oferece serviços e barbeiros por lista",
-    "Todos os inícios em que o serviço cabe",
-    "Resumo e confirmação",
+    "Saudação acolhedora pelo nome do cliente",
+    "Usa o último atendimento do cliente (serviço e barbeiro do histórico da Graces, na <referencia>) sem listar serviços nem barbeiros",
+    "Mostra por lista os inícios da tarde em que o serviço cabe (ou diz que não há e oferece alternativa)",
+    "Resumo com o serviço, a data e o horário, e pedido de confirmação",
     "Agendamento criado"
   ],
   "criterios": [

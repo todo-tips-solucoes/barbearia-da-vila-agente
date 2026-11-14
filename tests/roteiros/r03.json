@@ -3,9 +3,12 @@
   "situacao": "Onde fica e quando abre",
   "falas": [
     "Vocês ficam onde?",
+    "Bruno Henrique Alves, nasci em 05/09/1988, vi no Google",
     "Abre domingo?"
   ],
   "expectativas": [
+    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda a dúvida (texto aberto, sem lista)",
+    "Recebidos os dados, confirma o cadastro em poucas palavras e responde a dúvida que o cliente fez na primeira mensagem",
     "Endereço da config loja",
     "Horário da Graces",
     "Convite para agendar"

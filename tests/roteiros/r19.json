@@ -1,9 +1,8 @@
 {
   "id": "R19",
-  "situacao": "Pergunta o horário antes de listar (áudio do owner, 2026-10-28): dia definido sem período nem hora; o cliente diz uma hora aproximada e recebe só os inícios perto dela",
+  "situacao": "Pergunta o horário antes de listar (áudio do owner, 2026-10-28): dia definido sem período nem hora; o cliente diz uma hora aproximada e recebe só os inícios perto dela. Serviço do último atendimento (2026-11-14), barbeiro qualquer",
   "falas": [
     "Oi! Quero cortar o cabelo amanhã, pode ser com qualquer barbeiro",
-    "corte adulto",
     "umas 2 da tarde",
     {
       "tocar": 1
@@ -11,10 +10,11 @@
     "Pode confirmar"
   ],
   "expectativas": [
-    "Oferece os serviços de corte por lista",
-    "Com o serviço escolhido, antes de mostrar horários pergunta em texto, sem lista, qual horário fica melhor para o cliente",
-    "Depois de 'umas 2 da tarde', a lista de horários traz só inícios entre 13:00 e 15:00 (ou avisa que não havia nada perto e trouxe os mais próximos); não lista o dia inteiro",
-    "Resumo e confirmação",
+    "Cumprimenta o cliente pelo nome",
+    "Usa o serviço do último atendimento (histórico da Graces, na <referencia>) sem listar serviços, com qualquer barbeiro como o cliente pediu",
+    "Antes de mostrar horários pergunta em texto, sem lista, qual horário fica melhor",
+    "Depois de 'umas 2 da tarde', a lista traz só inícios entre 13:00 e 15:00 (ou avisa que não havia nada perto e trouxe os mais próximos), ou, se 14:00 estiver livre, vai direto ao resumo; não lista o dia inteiro",
+    "Resumo com o serviço, a data e o horário, e confirmação",
     "Agendamento criado"
   ],
   "criterios": [
