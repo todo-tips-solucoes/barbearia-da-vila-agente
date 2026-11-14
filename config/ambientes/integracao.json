@@ -178,6 +178,10 @@
     "cadastros_max_dia": 1,
     "cadastro_liberado": false
   },
+  "cadastro": {
+    "liberado": true,
+    "cliente_teste_id": "9503b3d1-6768-4b49-97a3-5320e86e916a"
+  },
   "handoff": {
     "setor_id": 78,
     "whatsapp_id": "145"

@@ -14,7 +14,7 @@ def roteiros():
 
 class Roteiros(unittest.TestCase):
     def test_ids_unicos_r1_a_r19(self):
-        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 20)])
+        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 21)])
 
     def test_criterios_validos(self):
         for r in roteiros():
@@ -27,7 +27,7 @@ class Roteiros(unittest.TestCase):
                     self.assertIsNone(re.search(r"\d{8,}|\d{3}\.\d{3}\.\d{3}|@", f), (r["id"], f))
 
     def test_agenda_so_nos_oito_previstos(self):
-        self.assertEqual({r["id"] for r in roteiros() if r["agenda"]}, {"R1", "R5", "R6", "R7", "R8", "R9", "R11", "R19"})
+        self.assertEqual({r["id"] for r in roteiros() if r["agenda"]}, {"R1", "R5", "R6", "R7", "R8", "R9", "R11", "R19", "R20"})
 
     def test_marcas_especiais(self):
         m = {r["id"]: r for r in roteiros()}

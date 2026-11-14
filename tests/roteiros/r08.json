@@ -2,7 +2,7 @@
   "id": "R8",
   "situacao": "Cancelei, vamos marcar outro",
   "falas": [
-    "Cancela o de sexta e marca pra segunda"
+    "Cancela o de quarta e marca pra segunda"
   ],
   "expectativas": [
     "Entende o contexto: cancela e já trata de segunda (pergunta o horário que fica melhor ou oferece os horários)",
@@ -19,5 +19,5 @@
   "agenda": true,
   "antes_da_c": false,
   "preparo": "agendamento_previo",
-  "preparo_dia_semana": 4
+  "preparo_dia_semana": 2
 }

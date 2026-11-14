@@ -2,9 +2,12 @@
   "id": "R13",
   "situacao": "Pergunta sem resposta conhecida",
   "falas": [
-    "Vocês aceitam pix? Tem estacionamento?"
+    "Vocês aceitam pix? Tem estacionamento?",
+    "Marcelo Nunes Prado, 03/02/1985, indicação"
   ],
   "expectativas": [
+    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda a dúvida (texto aberto, sem lista)",
+    "Recebidos os dados, confirma o cadastro em poucas palavras e responde a dúvida que o cliente fez na primeira mensagem",
     "Não inventa (K4)",
     "Diz que não tem essa informação e passa o contato da loja",
     "Convite para agendar"

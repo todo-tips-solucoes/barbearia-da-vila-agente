@@ -1,0 +1,29 @@
+{
+  "id": "R20",
+  "situacao": "Cliente cadastrado agenda pelo último corte (owner, 2026-11-14): o agente o chama pelo nome, propõe repetir o último atendimento e pergunta dia e horário de uma vez",
+  "falas": [
+    "Oi, quero marcar um horário",
+    "Amanhã de manhã",
+    {
+      "tocar": 1
+    },
+    "Pode confirmar"
+  ],
+  "expectativas": [
+    "Cumprimenta o cliente pelo nome",
+    "Propõe repetir o último atendimento (serviço e barbeiro do histórico da Graces, na <referencia>) e pergunta o dia e o horário numa mensagem só, sem listar serviços nem barbeiros",
+    "Com 'amanhã de manhã', mostra por lista os inícios da manhã desse barbeiro (ou diz que não há e oferece alternativa)",
+    "Resumo com o serviço, a data e o horário, e pedido de confirmação",
+    "Agendamento criado"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "agenda": true,
+  "antes_da_c": false
+}
