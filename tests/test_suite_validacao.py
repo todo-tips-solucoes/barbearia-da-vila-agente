@@ -14,7 +14,7 @@ def roteiros():
 
 class Roteiros(unittest.TestCase):
     def test_ids_unicos_r1_a_r19(self):
-        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 21)])
+        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 23)])
 
     def test_criterios_validos(self):
         for r in roteiros():
@@ -79,7 +79,7 @@ class Alocacao(unittest.TestCase):
             if r["id"] in a:
                 self.assertEqual(a[r["id"]] >= 520, bool(r["agenda"]), r["id"])
                 if not r["agenda"]:
-                    self.assertTrue(510 <= a[r["id"]] <= 519)
+                    self.assertIn(a[r["id"]], sv.CONTATOS_LIVRES)
 
 
 class Avaliadora(unittest.TestCase):
@@ -259,7 +259,7 @@ class Converge(unittest.TestCase):  # achados da rodada real 20261021-031240 (re
                 "/servicos/profissionais?idServico=s1": [{"idProfissional": "p1", "apelido": "Kiel"}, {"idProfissional": T, "apelido": "ZZ X "}],
                 "/agenda/configuracao": {"horarios": [{"dia": "Domingo", "horaInicio": "08:00", "horaFim": "16:00"}]}}
         r = sv.referencia_graces(resp.__getitem__)
-        self.assertIn("Barbeiros reais: Kiel", r)
+        self.assertIn("Barbeiros reais que o agente oferece: Kiel", r)
         self.assertIn("nunca pode aparecer ao cliente): ZZ X", r)
         self.assertIn("Domingo", r)
         self.assertIn("Loja:", r)

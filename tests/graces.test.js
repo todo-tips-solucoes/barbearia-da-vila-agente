@@ -680,3 +680,43 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   assert.match(rr.orientacao, /chame reagendar com id_opcao_agendamento 1 e id_opcao_horario 1/);
 }
 console.log('graces.test.js ultimo atendimento ok');
+
+// Clausula petrea (owner, 2026-11-14): o Jayme nunca e listado nem agendado pelo agente; quem quer o Jayme vai para a equipe.
+{
+  const JAY = 'b623cd84-6068-4a57-9ce6-2f7d9a37a11e', S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const cj = { ...cfg, humanos: [{ id: JAY, nome: 'Jayme' }] };
+  const lib = { ...cj, testeLiberado: true }; // nem contato de teste ve o Jayme
+  const barbs = [{ idProfissional: 'b1', apelido: 'Pedro' }, { idProfissional: JAY, apelido: 'jayme' }, { idProfissional: 'bx', apelido: 'X', nomeCompleto: 'jayme do espirito santo' }];
+  let pj = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: '1' }), { opcoes: { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte', valor: { idServico: S, nome: 'corte adulto' } }] }, pedido: {} }, lib);
+  let rj = g.bvGPasso(pj.st, [ok(barbs)], lib).final;
+  assert.deepEqual(rj.resultado.barbeiros.map((b) => b.nome), ['Pedro']);
+  // qualquer barbeiro: busca os barbeiros e nunca consulta a agenda do Jayme
+  const pedU = { identificado: true, idCliente: 'c1', ultimo: { servico: { idServico: S, nome: 'corte adulto', opcao_id: 'ult' }, barbeiro: null } };
+  pj = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20' }), { opcoes: {}, pedido: pedU }, cj);
+  pj = g.bvGPasso(pj.st, [ok(barbs)], cj);
+  assert.ok(pj.reqs.every((q) => q.qs.idProfissional !== JAY && q.qs.idProfissional !== 'bx'));
+  // cliente do Jayme: sem sugestao de servico, o contexto manda transferir
+  const ped = { idCliente: 'c1', cliente_sem_cadastro: false, cliente_nome: 'Ana', identificado: true };
+  rj = g.bvGPasso({ in: entrada({ operacao: 'identificar_cliente' }), ctx: { pedido: {}, opcoes: {} }, meta: { op: 'identificar_cliente', etapa: 'hist', ped } }, [ok([{ idServico: S, idProfissional: JAY, profissional: 'jayme ' }])], cj).final;
+  assert.deepEqual(rj.efeitos.pedido.ultimo, { humano: 'Jayme' });
+  assert.deepEqual(rj.resultado.ultimo, { humano: 'Jayme' });
+  // fase 1: horario, sequencia ou remarcacao com o Jayme -> encaminha; cancelar o agendamento dele segue
+  const hJ = { tipo: 'horario', itens: [{ id: '1', rotulo: '10:00', valor: { data: '2026-10-20', hora: '10:00', idProfissional: JAY, apelido: 'jayme', idServico: S, servico: 'corte adulto' } }] };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), { opcoes: hJ, pedido: { idCliente: 'c1' } }, cj).final.resultado.code, 'encaminhar_equipe');
+  const sqJ = { tipo: 'sequencia', itens: [{ id: '1', rotulo: 's', valor: { data: '2026-10-20', itens: [{ idProfissional: 'b1', apelido: 'Pedro', hora: '10:00' }, { idProfissional: JAY, apelido: 'jayme', hora: '10:40' }] } }] };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), { opcoes: sqJ, pedido: { idCliente: 'c1' } }, cj).final.resultado.code, 'encaminhar_equipe');
+  const agJ = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: JAY, profissional: 'jayme ' };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'reagendar', id_opcao_agendamento: '1', id_opcao_horario: '1' }), { opcoes: { tipo: 'horario', itens: [] }, pedido: { idCliente: 'c1', agendamentos: [agJ] } }, cj).final.resultado.code, 'encaminhar_equipe');
+  assert.notEqual(g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), { opcoes: {}, pedido: { idCliente: 'c1', agendamentos: [agJ] } }, cj).final.resultado.code, 'encaminhar_equipe');
+  // fase 2: proposta com o Jayme falha antes de qualquer chamada
+  const PJ = '33333333-3333-4333-8333-333333333333';
+  rj = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: PJ }), { pedido: { idCliente: 'c1' }, proposta: { id: PJ, acao: 'agendar', dados: { idCliente: 'c1', idServico: S, idProfissional: JAY, barbeiro: 'jayme', data: '2026-10-20', hora: '10:00', servico: 'corte adulto' } } }, cj).final;
+  assert.equal(rj.resultado.code, 'barbeiro_humano');
+  assert.equal(rj.efeitos.proposta_upd.estado, 'falhou');
+  // transferir_atendimento: handoff para a equipe
+  rj = g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { idCliente: 'c1' } }, cj).final;
+  assert.equal(rj.resultado.code, 'encaminhar_equipe');
+  assert.equal(rj.efeitos.pedido.handoff, true);
+  assert.equal(rj.efeitos.falha.motivo, 'encaminhar_equipe|barbeiro_humano');
+}
+console.log('graces.test.js jayme ok');

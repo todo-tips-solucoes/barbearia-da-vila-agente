@@ -279,3 +279,21 @@ console.log('agente.test.js saudacao no meio e teste liberado ok');
   assert.ok(!r[0].texto.includes('OP') && r[0].tipo === 'lista' && r[0].opcoes[0].rotulo === '17:20'); // marcador acentuado (R18)
 }
 console.log('agente.test.js convite K5 ok');
+
+// Clausula petrea do Jayme e barbeiro antes dos horarios (owner, 2026-11-14)
+{
+  const a = require('../workflows/shared/agente.js');
+  const H = [{ id: 'j1', nome: 'Jayme' }];
+  assert.deepEqual(a.bvFiltrarBarbeiros([{ id: 'j1', apelido: 'x' }, { id: 'k', apelido: 'Kiel' }, { id: 'z', apelido: 'JAYME ' }, { id: 'm', apelido: 'Jaymerson' }], 'zz', true, H).map((b) => b.id), ['k', 'm']);
+  assert.equal(a.bvBarbeiroHumano({ idProfissional: 'q', profissional: 'jayme do espirito santo' }, H).nome, 'Jayme');
+  const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {}, graces: { humanos: H } });
+  assert.match(p, /pergunte o barbeiro de preferência mandando a lista \(listar_barbeiros\)/);
+  assert.match(p, /Barbeiros que só a equipe agenda \(dado\): Jayme\. Nunca os mostre/);
+  assert.match(p, /chame transferir_atendimento/);
+  assert.doesNotMatch(a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} }), /só a equipe agenda/);
+  const c = a.bvContextoCliente(a.bvClienteDoPedido({ identificado: true, idCliente: 'c1', cliente_nome: 'Ana', ultimo: { humano: 'Jayme' } }), a.bvNeutralizar);
+  assert.match(c, /último atendimento do cliente foi com Jayme, que só a equipe agenda/);
+  assert.doesNotMatch(c, /Último atendimento do cliente \(dado\)/);
+  assert.equal(a.bvContextoCliente(a.bvClienteDoResultado({ ok: true, encontrado: true, nome: 'Ana', ultimo: { humano: 'Jayme' } }), a.bvNeutralizar), c);
+}
+console.log('agente.test.js jayme ok');
