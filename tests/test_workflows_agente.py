@@ -196,6 +196,24 @@ class EntregarRajadaAgente(unittest.TestCase):
                     for d in saida:
                         self.assertIn(d["node"], self.nos)
 
+    def test_jayme_clausula_petrea(self):  # owner, 2026-11-14: so a equipe agenda o Jayme
+        self.assertEqual(self._destinos("Sessao"), {0: ["Transferido?"]})  # depois da transferencia o agente fica em silencio
+        self.assertEqual(self._destinos("Transferido?"), {0: ["Silencio"], 1: ["So midia?"]})
+        self.assertEqual(self._destinos("Silencio"), {0: ["Saidas"]})
+        self.assertIn("transferido: !rec.sessaoNova && !!(ctx.pedido || {}).handoff", self.nos["Preparar"]["parameters"]["jsCode"])
+        t = self.nos["Ferramenta transferir_atendimento"]["parameters"]
+        self.assertEqual(t["workflowInputs"]["value"]["operacao"], "transferir_atendimento")
+        self.assertEqual(self.wf["connections"]["Ferramenta transferir_atendimento"]["ai_tool"][0][0]["node"], "Agente")
+        self.assertIn("humanos: {{BV:graces.barbeiros_humanos}}", self.nos["Preparar"]["parameters"]["jsCode"])
+        for a in ("integracao", "producao"):
+            cfg = json.load(open(os.path.join(RAIZ, "config", "ambientes", f"{a}.json"), encoding="utf-8"))
+            self.assertIn({"id": "b623cd84-6068-4a57-9ce6-2f7d9a37a11e", "nome": "Jayme"}, cfg["graces"]["barbeiros_humanos"])
+        g = json.loads(ler("workflows/sub/bv-graces.json"))
+        for n in g["nodes"]:
+            if n["name"] in ("Normalizar", "Planejar", "Passo", "Efeitos"):
+                self.assertIn("humanos: {{BV:graces.barbeiros_humanos}}", n["parameters"]["jsCode"])
+                self.assertIn("textos: { encaminhar_equipe: '{{BV:textos.encaminhar_equipe}}' }", n["parameters"]["jsCode"])  # texto da transferencia chega a ferramenta
+
     def test_sessao_comeca_na_mensagem_que_a_abriu(self):  # 2026-11-14: a 1a mensagem sumia do historico do turno seguinte
         q = self.nos["Sessao"]["parameters"]["query"]
         self.assertIn("COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())", q)
@@ -268,7 +286,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
             "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",
-            "buscar_pessoa", "escolher_pessoa", "cadastrar_terceiro", "funcionamento"})
+            "buscar_pessoa", "escolher_pessoa", "cadastrar_terceiro", "funcionamento", "transferir_atendimento"})
         campos_graces = set(re.search(r"BVG_CAMPOS = \[(.*?)\]", ler("workflows/shared/graces.js"), re.S).group(1).replace("'", "").replace("\n", "").replace(" ", "").split(","))
         for t in tools:
             self.assertEqual(t["typeVersion"], 2.2)

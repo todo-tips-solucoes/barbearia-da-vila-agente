@@ -49,8 +49,9 @@ CRITERIOS = {
     "K6": "O barbeiro de teste nunca aparece para o cliente.",
 }
 SEGREDOS = ("CHATMASTER_TOKEN_TESTE", "OPENAI_API_KEY", "GRACES_API_KEY", "N8N_API_KEY")
-# smoke-mensagens usa os contatos 505-509: sem agendamento aloca-se 510-519 (dec: evita colisao e limpeza cruzada entre os dois smokes)
-CONTATOS_LIVRES = range(510, 520)
+# smoke-mensagens usa os contatos 505-509: sem agendamento aloca-se 510-519 e, passando de 10 roteiros, 490-499
+# (dec: evita colisao e limpeza cruzada entre os dois smokes; >= 520 e o telefone do cliente de teste)
+CONTATOS_LIVRES = [*range(510, 520), *range(490, 500)]
 FILA_AGENDA = 520
 
 
@@ -569,14 +570,16 @@ def referencia_graces(get=None):
         adulto = next(x for x in ss if "adulto" in str(x.get("descricaoAgenda", "")).lower())
         ps = get(f"/servicos/profissionais?idServico={adulto['idServico']}")
         teste = [str(p.get("apelido", "")).strip() for p in ps if p.get("idProfissional") == sa.TESTE_ID]
-        partes.append("Barbeiros reais: " + ", ".join(str(p.get("apelido", "")).strip() for p in ps if p.get("idProfissional") != sa.TESTE_ID))
+        humanos = {h["id"] for h in sa.CFG["graces"].get("barbeiros_humanos", [])}  # clausula petrea: o agente nunca os mostra
+        partes.append("Barbeiros reais que o agente oferece: " + ", ".join(str(p.get("apelido", "")).strip() for p in ps if p.get("idProfissional") not in humanos | {sa.TESTE_ID}))
+        partes.append("Barbeiros que so a equipe agenda (o agente nunca os mostra nem agenda; quem pedir deve ser transferido ao atendimento humano): " + ", ".join(h["nome"] for h in sa.CFG["graces"].get("barbeiros_humanos", [])))
         partes.append("Barbeiro de teste (K6: nunca pode aparecer ao cliente): " + (teste[0] if teste else "ZZ TESTE INTEGRACAO - NAO AGENDAR"))
     except Exception:  # noqa: BLE001 - sem Graces a avaliadora fica so com a loja
         pass
     try:  # R18: sem isso a avaliadora so via a lista (um barbeiro por horario) e lia o resumo por barbeiro como invencao
         amanha = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))) + datetime.timedelta(days=1)).date().isoformat()
         for s in [x for x in ss if re.search(r"^corte adulto$|infantil", str(x.get("descricaoAgenda", "")), re.I)][:2]:
-            ps = [p for p in get(f"/servicos/profissionais?idServico={s['idServico']}") if p.get("idProfissional") != sa.TESTE_ID]
+            ps = [p for p in get(f"/servicos/profissionais?idServico={s['idServico']}") if p.get("idProfissional") not in humanos | {sa.TESTE_ID}]
             livres = {str(p.get("apelido", "")).strip(): get(f"/agenda/horarios-livres?idServico={s['idServico']}&idProfissional={p['idProfissional']}&data={amanha}").get("horarios", []) for p in ps}
             partes.append(f"Horarios livres em {amanha} para {s.get('descricaoAgenda')} (so este dia e servico; outros dias e servicos nao constam aqui e nao sao invencao): " + json.dumps(livres, ensure_ascii=False))
     except Exception:  # noqa: BLE001 - dia fechado ou Graces fora: a avaliadora fica sem disponibilidade
