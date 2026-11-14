@@ -93,7 +93,13 @@
       "5511948903182"
     ],
     "max_estagios": 16,
-    "max_consultas_estagio": 20
+    "max_consultas_estagio": 20,
+    "barbeiros_humanos": [
+      {
+        "id": "b623cd84-6068-4a57-9ce6-2f7d9a37a11e",
+        "nome": "Jayme"
+      }
+    ]
   },
   "textos": {
     "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho? Se for urgente, chama a loja no (11) 97126-5299.",

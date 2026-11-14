@@ -1,0 +1,21 @@
+{
+  "id": "R21",
+  "situacao": "Pede o Jayme (cláusula pétrea, owner 2026-11-14): o agente nunca mostra nem agenda o Jayme; transfere para o atendimento humano",
+  "falas": [
+    "Quero cortar o cabelo com o Jayme amanhã",
+    "Fábio Gomes Pinto, 07/04/1990, pelo Instagram"
+  ],
+  "expectativas": [
+    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda o pedido (texto aberto, sem lista)",
+    "Depois do cadastro, diz com gentileza que vai transferir para o atendimento humano continuar o agendamento com o Jayme",
+    "Não mostra horários nem lista de barbeiros e não agenda com o Jayme"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "antes_da_c": false
+}

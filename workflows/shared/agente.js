@@ -9,10 +9,21 @@ const BV_SEGUNDA_VEZ = /\b2\s*[ao]?\s*vez\b/i;
 const bvNormalizarDescricao = (s) => String(s || '').normalize('NFKD').replace(/\p{M}/gu, '');
 const bvSegundaVez = (s) => BV_SEGUNDA_VEZ.test(bvNormalizarDescricao(s));
 
+// Clausula petrea (owner, 2026-11-14): barbeiro que so a equipe agenda (graces.barbeiros_humanos, hoje o Jayme) nunca e
+// listado nem agendado pelo agente, nem para contato de teste. Casa pelo id ou pelo nome como palavra no nome/apelido.
+const bvNomeBarb = (t) => bvNormalizarDescricao(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function bvBarbeiroHumano(b, humanos) {
+  if (!b || typeof b !== 'object') return null;
+  const id = String(b.id || b.idProfissional || '');
+  const txt = ` ${bvNomeBarb(`${b.nome || ''} ${b.apelido || ''} ${b.profissional || ''} ${b.barbeiro || ''}`)} `;
+  return (Array.isArray(humanos) ? humanos : []).find((h) => h && ((h.id && h.id === id) || (h.nome && txt.includes(` ${bvNomeBarb(h.nome)} `)))) || null;
+}
+
 // FR-012: barbeiro de teste (id fixo OU "TESTE" no nome/apelido) nunca chega ao modelo.
-function bvFiltrarBarbeiros(lista, testeId, liberado) {
+function bvFiltrarBarbeiros(lista, testeId, liberado, humanos) {
   return (Array.isArray(lista) ? lista : []).filter((b) => {
     if (!b || typeof b !== 'object') return false;
+    if (bvBarbeiroHumano(b, humanos)) return false;
     if (liberado) return true; // PROD em teste fechado: o de teste aparece (owner, 2026-10-22)
     if (testeId && String(b.id || b.idProfissional || '') === testeId) return false;
     return !BV_TESTE.test(`${b.nome || ''} ${b.apelido || ''}`);
@@ -160,7 +171,7 @@ function bvClienteDoPedido(p) {
   if (!p || !p.identificado) return {};
   const u = p.ultimo;
   return { nome: p.cliente_nome || '', sem_cadastro: !!p.cliente_sem_cadastro, varios: !p.idCliente && !p.cliente_sem_cadastro, opcoes: [],
-    ultimo: u && u.servico ? { servico: u.servico.nome, barbeiro: u.barbeiro ? u.barbeiro.apelido : null } : null };
+    ultimo: u && u.humano ? { humano: u.humano } : u && u.servico ? { servico: u.servico.nome, barbeiro: u.barbeiro ? u.barbeiro.apelido : null } : null };
 }
 function bvContextoCliente(c, neutralizar) {
   const n = (x) => neutralizar(String(x));
@@ -175,6 +186,9 @@ function bvContextoCliente(c, neutralizar) {
   if (c.varios) {
     t += '\nHá mais de um cadastro neste telefone (dado): antes de agendar, pergunte quem é com as opções e use escolher_cliente'
       + (c.opcoes && c.opcoes.length ? ' (' + c.opcoes.map((o) => n(o.id) + ' = ' + n(o.nome)).join('; ') + ')' : '') + '.';
+  }
+  if (c.ultimo && c.ultimo.humano) {
+    t += '\nO último atendimento do cliente foi com ' + n(c.ultimo.humano) + ', que só a equipe agenda (dado). Num pedido de agendamento, diga com gentileza que vai transferir para o atendimento humano continuar o agendamento e chame transferir_atendimento; não ofereça horários.';
   }
   if (c.ultimo && c.ultimo.servico) {
     const com = c.ultimo.barbeiro ? ' com ' + n(c.ultimo.barbeiro) : '';
@@ -211,6 +225,13 @@ function bvDigitacaoMs(texto, cfg) {
   return Math.min(d.max_ms, Math.max(d.min_ms, String(texto).length * d.ms_por_char));
 }
 
+// Barbeiro antes dos horarios (owner, 2026-11-14: cliente novo recebeu os horarios do Kiel sem escolher) e barbeiros so da equipe.
+function bvRegraBarbeiros(cfg) {
+  const hs = ((cfg.graces || {}).humanos || []).map((h) => h && h.nome).filter(Boolean);
+  return 'Barbeiro: antes de buscar horários de um serviço, se o cliente não disse o barbeiro nem que tanto faz e o contexto não trouxer o barbeiro do último atendimento, pergunte o barbeiro de preferência mandando a lista (listar_barbeiros); use qualquer=true só quando ele disser que tanto faz ou perguntar quem tem horário. '
+    + (hs.length ? `Barbeiros que só a equipe agenda (dado): ${hs.join(', ')}. Nunca os mostre e nunca busque nem agende horário com eles; se o cliente quiser cortar com um deles, diga com gentileza que vai transferir para o atendimento humano continuar o agendamento e chame transferir_atendimento (cliente novo, sem cadastro: faça o cadastro antes). ` : '');
+}
+
 // FR-014, FR-026. Dado da Graces e fala do cliente entram como DADO, nunca como instrucao.
 function bvPrompt(cfg) {
   const loja = cfg.loja || {};
@@ -225,7 +246,7 @@ Para ver, reagendar ou cancelar, comece por meus_agendamentos (ela já identific
 Nunca responda que vai verificar, localizar ou pedir um instante: chame as ferramentas agora e responda com o resultado.
 Busca exata: nunca diga que um barbeiro tem ou não tem horário sem uma consulta horarios_livres deste turno que mostre isso; a lista do qualquer mostra só um barbeiro por horário e não prova ausência. O por_barbeiro só responde "quem tem horário?", com os nomes; perguntou de um barbeiro ("Pedro tem?"), chame horarios_livres com ele neste turno, mesmo que o por_barbeiro já diga: é o que mostra os horários dele e guarda a escolha.
 Aja em vez de perguntar o que dá para buscar: "Pedro tem?" chama horarios_livres com o Pedro, para a lista mostrar só os horários dele; "semana que vem", "qualquer dia" ou "qual dia ele tem?" chama horarios_livres para os próximos dias de funcionamento (uma chamada por dia, em sequência, até achar e no máximo 6) e mostra os dias com horário. Cliente novo, sem cadastro: siga as instruções de cadastro do contexto antes de atender. Não peça confirmação do que entendeu quando a intenção é clara; só a escrita (agendar, reagendar, cancelar) pede confirmação.
-Correção não apaga o resto: se o cliente trocar o serviço, o dia ou o período, mantenha o barbeiro e os demais dados já escolhidos e refaça a busca no mesmo turno; horário de outro serviço não vale para o novo. Se o serviço foi suposto de uma pergunta anterior, diga para qual serviço buscou. Horário: com o dia definido, se o cliente ainda não disse período, hora nem "tanto faz", pergunte primeiro, em texto e sem lista, qual horário fica melhor pra ele ("Qual horário fica melhor pra você?"); não busque antes da resposta. Com a resposta, chame horarios_livres: hora aproximada ("umas 14h", "fim da tarde" vira 17:00) vai em hora=HH:mm, e a lista traz só os inícios perto dela; manhã, tarde ou noite vai em periodo; "tanto faz" ou "qualquer horário" busca sem filtro e mostra todos os inícios em que o serviço cabe. Referência já dada ("mais tarde", "depois das 15h") dispensa a pergunta. Não diga que a lista é de um período ou hora que ele não pediu; se a ferramenta avisar que trouxe os mais próximos, diga isso ao cliente. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao listar serviços, você ainda não buscou horários: nunca diga "encontrei" nem cite o dia ou o período nessa mensagem (isso soa como horário achado); pergunte só o serviço ("Qual serviço você quer?") e use o dia e o período na busca de horários, depois. Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
+${bvRegraBarbeiros(cfg)}Correção não apaga o resto: se o cliente trocar o serviço, o dia ou o período, mantenha o barbeiro e os demais dados já escolhidos e refaça a busca no mesmo turno; horário de outro serviço não vale para o novo. Se o serviço foi suposto de uma pergunta anterior, diga para qual serviço buscou. Horário: com o dia definido, se o cliente ainda não disse período, hora nem "tanto faz", pergunte primeiro, em texto e sem lista, qual horário fica melhor pra ele ("Qual horário fica melhor pra você?"); não busque antes da resposta. Com a resposta, chame horarios_livres: hora aproximada ("umas 14h", "fim da tarde" vira 17:00) vai em hora=HH:mm, e a lista traz só os inícios perto dela; manhã, tarde ou noite vai em periodo; "tanto faz" ou "qualquer horário" busca sem filtro e mostra todos os inícios em que o serviço cabe. Referência já dada ("mais tarde", "depois das 15h") dispensa a pergunta. Não diga que a lista é de um período ou hora que ele não pediu; se a ferramenta avisar que trouxe os mais próximos, diga isso ao cliente. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao listar serviços, você ainda não buscou horários: nunca diga "encontrei" nem cite o dia ou o período nessa mensagem (isso soa como horário achado); pergunte só o serviço ("Qual serviço você quer?") e use o dia e o período na busca de horários, depois. Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
 Dois ou três serviços na mesma visita: chame horarios_livres com id_opcoes_servicos (os ids de serviço oferecidos), sem barbeiro; as opções já são sequências prontas, e agendar com a opção escolhida marca todos. Se vier sem_barbeiro_unico, pergunte com as opções de modo e repasse a resposta em id_opcao. Cancelar vários de uma vez: id_opcoes_agendamentos.
 Agendar para outra pessoa: peça nome e sobrenome e use buscar_pessoa; mostre só o nome e pergunte se é essa pessoa; só no turno seguinte, depois da resposta, use escolher_pessoa. Se não achar, ofereça cadastrar_terceiro (resumo e confirmação como nos agendamentos). Se a ferramenta mandar chamar a equipe, avise com gentileza e não insista. Nunca mostre celular de ninguém.
 Antes de agendar, reagendar ou cancelar, resuma e peça a confirmação do cliente; a escrita só acontece na confirmação, em um turno posterior. O resumo sai da ferramenta: escolhido o horário (inclusive quando só há um), chame agendar com id_opcao_horario, que não grava nada e devolve o resumo; mande esse resumo com o serviço, a data e o horário e pergunte se pode confirmar. Com o sim, chame agendar só com o proposta_id. Nunca peça confirmação sem ter chamado a ferramenta neste turno. Se horarios_livres disser que o horário pedido está livre, chame no mesmo turno a ferramenta que ela indicar (agendar, ou reagendar numa remarcação) e mande o resumo, sem mostrar a lista.
@@ -278,5 +299,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }

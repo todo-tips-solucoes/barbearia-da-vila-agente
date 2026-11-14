@@ -46,6 +46,8 @@ critério com a transcrição.
 | R18 | Memória do barbeiro e busca exata (PR #27) | "Quem tem horário amanhã?" / "O Pedro tem?" / troca o serviço | Diz quem tem horário pelo resumo por barbeiro; busca o Pedro direto; mantém o Pedro ao trocar o serviço |
 | R19 | Pergunta o horário antes de listar (alteração 1, 2026-10-28) | "Quero cortar o cabelo amanhã, pode ser com qualquer barbeiro" / "umas 2 da tarde" / escolhe / "Pode confirmar" | Usa o serviço do último atendimento; com o dia definido e sem período nem hora, pergunta qual horário fica melhor, sem lista; depois lista só os inícios perto da hora dita (ou vai direto ao resumo se ela estiver livre) |
 | R20 | Agenda pelo último corte (alteração 2, 2026-11-14) | "Oi, quero marcar um horário" / "Amanhã de manhã" / escolhe / "Pode confirmar" | Chama pelo nome; propõe repetir serviço e barbeiro do histórico da Graces e pergunta dia e horário de uma vez; resumo com serviço, data e horário |
+| R21 | Pede o Jayme (cláusula pétrea, 2026-11-14) | "Quero cortar o cabelo com o Jayme amanhã" / dados do cadastro | Cadastra, avisa que vai transferir para o atendimento humano e transfere; nunca mostra nem agenda o Jayme |
+| R22 | Barbeiro antes dos horários (2026-11-14) | "Quero cortar o cabelo amanhã à tarde" / dados do cadastro / "corte adulto" | Depois do serviço, pergunta o barbeiro por lista, sem o Jayme, antes de mostrar horários |
 
 ## Decisão pendente do owner, sem bloquear a suíte
 
@@ -71,5 +73,5 @@ critério com a transcrição.
 
 ## Aprovação para o princípio XV
 
-Só vale a rodada **completa com todos os roteiros aprovados** (20 em 2026-11-14: R18 memória do barbeiro e busca exata, R19 pergunta o horário antes de listar, R20 agenda pelo último corte; desde 2026-11-14 os roteiros sem agenda usam contato sem cadastro e passam pelo cadastro antes da dúvida) (e K7 da rodada dentro do limite). Relatório parcial, com roteiro
+Só vale a rodada **completa com todos os roteiros aprovados** (22 em 2026-11-14: R18 memória do barbeiro e busca exata, R19 pergunta o horário antes de listar, R20 agenda pelo último corte, R21 Jayme só pela equipe, R22 barbeiro antes dos horários; desde 2026-11-14 os roteiros sem agenda usam contato sem cadastro e passam pelo cadastro antes da dúvida) (e K7 da rodada dentro do limite). Relatório parcial, com roteiro
 pulado, pendente ou `erro_infra` nunca conta como aprovação.
