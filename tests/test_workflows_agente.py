@@ -89,7 +89,9 @@ class BvGraces(unittest.TestCase):
             self.assertNotIn("'+", q.replace(" ", ""), nome)
             self.assertTrue(n["parameters"]["options"]["queryReplacement"].startswith("={{"), nome)
         persistir = qs["Persistir"]["parameters"]["query"]
-        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", persistir)}), list(range(1, 18)))
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", persistir)}), list(range(1, 19)))
+        self.assertIn("ct AS (UPDATE contatos SET como_conheceu = $18::text", persistir)  # 0011: como conheceu, so por parametro
+        self.assertEqual(persistir.count("("), persistir.count(")"))  # CTE a mais quebrou o SQL inteiro (2026-11-14)
         # mensagens-agendadas 3.1.2: cancela pendentes, insere por idAgenda sem duplicar, fora da lista de escrita nasce cancelada
         for trecho in ("mc AS (UPDATE mensagens_agendadas", "ma AS (INSERT INTO mensagens_agendadas", "ON CONFLICT (graces_agendamento_id, tipo) WHERE situacao = 'pendente' DO UPDATE",
                        "'fora_da_lista'", "y.motivo IS NULL", "m.situacao <> 'pendente'",
@@ -124,7 +126,12 @@ class BvGraces(unittest.TestCase):
         self.assertIn("const prof = redir ? cfg.testeId", self.js)
         self.assertIn("escrita_fora_do_teste", self.js)
         self.assertIn("'{{BV:teste.redirecionar_escrita}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
-        self.assertIn("cadastroLiberado: false", self.nos["Planejar"]["parameters"]["jsCode"])  # 4.2.6: sem P1 nao cadastra
+        # Cadastro proprio (owner, 2026-11-14): trava por ambiente no config; no TESTE redireciona ao cliente de teste
+        for no in ("Normalizar", "Planejar", "Passo", "Efeitos"):
+            self.assertIn("cadastroLiberado: '{{BV:cadastro.liberado}}' === 'True', clienteTesteId: '{{BV:cadastro.cliente_teste_id}}'", self.nos[no]["parameters"]["jsCode"])
+        integ, prod = (json.load(open(os.path.join(RAIZ, "config", "ambientes", f"{a}.json"), encoding="utf-8")) for a in ("integracao", "producao"))
+        self.assertTrue(integ["teste"]["redirecionar_escrita"] and integ["cadastro"]["cliente_teste_id"])
+        self.assertFalse(prod["teste"]["redirecionar_escrita"])
 
     def test_contador_diario_terceiros_alimentado(self):  # SC-011: ctx.dia vem do banco, nunca fica vazio
         q = self.nos["Contexto"]["parameters"]["query"]
@@ -188,6 +195,27 @@ class EntregarRajadaAgente(unittest.TestCase):
                 for saida in saidas:
                     for d in saida:
                         self.assertIn(d["node"], self.nos)
+
+    def test_sessao_comeca_na_mensagem_que_a_abriu(self):  # 2026-11-14: a 1a mensagem sumia do historico do turno seguinte
+        q = self.nos["Sessao"]["parameters"]["query"]
+        self.assertIn("COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())", q)
+        self.assertNotIn("THEN now()", q)
+        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id] }}"))
+
+    def test_identifica_o_cliente_antes_do_modelo(self):  # owner, 2026-11-14
+        self.assertEqual(self._destinos("Limite?")[1], ["Identificar?"])
+        self.assertEqual(self._destinos("Identificar?"), {0: ["Identificar"], 1: ["Cliente"]})
+        self.assertEqual(self._destinos("Identificar"), {0: ["Cliente"]})
+        self.assertEqual(self._destinos("Cliente"), {0: ["Agente"]})
+        idf = self.nos["Identificar"]
+        self.assertEqual((idf["type"], idf["onError"]), ("n8n-nodes-base.executeWorkflow", "continueRegularOutput"))  # falha nao derruba o turno
+        self.assertEqual(idf["parameters"]["workflowInputs"]["value"]["operacao"], "identificar_cliente")
+        self.assertEqual(idf["parameters"]["workflowInputs"]["value"]["telefone"], "={{ String($('Gatilho').first().json.telefone) }}")  # nunca do modelo
+        self.assertIn("identificar: rec.sessaoNova || !(ctx.pedido || {}).identificado", self.nos["Preparar"]["parameters"]["jsCode"])
+        self.assertEqual(self.nos["Agente"]["parameters"]["options"]["systemMessage"], "={{ $('Cliente').first().json.system }}")
+        self.assertIn("bvContextoCliente(c, bvNeutralizar)", self.nos["Cliente"]["parameters"]["jsCode"])
+        cad = self.nos["Ferramenta cadastrar_cliente"]["parameters"]["workflowInputs"]
+        self.assertTrue({"nome", "nascimento", "como_conheceu"} <= set(cad["value"]) and {"nascimento", "como_conheceu"} <= {x["id"] for x in cad["schema"]})
 
     def test_gatilho_e_idempotencia_do_turno(self):  # 5.1.1
         self.assertEqual(self.nos["Gatilho"]["id"], "741e271a-ab2d-582e-91f1-bd3affabd0e1")  # mesmo id do stub

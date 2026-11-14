@@ -6,7 +6,8 @@
   ],
   "expectativas": [
     "Antes da C: passa o contato da loja",
-    "Depois da C: handoff para o setor 78 e o agente para de responder"
+    "Depois da C: handoff para o setor 78 e o agente para de responder",
+    "Responde direto, sem pedir cadastro antes (atraso e pedido de pessoa são exceções)"
   ],
   "criterios": [
     "K1",

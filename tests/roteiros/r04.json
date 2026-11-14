@@ -2,9 +2,12 @@
   "id": "R4",
   "situacao": "Indeciso sobre o serviço",
   "falas": [
-    "Quero dar um trato no visual, não sei o que fazer"
+    "Quero dar um trato no visual, não sei o que fazer",
+    "Lucas Ferreira, 22/11/1995, indicação de um amigo"
   ],
   "expectativas": [
+    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda a dúvida (texto aberto, sem lista)",
+    "Recebidos os dados, confirma o cadastro em poucas palavras e responde a dúvida que o cliente fez na primeira mensagem",
     "Pergunta aberta e acolhedora",
     "Oferece os serviços reais por lista",
     "Não empurra o mais caro"

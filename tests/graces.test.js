@@ -22,23 +22,84 @@ assert.deepEqual(p.reqs[0].qs, { celular: '5511999998888' });
 let r = g.bvGPasso(p.st, [ok([])], cfg).final;
 assert.equal(r.resultado.encontrado, false);
 assert.equal(r.efeitos.pedido.cliente_sem_cadastro, true);
-r = g.bvGPasso(p.st, [ok([{ idCliente: 'c1', nomeCliente: 'Ana', sobrenomeCliente: 'Souza' }])], cfg).final;
+// 1 cliente: identificado ja no 1o estagio do pedido; o nome do cliente e so a 1a palavra do nomeCliente
+let st1 = g.bvGPasso(p.st, [ok([{ idCliente: 'c1', nomeCliente: 'Ana Paula', sobrenomeCliente: 'Souza' }])], cfg);
+assert.deepEqual(st1.reqs, [{ m: 'GET', path: '/agenda/historico', qs: { idCliente: 'c1', pageSize: 10 } }]);
+// historico com falha ou vazio: segue identificado, sem sugestao
+r = g.bvGPasso(st1.st, [resp(500, { code: 'ERRO_INTERNO' })], cfg).final;
 assert.equal(r.efeitos.pedido.idCliente, 'c1');
+assert.equal(r.efeitos.pedido.cliente_nome, 'Ana');
+assert.equal(r.efeitos.pedido.identificado, true);
+assert.equal(r.efeitos.pedido.ultimo, null);
 assert.ok(!JSON.stringify(r.resultado).includes('c1'));
+assert.equal(g.bvGPasso(st1.st, [ok([])], cfg).final.resultado.nome, 'Ana');
+// historico: mais recente primeiro; confere servico no catalogo e barbeiro do servico
+const H = [{ idServico: '046519b1-e111-44b4-8779-3e64366f9d8f', descricaoServico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro Henrique ' }, { idServico: '23f2faf7-e848-45e3-b822-ef16af69a2df', idProfissional: 'b2' }];
+const st2 = g.bvGPasso(st1.st, [ok(H)], cfg);
+assert.deepEqual(st2.reqs.map((q) => [q.path, q.qs]), [['/agenda/servicos', {}], ['/servicos/profissionais', { idServico: H[0].idServico }]]);
+const CAT = ok([{ idServico: H[0].idServico, descricaoAgenda: 'corte adulto', valorPadrao: 85, tempoPadrao: 40, ativo: true }]);
+r = g.bvGPasso(st2.st, [CAT, ok([{ idProfissional: 'b1', apelido: 'Pedro Henrique ' }, { idProfissional: TESTE, apelido: 'ZZ' }])], cfg).final;
+assert.deepEqual(r.efeitos.pedido.ultimo, { servico: { idServico: H[0].idServico, nome: 'corte adulto', preco: 85, minutos: 40, opcao_id: 'ult' }, barbeiro: { idProfissional: 'b1', apelido: 'Pedro Henrique' } });
+assert.deepEqual(r.resultado.ultimo, { servico: 'corte adulto', barbeiro: 'Pedro Henrique' });
+const pedUlt = r.efeitos.pedido;
+// barbeiro que nao faz mais o servico: so o servico; servico fora do catalogo (ou "2a vez"): sem sugestao
+assert.equal(g.bvGPasso(st2.st, [CAT, ok([{ idProfissional: 'b9', apelido: 'Kiel' }])], cfg).final.efeitos.pedido.ultimo.barbeiro, null);
+assert.equal(g.bvGPasso(st2.st, [ok([{ idServico: H[0].idServico, descricaoAgenda: 'corte 2ª vez', ativo: true }]), ok([])], cfg).final.efeitos.pedido.ultimo, null);
+assert.equal(g.bvGPasso(st2.st, [resp(500, {}), resp(500, {})], cfg).final.efeitos.pedido.ultimo, null);
+// historico com o barbeiro de teste: nunca sugerido a cliente comum
+assert.equal(g.bvGPasso(st2.st, [CAT, ok([{ idProfissional: 'b1', apelido: 'ZZ TESTE INTEGRACAO' }])], cfg).final.efeitos.pedido.ultimo.barbeiro, null);
 r = g.bvGPasso(p.st, [ok([{ idCliente: 'c1', nomeCliente: 'Ana' }, { idCliente: 'c2', nomeCliente: 'Ana Maria' }])], cfg).final;
 assert.equal(r.efeitos.opcoes.tipo, 'cliente');
+assert.equal(r.efeitos.pedido.identificado, true);
 assert.ok(!JSON.stringify(r.resultado).includes('c2'));
 const ctxOp = (opcoes, pedido = {}, extra = {}) => ({ opcoes, pedido, ...extra });
 assert.equal(g.bvGPlano(entrada({ operacao: 'escolher_cliente', id_opcao: '2' }), ctxOp(r.efeitos.opcoes), cfg).final.efeitos.pedido.idCliente, 'c2');
 assert.equal(g.bvGPlano(entrada({ operacao: 'escolher_cliente', id_opcao: '9' }), ctxOp(r.efeitos.opcoes), cfg).final.resultado.code, 'opcao_desconhecida');
 
-// cadastrar_cliente: desligado por padrao; so mock com a trava aberta (4.2.6).
-assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, { cliente_sem_cadastro: true }), cfg).final.resultado.code, 'cadastro_desabilitado');
+// cadastrar_cliente (owner, 2026-11-14): nome e sobrenome separados, celular do contato, genero M, nascimento opcional.
+assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo Cliente' }), ctxOp({}, { cliente_sem_cadastro: true }), cfg).final.resultado.code, 'cadastro_desabilitado');
 const aberto = { ...cfg, cadastroLiberado: true, terceiroLiberado: true };
-assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, {}), aberto).final.resultado.code, 'identifique_primeiro');
-p = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, { cliente_sem_cadastro: true }), aberto);
-assert.deepEqual(p.reqs[0].body, { nomeCliente: 'Novo', ddiCelular: '55', celular: '11999998888' });
-assert.equal(g.bvGPasso(p.st, [ok({ sucesso: true, idCliente: 'n1' })].map((x) => x), aberto).final.efeitos.pedido.idCliente, 'n1');
+const prodCad = { ...aberto, redirecionar: false };
+assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo Cliente' }), ctxOp({}, {}), prodCad).final.resultado.code, 'identifique_primeiro');
+for (const nome of ['Novo', 'joão da', '  Ana  ']) assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome }), ctxOp({}, { cliente_sem_cadastro: true }), prodCad).final.resultado.code, 'nome_incompleto', nome);
+assert.equal(entrada({ operacao: 'cadastrar_cliente', nome: 'A B', nascimento: '3/5/1990' }).nascimento, '1990-05-03');
+assert.equal(entrada({ operacao: 'cadastrar_cliente', nome: 'A B', nascimento: 'não informado' }).nascimento, undefined);
+for (const nascimento of ['31/02/1990', '1990-02-30', '1899-12-31', '2999-01-01', '1990']) assert.equal(g.bvGNormalizar({ ...base, operacao: 'cadastrar_cliente', nome: 'A B', nascimento }, cfg).resultado.code, 'entrada_invalida', nascimento);
+assert.equal(g.bvGNormalizar({ ...base, operacao: 'cadastrar_cliente', nome: 'A B', como_conheceu: 'x'.repeat(81) }, cfg).resultado.code, 'entrada_invalida');
+p = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'joão PEDRO DA silva', nascimento: '1990-05-13', como_conheceu: 'Instagram' }), ctxOp({}, { cliente_sem_cadastro: true }), prodCad);
+assert.deepEqual(p.reqs[0].qs, { busca: 'João Pedro da Silva' }); // homonimo com outro celular antes do POST
+let stc = g.bvGPasso(p.st, [ok([])], prodCad);
+assert.deepEqual(stc.reqs[0].body, { nomeCliente: 'João', sobrenomeCliente: 'Pedro da Silva', ddiCelular: '55', celular: '11999998888', genero: 'M', dataNascimento: '1990-05-13' });
+r = g.bvGPasso(stc.st, [ok({ sucesso: true, idCliente: 'n1' })], prodCad).final;
+assert.deepEqual(r.efeitos.pedido, { idCliente: 'n1', cliente_sem_cadastro: false, cliente_nome: 'João', identificado: true });
+assert.equal(g.bvGParams(base, r.efeitos)[17], 'Instagram'); // como_conheceu -> contatos ($18)
+assert.equal(g.bvGParams(base, r.efeitos).length, 18);
+assert.equal(g.bvGPasso(stc.st, [ok({ sucesso: false, mensagem: 'x' })], prodCad).final.resultado.ok, false);
+// sem nascimento: nao manda o campo; nome com grafia propria fica como escrito
+p = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Ana McDonald' }), ctxOp({}, { cliente_sem_cadastro: true }), prodCad);
+stc = g.bvGPasso(p.st, [ok([])], prodCad);
+assert.deepEqual(stc.reqs[0].body, { nomeCliente: 'Ana', sobrenomeCliente: 'McDonald', ddiCelular: '55', celular: '11999998888', genero: 'M' });
+// mesmo nome completo com outro celular: nao cadastra, encaminha
+assert.equal(g.bvGPasso(p.st, [ok([{ idCliente: 'x', nomeCliente: 'Ana', sobrenomeCliente: 'McDonald', celular: '11911112222' }])], prodCad).final.resultado.code, 'encaminhar_equipe');
+// TESTE (redirecionar): nada vai a Graces, a conversa vira o cliente de teste
+const testeCad = { ...cfg, cadastroLiberado: true, clienteTesteId: 'ct-1' };
+r = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo Cliente', como_conheceu: 'indicação' }), ctxOp({}, { cliente_sem_cadastro: true }), testeCad).final;
+assert.equal(r.efeitos.pedido.idCliente, 'ct-1');
+assert.equal(r.efeitos.contato.como_conheceu, 'indicação');
+assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo Cliente' }), ctxOp({}, { cliente_sem_cadastro: true }), { ...testeCad, clienteTesteId: '' }).final.resultado.code, 'cadastro_desabilitado');
+
+// horarios_livres pelo ultimo atendimento: sem servico nem barbeiro escolhidos, usa os do historico
+p = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-20', hora: '15:00' }), ctxOp({}, pedUlt), cfg);
+assert.deepEqual(p.reqs.map((q) => [q.path, q.qs.idServico, q.qs.idProfissional]), [['/agenda/horarios-livres', H[0].idServico, 'b1'], ['/agenda/horarios', H[0].idServico, 'b1']]);
+r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['14:20', '15:00', '15:40'] }), resp(500, {})], cfg).final;
+assert.equal(r.resultado.horario_pedido_livre, '2'); // hora exata livre: direto ao resumo
+assert.match(r.resultado.orientacao, /chame agendar com id_opcao_horario 2/);
+assert.equal(r.efeitos.pedido.servico.nome, 'corte adulto');
+assert.equal(g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['14:20', '15:40'] }), resp(500, {})], cfg).final.resultado.horario_pedido_livre, undefined);
+// outro servico escolhido: o barbeiro do ultimo atendimento nao vale para ele
+assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-20' }), ctxOp({}, { ...pedUlt, servico: { idServico: 's9', nome: 'barba' } }), cfg).final.resultado.code, 'barbeiro_nao_escolhido');
+// ultimo atendimento sem barbeiro: pede o barbeiro
+assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-20' }), ctxOp({}, { ...pedUlt, ultimo: { ...pedUlt.ultimo, barbeiro: null } }), cfg).final.resultado.code, 'barbeiro_nao_escolhido');
 
 // listar_servicos: sem "2a vez" nem inativos; listar_barbeiros: trim e sem o de teste.
 p = g.bvGPlano(entrada({ operacao: 'listar_servicos' }), null, cfg);
@@ -299,7 +360,7 @@ r = g.bvGPasso(p.st, [resp(401, { code: 'NAO_AUTENTICADO', traceId: '00-zz-01', 
 assert.equal(r.resultado.ok, false);
 assert.ok(!JSON.stringify(r).includes('segredo'));
 assert.deepEqual(g.bvGParams(base, r.efeitos).slice(9, 14), ['graces|configuracao', 'listar_servicos', 'NAO_AUTENTICADO', 401, '00-zz-01']);
-assert.equal(g.bvGParams({ ...base }, {}).length, 17);
+assert.equal(g.bvGParams({ ...base }, {}).length, 18);
 
 // ---- FASE 3: escrita incerta (u9-u12), erros por code (u13) ----
 {
@@ -517,17 +578,17 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 17);
   assert.equal(r.efeitos.pedido.idCliente, 'nv');
   assert.equal(r.efeitos.pedido.cadastro_terceiro_feito, true);
   // u23: primeiro contato, mesmo nome completo com outro celular -> encaminha, sem POST
-  const pcad = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Paulo  SOUZA' }), ctxOp({}, { cliente_sem_cadastro: true }), aberto);
+  const pcad = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Paulo  SOUZA' }), ctxOp({}, { cliente_sem_cadastro: true }), prodCad);
   assert.equal(pcad.reqs[0].m, 'GET');
-  rp = g.bvGPasso(pcad.st, [ok([{ idCliente: 'p9', nomeCliente: 'paulo', sobrenomeCliente: 'Souza', celular: '11955554444' }])], aberto).final;
+  rp = g.bvGPasso(pcad.st, [ok([{ idCliente: 'p9', nomeCliente: 'paulo', sobrenomeCliente: 'Souza', celular: '11955554444' }])], prodCad).final;
   assert.equal(rp.resultado.motivo, 'nome_outro_celular');
   assert.equal(rp.efeitos.falha.motivo, 'encaminhar_equipe|nome_outro_celular');
-  // u24: sem homonimo exato -> POST com o celular do WhatsApp; nome de uma palavra vai direto ao POST
-  const po = g.bvGPasso(pcad.st, [ok([{ idCliente: 'p9', nomeCliente: 'Paulo', sobrenomeCliente: 'Souzinha', celular: '11955554444' }])], aberto);
+  // u24: sem homonimo exato -> POST com o celular do WhatsApp; nome de uma palavra e recusado (sobrenome obrigatorio)
+  const po = g.bvGPasso(pcad.st, [ok([{ idCliente: 'p9', nomeCliente: 'Paulo', sobrenomeCliente: 'Souzinha', celular: '11955554444' }])], prodCad);
   assert.equal(po.reqs[0].m, 'POST');
   assert.equal(po.reqs[0].body.celular, '11999998888');
-  assert.equal(g.bvGPasso(po.st, [ok({ sucesso: true, idCliente: 'n2' })], aberto).final.efeitos.pedido.idCliente, 'n2');
-  assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, { cliente_sem_cadastro: true }), aberto).reqs[0].m, 'POST');
+  assert.equal(g.bvGPasso(po.st, [ok({ sucesso: true, idCliente: 'n2' })], prodCad).final.efeitos.pedido.idCliente, 'n2');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo' }), ctxOp({}, { cliente_sem_cadastro: true }), prodCad).final.resultado.code, 'nome_incompleto');
 }
 console.log('graces.test.js ok');
 
@@ -568,7 +629,7 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   let r = g.bvGPasso(wr().st, [ok({ sucesso: true, idAgenda: 'n1' })], cfg).final;
   assert.deepEqual(r.efeitos.mensagens, { criar: [{ idAgenda: 'n1', idCliente: 'c1', idProfissional: TESTE, inicio: '2026-10-22T14:00:00', fim: '2026-10-22T14:45:00', servico: 'corte adulto', barbeiro: 'R', recorrente: false }], cancelar: [] });
   let pr = g.bvGParams({ contato_id: 1, turno_id: 't' }, r.efeitos, { ativo: true, agora, cfg: msgCfg, escrita: ['5511999998888'] });
-  assert.equal(pr.length, 17);
+  assert.equal(pr.length, 18);
   assert.deepEqual(JSON.parse(pr[14]).map((x) => x.tipo), ['confirmacao', 'lembrete', 'pos_atendimento']);
   assert.deepEqual(JSON.parse(pr[14])[1].dados, { servico: 'corte adulto', barbeiro: 'R', fim: '2026-10-22T14:45:00' });
   assert.equal(pr[16], '["5511999998888"]');
@@ -578,7 +639,7 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   assert.equal(JSON.parse(g.bvGParams({ contato_id: 1, turno_id: 't' }, rr, { ativo: true, agora, cfg: msgCfg, escrita: [] })[14])[0].dados.recorrente, true);
   // inativo (PROD): nada programado
   pr = g.bvGParams({ contato_id: 1, turno_id: 't' }, r.efeitos, { ativo: false, agora, cfg: msgCfg });
-  assert.deepEqual(pr.slice(14), [null, null, null]);
+  assert.deepEqual(pr.slice(14, 17), [null, null, null]);
   // horario que ja passou vira linha com motivo, nunca pendente
   const hoje = { ...dA, data: '2026-10-20', hora: '09:00' };
   const m0 = g.bvGParams({ contato_id: 1, turno_id: 't' }, { mensagens: { criar: [{ idAgenda: 'n', idCliente: 'c', idProfissional: 'p', inicio: '2026-10-20T09:00:00', fim: '2026-10-20T09:45:00', servico: 's', barbeiro: 'b' }], cancelar: [] } }, { ativo: true, agora, cfg: msgCfg });
@@ -595,3 +656,27 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   r = g.bvGPasso(wr().st, [resp(409, { code: 'CONFLITO' })], cfg).final;
   assert.equal(r.efeitos.mensagens, undefined);
 }
+
+// Ultimo atendimento (owner, 2026-11-14): "qualquer barbeiro" e "outro barbeiro" com o servico do historico
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const pedU = { identificado: true, idCliente: 'c1', ultimo: { servico: { idServico: S, nome: 'corte adulto', preco: 85, minutos: 40, opcao_id: 'ult' }, barbeiro: { idProfissional: 'b1', apelido: 'Pedro' } } };
+  let pq = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', hora: '14:00' }), { opcoes: {}, pedido: pedU }, cfg);
+  assert.deepEqual(pq.reqs, [{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: S } }]);
+  pq = g.bvGPasso(pq.st, [ok([{ idProfissional: 'b1', apelido: 'Pedro' }, { idProfissional: 'b2', apelido: 'Kiel' }, { idProfissional: TESTE, apelido: 'ZZ' }])], cfg);
+  assert.deepEqual(pq.reqs.map((q) => q.qs.idProfissional), ['b1', 'b2', 'b1', 'b2']);
+  // com a lista de barbeiros deste servico ja no pedido, nao busca de novo
+  const comLista = { ...pedU, servico: pedU.ultimo.servico, barbeiros: [{ opcao_id: '1', idProfissional: 'b1', apelido: 'Pedro' }] };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20' }), { opcoes: {}, pedido: comLista }, cfg).reqs[0].path, '/agenda/horarios-livres');
+  // outro barbeiro: listar_barbeiros aceita o id 'ult'
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'ult' }), { opcoes: {}, pedido: pedU }, cfg).reqs[0].qs, { idServico: S });
+  // remetente agendando para terceiro: o ultimo atendimento dele nao vira padrao
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-20' }), { opcoes: {}, pedido: { ...pedU, para_terceiro: true } }, cfg).final.resultado.code, 'servico_nao_escolhido');
+  // remarcacao com a hora pedida livre: orienta reagendar, nunca agendar
+  const agd = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro' };
+  let pr = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-26', hora: '15:00' }), { opcoes: {}, pedido: { ...pedU, agendamentos: [agd] } }, cfg);
+  pr = g.bvGPasso(pr.st, [ok([{ idProfissional: 'b1', apelido: 'Pedro' }])], cfg);
+  const rr = g.bvGPasso(pr.st, [ok({ minutos: 40, horarios: ['15:00'] }), resp(500, {})], cfg).final.resultado;
+  assert.match(rr.orientacao, /chame reagendar com id_opcao_agendamento 1 e id_opcao_horario 1/);
+}
+console.log('graces.test.js ultimo atendimento ok');
