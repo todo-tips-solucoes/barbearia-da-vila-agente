@@ -18,6 +18,7 @@ A lista completa, e as pendências, estão em **`docs/decisoes-pre-00c.md`**. O 
 - **LLM do atendimento:** OpenAI, modelo **`gpt-5.6-luna`**, com chave própria. A persona assume que é IA, com tom muito humanizado.
 - **Graces só funciona em produção.** A chave de `.env.smoke` responde `401` em staging. Os testes rodam em dados reais, **sempre com o barbeiro de teste** (o que tem "TESTE" no nome: `ZZ TESTE INTEGRACAO - NAO AGENDAR`, id `1cee0bb9-e58b-4428-9e9b-1db184db7943`). Ele nunca pode ser oferecido a um cliente. Cancele tudo o que um teste criar.
 - **Divergências de serviço, idade e preço: vale a Graces**, não `informacaoes_barbearia.txt`.
+- **Cláusula pétrea (owner, 2026-11-14): o agente nunca mostra nem agenda o barbeiro Jayme** (`graces.barbeiros_humanos`, id `b623cd84-6068-4a57-9ce6-2f7d9a37a11e`), nem para contato de teste. Quem pede o Jayme ou é cliente dele vai para o atendimento humano (`transferir_atendimento`). Não remova o filtro nem as barreiras de escrita sem ordem expressa do owner.
 
 ## Fontes de referência
 
