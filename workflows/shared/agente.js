@@ -170,7 +170,7 @@ function bvContextoCliente(c, neutralizar) {
       + ' Com nome e sobrenome e a resposta de como conheceu, chame cadastrar_cliente (nome completo; nascimento em AAAA-MM-DD se ele informou; como_conheceu em poucas palavras). Faltou o sobrenome: peça. Não quis dizer a data de nascimento ou como conheceu: cadastre sem.'
       + ' Antes do cadastro não responda preço, horário nem outra dúvida; guarde o pedido e, logo depois do cadastro, responda exatamente o que ele pediu. Se ele recusar o cadastro, responda o pedido mesmo assim; para agendar, o cadastro é necessário.'
       + ' Exceções, respondidas direto e sem cadastro: pedido para falar com uma pessoa e atraso ou imprevisto no horário.';
-    if (c.pedido_inicial) t += ' Pedido que ele fez antes do cadastro (dado): "' + n(c.pedido_inicial).slice(0, 300) + '". Assim que cadastrar_cliente der certo, responda esse pedido nesta mesma resposta (com as ferramentas ou com a regra de informação que você não tem) e feche com o convite leve para agendar; não pergunte como pode ajudar.';
+    if (c.pedido_inicial) t += ' Pedido que ele fez antes do cadastro (dado): "' + n(c.pedido_inicial).slice(0, 300) + '". Assim que cadastrar_cliente der certo, responda esse pedido nesta mesma resposta (com as ferramentas ou com a regra de informação que você não tem) e feche com o convite leve para agendar; não pergunte como pode ajudar. Se a resposta pedir uma escolha (serviço, barbeiro, horário), chame a ferramenta e mande as opções em lista, nunca em texto ("cabelo, barba ou os dois?" vira listar_servicos).';
   }
   if (c.varios) {
     t += '\nHá mais de um cadastro neste telefone (dado): antes de agendar, pergunte quem é com as opções e use escolher_cliente'
