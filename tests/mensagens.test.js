@@ -273,7 +273,12 @@ console.log('mensagens.test.js (confirmacao) ok');
   assert.equal(m.bvMSincResultado(tk[0], 404, { error: 'ERR_NO_CONTACT_FOUND' }, 0, cfg, agora).falhou, true);
   const ct = m.bvMSincPlano([linha({ ticket_id: 0 })], agora, cfg)[0];
   assert.deepEqual(ct.req, { m: 'POST', path: '/api/tickets/createTicketAPI', body: { contactId: 236429 } });
-  assert.deepEqual(m.bvMSincResultado(ct, 200, { id: 172345, status: 'pending' }, 0, cfg, agora), { id: 1, contato_id: 7, ticket_id: 172345 });
+  assert.deepEqual(m.bvMSincResultado(ct, 200, { id: 172345, status: 'pending' }, 0, cfg, agora), { id: 1, contato_id: 7, ticket_id: 172345, ticket_encerrar: true });
+  // ticket criado por nos: encerra antes do lembrete (owner, 2026-11-15); o que ja existia nao e tocado
+  const enc = m.bvMSincPlano([linha({ ticket_id: 172345, ticket_encerrar: true })], agora, cfg)[0];
+  assert.deepEqual(enc.req, { m: 'POST', path: '/api/tickets/updateAPI', body: { ticketId: '172345', status: 'closed' } });
+  assert.deepEqual(m.bvMSincResultado(enc, 200, {}, 0, cfg, agora), { id: 1, contato_id: 7, ticket_encerrar: false });
+  assert.equal(m.bvMSincPlano([linha({ ticket_id: 172345, ticket_encerrar: false })], agora, cfg)[0].acao, 'criar');
   assert.equal(m.bvMSincResultado(ct, 200, {}, 0, cfg, agora).code, 'SEM_ID');
   // falha: retentativa e, esgotada, falhou; sem resposta na criacao = incerto (nao recria)
   [a] = m.bvMSincPlano([linha()], agora, cfg);
@@ -295,3 +300,18 @@ console.log('mensagens.test.js lembretes chatmaster ok');
   assert.equal(m.bvMTextoDe({ tipo: 'lembrete_hora', inicio: '2026-11-22T12:00:00', dados: { nome: 'GABRIEL SANTOS', servico: 'corte', barbeiro: 'Black' } }, { lembrete_hora: 'Oi, {nome}! Às {hora}.' }), 'Oi, Gabriel! Às 12:00.');
 }
 console.log('mensagens.test.js nome normal ok');
+
+// Postgres -> n8n: bigint chega como texto. '0' tem de valer como 0 (contato/ticket verificado e inexistente), senao a fila trava
+{
+  const m = require('../workflows/shared/mensagens.js');
+  const cfg = { textos: { lembrete_hora: 'Oi, {nome}!' }, user_id: '234', wid: '159', retentativas_min: [1, 5, 15] };
+  const l = (o) => ({ id: '1', tipo: 'lembrete_hora', situacao: 'pendente', previsto_para: '2026-11-22T16:00:00.000Z', inicio: '2026-11-22T14:00:00', dados: {}, canal_id: null, contato_id: '7', telefone: '5511967296849', ...o });
+  const ag = '2026-11-20T12:00:00Z';
+  assert.equal(m.bvMSincPlano([l({ contato_canal_id: '0', ticket_id: null })], ag, cfg)[0].acao, 'criar_contato');
+  assert.equal(m.bvMSincPlano([l({ contato_canal_id: '138449', ticket_id: '0' })], ag, cfg)[0].acao, 'criar_ticket');
+  assert.equal(m.bvMSincPlano([l({ contato_canal_id: '138449', ticket_id: null })], ag, cfg)[0].acao, 'buscar_ticket');
+  assert.equal(m.bvMSincPlano([l({ contato_canal_id: '138449', ticket_id: '125529', ticket_encerrar: true })], ag, cfg)[0].acao, 'encerrar_ticket');
+  assert.equal(m.bvMSincPlano([l({ contato_canal_id: '138449', ticket_id: '125529', ticket_encerrar: false })], ag, cfg)[0].acao, 'criar');
+  assert.equal(m.bvMSincPlano([l({ contato_canal_id: null, ticket_id: null })], ag, cfg)[0].acao, 'buscar_contato');
+}
+console.log('mensagens.test.js bigint como texto ok');
