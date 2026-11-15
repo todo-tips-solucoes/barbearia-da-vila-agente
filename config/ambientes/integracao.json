@@ -148,7 +148,8 @@
         "id": "b623cd84-6068-4a57-9ce6-2f7d9a37a11e",
         "nome": "Jayme"
       }
-    ]
+    ],
+    "escrita_liberada": false
   },
   "textos": {
     "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho?",

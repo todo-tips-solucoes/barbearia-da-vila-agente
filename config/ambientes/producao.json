@@ -85,14 +85,7 @@
     "host": "api.gracesonline.com.br",
     "timeout_ms": 15000,
     "barbeiro_teste_id": "1cee0bb9-e58b-4428-9e9b-1db184db7943",
-    "teste_contatos": [
-      "5511967296849",
-      "5511971634416",
-      "5511995164884",
-      "559184617250",
-      "554797565968",
-      "5511948903182"
-    ],
+    "teste_contatos": [],
     "max_estagios": 16,
     "max_consultas_estagio": 20,
     "barbeiros_humanos": [
@@ -100,7 +93,8 @@
         "id": "b623cd84-6068-4a57-9ce6-2f7d9a37a11e",
         "nome": "Jayme"
       }
-    ]
+    ],
+    "escrita_liberada": true
   },
   "textos": {
     "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho?",
