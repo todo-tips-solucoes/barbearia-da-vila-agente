@@ -144,9 +144,17 @@ function bvMDia(inicio) { // "2026-10-22T14:00:00" -> "quinta-feira (22/10)"
 // Preenche {chave} com os valores; chave desconhecida some (nunca vaza o marcador para o cliente).
 const bvMTemplate = (t, v) => String(t || '').replace(/\{(\w+)\}/g, (_, k) => (v[k] === undefined || v[k] === null ? '' : String(v[k])));
 
+// Nome como se escreve (owner, 2026-11-15): "GABRIEL" ou "gabriel" vira "Gabriel"; grafia mista ("McDonald") fica como veio.
+function bvMNomeProprio(t) {
+  return String(t == null ? '' : t).trim().split(/\s+/).filter(Boolean).map((w) => {
+    const lw = w.toLocaleLowerCase('pt-BR');
+    return w === lw || w === w.toLocaleUpperCase('pt-BR') ? lw.charAt(0).toLocaleUpperCase('pt-BR') + lw.slice(1) : w;
+  }).join(' ');
+}
+
 function bvMTextoDe(linha, textos) {
   const d = linha.dados || {};
-  const nome = String(d.nome || '').trim().split(/\s+/)[0];
+  const nome = bvMNomeProprio(String(d.nome || '').trim().split(/\s+/)[0]);
   return bvMTemplate(textos[linha.tipo === 'pos_atendimento' ? 'pos' : linha.tipo], { nome, servico: d.servico, barbeiro: d.barbeiro, dia: bvMDia(linha.inicio), hora: String(linha.inicio || '').slice(11, 16) })
     .replace(/,\s*!/g, '!'); // sem nome: "Oi, !" vira "Oi!"
 }
@@ -357,5 +365,5 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax) {
   return ''; // fora_do_teste: sem texto
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

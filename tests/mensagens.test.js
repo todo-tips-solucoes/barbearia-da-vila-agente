@@ -267,3 +267,14 @@ console.log('mensagens.test.js (confirmacao) ok');
   assert.equal(m.bvMSincResultado(ap, 500, null, 0, cfg, agora).situacao, null); // apagar que falha mantem a linha cancelada
 }
 console.log('mensagens.test.js lembretes chatmaster ok');
+
+// Nome em maiusculas na Graces (owner, 2026-11-15): o agente escreve normal
+{
+  const m = require('../workflows/shared/mensagens.js');
+  assert.equal(m.bvMNomeProprio('GABRIEL'), 'Gabriel');
+  assert.equal(m.bvMNomeProprio('joão'), 'João');
+  assert.equal(m.bvMNomeProprio('ÉRICO SILVA'), 'Érico Silva');
+  assert.equal(m.bvMNomeProprio('McDonald'), 'McDonald');
+  assert.equal(m.bvMTextoDe({ tipo: 'lembrete_hora', inicio: '2026-11-22T12:00:00', dados: { nome: 'GABRIEL SANTOS', servico: 'corte', barbeiro: 'Black' } }, { lembrete_hora: 'Oi, {nome}! Às {hora}.' }), 'Oi, Gabriel! Às 12:00.');
+}
+console.log('mensagens.test.js nome normal ok');

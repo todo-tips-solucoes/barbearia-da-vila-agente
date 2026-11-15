@@ -765,3 +765,13 @@ console.log('graces.test.js agenda real ok');
   assert.ok(p); // a proposta acima e o formato que a fase 2 transforma em mensagens (bvgMsgs)
 }
 console.log('graces.test.js lembretes do agente ok');
+
+// Cliente cadastrado em maiusculas (owner, 2026-11-15): cumprimenta como "Gabriel"
+{
+  const pi = g.bvGPlano(entrada({ operacao: 'identificar_cliente' }), null, cfg);
+  const st = g.bvGPasso(pi.st, [ok([{ idCliente: 'c9', nomeCliente: 'GABRIEL', sobrenomeCliente: 'SANTOS' }])], cfg);
+  assert.equal(st.st.meta.ped.cliente_nome, 'Gabriel');
+  const vs = g.bvGPasso(pi.st, [ok([{ idCliente: 'a', nomeCliente: 'ANA' }, { idCliente: 'b', nomeCliente: 'ana maria' }])], cfg).final;
+  assert.deepEqual(vs.resultado.opcoes.map((o) => o.nome), ['Ana', 'Ana Maria']);
+}
+console.log('graces.test.js nome normal ok');
