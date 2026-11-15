@@ -95,8 +95,9 @@ def regras_mensagens(amb, c):
             erros.append(f"{amb}: mensagens.{k} deve ter 1..lista.max_titulo caracteres, sem espaco nas pontas")
     if m["titulo_sim"] == m["titulo_nao"]:
         erros.append(f"{amb}: mensagens.titulo_sim e titulo_nao devem ser diferentes")
-    if amb == "producao" and m["ativo"] is not False:  # publicadas em PROD, mas desligadas ate o ok do owner
-        erros.append("producao: mensagens agendadas devem estar inativas (mensagens.ativo falso) ate o ok do owner")
+    # Ok do owner em 2026-11-15: lembretes de 24 h e 1 h no Chat Master ligados em PROD; so os tipos novos sao programados
+    if m["ativo"] and not m.get("lembretes"):
+        erros.append(f"{amb}: mensagens.ativo exige mensagens.lembretes (sem ela voltariam os tipos do envio proprio)")
     return erros
 
 

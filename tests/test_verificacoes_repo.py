@@ -21,7 +21,7 @@ MIDIA = {"hosts_audio": ["a.example.com"], "hosts_imagem": [], "mimes_audio": ["
          "transcricao_modelo": "whisper-1", "imagem_detalhe": "auto", "retencao_h": 23.9}
 
 
-MENS = {"ativo": True, "confirmacao_hora": "18:00", "lembrete_antes_min": 120, "pos_depois_min": 60, "varredura_s": 60, "reserva_s": 120,
+MENS = {"ativo": True, "lembretes": [{"tipo": "lembrete_dia", "antes_min": 1440}, {"tipo": "lembrete_hora", "antes_min": 60}], "confirmacao_hora": "18:00", "lembrete_antes_min": 120, "pos_depois_min": 60, "varredura_s": 60, "reserva_s": 120,
         "atraso_max_min": 30, "retentativas_min": [1, 5, 15], "reconciliacao_min": 15, "reconciliacao_dias": 7, "espera_texto_s": 10,
         "titulo_sim": "Confirmo", "titulo_nao": "Nao vou", "repetida_max_por_hora": 2, "max_por_varredura": 20, "max_por_contato_dia": 6}
 TXT_M = {k: "x" for k in vr.TEXTOS_MENSAGENS}
@@ -51,7 +51,8 @@ class T(unittest.TestCase):
         self.assertIn("reconciliacao_dias", erros(reconciliacao_dias=8))
         self.assertIn("diferentes", erros(titulo_nao="Confirmo"))
         self.assertIn("titulo_sim", erros(titulo_sim="x" * 25))
-        self.assertIn("inativas", erros("producao", ativo=True))
+        self.assertEqual(erros("producao", ativo=True), "")  # ok do owner, 2026-11-15: lembretes ligados em PROD
+        self.assertIn("mensagens.lembretes", erros("producao", ativo=True, lembretes=[]))
         self.assertEqual(erros("producao"), "")  # ativo false passa
         c = copy.deepcopy(OK)  # ids de bv-mensagens/bv_confirmacao em PROD nao falham mais (publicadas desligadas)
         c["producao"].update(workflows={"bv-mensagens": "wfM"}, workflows_sub={"bv_confirmacao": "wfC"})

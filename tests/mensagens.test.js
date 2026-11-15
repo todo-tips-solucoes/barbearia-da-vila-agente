@@ -215,3 +215,55 @@ console.log('mensagens.test.js (decisao) ok');
   assert.equal(P({}, agora, 120, id), '');
 }
 console.log('mensagens.test.js (confirmacao) ok');
+
+// Lembretes no Chat Master (owner, 2026-11-15): 24 h e 1 h antes, espelhados no modulo de Agendamentos com o minimo de chamadas
+{
+  const m = require('../workflows/shared/mensagens.js');
+  const LEM = [{ tipo: 'lembrete_dia', antes_min: 1440 }, { tipo: 'lembrete_hora', antes_min: 60 }];
+  const agora = '2026-11-20T12:00:00Z'; // 09:00 em SP
+  let p = m.bvMProgramar({ inicio: '2026-11-22T14:00:00', fim: '2026-11-22T14:40:00' }, agora, { lembretes: LEM });
+  assert.deepEqual(p.programar, [{ tipo: 'lembrete_dia', previsto_para: '2026-11-21T17:00:00.000Z' }, { tipo: 'lembrete_hora', previsto_para: '2026-11-22T16:00:00.000Z' }]);
+  p = m.bvMProgramar({ inicio: '2026-11-20T15:00:00' }, agora, { lembretes: LEM }); // corte daqui a 6 h: so o de 1 h antes
+  assert.deepEqual([p.programar.map((x) => x.tipo), p.ignorar.map((x) => x.tipo)], [['lembrete_hora'], ['lembrete_dia']]);
+  const textos = { lembrete_dia: 'Oi, {nome}! Amanhã às {hora}, {servico} com {barbeiro}.', lembrete_hora: 'Oi, {nome}! Às {hora}.' };
+  assert.equal(m.bvMTextoDe({ tipo: 'lembrete_dia', inicio: '2026-11-22T14:00:00', dados: { nome: 'Paulo Sudre', servico: 'corte adulto', barbeiro: 'Pedro' } }, textos), 'Oi, Paulo! Amanhã às 14:00, corte adulto com Pedro.');
+  assert.equal(m.bvMTextoDe({ tipo: 'lembrete_hora', inicio: '2026-11-22T14:00:00', dados: {} }, textos), 'Oi! Às 14:00.');
+  const cfg = { textos, user_id: '234', wid: '159', retentativas_min: [1, 5, 15] };
+  const linha = (o) => ({ id: 1, tipo: 'lembrete_hora', situacao: 'pendente', previsto_para: '2026-11-22T16:00:00.000Z', inicio: '2026-11-22T14:00:00', dados: { nome: 'Paulo', servico: 'corte', barbeiro: 'Pedro' }, canal_id: null, contato_id: 7, telefone: '+5511967296849', contato_canal_id: 236429, ...o });
+  // criar: payload medido na API (fuso de SP, userId do agente, sem abrir ticket)
+  let [a] = m.bvMSincPlano([linha()], agora, cfg);
+  assert.equal(a.acao, 'criar');
+  assert.deepEqual(a.req, { m: 'POST', path: '/api/schedules', body: { body: 'Oi, Paulo! Às 14:00.', sendAt: '2026-11-22T13:00', contactId: '236429', userId: '234', openTicket: '0', queueId: '0', whatsappId: '159', repetir: '0', repetirTodo: '0', quantasVezes: '0' } });
+  assert.deepEqual(m.bvMSincResultado(a, 200, { id: 2423 }, 0, cfg, agora), { id: 1, canal_id: '2423', canal_previsto_para: '2026-11-22T16:00:00.000Z', canal_texto: 'Oi, Paulo! Às 14:00.' });
+  // ja sincronizado e igual: nenhuma chamada; mudou o horario (remarcou): PUT, nunca apagar e criar
+  const sinc = { canal_id: '2423', canal_previsto_para: '2026-11-22T16:00:00.000Z', canal_texto: 'Oi, Paulo! Às 14:00.' };
+  assert.equal(m.bvMSincPlano([linha(sinc)], agora, cfg)[0].acao, 'nada');
+  [a] = m.bvMSincPlano([linha({ ...sinc, previsto_para: '2026-11-22T17:00:00.000Z', inicio: '2026-11-22T15:00:00' })], agora, cfg);
+  assert.deepEqual([a.acao, a.req.m, a.req.path, a.req.body], ['atualizar', 'PUT', '/api/schedules/2423', { body: 'Oi, Paulo! Às 15:00.', sendAt: '2026-11-22 14:00' }]);
+  assert.equal(m.bvMSincResultado(a, 404, {}, 0, cfg, agora).limpar_canal, true); // apagado na tela: recria na proxima
+  // cancelado: apaga no Chat Master; ja passou: so solta o id; horario chegou: marca enviada sem chamada
+  [a] = m.bvMSincPlano([linha({ ...sinc, situacao: 'cancelada' })], agora, cfg);
+  assert.deepEqual(a.req, { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: '2423' } });
+  assert.equal(m.bvMSincResultado(a, 200, { message: 'Schedule deleted' }, 0, cfg, agora).limpar_canal, true);
+  assert.equal(m.bvMSincPlano([linha({ ...sinc, situacao: 'cancelada', previsto_para: '2026-11-20T11:00:00Z' })], agora, cfg)[0].acao, 'liberar');
+  assert.equal(m.bvMSincPlano([linha({ ...sinc, previsto_para: '2026-11-20T11:59:00Z' })], agora, cfg)[0].acao, 'enviada');
+  assert.equal(m.bvMSincPlano([linha({ previsto_para: '2026-11-20T12:01:00Z' })], agora, cfg)[0].acao, 'ja_passou'); // em cima da hora: nao cria
+  // contato: busca pelo numero uma vez por contato na rodada; vazio = nao existe -> cria na proxima
+  const semId = [linha({ contato_canal_id: null }), linha({ id: 2, tipo: 'lembrete_dia', previsto_para: '2026-11-21T17:00:00.000Z', contato_canal_id: null })];
+  const pl = m.bvMSincPlano(semId, agora, cfg);
+  assert.deepEqual(pl.map((x) => x.acao), ['buscar_contato', 'aguardar_contato']);
+  assert.deepEqual(pl[0].req, { m: 'GET', path: '/api/contacts/single', body: { number: '5511967296849' } });
+  assert.deepEqual(m.bvMSincResultado(pl[0], 200, { 236429: { id: 236429, name: 'P' } }, 0, cfg, agora), { id: 1, contato_id: 7, contato_canal_id: 236429 });
+  assert.equal(m.bvMSincResultado(pl[0], 200, {}, 0, cfg, agora).contato_canal_id, 0);
+  [a] = m.bvMSincPlano([linha({ contato_canal_id: 0 })], agora, cfg);
+  assert.deepEqual(a.req, { m: 'POST', path: '/api/contacts', body: { name: 'Paulo', number: '5511967296849' } });
+  assert.equal(m.bvMSincPlano([linha({ contato_canal_id: null, telefone: '123@lid' })], agora, cfg)[0].acao, 'sem_contato');
+  // falha: retentativa e, esgotada, falhou; sem resposta na criacao = incerto (nao recria)
+  [a] = m.bvMSincPlano([linha()], agora, cfg);
+  let f = m.bvMSincResultado(a, 500, null, 0, cfg, agora);
+  assert.deepEqual([f.situacao, f.tentativas, f.proxima], ['pendente', 1, '2026-11-20T12:01:00.000Z']);
+  assert.deepEqual([m.bvMSincResultado(a, 500, null, 3, cfg, agora).situacao, m.bvMSincResultado(a, 0, null, 0, cfg, agora).motivo], ['falhou', 'incerto']);
+  const ap = m.bvMSincPlano([linha({ ...sinc, situacao: 'cancelada' })], agora, cfg)[0];
+  assert.equal(m.bvMSincResultado(ap, 500, null, 0, cfg, agora).situacao, null); // apagar que falha mantem a linha cancelada
+}
+console.log('mensagens.test.js lembretes chatmaster ok');
