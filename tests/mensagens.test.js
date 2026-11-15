@@ -264,11 +264,17 @@ console.log('mensagens.test.js (confirmacao) ok');
   const sid = m.bvMSincResultado(a, 200, { message: 'ok' }, 0, cfg, agora);
   assert.deepEqual([sid.falhou, sid.code], [true, 'SEM_ID']);
   // contato sem ticket (cliente do balcao): ticket atrelado antes do lembrete, uma vez por contato
+  // ticket: antes de criar, verifica se ja existe um nesta conexao (owner, 2026-11-15)
   const tk = m.bvMSincPlano([linha({ ticket_id: null }), linha({ id: 2, tipo: 'lembrete_dia', previsto_para: '2026-11-21T17:00:00.000Z', ticket_id: null })], agora, cfg);
-  assert.deepEqual(tk.map((x) => x.acao), ['criar_ticket', 'aguardar_contato']);
-  assert.deepEqual(tk[0].req, { m: 'POST', path: '/api/tickets/createTicketAPI', body: { contactId: 236429 } });
-  assert.deepEqual(m.bvMSincResultado(tk[0], 200, { id: 172345, status: 'pending' }, 0, cfg, agora), { id: 1, contato_id: 7, ticket_id: 172345 });
-  assert.equal(m.bvMSincResultado(tk[0], 200, {}, 0, cfg, agora).code, 'SEM_ID');
+  assert.deepEqual(tk.map((x) => x.acao), ['buscar_ticket', 'aguardar_contato']);
+  assert.deepEqual(tk[0].req, { m: 'GET', path: '/api/contacts/alltickets', body: { number: '5511967296849' } });
+  assert.equal(m.bvMSincResultado(tk[0], 200, [{ id: 99, whatsappId: 145 }, { id: 172345, whatsappId: 159, status: 'closed' }], 0, cfg, agora).ticket_id, 172345);
+  assert.equal(m.bvMSincResultado(tk[0], 200, [{ id: 99, whatsappId: 145 }], 0, cfg, agora).ticket_id, 0); // so de outra conexao: cria
+  assert.equal(m.bvMSincResultado(tk[0], 404, { error: 'ERR_NO_CONTACT_FOUND' }, 0, cfg, agora).falhou, true);
+  const ct = m.bvMSincPlano([linha({ ticket_id: 0 })], agora, cfg)[0];
+  assert.deepEqual(ct.req, { m: 'POST', path: '/api/tickets/createTicketAPI', body: { contactId: 236429 } });
+  assert.deepEqual(m.bvMSincResultado(ct, 200, { id: 172345, status: 'pending' }, 0, cfg, agora), { id: 1, contato_id: 7, ticket_id: 172345 });
+  assert.equal(m.bvMSincResultado(ct, 200, {}, 0, cfg, agora).code, 'SEM_ID');
   // falha: retentativa e, esgotada, falhou; sem resposta na criacao = incerto (nao recria)
   [a] = m.bvMSincPlano([linha()], agora, cfg);
   let f = m.bvMSincResultado(a, 500, null, 0, cfg, agora);
