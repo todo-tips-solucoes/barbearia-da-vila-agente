@@ -34,8 +34,12 @@
   },
   "chatmaster": {
     "whatsapp_id": "159",
-    "queue_id": "106",
-    "user_id": "234"
+    "queue_id": "107",
+    "user_id": "234",
+    "etiquetas": {
+      "confirmado": 534,
+      "cancelado": 535
+    }
   },
   "buffer": {
     "janela_s": 8,
@@ -118,7 +122,7 @@
     "confirmacao_desatualizada": "Esse horário não está mais valendo. Se quiser, me fala e eu vejo outro pra você.",
     "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho?",
     "confirmacao_escolher": "Você tem mais de um horário pra confirmar. Toca no botão da mensagem do horário que quer responder, ou me fala o dia e a hora, tá?",
-    "lembrete_dia": "Oi, {nome}! Passando para lembrar do seu {servico} com {barbeiro} amanhã, às {hora}, aqui na Barbearia da Vila. Se precisar remarcar, é só me chamar por aqui.",
+    "lembrete_dia": "Oi, {nome}! Passando para lembrar do seu {servico} com {barbeiro} amanhã, às {hora}, aqui na Barbearia da Vila. Você confirma? É só responder SIM para confirmar ou NÃO se não puder vir.",
     "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!"
   },
   "loja": {
@@ -175,7 +179,7 @@
     "cliente_teste_id": ""
   },
   "handoff": {
-    "setor_id": 107,
+    "setor_id": 106,
     "whatsapp_id": "159"
   },
   "mensagens": {

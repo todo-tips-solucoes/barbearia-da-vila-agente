@@ -97,7 +97,7 @@ class BvGraces(unittest.TestCase):
                        "'fora_da_lista'", "y.motivo IS NULL", "m.situacao <> 'pendente'",
                        "m.situacao = 'pendente' AND m.reservada_em IS NULL AND NOT EXISTS",  # item 9: reservada nao e cancelada (o envio grava)
                        "me AS (UPDATE mensagens_agendadas m SET motivo = x.motivo",  # item 3: confirmacao ja enviada fica encerrada
-                       "m.tipo = 'confirmacao' AND m.situacao = 'enviada' AND m.resposta IS NULL AND m.motivo IS NULL",
+                       "m.tipo IN ('confirmacao','lembrete_dia') AND m.situacao = 'enviada' AND m.resposta IS NULL AND m.motivo IS NULL",
                        "$17::jsonb IS NOT NULL AND NOT EXISTS"):  # item 8: fora_da_lista so com lista (TESTE)
             self.assertIn(trecho, persistir)
         ef = self.nos["Efeitos"]["parameters"]["jsCode"]
@@ -206,10 +206,10 @@ class EntregarRajadaAgente(unittest.TestCase):
             self.assertNotIn("queueId: '0'", t, f)
             self.assertNotRegex(t, r"whatsappId: '1[0-9]{2}'", f)
         prod = json.load(open(os.path.join(RAIZ, "config", "ambientes", "producao.json"), encoding="utf-8"))
-        self.assertEqual((prod["chatmaster"], prod["handoff"]["setor_id"], prod["handoff"]["whatsapp_id"]), ({"whatsapp_id": "159", "queue_id": "106", "user_id": "234"}, 107, "159"))
+        self.assertEqual((prod["chatmaster"], prod["handoff"]["setor_id"], prod["handoff"]["whatsapp_id"]), ({"whatsapp_id": "159", "queue_id": "107", "user_id": "234", "etiquetas": {"confirmado": 534, "cancelado": 535}}, 106, "159"))  # owner, 2026-11-15: 106 Atendimento (humano), 107 Atendimento Agente
         self.assertNotEqual(prod["credenciais"]["chatmaster"], integ_cred := json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))["credenciais"]["chatmaster"])  # 159 e de outra conta
         integ = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
-        self.assertEqual((integ["chatmaster"], integ["handoff"]["setor_id"]), ({"whatsapp_id": "145", "queue_id": "0", "user_id": "100"}, 78))
+        self.assertEqual((integ["chatmaster"], integ["handoff"]["setor_id"]), ({"whatsapp_id": "145", "queue_id": "0", "user_id": "100", "etiquetas": {"confirmado": 0, "cancelado": 0}}, 78))
         g = json.loads(ler("workflows/sub/bv-graces.json"))
         for n in g["nodes"]:
             if n["name"] in ("Normalizar", "Planejar", "Passo", "Efeitos"):
