@@ -188,11 +188,19 @@ function bvMSincPlano(linhas, agora, cfg) {
     }
     if (!futuro) return { ...base, acao: 'ja_passou' };
     const cid = l.contato_canal_id;
+    const num = /@lid$/.test(String(l.telefone)) ? '' : bvMDig(l.telefone);
+    // Contato sem ticket na conexao (cliente do balcao): o owner pediu um ticket atrelado antes do lembrete e que se verifique antes
+    // se ja existe ticket nesta conexao (2026-11-15). ticket_id null = nao verificado; 0 = verificado e sem ticket -> cria.
+    if (cid > 0 && !(l.ticket_id > 0)) {
+      if (contatoFeito.has(l.contato_id)) return { ...base, acao: 'aguardar_contato' };
+      contatoFeito.add(l.contato_id);
+      if (l.ticket_id === 0 || !num) return { ...base, acao: 'criar_ticket', req: { m: 'POST', path: '/api/tickets/createTicketAPI', body: { contactId: Number(cid) } } };
+      return { ...base, acao: 'buscar_ticket', conexao: String(cfg.wid), req: { m: 'GET', path: '/api/contacts/alltickets', body: { number: num } } };
+    }
     if (cid > 0) {
       return { ...base, acao: 'criar', texto, previsto_para: l.previsto_para, req: { m: 'POST', path: '/api/schedules', body: { body: texto, sendAt: bvMLocal(l.previsto_para, 'T'), contactId: String(cid),
         userId: String(cfg.user_id), openTicket: '0', queueId: String(cfg.fila || '0'), whatsappId: String(cfg.wid), repetir: '0', repetirTodo: '0', quantasVezes: '0' } } };
     }
-    const num = /@lid$/.test(String(l.telefone)) ? '' : bvMDig(l.telefone);
     if (!num) return { ...base, acao: 'sem_contato' };
     if (contatoFeito.has(l.contato_id)) return { ...base, acao: 'aguardar_contato' };
     contatoFeito.add(l.contato_id);
@@ -208,7 +216,7 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
   const contatoDe = (b) => { // GET /contacts/single devolve { "<id>": {id,...} }; vazio = nao existe
     if (!b || typeof b !== 'object') return null;
     if (Number.isInteger(b.id)) return b.id;
-    const v = Object.values(b).find((x) => x && Number.isInteger(x.id));
+    const v = Object.values(b).find((x) => x && Number.isInteger(x.id)); // { "<id>": {...} }, { existingContact: {...} }, { contact: {...} }
     return v ? v.id : (Object.keys(b).length ? null : 0);
   };
   const falha = (code) => {
@@ -228,7 +236,13 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
     case 'ja_passou': return { id, situacao: 'cancelada', motivo: 'ja_passou' };
     case 'sem_contato': return { id, situacao: 'cancelada', motivo: 'sem_contato_canal' };
     case 'buscar_contato': { const c = ok ? contatoDe(body) : null; return c === null ? falha() : { id, contato_id: p.contato_id, contato_canal_id: c }; }
-    case 'criar_contato': { const c = ok ? contatoDe(body) : null; return ok ? { id, contato_id: p.contato_id, contato_canal_id: c || null } : falha(); } // sem id: a proxima rodada busca
+    case 'criar_contato': { const c = ok ? contatoDe(body) : null; return c > 0 ? { id, contato_id: p.contato_id, contato_canal_id: c } : falha(ok ? 'SEM_ID' : undefined); } // sem id: falha visivel, nunca repete em silencio
+    case 'buscar_ticket': { // lista de tickets do contato em todas as conexoes: so vale um desta conexao
+      if (!ok || !Array.isArray(body)) return falha();
+      const t = body.find((x) => x && Number.isInteger(x.id) && String(x.whatsappId) === String(p.conexao));
+      return { id, contato_id: p.contato_id, ticket_id: t ? t.id : 0 };
+    }
+    case 'criar_ticket': return ok && body && Number.isInteger(body.id) ? { id, contato_id: p.contato_id, ticket_id: body.id } : falha(ok ? 'SEM_ID' : undefined);
     default: return { id };
   }
 }
