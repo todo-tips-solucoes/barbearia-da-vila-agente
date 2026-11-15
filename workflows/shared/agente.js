@@ -130,7 +130,9 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   // K5: resposta com preco e sem pergunta termina no convite para agendar (o modelo as vezes esquece)
   // shortcut: nao olha se o cliente ja disse nao; pergunta de preco depois de um nao e rara, revisar se aparecer
   const ult = saida[saida.length - 1];
-  if (ult && !itens.length && !saida.some((m) => m.texto.includes('?')) && saida.some((m) => /R\$\s?\d/.test(m.texto))) {
+  // Owner, 2026-11-15: o "confirmado" do agendamento cita o preco e ganhava o convite logo depois de agendar
+  const escrita = saida.some((m) => BV_ESCRITA_FEITA.test(bvNormalizarDescricao(m.texto)));
+  if (ult && !itens.length && !escrita && !saida.some((m) => m.texto.includes('?')) && saida.some((m) => /R\$\s?\d/.test(m.texto))) {
     ult.texto = `${ult.texto} ${bvConvite(cfg)}`;
   }
   return saida;
@@ -199,6 +201,9 @@ function bvContextoCliente(c, neutralizar) {
   }
   return t;
 }
+
+// Resposta que fecha uma escrita (agendou, remarcou, cancelou): nao leva convite para agendar.
+const BV_ESCRITA_FEITA = /\b(confirmad[oa]s?|agendad[oa]s?|marcad[oa]s?|remarcad[oa]s?|cancelad[oa]s?|reservad[oa]s?|te esperamos)\b/i;
 
 // K1 (suite-validacao): 1a resposta da sessao sempre cumprimenta; o modelo as vezes esquece.
 const BV_SAUDACAO = /^\s*(oi|olá|ola|opa|bom dia|boa tarde|boa noite|e aí|eai|fala|hey)(?=[\s,!.?]|$)/i; // sem \b: ele nao fecha palavra depois de á/í

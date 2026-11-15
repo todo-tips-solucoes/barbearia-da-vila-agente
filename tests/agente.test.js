@@ -278,6 +278,16 @@ console.log('agente.test.js saudacao no meio e teste liberado ok');
   const r = a.bvCompor('Ele tem este horário:\n**OPÇÕES:**\n1 | 17:20', oh, c);
   assert.ok(!r[0].texto.includes('OP') && r[0].tipo === 'lista' && r[0].opcoes[0].rotulo === '17:20'); // marcador acentuado (R18)
 }
+{
+  // Owner, 2026-11-15: confirmacao do agendamento cita o preco e nao pode ganhar o convite para agendar de novo
+  const c = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  for (const t of ['Prontinho, Paulo! Seu corte adulto com Pedro Henrique está confirmado para 21/11 às 14:00 (R$ 90,00).',
+    'Seu horário de 21/11 foi cancelado. O corte adulto sai por R$ 90 quando quiser voltar.',
+    'Remarcado! Corte adulto, R$ 90, sábado às 10:00. Te esperamos!']) {
+    assert.ok(!a.bvCompor(t, null, c).some((m) => m.texto.includes('Quer que eu já veja um horário')), t);
+  }
+  assert.ok(a.bvCompor('O corte adulto sai por R$ 90.', null, c).slice(-1)[0].texto.endsWith('Quer que eu já veja um horário pra você?')); // duvida de preco segue com convite
+}
 console.log('agente.test.js convite K5 ok');
 
 // Clausula petrea do Jayme e barbeiro antes dos horarios (owner, 2026-11-14)
