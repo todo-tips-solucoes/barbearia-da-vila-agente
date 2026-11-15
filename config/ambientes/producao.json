@@ -34,7 +34,7 @@
   },
   "chatmaster": {
     "whatsapp_id": "159",
-    "queue_id": "106",
+    "queue_id": "107",
     "user_id": "234"
   },
   "buffer": {
@@ -175,7 +175,7 @@
     "cliente_teste_id": ""
   },
   "handoff": {
-    "setor_id": 107,
+    "setor_id": 106,
     "whatsapp_id": "159"
   },
   "mensagens": {
