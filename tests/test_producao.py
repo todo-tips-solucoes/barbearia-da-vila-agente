@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import unittest
+import unittest.mock
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 spec = importlib.util.spec_from_file_location("dep", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
@@ -17,6 +18,7 @@ def cfg(amb):
 
 def render(arq, amb, texto=None):
     os.environ.setdefault("BV_WEBHOOK_TOKEN_SHA256", "x")
+    os.environ.setdefault("BV_WEBHOOK_TOKEN_SHA256_PRODUCAO", "y")
     texto = texto if texto is not None else open(os.path.join(RAIZ, "workflows", arq), encoding="utf-8").read()
     return json.loads(dep.renderizar(texto, cfg(amb), RAIZ))
 
@@ -145,3 +147,16 @@ class VirarConexaoProd(unittest.TestCase):
         r = subprocess.run(["python3", "-I", os.path.join(RAIZ, "scripts", "virar-conexao-prod.py")], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, 2)
         self.assertIn("recusado", r.stderr)
+
+
+class HashDoTokenPorAmbiente(unittest.TestCase):
+    """2026-11-15: PROD (conexao 159, outra conta) autentica com o hash do token proprio; o TESTE segue com o da 145."""
+
+    def test_prod_usa_o_hash_de_producao(self):
+        wf = '{"p": "{{BV:TOKEN_SHA256}}"}'
+        with unittest.mock.patch.dict(os.environ, {"BV_WEBHOOK_TOKEN_SHA256": "h145", "BV_WEBHOOK_TOKEN_SHA256_PRODUCAO": "h159"}):
+            self.assertIn("h159", dep.renderizar(wf, cfg("producao"), RAIZ))
+            self.assertIn("h145", dep.renderizar(wf, cfg("integracao"), RAIZ))
+        with unittest.mock.patch.dict(os.environ, {"BV_WEBHOOK_TOKEN_SHA256_PRODUCAO": ""}):
+            with self.assertRaises(dep.Falha):
+                dep.renderizar(wf, cfg("producao"), RAIZ)
