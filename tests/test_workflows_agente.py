@@ -122,7 +122,9 @@ class BvGraces(unittest.TestCase):
             self.assertIn(acao, self.js[i:i + 300])
 
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
-        self.assertIn("cfg.ambiente === 'producao' ? !cfg.testeLiberado : !cfg.redirecionar", self.js)
+        self.assertIn("cfg.ambiente === 'producao' ? !(cfg.escritaLiberada || cfg.testeLiberado) : !cfg.redirecionar", self.js)
+        for no in ("Normalizar", "Planejar", "Passo", "Efeitos"):  # owner, 2026-11-15: agenda real em PROD por config
+            self.assertIn("escritaLiberada: '{{BV:graces.escrita_liberada}}' === 'True'", self.nos[no]["parameters"]["jsCode"])
         self.assertIn("const prof = redir ? cfg.testeId", self.js)
         self.assertIn("escrita_fora_do_teste", self.js)
         self.assertIn("'{{BV:teste.redirecionar_escrita}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
@@ -132,6 +134,7 @@ class BvGraces(unittest.TestCase):
         integ, prod = (json.load(open(os.path.join(RAIZ, "config", "ambientes", f"{a}.json"), encoding="utf-8")) for a in ("integracao", "producao"))
         self.assertTrue(integ["teste"]["redirecionar_escrita"] and integ["cadastro"]["cliente_teste_id"])
         self.assertFalse(prod["teste"]["redirecionar_escrita"])
+        self.assertEqual((integ["graces"]["escrita_liberada"], prod["graces"]["escrita_liberada"], prod["graces"]["teste_contatos"]), (False, True, []))
 
     def test_contador_diario_terceiros_alimentado(self):  # SC-011: ctx.dia vem do banco, nunca fica vazio
         q = self.nos["Contexto"]["parameters"]["query"]
