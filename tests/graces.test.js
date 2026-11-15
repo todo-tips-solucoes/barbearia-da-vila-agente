@@ -752,3 +752,16 @@ console.log('graces.test.js jayme ok');
   assert.equal(p2.st.meta.prof, TESTE);
 }
 console.log('graces.test.js agenda real ok');
+
+// Lembretes do agente no Chat Master (owner, 2026-11-15): ao agendar, programa 24 h e 1 h antes, com o nome do cliente
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f', PR = '55555555-5555-4555-8555-555555555555';
+  const p = { id: PR, acao: 'agendar', dados: { idCliente: 'c1', idServico: S, servico: 'corte adulto', idProfissional: 'b1', barbeiro: 'Pedro', data: '2030-01-10', hora: '14:00', minutos: 40 } };
+  const msgs = { criar: [{ idAgenda: 'ag1', idCliente: 'c1', idProfissional: 'b1', inicio: '2030-01-10T14:00:00', fim: '2030-01-10T14:40:00', servico: 'corte adulto', barbeiro: 'Pedro', recorrente: false, nome: 'Paulo' }], cancelar: [] };
+  const msgCfg = { lembretes: [{ tipo: 'lembrete_dia', antes_min: 1440 }, { tipo: 'lembrete_hora', antes_min: 60 }], confirmacao_hora: '18:00', lembrete_antes_min: 120, pos_depois_min: 60 };
+  const pr = g.bvGParams({ contato_id: 1, turno_id: 't' }, { mensagens: msgs }, { ativo: true, agora: '2030-01-01T12:00:00Z', cfg: msgCfg, escrita: null });
+  const linhas = JSON.parse(pr[14]);
+  assert.deepEqual(linhas.map((l) => [l.tipo, l.previsto_para, l.dados.nome]), [['lembrete_dia', '2030-01-09T17:00:00.000Z', 'Paulo'], ['lembrete_hora', '2030-01-10T16:00:00.000Z', 'Paulo']]);
+  assert.ok(p); // a proposta acima e o formato que a fase 2 transforma em mensagens (bvgMsgs)
+}
+console.log('graces.test.js lembretes do agente ok');

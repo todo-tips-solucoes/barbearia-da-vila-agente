@@ -153,7 +153,7 @@ class CodeNodes(unittest.TestCase):
         ag = {"idAgenda": "A", "horaInicio": "2099-10-22T14:00:00", "horaFim": "2099-10-22T14:45:00", "idStatusAgenda": 2, "ddiCelular": "55", "celularCliente": "(11) 99999-8888",
               "nomeServico": "Corte", "profissional": "Ze", "idProfissional": TESTE}
         r = rodar(arq, "Reconciliar", [{"linhas": [], "contatos": [{"id": 1, "telefone": TEL}]}], {"Achatar": [{"agenda": [ag]}]})[0]
-        self.assertEqual(sorted(x["tipo"] for x in r["criar"]), ["confirmacao", "lembrete", "pos_atendimento"])
+        self.assertEqual(sorted(x["tipo"] for x in r["criar"]), ["lembrete_dia", "lembrete_hora"])  # owner, 2026-11-15: lembretes no Chat Master
         self.assertEqual(r["criar"][0]["dados"], {"servico": "Corte", "barbeiro": "Ze", "fim": "2099-10-22T14:45:00"})
 
 
@@ -203,10 +203,34 @@ class BvMensagens(Base, unittest.TestCase):
 
     def test_dois_agendadores(self):
         gat = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]
-        self.assertEqual(len(gat), 2)
+        self.assertEqual(len(gat), 3)  # varredura (legado), reconciliacao e sincronizacao com o Chat Master (owner, 2026-11-15)
         j = json.dumps(self.wf)
         self.assertIn("{{BV:NUM:mensagens.varredura_s}}", j)
         self.assertIn("{{BV:NUM:mensagens.reconciliacao_min}}", j)
+
+    def test_sincronizacao_chatmaster(self):  # owner, 2026-11-15: lembretes no modulo de Agendamentos, so a diferenca vira chamada
+        self.assertEqual(self.destinos("A cada sincronizacao"), ["Pendencias"])
+        self.assertEqual(self.destinos("Chama o Chat Master?", 0), ["Chat Master agendamentos"])
+        self.assertEqual(self.destinos("Chama o Chat Master?", 1), ["Resultado sincronizacao"])
+        self.assertEqual(self.destinos("Resultado sincronizacao"), ["Gravar sincronizacao"])
+        q = self.nos["Pendencias"]["parameters"]["query"]
+        for t in ("ARRAY['lembrete_dia','lembrete_hora']", "FOR UPDATE OF m SKIP LOCKED", "m.situacao IN ('cancelada','falhou') AND m.agendamento_canal_id IS NOT NULL", "m.atualizado_em > m.canal_sincronizado_em"):
+            self.assertIn(t, q)
+        self.assertIn("m.tipo IN ('confirmacao','lembrete','pos_atendimento')", self.nos["Reservar"]["parameters"]["query"])  # legado nao envia os novos
+        self.assertEqual(self.nos["Chat Master agendamentos"]["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.chatmaster}}")
+        g = self.nos["Gravar sincronizacao"]["parameters"]["query"]
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), list(range(1, 16)))
+        self.assertEqual(g.count("("), g.count(")"))
+        lin = {"id": 9, "tipo": "lembrete_hora", "situacao": "pendente", "previsto_para": "2030-01-10T16:00:00.000Z", "inicio": "2030-01-10T14:00:00",
+               "dados": {"nome": "Ana Souza", "servico": "corte adulto", "barbeiro": "Pedro"}, "canal_id": None, "tentativas": 0, "reserva": "1.5",
+               "contato_id": 3, "telefone": TEL, "contato_canal_id": 55}
+        r = rodar("workflows/bv-mensagens.json", "Planejar sincronizacao", [lin])
+        self.assertEqual(r[0]["acao"], "criar")
+        b = r[0]["req"]["body"]
+        self.assertEqual((b["sendAt"], b["contactId"], b["userId"], b["whatsappId"], b["openTicket"]), ("2030-01-10T13:00", "55", CFG["chatmaster"]["user_id"], CFG["chatmaster"]["whatsapp_id"], "0"))
+        self.assertTrue(b["body"].startswith("Oi, Ana! Seu corte adulto com Pedro é daqui a 1 hora, às 14:00."))
+        g2 = rodar("workflows/bv-mensagens.json", "Resultado sincronizacao", [{"statusCode": 200, "body": {"id": 77}}], {"Planejar sincronizacao": r}, each=True)
+        self.assertEqual((g2["canal_id"], g2["reserva"]), ("77", "1.5"))
 
     def test_cadeia_da_varredura(self):  # contracts/envio-chatmaster.md
         self.assertEqual(self.destinos("Reservar"), ["Tem cliente?"])
