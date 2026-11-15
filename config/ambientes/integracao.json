@@ -38,7 +38,8 @@
   },
   "chatmaster": {
     "whatsapp_id": "145",
-    "queue_id": "0"
+    "queue_id": "0",
+    "user_id": "100"
   },
   "buffer": {
     "janela_s": 8,
@@ -171,7 +172,9 @@
     "confirmacao_repetida": "Esse horário já está respondido, tá? Se quiser mudar alguma coisa é só me falar.",
     "confirmacao_desatualizada": "Esse horário não está mais valendo. Se quiser, me fala e eu vejo outro pra você.",
     "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho?",
-    "confirmacao_escolher": "Você tem mais de um horário pra confirmar. Toca no botão da mensagem do horário que quer responder, ou me fala o dia e a hora, tá?"
+    "confirmacao_escolher": "Você tem mais de um horário pra confirmar. Toca no botão da mensagem do horário que quer responder, ou me fala o dia e a hora, tá?",
+    "lembrete_dia": "Oi, {nome}! Passando para lembrar do seu {servico} com {barbeiro} amanhã, às {hora}, aqui na Barbearia da Vila. Se precisar remarcar, é só me chamar por aqui.",
+    "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!"
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
@@ -214,7 +217,18 @@
     "titulo_nao": "Não vou poder",
     "repetida_max_por_hora": 2,
     "max_por_varredura": 20,
-    "max_por_contato_dia": 6
+    "max_por_contato_dia": 6,
+    "lembretes": [
+      {
+        "tipo": "lembrete_dia",
+        "antes_min": 1440
+      },
+      {
+        "tipo": "lembrete_hora",
+        "antes_min": 60
+      }
+    ],
+    "antecedencia_min_s": 120
   },
   "verificacao": {
     "path": "bv-verificacao",

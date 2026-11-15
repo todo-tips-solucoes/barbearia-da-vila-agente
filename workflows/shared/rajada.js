@@ -33,6 +33,8 @@ function bvNormalizar(evento, opcoes) {
     msg: {
       telefone: b.sender,
       ticketId: Number.isInteger(b.chamadoId) ? b.chamadoId : null,
+      // id do contato no Chat Master (lembretes, owner 2026-11-15): poupa a busca pelo numero na hora de agendar
+      contatoCanalId: b.ticketData && Number.isInteger(b.ticketData.contactId) && b.ticketData.contactId > 0 ? b.ticketData.contactId : null,
       tipo,
       conteudo: typeof m.text === 'string' && m.text !== '' ? m.text : null,
       midiaUrl,

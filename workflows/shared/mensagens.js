@@ -28,7 +28,8 @@ function bvMProgramar(ag, agora, cfg) {
   if (!Number.isFinite(fim) || fim < ini) fim = ini;
   const hm = /^(\d{1,2}):(\d{2})$/.exec(cfg.confirmacao_hora || '18:00');
   const dia = ini - (ini % 86400000); // meia-noite (parede) do dia do inicio
-  const alvos = [
+  // Lembretes no Chat Master (owner, 2026-11-15): mensagens.lembretes = [{tipo, antes_min}] substitui confirmacao/lembrete/pos
+  const alvos = Array.isArray(cfg.lembretes) ? cfg.lembretes.map((l) => [l.tipo, ini - Number(l.antes_min) * 60000]) : [
     ['confirmacao', dia - 86400000 + (+hm[1] * 60 + +hm[2]) * 60000],
     ['lembrete', ini - cfg.lembrete_antes_min * 60000],
     ['pos_atendimento', fim + cfg.pos_depois_min * 60000],
@@ -145,7 +146,83 @@ const bvMTemplate = (t, v) => String(t || '').replace(/\{(\w+)\}/g, (_, k) => (v
 
 function bvMTextoDe(linha, textos) {
   const d = linha.dados || {};
-  return bvMTemplate(textos[linha.tipo === 'pos_atendimento' ? 'pos' : linha.tipo], { servico: d.servico, barbeiro: d.barbeiro, dia: bvMDia(linha.inicio), hora: String(linha.inicio || '').slice(11, 16) });
+  const nome = String(d.nome || '').trim().split(/\s+/)[0];
+  return bvMTemplate(textos[linha.tipo === 'pos_atendimento' ? 'pos' : linha.tipo], { nome, servico: d.servico, barbeiro: d.barbeiro, dia: bvMDia(linha.inicio), hora: String(linha.inicio || '').slice(11, 16) })
+    .replace(/,\s*!/g, '!'); // sem nome: "Oi, !" vira "Oi!"
+}
+
+// Instante ISO -> relogio de parede de Sao Paulo "AAAA-MM-DD<sep>HH:mm" (o Chat Master le sendAt no fuso da empresa; medido 2026-11-15)
+function bvMLocal(iso, sep) {
+  const t = new Date(iso).getTime();
+  return new Date(t + bvMOffsetMs(t)).toISOString().slice(0, 16).replace('T', sep);
+}
+
+// Sincronizacao com o modulo de Agendamentos do Chat Master (owner, 2026-11-15). A tabela mensagens_agendadas segue a fonte unica;
+// o Chat Master e espelho visual e quem envia. So ha chamada quando algo difere (cria, atualiza horario/texto, apaga).
+// linhas: [{id, tipo, situacao, previsto_para (ISO), inicio, dados, canal_id, canal_previsto_para, canal_texto, contato_id, telefone,
+// contato_canal_id (null = nao buscado, 0 = nao existe no Chat Master)}]. Devolve uma acao por linha; contato e buscado/criado uma vez por rodada.
+function bvMSincPlano(linhas, agora, cfg) {
+  const t0 = new Date(agora).getTime(), folga = (cfg.antecedencia_min_s || 120) * 1000;
+  const contatoFeito = new Set();
+  return (Array.isArray(linhas) ? linhas : []).map((l) => {
+    const base = { id: l.id, contato_id: l.contato_id };
+    const futuro = new Date(l.previsto_para).getTime() > t0 + folga;
+    if (l.situacao !== 'pendente') { // cancelada/falhou com agendamento no Chat Master
+      if (!l.canal_id) return { ...base, acao: 'nada' };
+      return futuro ? { ...base, acao: 'apagar', req: { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: String(l.canal_id) } } } : { ...base, acao: 'liberar' };
+    }
+    const texto = bvMTextoDe(l, cfg.textos);
+    if (l.canal_id) {
+      if (new Date(l.previsto_para).getTime() <= t0) return { ...base, acao: 'enviada' };
+      const mesmo = l.canal_previsto_para && new Date(l.canal_previsto_para).getTime() === new Date(l.previsto_para).getTime() && l.canal_texto === texto;
+      if (mesmo) return { ...base, acao: 'nada' };
+      return { ...base, acao: 'atualizar', texto, previsto_para: l.previsto_para, req: { m: 'PUT', path: `/api/schedules/${encodeURIComponent(String(l.canal_id))}`, body: { body: texto, sendAt: bvMLocal(l.previsto_para, ' ') } } };
+    }
+    if (!futuro) return { ...base, acao: 'ja_passou' };
+    const cid = l.contato_canal_id;
+    if (cid > 0) {
+      return { ...base, acao: 'criar', texto, previsto_para: l.previsto_para, req: { m: 'POST', path: '/api/schedules', body: { body: texto, sendAt: bvMLocal(l.previsto_para, 'T'), contactId: String(cid),
+        userId: String(cfg.user_id), openTicket: '0', queueId: String(cfg.fila || '0'), whatsappId: String(cfg.wid), repetir: '0', repetirTodo: '0', quantasVezes: '0' } } };
+    }
+    const num = /@lid$/.test(String(l.telefone)) ? '' : bvMDig(l.telefone);
+    if (!num) return { ...base, acao: 'sem_contato' };
+    if (contatoFeito.has(l.contato_id)) return { ...base, acao: 'aguardar_contato' };
+    contatoFeito.add(l.contato_id);
+    if (cid === 0) return { ...base, acao: 'criar_contato', req: { m: 'POST', path: '/api/contacts', body: { name: String((l.dados || {}).nome || num).slice(0, 80), number: num } } };
+    return { ...base, acao: 'buscar_contato', req: { m: 'GET', path: '/api/contacts/single', body: { number: num } } };
+  });
+}
+
+// Resultado de uma acao planejada (status/body da chamada, ou sem chamada) -> o que gravar. Falha: retentativa com retentativas_min
+// e, esgotadas, situacao falhou; sem resposta na criacao = incerto (nunca recria: SC-007).
+function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
+  const ok = status >= 200 && status < 300, id = p.id;
+  const contatoDe = (b) => { // GET /contacts/single devolve { "<id>": {id,...} }; vazio = nao existe
+    if (!b || typeof b !== 'object') return null;
+    if (Number.isInteger(b.id)) return b.id;
+    const v = Object.values(b).find((x) => x && Number.isInteger(x.id));
+    return v ? v.id : (Object.keys(b).length ? null : 0);
+  };
+  const falha = (code) => {
+    const r = bvMResultadoEnvio(status, tentativas, cfg, agora);
+    const pendente = !['apagar', 'liberar'].includes(p.acao); // apagar que falha nao ressuscita a linha cancelada
+    return { id, falhou: true, situacao: pendente ? (r.situacao === 'enviada' ? 'pendente' : r.situacao) : null, motivo: pendente ? (r.motivo || null) : null, tentativas: r.tentativas ?? (tentativas || 0) + 1, proxima: r.proxima_tentativa_em || null, code: code || (status ? `HTTP_${status}` : 'SEM_RESPOSTA'), status: status || 0, operacao: p.acao };
+  };
+  switch (p.acao) {
+    case 'criar': if (ok && body && body.id) return { id, canal_id: String(body.id), canal_previsto_para: p.previsto_para, canal_texto: p.texto }; return falha();
+    case 'atualizar':
+      if (ok) return { id, canal_id_igual: true, canal_previsto_para: p.previsto_para, canal_texto: p.texto };
+      if (status === 404) return { id, limpar_canal: true }; // sumiu do Chat Master (apagado na tela): a proxima rodada recria
+      return falha();
+    case 'apagar': if (ok || status === 404) return { id, limpar_canal: true }; return falha();
+    case 'liberar': return { id, limpar_canal: true };
+    case 'enviada': return { id, situacao: 'enviada' };
+    case 'ja_passou': return { id, situacao: 'cancelada', motivo: 'ja_passou' };
+    case 'sem_contato': return { id, situacao: 'cancelada', motivo: 'sem_contato_canal' };
+    case 'buscar_contato': { const c = ok ? contatoDe(body) : null; return c === null ? falha() : { id, contato_id: p.contato_id, contato_canal_id: c }; }
+    case 'criar_contato': { const c = ok ? contatoDe(body) : null; return ok ? { id, contato_id: p.contato_id, contato_canal_id: c || null } : falha(); } // sem id: a proxima rodada busca
+    default: return { id };
+  }
 }
 
 // /agenda/completa ([{idProfissional, apelido, agendamentos:[...]}]) -> lista plana; /agenda/agendamentos (ja plana) passa igual.
@@ -280,5 +357,5 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax) {
   return ''; // fora_do_teste: sem texto
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };
