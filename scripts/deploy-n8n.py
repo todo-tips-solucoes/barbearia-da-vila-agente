@@ -41,7 +41,7 @@ class Api:
 
 def renderizar(texto, cfg, raiz):
     """Troca {{BV:a.b}} pelo valor do config, {{BV:INCLUDE:shared/x.js}} pelo arquivo e {{BV:TOKEN_SHA256}} por
-    BV_WEBHOOK_TOKEN_SHA256 (de .env.n8n, nunca versionado). Valores entram escapados como conteudo de string JSON.
+    BV_WEBHOOK_TOKEN_SHA256 (PROD: BV_WEBHOOK_TOKEN_SHA256_PRODUCAO), de .env.n8n, nunca versionado. Valores entram escapados como conteudo de string JSON.
     "{{BV:NUM:a.b}}" (com aspas) vira o numero cru, para campos que o n8n exige numericos (ex.: executionTimeout)."""
     def num(m):
         v = cfg
@@ -57,7 +57,12 @@ def renderizar(texto, cfg, raiz):
     def sub(m):
         k = m.group(1)
         if k == "TOKEN_SHA256":
-            v = os.environ["BV_WEBHOOK_TOKEN_SHA256"]
+            # PROD na conexao 159, de outra conta do Chat Master (2026-11-15): o token_origin dos eventos e outro e o
+            # hash tambem; com o hash do TESTE a recepcao de PROD recusava todo evento (401) e o agente ficava mudo
+            var = "BV_WEBHOOK_TOKEN_SHA256_PRODUCAO" if cfg.get("ambiente") == "producao" else "BV_WEBHOOK_TOKEN_SHA256"
+            v = os.environ.get(var, "")
+            if not v:
+                raise Falha(f"{var} ausente no .env.n8n")
         elif k.startswith("INCLUDE:"):
             with open(os.path.join(raiz, "workflows", k[8:]), encoding="utf-8") as f:
                 v = f.read()
