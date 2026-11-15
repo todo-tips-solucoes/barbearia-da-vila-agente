@@ -166,7 +166,7 @@ const bvgReqsLivre = (pares) => [...pares.map((q) => ({ m: 'GET', path: '/agenda
 // updateAPI {ticketId, queueId} fica no Code node (ticketId do estado da conversa, nunca do modelo) apos a sonda S5.
 const bvgEncaminhar = (motivo, operacao, cfg) => bvgFim(
   { ok: false, code: 'encaminhar_equipe', motivo, orientacao: 'a conversa foi transferida para a equipe, que continua por aqui: responda com o texto de encaminhamento (texto), sem dar nomes, detalhes nem outro contato', texto: cfg.textos && cfg.textos.encaminhar_equipe },
-  { pedido: { handoff: true }, handoff: { queueId: (cfg.handoff && cfg.handoff.setor_id) || 78 }, falha: { motivo: `encaminhar_equipe|${motivo}`, operacao, code: 'encaminhar_equipe', status: 0, trace: null } });
+  { pedido: { handoff: true }, handoff: { queueId: (cfg.handoff && cfg.handoff.setor_id) || 78 } /* setor do config (TESTE 78, PROD 107) */, falha: { motivo: `encaminhar_equipe|${motivo}`, operacao, code: 'encaminhar_equipe', status: 0, trace: null } });
 
 function bvGPlano(i, ctx0, cfg) {
   const ctx = { pedido: (ctx0 && ctx0.pedido) || {}, opcoes: (ctx0 && ctx0.opcoes) || {}, proposta: ctx0 && ctx0.proposta, info: ctx0 && ctx0.info, dia: (ctx0 && ctx0.dia) || {} };

@@ -115,7 +115,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', testeId: '{{BV:ambiente}}' === 'integracao' ? '{{BV:graces.barbeiro_teste_id}}' : '' }; // trava so no TESTE\nconst ent = $('Normalizar').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id);\nconst e = bvMConfEscolher(rows, ent, cfg);\nreturn [{ json: { ...e, ent } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}', testeId: '{{BV:ambiente}}' === 'integracao' ? '{{BV:graces.barbeiro_teste_id}}' : '' }; // trava so no TESTE\nconst ent = $('Normalizar').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.id);\nconst e = bvMConfEscolher(rows, ent, cfg);\nreturn [{ json: { ...e, ent } }];"
       },
       "id": "91f37e00-8f4e-5968-9fc1-38539b05239d",
       "name": "Escolher",
@@ -375,7 +375,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', testeId: '{{BV:graces.barbeiro_teste_id}}' };\nconst d = $('Desfecho').first().json;\nreturn [{ json: bvMTexto({ texto: d.texto }, d.telefone, cfg) }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}', testeId: '{{BV:graces.barbeiro_teste_id}}' };\nconst d = $('Desfecho').first().json;\nreturn [{ json: bvMTexto({ texto: d.texto }, d.telefone, cfg) }];"
       },
       "id": "bcb6f59e-e9e4-567a-b855-57b6bfcebdb5",
       "name": "Compor envio",

@@ -196,6 +196,22 @@ class EntregarRajadaAgente(unittest.TestCase):
                     for d in saida:
                         self.assertIn(d["node"], self.nos)
 
+    def test_conexao_e_filas_do_config(self):  # owner, 2026-11-14: PROD na conexao 159, fila do agente 106, humana 107
+        import glob
+        for f in glob.glob(os.path.join(RAIZ, "workflows", "**", "*.json"), recursive=True) + glob.glob(os.path.join(RAIZ, "workflows", "shared", "*.js")):
+            t = open(f, encoding="utf-8").read()
+            self.assertNotIn("queueId: '0'", t, f)
+            self.assertNotRegex(t, r"whatsappId: '1[0-9]{2}'", f)
+        prod = json.load(open(os.path.join(RAIZ, "config", "ambientes", "producao.json"), encoding="utf-8"))
+        self.assertEqual((prod["chatmaster"], prod["handoff"]["setor_id"], prod["handoff"]["whatsapp_id"]), ({"whatsapp_id": "159", "queue_id": "106"}, 107, "159"))
+        self.assertNotEqual(prod["credenciais"]["chatmaster"], integ_cred := json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))["credenciais"]["chatmaster"])  # 159 e de outra conta
+        integ = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
+        self.assertEqual((integ["chatmaster"], integ["handoff"]["setor_id"]), ({"whatsapp_id": "145", "queue_id": "0"}, 78))
+        g = json.loads(ler("workflows/sub/bv-graces.json"))
+        for n in g["nodes"]:
+            if n["name"] in ("Normalizar", "Planejar", "Passo", "Efeitos"):
+                self.assertIn("handoff: { setor_id: {{BV:handoff.setor_id}} }", n["parameters"]["jsCode"])
+
     def test_jayme_clausula_petrea(self):  # owner, 2026-11-14: so a equipe agenda o Jayme
         self.assertEqual(self._destinos("Sessao"), {0: ["Transferido?"]})  # depois da transferencia o agente fica em silencio
         self.assertEqual(self._destinos("Transferido?"), {0: ["Silencio"], 1: ["So midia?"]})
