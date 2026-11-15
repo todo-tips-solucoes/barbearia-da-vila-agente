@@ -501,7 +501,7 @@ function bvgPassoUm(st, resps0, cfg) {
   const lista = Array.isArray(r0.body) ? r0.body : [];
   switch (op) {
     case 'identificar_cliente': {
-      const cs = lista.filter((c) => c && c.idCliente).map((c) => ({ idCliente: c.idCliente, nome: `${c.nomeCliente || ''} ${c.sobrenomeCliente || ''}`.trim(), primeiroNome: String(c.nomeCliente || '').trim().split(/\s+/)[0] }));
+      const cs = lista.filter((c) => c && c.idCliente).map((c) => ({ idCliente: c.idCliente, nome: bvMNomeProprio(`${c.nomeCliente || ''} ${c.sobrenomeCliente || ''}`), primeiroNome: bvMNomeProprio(String(c.nomeCliente || '').trim().split(/\s+/)[0]) }));
       if (cs.length === 0) return bvgFim({ ok: true, encontrado: false, cadastro_necessario: true, orientacao: BVG_ORIENT_CADASTRO }, { pedido: { idCliente: null, cliente_sem_cadastro: true, identificado: true } });
       if (cs.length === 1) {
         const ped = { idCliente: cs[0].idCliente, cliente_sem_cadastro: false, cliente_nome: cs[0].primeiroNome, identificado: true };
