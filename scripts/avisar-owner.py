@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manda ao WhatsApp do owner (alerta.contato de PROD) o texto lido do stdin, pela conexao 145.
+"""Manda ao WhatsApp do owner (alerta.contato de PROD) o texto lido do stdin, pela conexao de PROD (chatmaster.whatsapp_id).
 
 Uso: python3 -I scripts/avisar-owner.py < texto.txt
 So o numero fixo da config; nunca outro destino. O token vem do .env.smoke (capturar-webhook.carregar_env), nunca impresso.
@@ -16,7 +16,7 @@ _spec.loader.exec_module(cw)
 
 
 def corpo(texto, cfg):
-    return {"number": cfg["alerta"]["contato"], "openTicket": "0", "queueId": "0",
+    return {"number": cfg["alerta"]["contato"], "openTicket": "0", "queueId": str(cfg["chatmaster"].get("queue_id", "0")),
             "whatsappId": str(cfg["chatmaster"]["whatsapp_id"]), "body": texto}
 
 
@@ -27,7 +27,8 @@ def main():
         return 2
     cfg = json.load(open(os.path.join(RAIZ, "config", "ambientes", "producao.json"), encoding="utf-8"))
     cw.carregar_env(RAIZ)
-    tok = os.environ.get("CHATMASTER_TOKEN_TESTE", "")  # mesma conexao 145 (owner, 2026-10-21)
+    # PROD na conexao 159, de outra conta do Chat Master (owner, 2026-11-14): token proprio; sem ele, o da 145
+    tok = os.environ.get("CHATMASTER_TOKEN_PRODUCAO") or os.environ.get("CHATMASTER_TOKEN_TESTE", "")
     try:
         cw.http("POST", cw.CM + "/api/messages/send", {"Authorization": f"Bearer {tok}"}, corpo(texto, cfg))
     except cw.Falha as e:

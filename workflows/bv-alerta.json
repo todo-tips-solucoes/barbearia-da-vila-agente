@@ -67,7 +67,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: '{{BV:alerta.contato}}', openTicket: '0', queueId: '0', whatsappId: '{{BV:chatmaster.whatsapp_id}}', body: $json.texto }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: '{{BV:alerta.contato}}', openTicket: '0', queueId: '{{BV:chatmaster.queue_id}}', whatsappId: '{{BV:chatmaster.whatsapp_id}}', body: $json.texto }) }}",
         "options": {
           "timeout": "{{BV:NUM:graces.timeout_ms}}"
         }
