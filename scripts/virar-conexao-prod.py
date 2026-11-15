@@ -3,7 +3,7 @@
 mensagem de teste ao owner (alerta.contato) por ela, na fila do agente. So o owner roda (trava de PROD).
 
 Uso: BV_DEPLOY_PRODUCAO_AUTORIZADO=sim python3 -I scripts/virar-conexao-prod.py [--sem-teste]
-Token: CHATMASTER_TOKEN_PRODUCAO do .env.smoke (conta da conexao de PROD; owner, 2026-11-15). Nunca impresso.
+O token da conta da conexao de PROD vem do .env.smoke (variavel do Chat Master de producao; owner, 2026-11-15) e nunca e impresso.
 Recusa se a conexao nao estiver CONNECTED: sem isso o WhatsApp nao entrega nada.
 """
 import json
