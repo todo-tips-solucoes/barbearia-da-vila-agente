@@ -720,3 +720,35 @@ console.log('graces.test.js ultimo atendimento ok');
   assert.equal(rj.efeitos.falha.motivo, 'encaminhar_equipe|barbeiro_humano');
 }
 console.log('graces.test.js jayme ok');
+
+// Agenda real em PROD (owner, 2026-11-15): todos os barbeiros, nunca o de teste nem os so da equipe; TESTE segue redirecionado.
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f', JAY = 'b623cd84-6068-4a57-9ce6-2f7d9a37a11e';
+  const prodReal = { ...cfg, ambiente: 'producao', redirecionar: false, escritaLiberada: true, testeLiberado: false, humanos: [{ id: JAY, nome: 'Jayme' }] };
+  const ent = (o) => { const n = g.bvGNormalizar({ ...base, ambiente: 'producao', ...o }, prodReal); assert.ok(n.ok, JSON.stringify(n)); return n.in; };
+  const of = (id, apelido) => ({ tipo: 'horario', itens: [{ id: '1', rotulo: '10:00', valor: { data: '2026-10-20', hora: '10:00', idProfissional: id, apelido, idServico: S, servico: 'corte adulto', preco: 90, minutos: 40 } }] });
+  // qualquer contato agenda com barbeiro real; a proposta guarda o barbeiro real
+  let r = g.bvGPlano(ent({ operacao: 'agendar', id_opcao_horario: '1' }), { opcoes: of('b1', 'Pedro'), pedido: { idCliente: 'c1' } }, prodReal).final;
+  assert.equal(r.resultado.aguardando_confirmacao, true);
+  assert.equal(r.efeitos.proposta_nova.dados.idProfissional, 'b1');
+  // barbeiro de teste nunca, Jayme vai para a equipe
+  assert.equal(g.bvGPlano(ent({ operacao: 'agendar', id_opcao_horario: '1' }), { opcoes: of(TESTE, 'ZZ'), pedido: { idCliente: 'c1' } }, prodReal).final.resultado.code, 'opcao_desconhecida');
+  assert.equal(g.bvGPlano(ent({ operacao: 'agendar', id_opcao_horario: '1' }), { opcoes: of(JAY, 'jayme'), pedido: { idCliente: 'c1' } }, prodReal).final.resultado.code, 'encaminhar_equipe');
+  // fase 2: grava no barbeiro da proposta (nao redireciona); proposta com o de teste falha
+  const PR = '44444444-4444-4444-8444-444444444444';
+  const dados = { idCliente: 'c1', idServico: S, servico: 'corte adulto', idProfissional: 'b1', barbeiro: 'Pedro', data: '2026-10-20', hora: '10:00', minutos: 40 };
+  let p2 = g.bvGPlano(ent({ operacao: 'agendar', proposta_id: PR }), { pedido: { idCliente: 'c1' }, proposta: { id: PR, acao: 'agendar', dados } }, prodReal);
+  assert.ok(p2.reqs.every((q) => !q.qs || !q.qs.idProfissional || q.qs.idProfissional === 'b1'));
+  assert.equal(p2.st.meta.redir, false);
+  r = g.bvGPlano(ent({ operacao: 'agendar', proposta_id: PR }), { pedido: { idCliente: 'c1' }, proposta: { id: PR, acao: 'agendar', dados: { ...dados, idProfissional: TESTE } } }, prodReal).final;
+  assert.equal(r.resultado.code, 'barbeiro_de_teste');
+  // remarcar e cancelar agendamento real passam a valer
+  const ag = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro' };
+  assert.equal(g.bvGPlano(ent({ operacao: 'cancelar', id_opcao_agendamento: '1' }), { opcoes: {}, pedido: { idCliente: 'c1', agendamentos: [ag] } }, prodReal).final.resultado.aguardando_confirmacao, true);
+  // chave desligada: volta o teste fechado (sem contato de teste, nada grava)
+  assert.equal(g.bvGPlano(ent({ operacao: 'agendar', id_opcao_horario: '1' }), { opcoes: of('b1', 'Pedro'), pedido: { idCliente: 'c1' } }, { ...prodReal, escritaLiberada: false }).final.resultado.code, 'escrita_desabilitada');
+  // TESTE segue redirecionado ao barbeiro de teste
+  p2 = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: PR }), { pedido: { idCliente: 'c1' }, proposta: { id: PR, acao: 'agendar', dados } }, { ...cfg, escritaLiberada: false });
+  assert.equal(p2.st.meta.prof, TESTE);
+}
+console.log('graces.test.js agenda real ok');

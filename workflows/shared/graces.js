@@ -1,7 +1,7 @@
 // Logica pura das ferramentas da Graces (sem rede). contracts/ferramentas-graces.md. Incluida DEPOIS de shared/agente.js
 // nos Code nodes de bv-graces ({{BV:INCLUDE:...}}). Protocolo: bvGPlano -> chamadas HTTP -> bvGPasso (em laco, ate graces.max_estagios).
 // Regras duras em codigo: FR-007 (duas fases), FR-012 (barbeiro de teste), FR-020 (idCliente so do pedido/telefone),
-// escrita so em TESTE e sempre redirecionada ao barbeiro de teste (research Decision 10).
+// TESTE: escrita sempre redirecionada ao barbeiro de teste (research Decision 10). PROD: agenda real com graces.escrita_liberada.
 if (typeof module !== 'undefined' && typeof bvFiltrarBarbeiros === 'undefined') Object.assign(globalThis, require('./agente.js'));
 if (typeof module !== 'undefined' && typeof bvMProgramar === 'undefined') Object.assign(globalThis, require('./mensagens.js'));
 
@@ -107,7 +107,8 @@ function bvgResolver(id, tipo, ctx) {
 const bvgNaoOferecido = () => bvgRecusa('servico_nao_oferecido', 'esse serviço não é oferecido por aqui; ofereça o serviço regular, sem falar em desconto');
 
 function bvgEscritaPermitida(cfg) {
-  if (cfg.ambiente === 'producao' ? !cfg.testeLiberado : !cfg.redirecionar) { // PROD: so com o barbeiro de teste liberado (owner, 2026-10-22)
+  // PROD: agenda real com graces.escrita_liberada (owner, 2026-11-15); sem ela, so contato de teste no barbeiro de teste (2026-10-22)
+  if (cfg.ambiente === 'producao' ? !(cfg.escritaLiberada || cfg.testeLiberado) : !cfg.redirecionar) {
     return bvgRecusa('escrita_desabilitada', 'agendar por aqui ainda não está liberado; chame a equipe da loja');
   }
   return null;
@@ -293,11 +294,13 @@ function bvgFase1(i, ctx, cfg) {
   if (!ctx.pedido.idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
   const fora = bvgRecusa('escrita_fora_do_teste', 'só é possível mexer em agendamentos de teste neste ambiente');
   if (i.operacao !== 'cancelar' && bvgTocaHumano(i, ctx, cfg)) return bvgEncaminhar('barbeiro_humano', i.operacao, cfg);
-  const prod = cfg.ambiente === 'producao'; // PROD: toda escrita so no barbeiro de teste
+  const prod = cfg.ambiente === 'producao';
+  const real = prod && !!cfg.escritaLiberada; // PROD liberada: agenda real de todos os barbeiros (menos o de teste e os so da equipe)
+  const soTeste = prod && !real; // PROD em teste fechado: toda escrita so no barbeiro de teste
   const sq = i.operacao === 'agendar' && i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'sequencia', ctx) : null;
   if (sq) { // FR-008: um POST por servico, em sequencia, confirmados num unico resumo
-    if (i.substitui_id_opcao_agendamento || sq.itens.some((x) => x.idProfissional === cfg.testeId) !== prod) return bvgFim(bvgOpcaoInvalida());
-    if (prod && sq.itens.some((x) => x.idProfissional !== cfg.testeId)) return bvgFim(fora);
+    if (i.substitui_id_opcao_agendamento || sq.itens.some((x) => x.idProfissional === cfg.testeId) !== soTeste) return bvgFim(bvgOpcaoInvalida());
+    if (soTeste && sq.itens.some((x) => x.idProfissional !== cfg.testeId)) return bvgFim(fora);
     if (sq.itens.some((x) => bvSegundaVez(x.servico))) return bvgFim(bvgNaoOferecido());
     const itens = sq.itens.map((x, k) => ({ ordem: k + 1, idServico: x.idServico, servico: x.servico, idProfissional: x.idProfissional, barbeiro: x.apelido, data: sq.data, hora: x.hora, minutos: x.minutos, valor: x.valor }));
     const mesmo = itens.every((x) => x.idProfissional === itens[0].idProfissional);
@@ -308,7 +311,7 @@ function bvgFase1(i, ctx, cfg) {
   if (i.operacao === 'cancelar' && i.id_opcoes_agendamentos) {
     const ags = i.id_opcoes_agendamentos.map((x) => bvgResolver(x, 'agendamento', ctx));
     if (ags.some((a) => !a)) return bvgFim(bvgOpcaoInvalida());
-    if (ags.some((a) => a.idProfissional !== cfg.testeId)) return bvgFim(fora);
+    if (!real && ags.some((a) => a.idProfissional !== cfg.testeId)) return bvgFim(fora);
     const itens = ags.map((a, k) => ({ ordem: k + 1, idAgenda: a.idAgenda, horaInicio: a.horaInicio, recorrente: !!a.recorrente, servico: a.servico }));
     const resumo = `Cancelar ${itens.map((x) => `${x.servico} em ${bvgDia(x.horaInicio)} às ${x.horaInicio.slice(11, 16)}`).join(' e ')}`;
     return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar_conjunto', dados: { itens, resumo }, resumo } }, cfg);
@@ -317,9 +320,9 @@ function bvgFase1(i, ctx, cfg) {
   const h = i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'horario', ctx) : null;
   const antigo = i.substitui_id_opcao_agendamento ? bvgResolver(i.substitui_id_opcao_agendamento, 'agendamento', ctx) : null;
   const ag0 = (antigo || ag);
-  if (ag0 && ag0.idProfissional !== cfg.testeId) return bvgFim(fora); // nunca altera agenda de barbeiro real
-  if (h && prod && h.idProfissional !== cfg.testeId) return bvgFim(fora); // nunca escreve na agenda de barbeiro real
-  if (h && !prod && h.idProfissional === cfg.testeId) return bvgFim(bvgOpcaoInvalida()); // FR-012: o modelo nao escolhe o de teste
+  if (!real && ag0 && ag0.idProfissional !== cfg.testeId) return bvgFim(fora); // TESTE e PROD fechada: nunca altera agenda de barbeiro real
+  if (h && soTeste && h.idProfissional !== cfg.testeId) return bvgFim(fora); // PROD fechada: nunca escreve na agenda de barbeiro real
+  if (h && !soTeste && h.idProfissional === cfg.testeId) return bvgFim(bvgOpcaoInvalida()); // FR-012: o modelo nao escolhe o de teste
   const alvo = i.operacao === 'reagendar' ? ag : h; // serviço que seria escrito; cancelar segue permitido
   if (i.operacao !== 'cancelar' && alvo && bvSegundaVez(alvo.servico)) return bvgFim(bvgNaoOferecido()); // FR-005
   const agAnt = { idAgenda: ag0 && ag0.idAgenda, horaInicio: ag0 && ag0.horaInicio, recorrente: !!(ag0 && ag0.recorrente) };
@@ -359,7 +362,12 @@ function bvgFase2(i, ctx, cfg, chamar) {
     return bvgFim(bvgRecusa('barbeiro_humano', 'esse barbeiro só é agendado pela equipe; chame transferir_atendimento'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'barbeiro_humano' } } });
   }
   if (p.acao !== 'cancelar' && bvSegundaVez(d.servico)) return bvgFim(bvgNaoOferecido(), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'servico_nao_oferecido' } } });
-  const redir = !!cfg.redirecionar || cfg.ambiente === 'producao'; // PROD: defesa extra, a escrita so vai ao de teste
+  const real = cfg.ambiente === 'producao' && !!cfg.escritaLiberada;
+  // PROD liberada: escreve no barbeiro da proposta e nunca no de teste; PROD fechada: defesa extra, a escrita so vai ao de teste
+  if (real && !/^cancelar/.test(p.acao) && [d, ...(Array.isArray(d.itens) ? d.itens : [])].some((x) => x && x.idProfissional === cfg.testeId)) {
+    return bvgFim(bvgRecusa('barbeiro_de_teste', 'esse horário não está disponível; ofereça outro'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'barbeiro_de_teste' } } });
+  }
+  const redir = !!cfg.redirecionar || (cfg.ambiente === 'producao' && !real);
   const prof = redir ? cfg.testeId : d.idProfissional; // research Decision 10: toda escrita vai ao barbeiro de teste
   const meta = { fase2: true, proposta: p, prof, redir };
   if (p.acao === 'cadastrar_terceiro') {
