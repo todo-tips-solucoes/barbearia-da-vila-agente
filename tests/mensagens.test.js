@@ -229,7 +229,7 @@ console.log('mensagens.test.js (confirmacao) ok');
   assert.equal(m.bvMTextoDe({ tipo: 'lembrete_dia', inicio: '2026-11-22T14:00:00', dados: { nome: 'Paulo Sudre', servico: 'corte adulto', barbeiro: 'Pedro' } }, textos), 'Oi, Paulo! Amanhã às 14:00, corte adulto com Pedro.');
   assert.equal(m.bvMTextoDe({ tipo: 'lembrete_hora', inicio: '2026-11-22T14:00:00', dados: {} }, textos), 'Oi! Às 14:00.');
   const cfg = { textos, user_id: '234', wid: '159', retentativas_min: [1, 5, 15] };
-  const linha = (o) => ({ id: 1, tipo: 'lembrete_hora', situacao: 'pendente', previsto_para: '2026-11-22T16:00:00.000Z', inicio: '2026-11-22T14:00:00', dados: { nome: 'Paulo', servico: 'corte', barbeiro: 'Pedro' }, canal_id: null, contato_id: 7, telefone: '+5511967296849', contato_canal_id: 236429, ...o });
+  const linha = (o) => ({ id: 1, tipo: 'lembrete_hora', situacao: 'pendente', previsto_para: '2026-11-22T16:00:00.000Z', inicio: '2026-11-22T14:00:00', dados: { nome: 'Paulo', servico: 'corte', barbeiro: 'Pedro' }, canal_id: null, contato_id: 7, telefone: '+5511967296849', contato_canal_id: 236429, ticket_id: 172345, ...o });
   // criar: payload medido na API (fuso de SP, userId do agente, sem abrir ticket)
   let [a] = m.bvMSincPlano([linha()], agora, cfg);
   assert.equal(a.acao, 'criar');
@@ -258,6 +258,17 @@ console.log('mensagens.test.js (confirmacao) ok');
   [a] = m.bvMSincPlano([linha({ contato_canal_id: 0 })], agora, cfg);
   assert.deepEqual(a.req, { m: 'POST', path: '/api/contacts', body: { name: 'Paulo', number: '5511967296849' } });
   assert.equal(m.bvMSincPlano([linha({ contato_canal_id: null, telefone: '123@lid' })], agora, cfg)[0].acao, 'sem_contato');
+  // criar contato: id vem em existingContact (ja existia) ou direto; 2xx sem id = falha visivel (nunca repete em silencio)
+  assert.equal(m.bvMSincResultado(a, 200, { alreadyExists: true, existingContact: { id: 236429 } }, 0, cfg, agora).contato_canal_id, 236429);
+  assert.equal(m.bvMSincResultado(a, 200, { id: 9001 }, 0, cfg, agora).contato_canal_id, 9001);
+  const sid = m.bvMSincResultado(a, 200, { message: 'ok' }, 0, cfg, agora);
+  assert.deepEqual([sid.falhou, sid.code], [true, 'SEM_ID']);
+  // contato sem ticket (cliente do balcao): ticket atrelado antes do lembrete, uma vez por contato
+  const tk = m.bvMSincPlano([linha({ ticket_id: null }), linha({ id: 2, tipo: 'lembrete_dia', previsto_para: '2026-11-21T17:00:00.000Z', ticket_id: null })], agora, cfg);
+  assert.deepEqual(tk.map((x) => x.acao), ['criar_ticket', 'aguardar_contato']);
+  assert.deepEqual(tk[0].req, { m: 'POST', path: '/api/tickets/createTicketAPI', body: { contactId: 236429 } });
+  assert.deepEqual(m.bvMSincResultado(tk[0], 200, { id: 172345, status: 'pending' }, 0, cfg, agora), { id: 1, contato_id: 7, ticket_id: 172345 });
+  assert.equal(m.bvMSincResultado(tk[0], 200, {}, 0, cfg, agora).code, 'SEM_ID');
   // falha: retentativa e, esgotada, falhou; sem resposta na criacao = incerto (nao recria)
   [a] = m.bvMSincPlano([linha()], agora, cfg);
   let f = m.bvMSincResultado(a, 500, null, 0, cfg, agora);
