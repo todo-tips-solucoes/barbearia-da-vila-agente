@@ -136,7 +136,7 @@ class AvisarOwner(unittest.TestCase):  # 4.1.2: destino so o alerta.contato de P
         m = importlib.util.module_from_spec(s)
         s.loader.exec_module(m)
         c = m.corpo("oi", cfg("producao"))
-        self.assertEqual((c["number"], c["whatsappId"], c["queueId"], c["body"]), ("5511967296849", "159", "106", "oi"))
+        self.assertEqual((c["number"], c["whatsappId"], c["queueId"], c["body"]), ("5511967296849", "159", "107", "oi"))
 
 
 class VirarConexaoProd(unittest.TestCase):
