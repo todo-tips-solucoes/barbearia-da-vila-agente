@@ -135,3 +135,13 @@ class AvisarOwner(unittest.TestCase):  # 4.1.2: destino so o alerta.contato de P
         s.loader.exec_module(m)
         c = m.corpo("oi", cfg("producao"))
         self.assertEqual((c["number"], c["whatsappId"], c["queueId"], c["body"]), ("5511967296849", "159", "106", "oi"))
+
+
+class VirarConexaoProd(unittest.TestCase):
+    """owner, 2026-11-15: webhook da conexao de PROD so com a trava; sem ela, recusa antes de qualquer chamada."""
+
+    def test_recusa_sem_trava(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("BV_DEPLOY")}
+        r = subprocess.run(["python3", "-I", os.path.join(RAIZ, "scripts", "virar-conexao-prod.py")], capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("recusado", r.stderr)
