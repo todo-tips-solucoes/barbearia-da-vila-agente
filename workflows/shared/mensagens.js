@@ -187,14 +187,23 @@ function bvMSincPlano(linhas, agora, cfg) {
       return { ...base, acao: 'atualizar', texto, previsto_para: l.previsto_para, req: { m: 'PUT', path: `/api/schedules/${encodeURIComponent(String(l.canal_id))}`, body: { body: texto, sendAt: bvMLocal(l.previsto_para, ' ') } } };
     }
     if (!futuro) return { ...base, acao: 'ja_passou' };
-    const cid = l.contato_canal_id;
+    // bigint do Postgres chega ao Code node como TEXTO ('0', '138449'): sem converter, '0' === 0 falhava e o contato inexistente
+    // voltava a ser buscado a cada rodada, sem falha registrada, travando a fila em PROD (2026-11-15)
+    const num0 = (x) => (x === null || x === undefined || x === '' ? null : Number(x));
+    const cid = num0(l.contato_canal_id), tk = num0(l.ticket_id), encerrar = l.ticket_encerrar === true || l.ticket_encerrar === 'true';
     const num = /@lid$/.test(String(l.telefone)) ? '' : bvMDig(l.telefone);
     // Contato sem ticket na conexao (cliente do balcao): o owner pediu um ticket atrelado antes do lembrete e que se verifique antes
     // se ja existe ticket nesta conexao (2026-11-15). ticket_id null = nao verificado; 0 = verificado e sem ticket -> cria.
-    if (cid > 0 && !(l.ticket_id > 0)) {
+    // Ticket que o proprio sincronizador criou: encerra antes do lembrete (owner, 2026-11-15); ticket que ja existia nao e tocado
+    if (cid > 0 && tk > 0 && encerrar) {
       if (contatoFeito.has(l.contato_id)) return { ...base, acao: 'aguardar_contato' };
       contatoFeito.add(l.contato_id);
-      if (l.ticket_id === 0 || !num) return { ...base, acao: 'criar_ticket', req: { m: 'POST', path: '/api/tickets/createTicketAPI', body: { contactId: Number(cid) } } };
+      return { ...base, acao: 'encerrar_ticket', req: { m: 'POST', path: '/api/tickets/updateAPI', body: { ticketId: String(tk), status: 'closed' } } };
+    }
+    if (cid > 0 && !(tk > 0)) {
+      if (contatoFeito.has(l.contato_id)) return { ...base, acao: 'aguardar_contato' };
+      contatoFeito.add(l.contato_id);
+      if (tk === 0 || !num) return { ...base, acao: 'criar_ticket', req: { m: 'POST', path: '/api/tickets/createTicketAPI', body: { contactId: Number(cid) } } };
       return { ...base, acao: 'buscar_ticket', conexao: String(cfg.wid), req: { m: 'GET', path: '/api/contacts/alltickets', body: { number: num } } };
     }
     if (cid > 0) {
@@ -242,7 +251,8 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
       const t = body.find((x) => x && Number.isInteger(x.id) && String(x.whatsappId) === String(p.conexao));
       return { id, contato_id: p.contato_id, ticket_id: t ? t.id : 0 };
     }
-    case 'criar_ticket': return ok && body && Number.isInteger(body.id) ? { id, contato_id: p.contato_id, ticket_id: body.id } : falha(ok ? 'SEM_ID' : undefined);
+    case 'criar_ticket': return ok && body && Number.isInteger(body.id) ? { id, contato_id: p.contato_id, ticket_id: body.id, ticket_encerrar: true } : falha(ok ? 'SEM_ID' : undefined);
+    case 'encerrar_ticket': return ok ? { id, contato_id: p.contato_id, ticket_encerrar: false } : falha();
     default: return { id };
   }
 }
