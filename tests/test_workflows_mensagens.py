@@ -219,11 +219,11 @@ class BvMensagens(Base, unittest.TestCase):
         self.assertIn("m.tipo IN ('confirmacao','lembrete','pos_atendimento')", self.nos["Reservar"]["parameters"]["query"])  # legado nao envia os novos
         self.assertEqual(self.nos["Chat Master agendamentos"]["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.chatmaster}}")
         g = self.nos["Gravar sincronizacao"]["parameters"]["query"]
-        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), list(range(1, 16)))
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), list(range(1, 17)))
         self.assertEqual(g.count("("), g.count(")"))
         lin = {"id": 9, "tipo": "lembrete_hora", "situacao": "pendente", "previsto_para": "2030-01-10T16:00:00.000Z", "inicio": "2030-01-10T14:00:00",
                "dados": {"nome": "Ana Souza", "servico": "corte adulto", "barbeiro": "Pedro"}, "canal_id": None, "tentativas": 0, "reserva": "1.5",
-               "contato_id": 3, "telefone": TEL, "contato_canal_id": 55}
+               "contato_id": 3, "telefone": TEL, "contato_canal_id": 55, "ticket_id": 9}
         r = rodar("workflows/bv-mensagens.json", "Planejar sincronizacao", [lin])
         self.assertEqual(r[0]["acao"], "criar")
         b = r[0]["req"]["body"]
