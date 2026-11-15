@@ -297,3 +297,14 @@ console.log('agente.test.js convite K5 ok');
   assert.equal(a.bvContextoCliente(a.bvClienteDoResultado({ ok: true, encontrado: true, nome: 'Ana', ultimo: { humano: 'Jayme' } }), a.bvNeutralizar), c);
 }
 console.log('agente.test.js jayme ok');
+
+// Esta conversa e o WhatsApp oficial (owner, 2026-11-15): o agente nao passa numero da loja
+{
+  const a = require('../workflows/shared/agente.js');
+  assert.match(a.bvPrompt({ saida: { max_mensagens: 4 }, loja: { contatos: 'x@y' } }), /nunca passe número de telefone ou de WhatsApp/);
+  for (const amb of ['integracao', 'producao']) {
+    const c = JSON.parse(require('fs').readFileSync(`${__dirname}/../config/ambientes/${amb}.json`, 'utf8'));
+    assert.doesNotMatch(JSON.stringify([c.loja, c.textos]), /\(\d{2}\)\s?\d{4,5}-?\d{4}/, amb);
+  }
+}
+console.log('agente.test.js sem numero da loja ok');
