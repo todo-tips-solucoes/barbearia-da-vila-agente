@@ -175,6 +175,18 @@ function bvMSincPlano(linhas, agora, cfg) {
   return (Array.isArray(linhas) ? linhas : []).map((l) => {
     const base = { id: l.id, contato_id: l.contato_id };
     const futuro = new Date(l.previsto_para).getTime() > t0 + folga;
+    // Etiqueta da confirmacao (owner, 2026-11-15): resposta ao lembrete de 24 h -> Confirmado/Cancelado no ticket; tira no horario marcado
+    const etq = l.etiqueta_id === null || l.etiqueta_id === undefined || l.etiqueta_id === '' ? null : Number(l.etiqueta_id);
+    const horario = bvMLocalParaInstante(bvMParseLocal(l.inicio));
+    if (etq > 0 && !l.etiqueta_removida_em && horario <= t0) {
+      return { ...base, acao: 'desetiquetar', req: { m: 'DELETE', path: `/api/tickets/${encodeURIComponent(String(l.etiqueta_ticket_id))}/tags`, body: { tags: [etq] } } };
+    }
+    if (l.tipo === 'lembrete_dia' && l.resposta && etq === null) {
+      const tag = Number(((cfg.etiquetas || {})[l.resposta === 'confirmada' ? 'confirmado' : 'cancelado']) || 0);
+      const tick = Number(l.ticket_id || 0);
+      if (!tag || !tick || horario <= t0) return { ...base, acao: 'sem_etiqueta' };
+      return { ...base, acao: 'etiquetar', etiqueta_id: tag, etiqueta_ticket_id: tick, req: { m: 'POST', path: `/api/tickets/${tick}/tags`, body: { tags: [tag] } } };
+    }
     if (l.situacao !== 'pendente') { // cancelada/falhou com agendamento no Chat Master
       if (!l.canal_id) return { ...base, acao: 'nada' };
       return futuro ? { ...base, acao: 'apagar', req: { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: String(l.canal_id) } } } : { ...base, acao: 'liberar' };
@@ -230,7 +242,7 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
   };
   const falha = (code) => {
     const r = bvMResultadoEnvio(status, tentativas, cfg, agora);
-    const pendente = !['apagar', 'liberar'].includes(p.acao); // apagar que falha nao ressuscita a linha cancelada
+    const pendente = !['apagar', 'liberar', 'etiquetar', 'desetiquetar'].includes(p.acao); // apagar/etiquetar que falha nao mexe na situacao
     return { id, falhou: true, situacao: pendente ? (r.situacao === 'enviada' ? 'pendente' : r.situacao) : null, motivo: pendente ? (r.motivo || null) : null, tentativas: r.tentativas ?? (tentativas || 0) + 1, proxima: r.proxima_tentativa_em || null, code: code || (status ? `HTTP_${status}` : 'SEM_RESPOSTA'), status: status || 0, operacao: p.acao };
   };
   switch (p.acao) {
@@ -241,6 +253,9 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
       return falha();
     case 'apagar': if (ok || status === 404) return { id, limpar_canal: true }; return falha();
     case 'liberar': return { id, limpar_canal: true };
+    case 'etiquetar': return ok ? { id, etiqueta_id: p.etiqueta_id, etiqueta_ticket_id: p.etiqueta_ticket_id } : falha();
+    case 'desetiquetar': return ok || status === 404 ? { id, etiqueta_removida: true } : falha();
+    case 'sem_etiqueta': return { id, etiqueta_id: 0 };
     case 'enviada': return { id, situacao: 'enviada' };
     case 'ja_passou': return { id, situacao: 'cancelada', motivo: 'ja_passou' };
     case 'sem_contato': return { id, situacao: 'cancelada', motivo: 'sem_contato_canal' };

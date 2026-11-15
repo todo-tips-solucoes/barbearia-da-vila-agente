@@ -315,3 +315,30 @@ console.log('mensagens.test.js nome normal ok');
   assert.equal(m.bvMSincPlano([l({ contato_canal_id: null, ticket_id: null })], ag, cfg)[0].acao, 'buscar_contato');
 }
 console.log('mensagens.test.js bigint como texto ok');
+
+// Confirmacao com etiquetas no ticket (owner, 2026-11-15): Confirmado 534 / Cancelado 535; sai no horario marcado
+{
+  const m = require('../workflows/shared/mensagens.js');
+  const cfg = { textos: { lembrete_dia: 'x' }, user_id: '234', wid: '159', retentativas_min: [1, 5, 15], etiquetas: { confirmado: 534, cancelado: 535 } };
+  const agora = '2026-11-21T12:00:00Z'; // 09:00 em SP
+  const l = (o) => ({ id: '5', tipo: 'lembrete_dia', situacao: 'enviada', previsto_para: '2026-11-21T11:00:00Z', inicio: '2026-11-22T14:00:00', dados: {}, canal_id: '2424', contato_id: '7', telefone: '5511967296849', contato_canal_id: '236429', ticket_id: '172345', resposta: 'confirmada', etiqueta_id: null, ...o });
+  let [a] = m.bvMSincPlano([l()], agora, cfg);
+  assert.deepEqual([a.acao, a.req], ['etiquetar', { m: 'POST', path: '/api/tickets/172345/tags', body: { tags: [534] } }]);
+  assert.deepEqual(m.bvMSincResultado(a, 200, {}, 0, cfg, agora), { id: '5', etiqueta_id: 534, etiqueta_ticket_id: 172345 });
+  assert.equal(m.bvMSincPlano([l({ resposta: 'recusada' })], agora, cfg)[0].req.body.tags[0], 535);
+  // falha ao etiquetar: retenta sem mexer na situacao do lembrete
+  const f = m.bvMSincResultado(a, 500, null, 0, cfg, agora);
+  assert.deepEqual([f.falhou, f.situacao, f.tentativas], [true, null, 1]);
+  // sem ticket, sem etiqueta configurada (TESTE) ou horario ja passou: marca nao aplicavel, sem chamada
+  for (const o of [{ ticket_id: null }, { inicio: '2026-11-21T08:00:00' }]) assert.equal(m.bvMSincPlano([l(o)], agora, cfg)[0].acao, 'sem_etiqueta');
+  assert.equal(m.bvMSincPlano([l()], agora, { ...cfg, etiquetas: { confirmado: 0, cancelado: 0 } })[0].acao, 'sem_etiqueta');
+  assert.deepEqual(m.bvMSincResultado({ id: '5', acao: 'sem_etiqueta' }, 200, null, 0, cfg, agora), { id: '5', etiqueta_id: 0 });
+  // no horario marcado: tira a etiqueta do ticket em que foi posta (404 = ja nao existe: da por tirada)
+  [a] = m.bvMSincPlano([l({ inicio: '2026-11-21T09:00:00', etiqueta_id: '534', etiqueta_ticket_id: '172345' })], agora, cfg);
+  assert.deepEqual([a.acao, a.req], ['desetiquetar', { m: 'DELETE', path: '/api/tickets/172345/tags', body: { tags: [534] } }]);
+  assert.deepEqual(m.bvMSincResultado(a, 200, {}, 0, cfg, agora), { id: '5', etiqueta_removida: true });
+  assert.equal(m.bvMSincResultado(a, 404, {}, 0, cfg, agora).etiqueta_removida, true);
+  // antes do horario, com etiqueta posta: nada a fazer (nem e selecionada), e ja tirada nao volta
+  assert.notEqual(m.bvMSincPlano([l({ etiqueta_id: '534', etiqueta_ticket_id: '172345', etiqueta_removida_em: '2026-11-22T17:00:00Z', inicio: '2026-11-21T09:00:00' })], agora, cfg)[0].acao, 'desetiquetar');
+}
+console.log('mensagens.test.js etiquetas da confirmacao ok');
