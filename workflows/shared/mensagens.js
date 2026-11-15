@@ -48,7 +48,7 @@ const bvMDig = (s) => String(s || '').replace(/\D/g, '');
 // m: { texto }; contato: telefone (digitos ou "<id>@lid"); cfg: { wid, botao, topo, titulo_sim, titulo_nao }; id = mensagens_agendadas.id
 function bvMLista(m, id, contato, cfg) {
   const number = /@lid$/.test(String(contato)) ? String(contato) : bvMDig(contato);
-  return { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '1', queueId: '0', whatsappId: cfg.wid,
+  return { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '1', queueId: cfg.fila || '0', whatsappId: cfg.wid,
     body: { Desc: m.texto, ButtonText: cfg.botao, TopText: cfg.topo,
       List: [{ RowId: `bvc:${id}:s`, title: cfg.titulo_sim, desc: '' }, { RowId: `bvc:${id}:n`, title: cfg.titulo_nao, desc: '' }] } } };
 }
@@ -56,7 +56,7 @@ function bvMLista(m, id, contato, cfg) {
 function bvMTexto(m, contato, cfg) {
   const lid = /@lid$/.test(String(contato));
   return { path: lid ? '/api/messages/whatsmeow/sendTextPROLid' : '/api/messages/send',
-    body: { number: lid ? String(contato) : bvMDig(contato), openTicket: '0', queueId: '0', whatsappId: cfg.wid, body: m.texto } };
+    body: { number: lid ? String(contato) : bvMDig(contato), openTicket: '0', queueId: cfg.fila || '0', whatsappId: cfg.wid, body: m.texto } };
 }
 
 // status HTTP do envio; tentativas = recusas ANTERIORES. 2xx enviada; 0/ausente = incerto (nunca reenvia, SC-007);

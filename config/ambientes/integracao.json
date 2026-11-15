@@ -37,7 +37,8 @@
     "webhook_id": "40d24084-b482-4282-82a7-637db68acac0"
   },
   "chatmaster": {
-    "whatsapp_id": "145"
+    "whatsapp_id": "145",
+    "queue_id": "0"
   },
   "buffer": {
     "janela_s": 8,

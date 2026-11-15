@@ -19,7 +19,7 @@
     "verificacao": "VVbK8DkOhfW3nRg2",
     "openai": "tVRedGvpa2XF0gX1",
     "graces": "lSsJYIq9jbpkmYlr",
-    "chatmaster": "Gt9C67GDkOEnB4BZ"
+    "chatmaster": "rSt9OTva2S2MwtHE"
   },
   "workflows": {
     "bv-mensagens": "",
@@ -33,7 +33,8 @@
     "webhook_id": "b0784483-4a86-4130-a3d5-7a31524460c2"
   },
   "chatmaster": {
-    "whatsapp_id": "145"
+    "whatsapp_id": "159",
+    "queue_id": "106"
   },
   "buffer": {
     "janela_s": 8,
@@ -177,8 +178,8 @@
     "cliente_teste_id": ""
   },
   "handoff": {
-    "setor_id": 78,
-    "whatsapp_id": "145"
+    "setor_id": 107,
+    "whatsapp_id": "159"
   },
   "mensagens": {
     "ativo": false,

@@ -23,7 +23,7 @@ Recriado pelo repo, sem copiar segredos da origem: banco `barbearia_vila_teste` 
 | Credencial Verificacao | `VVbK8DkOhfW3nRg2` |
 | Credencial OpenAI | `tVRedGvpa2XF0gX1` |
 | Credencial Graces | `lSsJYIq9jbpkmYlr` |
-| Credencial Chat Master | `Gt9C67GDkOEnB4BZ` |
+| Credencial Chat Master (TESTE, conexao 145) | `Gt9C67GDkOEnB4BZ` |
 | `bv-verificacao` | `mAKBRCHQ1Bd78S7R` |
 | `bv-captura` | `KV66loTQW9KHtW86` |
 | `bv-recepcao` | `n2Dy8IyVnDHQ6KyF` |
@@ -198,7 +198,7 @@ Autorizacao do owner em 2026-10-21 (banco, deploy e webhook). Tudo pela n8n2; nu
 - **Liberacao (2026-10-22, ok do owner):** `liberacao.contatos` = `[]`: a recepcao de PROD atende todos os numeros. Rollback: voltar a lista com os numeros de teste + deploy da recepcao.
 - **Barbeiro de teste em PROD (2026-10-22, pedido do owner):** `graces.teste_contatos` (owner, `5511971634416`, `5511995164884`, `559184617250`, `554797565968`, `5511948903182`) ve o ZZ TESTE em listas e no texto e so esses numeros escrevem, e **so** na agenda dele (fase 1 recusa barbeiro real, fase 2 sempre redireciona ao de teste). Para os demais clientes o de teste segue oculto e a escrita segue desligada. Retirar: lista vazia + deploy de `bv_graces` e `entregar_rajada`.
 - **Confirmacao da vespera:** `mensagens.ativo=false` e `bv-mensagens` fora de PROD ate novo ok do owner.
-- Credenciais: Postgres `lKwTwGxPO9zHbthQ`; Redis, OpenAI, Graces, Chat Master e Verificacao reaproveitam as do TESTE (mesmas chaves e mesma conexao 145; Redis isolado pelo prefixo `bv:prod:`).
+- Credenciais: Postgres `lKwTwGxPO9zHbthQ`; Redis, OpenAI, Graces e Verificacao reaproveitam as do TESTE (Redis isolado pelo prefixo `bv:prod:`). Chat Master de PROD: `rSt9OTva2S2MwtHE` (2026-11-15, owner: conexao 159 "Conexao Recepcao", QR Pro, outra conta do Chat Master; token `CHATMASTER_TOKEN_PRODUCAO` no `.env.smoke`). Fila do agente 106 (`chatmaster.queue_id`) e fila humana 107 (`handoff.setor_id`); o TESTE segue na 145, fila 0 e setor 78.
 - Banco `barbearia_vila`: migracoes 0001 a 0010. Backup manual e restore em banco descartavel verificados (`backup-bancos.py --restaurar-teste`).
 - Backup diario: `config/vps/barbearia-backup-limpeza.{sh,cron}`, 06:30 UTC (03:30 de Sao Paulo; a VPS esta em `Etc/UTC` e o cron do Ubuntu nao tem `CRON_TZ`), 14 dias, e a limpeza LGPD de mensagens com mais de 12 meses logo apos um backup ok. Instalado em 2026-10-22 com `BV_DEPLOY_PRODUCAO_AUTORIZADO=sim python3 -I scripts/_vps.py instalar-crons` (atomico, `sh -n` antes); 1a execucao manual: rc 0, dump de 34 KB legivel por `pg_restore --list` (12 tabelas), limpeza apagou 0. Log em `/root/barbearia_vila/backup-limpeza.log`.
 - Cron de midia: linha de PROD (`IiVgK4hASaCzzbVM`) em `config/vps/barbearia-limpar-midia.cron`; instalado pelo mesmo `instalar-crons`.
