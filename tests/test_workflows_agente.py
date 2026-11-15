@@ -204,6 +204,7 @@ class EntregarRajadaAgente(unittest.TestCase):
             self.assertNotRegex(t, r"whatsappId: '1[0-9]{2}'", f)
         prod = json.load(open(os.path.join(RAIZ, "config", "ambientes", "producao.json"), encoding="utf-8"))
         self.assertEqual((prod["chatmaster"], prod["handoff"]["setor_id"], prod["handoff"]["whatsapp_id"]), ({"whatsapp_id": "159", "queue_id": "106"}, 107, "159"))
+        self.assertNotEqual(prod["credenciais"]["chatmaster"], integ_cred := json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))["credenciais"]["chatmaster"])  # 159 e de outra conta
         integ = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
         self.assertEqual((integ["chatmaster"], integ["handoff"]["setor_id"]), ({"whatsapp_id": "145", "queue_id": "0"}, 78))
         g = json.loads(ler("workflows/sub/bv-graces.json"))
