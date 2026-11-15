@@ -219,7 +219,7 @@ class BvMensagens(Base, unittest.TestCase):
         self.assertIn("m.tipo IN ('confirmacao','lembrete','pos_atendimento')", self.nos["Reservar"]["parameters"]["query"])  # legado nao envia os novos
         self.assertEqual(self.nos["Chat Master agendamentos"]["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.chatmaster}}")
         g = self.nos["Gravar sincronizacao"]["parameters"]["query"]
-        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), list(range(1, 18)))
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), list(range(1, 21)))
         self.assertEqual(g.count("("), g.count(")"))
         lin = {"id": 9, "tipo": "lembrete_hora", "situacao": "pendente", "previsto_para": "2030-01-10T16:00:00.000Z", "inicio": "2030-01-10T14:00:00",
                "dados": {"nome": "Ana Souza", "servico": "corte adulto", "barbeiro": "Pedro"}, "canal_id": None, "tentativas": 0, "reserva": "1.5",
@@ -286,7 +286,7 @@ class BvConfirmacao(Base, unittest.TestCase):
     def test_entrada_e_claim_atomico(self):  # 4.1.1 / 4.1.2
         self.assertEqual([v["name"] for v in self.nos["Gatilho"]["parameters"]["workflowInputs"]["values"]], ["contato_id", "origem", "confirmado", "mensagem_id"])
         c = self.nos["Reivindicar"]["parameters"]["query"]
-        for t in ("contato_id = $2::bigint", "tipo = 'confirmacao'", "situacao = 'enviada'", "resposta IS NULL", "motivo IS NULL", "RETURNING"):
+        for t in ("contato_id = $2::bigint", "tipo IN ('confirmacao','lembrete_dia')", "situacao = 'enviada'", "resposta IS NULL", "motivo IS NULL", "RETURNING"):
             self.assertIn(t, c)
         self.assertEqual(self.destinos("Reivindicar?", 0), ["Reivindicar"])
         self.assertEqual(self.destinos("Reivindicar?", 1), ["Desfecho"])  # desatualizada/repetida/fora do teste: sem Graces
@@ -318,7 +318,7 @@ class BvConfirmacao(Base, unittest.TestCase):
     def test_respostas_registro_e_recusa(self):  # 4.1.4
         r = self.nos["Registrar"]["parameters"]["query"]
         for t in ("'confirmacao_recusada'", "'saida'", "'conf-' ||", "mensagem_id_canal", "falhas_agente", "resposta = NULL", "'divergente'",
-                  "tipo IN ('lembrete', 'pos_atendimento')", "motivo = 'recusada'"):  # item 11 (owner): recusa cancela lembrete e pos
+                  "tipo IN ('lembrete', 'pos_atendimento', 'lembrete_hora')", "motivo = 'recusada'"):  # item 11 (owner): recusa cancela lembrete e pos
             self.assertIn(t, r) if t != "mensagem_id_canal" else None
         self.assertEqual(self.destinos("Enviar texto?", 1), ["Registrar"])
         # E2E 2026-10-20: o toque tratado pelo id tira da rajada o titulo gemeo ("Confirmo"), que senao iria ao agente
