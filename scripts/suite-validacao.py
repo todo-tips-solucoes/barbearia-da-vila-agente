@@ -406,7 +406,7 @@ def executar(r, n, orc, parar, referencia=""):
             hoje = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)).strftime("%Y-%m-%d (%A)")
             ref = referencia + "\nHoje em Sao Paulo: " + hoje
             if r.get("preparo") == "agendamento_previo":  # a avaliadora nao ve meus_agendamentos: o preparo e fonte do K4
-                ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + "."
+                ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + ". Regra do agente: a remarcacao mantem o barbeiro do agendamento; dizer que sera com o mesmo barbeiro e correto."
             notas, tokens, erro = avaliar(r, transcricao(ex["turnos"], nome) + extra, ref)
             ex.update(notas=notas, erro_avaliadora=erro)
             ex["tokens"]["avaliadora"] = tokens
