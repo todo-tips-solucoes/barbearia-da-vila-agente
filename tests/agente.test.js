@@ -347,6 +347,7 @@ console.log('agente.test.js sem numero da loja ok');
   const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
   assert.match(p, /Remarcação mantém o barbeiro/);
   assert.match(p, /Nunca diga que encontrou, achou ou que há horários sem mandar a lista deles nesta mesma resposta/); // suite R8, 2026-11-16
+  assert.match(p, /nunca diga que o horário ficou reservado, separado, garantido ou marcado: nada é marcado antes do sim do cliente/); // suite R19 e PROD, 2026-11-16
   assert.match(p, /Nunca diga que o dia está lotado quando a consulta foi de um barbeiro só/);
 }
 console.log('agente.test.js sem repetir ok');
