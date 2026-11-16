@@ -599,6 +599,7 @@ def referencia_graces(get=None):
         partes.append("Funcionamento: " + json.dumps(get("/agenda/configuracao").get("horarios"), ensure_ascii=False))
     except Exception:  # noqa: BLE001
         pass
+    partes.append("A lista de servicos vem com os mais pedidos primeiro (config, medido na agenda): " + ", ".join(sa.CFG["graces"].get("servicos_destaque", [])) + ". Dizer que sao os mais pedidos e correto.")
     partes.append("Loja: " + json.dumps(sa.CFG["loja"], ensure_ascii=False))
     return "\n".join(partes)[:8000]
 
