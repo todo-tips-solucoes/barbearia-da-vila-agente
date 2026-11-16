@@ -156,6 +156,20 @@ class WorkflowRecepcao(unittest.TestCase):
         self.assertIn("'tempo_esgotado'", q["query"])
         self.assertIn("{{BV:execucao.timeout_s}}", q["options"]["queryReplacement"])
         self.assertNotIn("conteudo", q["query"])  # sem PII
+        # PROD, 2026-11-15: uma mensagem ficou 2h25 sem resposta porque o turno travou e morreu em silencio. O vigia fecha o turno
+        # preso e avisa o cliente, so se ele ainda nao recebeu resposta e nao esta com a equipe.
+        for t in ("UPDATE turnos SET estado = 'falhou', concluido_em = now() WHERE estado = 'em_andamento'", "s.direcao = 'saida' AND s.criado_em > x.desde", "k.pedido->>'handoff'"):
+            self.assertIn(t, q["query"])
+        self.assertEqual(q["query"].count("("), q["query"].count(")"))
+        vn = {n["name"]: n for n in wf["nodes"]}
+        dest = lambda n, i=0: [d["node"] for d in wf["connections"][n]["main"][i]]
+        self.assertEqual((dest("Registrar estouradas"), dest("Envia aviso?", 0), dest("Envia aviso?", 1), dest("Resultado aviso")), (["Montar aviso"], ["Enviar aviso"], ["Resultado aviso"], ["Gravar aviso"]))
+        self.assertIn("{{BV:textos.contingencia}}", vn["Montar aviso"]["parameters"]["jsCode"])
+        self.assertEqual(vn["Enviar aviso"]["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.chatmaster}}")
+        self.assertIn("'vigia-'", vn["Gravar aviso"]["parameters"]["query"])
+        _, er = carregar("sub/entregar-rajada.json")
+        mo = next(n for n in er["nodes"] if n["name"] == "Modelo")["parameters"]["options"]
+        self.assertEqual((mo["timeout"], mo["maxRetries"]), ("{{BV:NUM:agente.modelo_timeout_ms}}", "{{BV:NUM:agente.modelo_retentativas}}"))  # chamada travada falha rapido e cai na contingencia
         _, rc = carregar("bv-recepcao.json")
         nos = {n["name"]: n for n in rc["nodes"]}
         for fim in ("Fim", "Fim Redis indisponivel", "Fim sem posse"):

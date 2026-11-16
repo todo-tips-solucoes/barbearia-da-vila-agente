@@ -159,6 +159,23 @@ function bvMTextoDe(linha, textos) {
     .replace(/,\s*!/g, '!'); // sem nome: "Oi, !" vira "Oi!"
 }
 
+// Retomada de agendamento abandonado (owner, 2026-11-16; roadmap feature 9). linha: { contato_id, telefone, nome, servico, proposta:
+// { acao, dados } | null }; cfg: { wid, fila, textos: { retomada_confirmar, retomada_continuar } }. Com proposta pendente lembra o
+// resumo; sem ela, convida a continuar. Devolve { texto, req } (req no formato do envio de texto do Chat Master).
+function bvMRetomada(linha, cfg) {
+  const dia = (d) => (/^\d{4}-\d{2}-\d{2}/.test(String(d)) ? `${String(d).slice(8, 10)}/${String(d).slice(5, 7)}` : '');
+  const um = (x) => `${x.servico || 'seu horário'}${x.barbeiro ? ` com ${x.barbeiro}` : ''}${x.data ? ` em ${dia(x.data)}` : ''}${x.hora ? ` às ${x.hora}` : ''}`;
+  const p = linha.proposta, d = (p && p.dados) || {};
+  let resumo = '';
+  if (p && Array.isArray(d.itens) && d.itens.length) resumo = d.itens.map(um).join(' + ');
+  else if (p && p.acao === 'reagendar') resumo = `a remarcação do seu ${um(d)}`;
+  else if (p && d.servico) resumo = `o seu ${um(d)}`;
+  const nome = bvMNomeProprio(String(linha.nome || '').trim().split(/\s+/)[0]);
+  const texto = bvMTemplate(resumo ? cfg.textos.retomada_confirmar : cfg.textos.retomada_continuar, { nome, resumo, servico: linha.servico ? `o seu ${linha.servico}` : 'o seu horário' })
+    .replace(/,\s*!/g, '!');
+  return { texto, req: bvMTexto({ texto }, linha.telefone, cfg) };
+}
+
 // Instante ISO -> relogio de parede de Sao Paulo "AAAA-MM-DD<sep>HH:mm" (o Chat Master le sendAt no fuso da empresa; medido 2026-11-15)
 function bvMLocal(iso, sep) {
   const t = new Date(iso).getTime();
@@ -404,5 +421,5 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax) {
   return ''; // fora_do_teste: sem texto
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

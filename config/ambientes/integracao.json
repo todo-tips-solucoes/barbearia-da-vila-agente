@@ -120,7 +120,9 @@
     "raciocinio": "low",
     "iteracoes_max": 8,
     "mensagens_contexto": 20,
-    "turnos_max_contato_hora": 20
+    "turnos_max_contato_hora": 20,
+    "modelo_timeout_ms": 45000,
+    "modelo_retentativas": 1
   },
   "conversa": {
     "janela_recencia_min": 120
@@ -178,7 +180,9 @@
     "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho?",
     "confirmacao_escolher": "Você tem mais de um horário pra confirmar. Toca no botão da mensagem do horário que quer responder, ou me fala o dia e a hora, tá?",
     "lembrete_dia": "Oi, {nome}! Passando para lembrar do seu {servico} com {barbeiro} amanhã, às {hora}, aqui na Barbearia da Vila. Você confirma? É só responder SIM para confirmar ou NÃO se não puder vir.",
-    "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!"
+    "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!",
+    "retomada_confirmar": "Oi, {nome}! Ficou faltando só confirmar {resumo}. Ainda quer esse horário?",
+    "retomada_continuar": "Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?"
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
@@ -246,5 +250,26 @@
     "falhas_agente_limiar": 3,
     "janela_min": 10,
     "repetir_min": 60
+  },
+  "retomada": {
+    "ativo": true,
+    "apos_min": 120,
+    "max_min": 1080,
+    "hora_inicio": "00:00",
+    "hora_fim": "23:59",
+    "varredura_min": 1,
+    "max_por_varredura": 10,
+    "ofertas": [
+      "barbeiro",
+      "horario",
+      "sequencia",
+      "modo_encadeamento"
+    ],
+    "acoes": [
+      "agendar",
+      "agendar_conjunto",
+      "reagendar",
+      "trocar_servico"
+    ]
   }
 }

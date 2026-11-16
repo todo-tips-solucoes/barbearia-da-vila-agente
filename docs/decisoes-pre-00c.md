@@ -46,6 +46,7 @@ Insumo do briefing e da constituição. Tudo aqui foi respondido pelo owner nest
 | Terceiros | **Permitido** agendar para outra pessoa (filho, amigo): pedir o nome e buscar ou cadastrar a pessoa na Graces. |
 | Vários serviços | **Permitido**: um agendamento por serviço, com horários encadeados. |
 | Follow-up | **No MVP**: 1 retomada gentil 2 h depois da última mensagem, só se o cliente parou no meio de um agendamento. |
+| Follow-up (implementado em 2026-11-16) | Como decidido: 1 retomada, 2 h depois da última mensagem do agente, só para quem parou no meio de um agendamento. Detalhes escolhidos na implementação: só entre 08:00 e 20:00 (quem para à noite recebe às 08:00, até 18 h depois); não vale para quem só perguntou preço; quem responde em até 2 h continua de onde parou. Textos em `textos.retomada_confirmar` e `textos.retomada_continuar`. |
 
 ## Mensagens agendadas (módulo de agendamento do Chat Master, `POST/DELETE /api/schedules`)
 

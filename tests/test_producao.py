@@ -33,8 +33,9 @@ class Rotulo(unittest.TestCase):  # 2.2
             self.assertNotIn("[TESTE]", json.dumps(p, ensure_ascii=False))
             self.assertTrue(t["name"].endswith("[TESTE]"), t["name"])
             # o TESTE renderiza igual ao arquivo de antes da parametrizacao (commit 00a0688, develop da #16)
+            # (o bv-vigia mudou de proposito em 2026-11-16: avisa o cliente do turno que estourou o tempo; a comparacao vale para os demais)
             antigo = subprocess.run(["git", "-C", RAIZ, "show", f"00a0688:workflows/{arq}"], capture_output=True, text=True)
-            if antigo.returncode == 0:
+            if antigo.returncode == 0 and arq != "bv-vigia.json":
                 self.assertEqual(t, render(arq, "integracao", antigo.stdout))
 
     def test_verificacao_com_path_e_webhook_distintos(self):
