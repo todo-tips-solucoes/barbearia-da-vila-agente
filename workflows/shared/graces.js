@@ -106,13 +106,12 @@ function bvgResolver(id, tipo, ctx) {
 
 // Busca de servico (atendimentos de 2026-11-15): a Graces filtra por trecho do nome, e "cabelo" so achava os combos com barba
 // ("Cabelo adulto + barba"); quem pedia so o corte recebia as opcoes de R$ 150 e ia embora. Cabelo/cortar sem barba busca os
-// cortes e os combos; cabelo (ou corte) com barba busca os combos.
+// cortes (so os de cabelo: "Corte de unha" sai); cabelo (ou corte) com barba busca os combos.
+const bvgSoCabelo = (t) => { const n = bvgNomeNorm(t); return /\b(cabelos?|cortar)\b/.test(n) && !/\bbarbas?\b/.test(n); };
 function bvgTermosServico(t) {
   const n = bvgNomeNorm(t);
-  const cabelo = /\b(cabelos?|cortar|cortes?)\b/.test(n), barba = /\bbarbas?\b/.test(n);
-  if (cabelo && barba) return ['cabelo'];
-  if (/\b(cabelos?|cortar)\b/.test(n)) return ['corte', 'cabelo'];
-  return [t];
+  if (/\b(cabelos?|cortar|cortes?)\b/.test(n) && /\bbarbas?\b/.test(n)) return ['cabelo'];
+  return bvgSoCabelo(t) ? ['corte'] : [t];
 }
 
 const bvgNaoOferecido = () => bvgRecusa('servico_nao_oferecido', 'esse serviço não é oferecido por aqui; ofereça o serviço regular, sem falar em desconto');
@@ -234,7 +233,7 @@ function bvGPlano(i, ctx0, cfg) {
     {
       // FR-005: pedido pelo nome "2a vez" busca o regular, sem desconto.
       const t = i.texto ? i.texto.replace(/\b2\s*[ªaºo°]?\s*vez\b/gi, '').replace(/\s+/g, ' ').trim() : '';
-      return chamar(bvgTermosServico(t).map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto });
+      return chamar(bvgTermosServico(t).map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: bvgSoCabelo(t) });
     }
     case 'listar_barbeiros': {
       const s = bvgResolver(i.id_opcao_servico, 'servico', ctx);
@@ -259,7 +258,9 @@ function bvGPlano(i, ctx0, cfg) {
       }
       const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
       const ult = (!ctx.pedido.para_terceiro && ctx.pedido.ultimo) || {}; // ultimo atendimento do remetente: padrao so para ele mesmo
-      const s = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : (i.id_opcao_servico ? bvgResolver(i.id_opcao_servico, 'servico', ctx) : (ctx.pedido.servico || ult.servico));
+      const s0 = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : (i.id_opcao_servico ? bvgResolver(i.id_opcao_servico, 'servico', ctx) : (ctx.pedido.servico || ult.servico));
+      // o servico vindo da oferta nao tem opcao_id: sem guarda-lo, a consulta seguinte com o mesmo id era recusada (suite R18, 2026-11-16)
+      const s = s0 && i.id_opcao_servico && !s0.opcao_id ? { ...s0, opcao_id: i.id_opcao_servico } : s0;
       if (!s) return bvgFim(bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
       // Remarcar mantem o barbeiro (atendimentos de 2026-11-15): a busca ia a todos os barbeiros e a proposta trocava o barbeiro em
       // silencio (quase sempre para o primeiro da lista). Vale o barbeiro do agendamento, ou o que o cliente escolheu para esta
@@ -558,7 +559,8 @@ function bvgPassoUm(st, resps0, cfg) {
     case 'listar_servicos': {
       const vistos = new Set(); // uma busca por termo: junta sem repetir
       const juntas = resps.filter(ok200).flatMap((r) => (Array.isArray(r.body) ? r.body : [])).filter((s) => s && !vistos.has(s.idServico) && vistos.add(s.idServico));
-      const ss = bvFiltrarServicos(juntas.filter((s) => s.ativo !== false).map((s) => ({ ...s, nome: String(s.descricaoAgenda || '') })));
+      const ss = bvFiltrarServicos(juntas.filter((s) => s.ativo !== false).map((s) => ({ ...s, nome: String(s.descricaoAgenda || '') })))
+        .filter((s) => !meta.soCabelo || !/\bunhas?\b/i.test(s.nome));
       const of = bvMontarOferta('servico', ss.map((s) => ({ rotulo: s.nome, valor: { idServico: s.idServico, nome: s.nome, preco: s.valorPadrao, minutos: s.tempoPadrao } })), cfg);
       const orientacao = meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'há mais serviços; peça ao cliente um termo para filtrar' : undefined;
       return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of });

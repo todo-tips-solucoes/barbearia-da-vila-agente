@@ -781,17 +781,25 @@ console.log('graces.test.js nome normal ok');
   const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
   // 1. "cabelo" e "cortar" buscam cortes e combos; com barba, os combos; outros termos seguem iguais
   const termos = (texto) => g.bvGPlano(entrada({ operacao: 'listar_servicos', texto }), null, cfg).reqs.map((q) => q.qs.texto);
-  assert.deepEqual(termos('cabelo'), ['corte', 'cabelo']);
-  assert.deepEqual(termos('cortar o cabelo'), ['corte', 'cabelo']);
+  assert.deepEqual(termos('cabelo'), ['corte']);
+  assert.deepEqual(termos('cortar o cabelo'), ['corte']);
   assert.deepEqual(termos('cabelo e barba'), ['cabelo']);
   assert.deepEqual(termos('corte e barba'), ['cabelo']);
   assert.deepEqual(termos('corte'), ['corte']);
   assert.deepEqual(termos('barba'), ['barba']);
   const ps = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'cabelo' }), null, cfg);
-  const rs = g.bvGPasso(ps.st, [ok([{ idServico: 'c1', descricaoAgenda: 'corte adulto', valorPadrao: 90 }, { idServico: 'c2', descricaoAgenda: 'corte adulto 2º vez' }]),
-    ok([{ idServico: 'k1', descricaoAgenda: 'Cabelo adulto + barba', valorPadrao: 150 }, { idServico: 'c1', descricaoAgenda: 'corte adulto', valorPadrao: 90 }])], cfg).final;
-  assert.deepEqual(rs.resultado.servicos.map((x) => x.nome), ['corte adulto', 'Cabelo adulto + barba']); // junta sem repetir, sem "2a vez"
-  assert.deepEqual(g.bvGPasso(ps.st, [resp(500, {}), ok([{ idServico: 'k1', descricaoAgenda: 'Cabelo adulto + barba' }])], cfg).final.resultado.servicos.map((x) => x.nome), ['Cabelo adulto + barba']);
+  const rs = g.bvGPasso(ps.st, [ok([{ idServico: 'c1', descricaoAgenda: 'corte adulto', valorPadrao: 90 }, { idServico: 'c2', descricaoAgenda: 'corte adulto 2º vez' }, { idServico: 'u1', descricaoAgenda: 'Corte de unha' }, { idServico: 'c1', descricaoAgenda: 'corte adulto' }])], cfg).final;
+  assert.deepEqual(rs.resultado.servicos.map((x) => x.nome), ['corte adulto']); // so cortes de cabelo, sem repetir, sem "2a vez" e sem unha
+  const pc = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'corte' }), null, cfg); // quem pede "corte" ve tudo o que tem corte no nome
+  assert.deepEqual(g.bvGPasso(pc.st, [ok([{ idServico: 'c1', descricaoAgenda: 'corte adulto' }, { idServico: 'u1', descricaoAgenda: 'Corte de unha' }])], cfg).final.resultado.servicos.map((x) => x.nome), ['corte adulto', 'Corte de unha']);
+  // servico vindo da oferta guarda o id da opcao: a consulta seguinte com o mesmo id resolve (suite R18)
+  const ofS = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Corte Infantil', valor: { idServico: S, nome: 'Corte Infantil ate 11 anos', preco: 70, minutos: 40 } }] };
+  let pq = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_servico: '1', qualquer: true, data: '2026-10-27' }), { opcoes: ofS, pedido: {} }, cfg);
+  pq = g.bvGPasso(pq.st, [ok([{ idProfissional: 'b1', apelido: 'Pedro' }])], cfg);
+  const fq = g.bvGPasso(pq.st, [ok({ minutos: 40, horarios: ['10:00'] }), resp(500, {})], cfg).final;
+  assert.equal(fq.efeitos.pedido.servico.opcao_id, '1');
+  const depois = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: '1' }), { opcoes: fq.efeitos.opcoes, pedido: fq.efeitos.pedido }, cfg);
+  assert.deepEqual(depois.reqs[0].qs, { idServico: S });
 
   // 2. remarcar mantem o barbeiro do agendamento; sem horario, fala dele e nao troca sozinho
   const agd = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: 'b1', profissional: 'Rodrigo ' };
