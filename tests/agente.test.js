@@ -406,7 +406,7 @@ console.log('agente.test.js itens 7 a 9 ok');
   const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
   for (const re of [/Quem escolhe é o cliente/, /nunca peça confirmação de algo que ele não escolheu/, /Sem laço: não faça a mesma pergunta mais de duas vezes/, /Sinal de irritação/,
     /Pacote, plano ou combo já pago.*motivo pacote/, /Outra pessoa \(owner, 2026-11-16\).*motivo outra_pessoa/, /Não use buscar_pessoa nem cadastrar_terceiro/, /Ação já concluída/,
-    /chame meus_agendamentos antes de qualquer outra coisa/, /mostre a lista em vez de perguntar a preferência/, /o texto precisa pedir exatamente essa escolha/]) assert.match(p, re);
+    /chame meus_agendamentos antes de qualquer outra coisa/, /nunca diga que vai passar, está passando ou passou para a equipe sem ter chamado transferir_atendimento neste turno/, /mostre a lista em vez de perguntar a preferência/, /o texto precisa pedir exatamente essa escolha/]) assert.match(p, re);
   // frase que ficava pela metade quando as opcoes viravam lista
   const cfg = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
   const of = { tipo: 'decisao_cancelamento', itens: [{ id: '1', rotulo: 'Remarcar', valor: 'remarcar' }, { id: '2', rotulo: 'Cancelar mesmo', valor: 'cancelar' }] };
