@@ -675,7 +675,7 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   // remarcacao com a hora pedida livre: orienta reagendar, nunca agendar
   const agd = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro' };
   let pr = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-26', hora: '15:00' }), { opcoes: {}, pedido: { ...pedU, agendamentos: [agd] } }, cfg);
-  pr = g.bvGPasso(pr.st, [ok([{ idProfissional: 'b1', apelido: 'Pedro' }])], cfg);
+  assert.deepEqual(pr.reqs.map((q) => [q.path, q.qs.idProfissional]), [['/agenda/horarios-livres', 'b1'], ['/agenda/horarios', 'b1']]); // direto no barbeiro do agendamento
   const rr = g.bvGPasso(pr.st, [ok({ minutos: 40, horarios: ['15:00'] }), resp(500, {})], cfg).final.resultado;
   assert.match(rr.orientacao, /chame reagendar com id_opcao_agendamento 1 e id_opcao_horario 1/);
 }
@@ -775,3 +775,99 @@ console.log('graces.test.js lembretes do agente ok');
   assert.deepEqual(vs.resultado.opcoes.map((o) => o.nome), ['Ana', 'Ana Maria']);
 }
 console.log('graces.test.js nome normal ok');
+
+// Melhorias dos atendimentos de 2026-11-15 (owner, 2026-11-16): busca de servico, barbeiro da remarcacao e "lotado" de um barbeiro so
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  // 1. "cabelo" e "cortar" buscam cortes e combos; com barba, os combos; outros termos seguem iguais
+  const termos = (texto) => g.bvGPlano(entrada({ operacao: 'listar_servicos', texto }), null, cfg).reqs.map((q) => q.qs.texto);
+  assert.deepEqual(termos('cabelo'), ['corte']);
+  assert.deepEqual(termos('cortar o cabelo'), ['corte']);
+  assert.deepEqual(termos('cabelo e barba'), ['cabelo']);
+  assert.deepEqual(termos('corte e barba'), ['cabelo']);
+  assert.deepEqual(termos('corte'), ['corte']);
+  assert.deepEqual(termos('barba'), ['barba']);
+  const ps = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'cabelo' }), null, cfg);
+  const rs = g.bvGPasso(ps.st, [ok([{ idServico: 'c1', descricaoAgenda: 'corte adulto', valorPadrao: 90 }, { idServico: 'c2', descricaoAgenda: 'corte adulto 2º vez' }, { idServico: 'u1', descricaoAgenda: 'Corte de unha' }, { idServico: 'c1', descricaoAgenda: 'corte adulto' }])], cfg).final;
+  assert.deepEqual(rs.resultado.servicos.map((x) => x.nome), ['corte adulto']); // so cortes de cabelo, sem repetir, sem "2a vez" e sem unha
+  const pc = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'corte' }), null, cfg); // quem pede "corte" ve tudo o que tem corte no nome
+  assert.deepEqual(g.bvGPasso(pc.st, [ok([{ idServico: 'c1', descricaoAgenda: 'corte adulto' }, { idServico: 'u1', descricaoAgenda: 'Corte de unha' }])], cfg).final.resultado.servicos.map((x) => x.nome), ['corte adulto', 'Corte de unha']);
+  // servico vindo da oferta guarda o id da opcao: a consulta seguinte com o mesmo id resolve (suite R18)
+  const ofS = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Corte Infantil', valor: { idServico: S, nome: 'Corte Infantil ate 11 anos', preco: 70, minutos: 40 } }] };
+  let pq = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_servico: '1', qualquer: true, data: '2026-10-27' }), { opcoes: ofS, pedido: {} }, cfg);
+  pq = g.bvGPasso(pq.st, [ok([{ idProfissional: 'b1', apelido: 'Pedro' }])], cfg);
+  const fq = g.bvGPasso(pq.st, [ok({ minutos: 40, horarios: ['10:00'] }), resp(500, {})], cfg).final;
+  assert.equal(fq.efeitos.pedido.servico.opcao_id, '1');
+  const depois = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: '1' }), { opcoes: fq.efeitos.opcoes, pedido: fq.efeitos.pedido }, cfg);
+  assert.deepEqual(depois.reqs[0].qs, { idServico: S });
+
+  // 2. remarcar mantem o barbeiro do agendamento; sem horario, fala dele e nao troca sozinho
+  const agd = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: 'b1', profissional: 'Rodrigo ' };
+  const ctxR = (extra = {}) => ({ opcoes: {}, pedido: { idCliente: 'c1', agendamentos: [agd], ...extra } });
+  let p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-27', periodo: 'tarde' }), ctxR(), cfg);
+  assert.ok(p.reqs.every((q) => q.qs.idProfissional === 'b1'));
+  let r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['14:00', '15:20'] }), resp(500, {})], cfg).final;
+  assert.deepEqual(r.resultado.opcoes.map((o) => [o.hora, o.barbeiro]), [['14:00', 'Rodrigo'], ['15:20', 'Rodrigo']]);
+  assert.deepEqual(r.efeitos.pedido.barbeiro, { idProfissional: 'b1', apelido: 'Rodrigo' });
+  assert.equal(r.efeitos.pedido.barbeiro_ag, 'a1');
+  r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: [] }), resp(500, {})], cfg).final; // sem horario: nao consulta os outros sozinho
+  assert.match(r.resultado.orientacao, /^Rodrigo não tem horário nesse dia \(não diga que o dia está lotado/);
+  assert.match(r.resultado.orientacao, /qualquer=true/);
+  // o cliente aceitou outro barbeiro: qualquer=true consulta todos
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-27', qualquer: true }), ctxR(), cfg).reqs, [{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: S } }]);
+  // escolheu outro barbeiro para ESTA remarcacao: a proxima consulta sem barbeiro segue com ele; escolha de outra conversa nao vale
+  const kiel = { idProfissional: 'b2', apelido: 'Kiel' };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-28' }), ctxR({ barbeiro: kiel, barbeiro_ag: 'a1' }), cfg).reqs[0].qs.idProfissional, 'b2');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-28' }), ctxR({ barbeiro: kiel, barbeiro_ag: 'outro' }), cfg).reqs[0].qs.idProfissional, 'b1');
+  // agendamento com barbeiro so da equipe: encaminha; com o de teste (TESTE): segue pela uniao dos barbeiros
+  const cj = { ...cfg, humanos: [{ id: 'bj', nome: 'Jayme' }] };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-27' }), { opcoes: {}, pedido: { agendamentos: [{ ...agd, idProfissional: 'bj', profissional: 'jayme' }] } }, cj).final.resultado.code, 'encaminhar_equipe');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-27' }), { opcoes: {}, pedido: { agendamentos: [{ ...agd, idProfissional: TESTE, profissional: 'ZZ TESTE' }] } }, cfg).reqs[0].path, '/servicos/profissionais');
+
+  // 3. barbeiro habitual (ultimo atendimento) sem horario no periodo: consulta os outros no mesmo passo e avisa
+  const pedU = { identificado: true, idCliente: 'c1', ultimo: { servico: { idServico: S, nome: 'barba design', preco: 70, minutos: 40, opcao_id: 'ult' }, barbeiro: { idProfissional: 'bk', apelido: 'Black' } } };
+  p = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-27', periodo: 'manha' }), { opcoes: {}, pedido: pedU }, cfg);
+  let st2 = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['14:00'] }), resp(500, {})], cfg); // Black so tem a tarde
+  assert.deepEqual(st2.reqs, [{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: S } }]);
+  st2 = g.bvGPasso(st2.st, [ok([{ idProfissional: 'bk', apelido: 'Black' }, { idProfissional: 'b2', apelido: 'Kiel' }])], cfg);
+  assert.deepEqual(st2.reqs.map((q) => q.qs.idProfissional), ['b2', 'b2']); // nao consulta o Black de novo
+  r = g.bvGPasso(st2.st, [ok({ minutos: 40, horarios: ['09:20', '10:00'] }), resp(500, {})], cfg).final;
+  assert.deepEqual(r.resultado.opcoes.map((o) => [o.hora, o.barbeiro]), [['09:20', 'Kiel'], ['10:00', 'Kiel']]);
+  assert.match(r.resultado.orientacao, /^Black, o barbeiro do último atendimento, não tem horário de manha nesse dia: diga isso ao cliente e que os horários da lista são de outros barbeiros/);
+  assert.equal(r.efeitos.pedido.barbeiro, undefined); // nao vira escolha do cliente
+  // habitual com horario: lista dele e segue como sugestao (nao grava como escolha)
+  r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['09:20'] }), resp(500, {})], cfg).final;
+  assert.deepEqual([r.resultado.opcoes[0].barbeiro, r.efeitos.pedido.barbeiro], ['Black', undefined]);
+  // barbeiro escolhido pelo cliente sem horario: fala dele, sem trocar
+  p = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-27' }), { opcoes: {}, pedido: { ...pedU, barbeiro: { idProfissional: 'bk', apelido: 'Black' } } }, cfg);
+  r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: [] }), resp(500, {})], cfg).final;
+  assert.match(r.resultado.orientacao, /^Black não tem horário nesse dia/);
+}
+console.log('graces.test.js melhorias dos atendimentos ok');
+
+// Suite R18 e R21 (2026-11-16): servico pelo nome ou ja escolhido; cliente novo e cadastrado antes da transferencia
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const inf = { idServico: S, nome: 'Corte Infantil ate 11 anos', preco: 70, minutos: 40, opcao_id: '1' };
+  const ofH = { tipo: 'horario', itens: [] }; // depois de ver horarios a oferta nao e mais de servicos
+  // o modelo manda o NOME no lugar do id: casa com o servico escolhido
+  let n = g.bvGNormalizar({ ...base, operacao: 'listar_barbeiros', id_opcao_servico: 'Corte Infantil ate 11 anos' }, cfg);
+  assert.deepEqual([n.ok, n.in.id_opcao_servico, n.in.servico_nome], [true, undefined, 'Corte Infantil ate 11 anos']);
+  assert.deepEqual(g.bvGPlano(n.in, { opcoes: ofH, pedido: { servico: inf } }, cfg).reqs[0].qs, { idServico: S });
+  // sem id nem nome: usa o servico ja escolhido; sem servico nenhum: pede para escolher
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros' }), { opcoes: ofH, pedido: { servico: inf } }, cfg).reqs[0].qs, { idServico: S });
+  assert.equal(g.bvGPlano(entrada({ operacao: 'listar_barbeiros' }), { opcoes: ofH, pedido: {} }, cfg).final.resultado.code, 'servico_nao_escolhido');
+  // nome de um servico que nao foi ofertado nem escolhido: nunca troca em silencio
+  n = g.bvGNormalizar({ ...base, operacao: 'listar_barbeiros', id_opcao_servico: 'Coloração completa' }, cfg);
+  assert.equal(g.bvGPlano(n.in, { opcoes: ofH, pedido: { servico: inf } }, cfg).final.resultado.code, 'opcao_desconhecida');
+  // nome casando com um item da oferta de servicos em curso
+  const ofS = { tipo: 'servico', itens: [{ id: '2', rotulo: 'corte adulto', valor: { idServico: 'sa', nome: 'corte adulto', preco: 90, minutos: 40 } }] };
+  n = g.bvGNormalizar({ ...base, operacao: 'horarios_livres', id_opcao_servico: 'Corte Adulto', qualquer: true, data: '2026-10-27' }, cfg);
+  assert.deepEqual(g.bvGPlano(n.in, { opcoes: ofS, pedido: { servico: inf } }, cfg).reqs[0].qs, { idServico: 'sa' });
+  // transferir: cliente novo e cadastrado antes; ja cadastrado (ou cadastro desligado) transfere direto
+  const aberto2 = { ...cfg, cadastroLiberado: true };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { cliente_sem_cadastro: true } }, aberto2).final.resultado.code, 'cadastre_primeiro');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { cliente_sem_cadastro: true } }, cfg).final.resultado.code, 'encaminhar_equipe');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { idCliente: 'c1', cliente_sem_cadastro: false } }, aberto2).final.resultado.code, 'encaminhar_equipe');
+}
+console.log('graces.test.js servico pelo nome ok');

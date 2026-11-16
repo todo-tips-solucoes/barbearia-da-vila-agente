@@ -145,7 +145,7 @@ function bvContextoPedido(pedido, sessaoNova, neutralizar) {
   let t = '';
   if (pedido.servico && pedido.servico.nome) {
     t += '\nServiço já escolhido (dado): ' + neutralizar(String(pedido.servico.nome))
-      + '. Para horários dele, chame horarios_livres direto (sem listar_servicos), a menos que o cliente mude de serviço.';
+      + '. Para horários dele, chame horarios_livres direto (sem listar_servicos) e, para os barbeiros dele, listar_barbeiros sem id_opcao_servico, a menos que o cliente mude de serviço.';
   }
   // Memoria (teste do owner, 2026-10-22): trocar o servico nao apaga o barbeiro; o agente perguntava de novo "com quem?"
   if (pedido.barbeiro && pedido.barbeiro.apelido) {
@@ -205,6 +205,34 @@ function bvContextoCliente(c, neutralizar) {
 // Resposta que fecha uma escrita (agendou, remarcou, cancelou): nao leva convite para agendar.
 const BV_ESCRITA_FEITA = /\b(confirmad[oa]s?|agendad[oa]s?|marcad[oa]s?|remarcad[oa]s?|cancelad[oa]s?|reservad[oa]s?|te esperamos)\b/i;
 
+// Corrida (atendimentos de 2026-11-15): o cliente manda outra mensagem antes de ler a resposta anterior (digita em partes, toca na
+// lista e escreve). Cada mensagem vira um turno e o segundo repetia a pergunta ou o resumo do primeiro. itens: mensagens novas do
+// turno ({recebida_em}); historico: mensagens da sessao ({direcao, conteudo, criado_em}). So e corrida a mensagem que chegou ANTES de
+// a ultima resposta ser gravada (o agente ainda respondia a anterior): com margem, quem respondia rapido a uma pergunta repetida
+// ficava em silencio (suite R20, 2026-11-16).
+function bvCorrida(itens, historico, margemMs = 0) {
+  const saidas = (Array.isArray(historico) ? historico : []).filter((h) => h && h.direcao === 'saida' && h.conteudo).map((h) => Date.parse(h.criado_em)).filter(Number.isFinite);
+  const novas = (Array.isArray(itens) ? itens : []).map((i) => Date.parse(i && i.recebida_em)).filter(Number.isFinite);
+  return saidas.length > 0 && novas.length > 0 && Math.max(...novas) < Math.max(...saidas) + margemMs;
+}
+const bvPalavras = (t) => new Set(bvNormalizarDescricao(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean));
+// Quase igual: a menor esta (quase) toda dentro da maior e os tamanhos sao proximos ("Perfeito, Rodrigo! Para o servico..." x "Perfeito! Para...")
+function bvQuaseIgual(a, b) {
+  const A = bvPalavras(a), B = bvPalavras(b), menor = Math.min(A.size, B.size), maior = Math.max(A.size, B.size);
+  if (menor < 3) return false;
+  let comum = 0; for (const w of A) if (B.has(w)) comum += 1;
+  return comum / menor >= 0.85 && menor / maior >= 0.6;
+}
+// Numa corrida, tira da saida o que repete uma mensagem enviada ha pouco; fora dela nada muda (repetir depois que o cliente leu e
+// legitimo). Lista de uma oferta nova nunca sai: os ids que o cliente vai tocar tem de ser os da oferta gravada.
+function bvSemRepetir(saida, itens, historico, ofertaNova, janelaMs = 120000) {
+  if (!bvCorrida(itens, historico)) return saida;
+  const saidas = historico.filter((h) => h && h.direcao === 'saida' && h.conteudo);
+  const ult = Math.max(...saidas.map((h) => Date.parse(h.criado_em)).filter(Number.isFinite));
+  const recentes = saidas.filter((h) => Date.parse(h.criado_em) >= ult - janelaMs).map((h) => String(h.conteudo));
+  return saida.filter((m) => (m.tipo === 'lista' && ofertaNova) || !recentes.some((t) => bvQuaseIgual(m.texto, t))).map((m, k) => ({ ...m, n: k + 1 }));
+}
+
 // K1 (suite-validacao): 1a resposta da sessao sempre cumprimenta; o modelo as vezes esquece.
 const BV_SAUDACAO = /^\s*(oi|olá|ola|opa|bom dia|boa tarde|boa noite|e aí|eai|fala|hey)(?=[\s,!.?]|$)/i; // sem \b: ele nao fecha palavra depois de á/í
 function bvSaudar(saida, sessaoNova) {
@@ -247,8 +275,9 @@ Você agenda, reagenda e cancela serviços usando apenas as ferramentas. Nunca i
 Dados da loja (DADO): endereço ${loja.endereco || 'não informado'}; contatos ${loja.contatos || 'não informados'}. Esta conversa já é o WhatsApp oficial da loja (owner, 2026-11-15): nunca passe número de telefone ou de WhatsApp, nem peça para o cliente chamar outro número; quando precisar da equipe, use só os contatos acima. Horário de funcionamento: use a ferramenta funcionamento. Qualquer outra informação da loja que não esteja aqui nem nas ferramentas (formas de pagamento, estacionamento, Wi-Fi etc.) você não sabe: diga que não tem essa informação, passe os contatos da loja e feche com o convite para agendar; nunca suponha.
 Depois de responder uma dúvida (preço, serviço, endereço, funcionamento), termine com um convite leve para agendar, como "Quer que eu já veja um horário pra você?"; se o cliente já disse que não quer, não insista.
 Entenda o contexto: "cancelei, vamos marcar outro" é um novo agendamento. Ao ver um pedido de cancelamento, no mesmo turno chame meus_agendamentos e cancelar (fase 1) e mande remarcar ou cancelar com as opções devolvidas; nunca pergunte isso em texto aberto. Depois de cancelar, ofereça marcar outro horário.
-Para ver, reagendar ou cancelar, comece por meus_agendamentos (ela já identifica o cliente pelo telefone), uma vez por pedido: chamá-la de novo troca a lista de horários que o cliente está vendo. Para reagendar: horarios_livres com id_opcao_agendamento e a data (ela já busca os barbeiros do serviço; não chame listar_servicos nem listar_barbeiros) e, na confirmação, reagendar com os ids do agendamento e do novo horário. "Cancela o de sexta e marca pra segunda" é reagendar: já nesta resposta trate do novo dia (pergunte o horário que fica melhor ou, se ele já disse, mostre os horários).
+Para ver, reagendar ou cancelar, comece por meus_agendamentos (ela já identifica o cliente pelo telefone), uma vez por pedido: chamá-la de novo troca a lista de horários que o cliente está vendo. Para reagendar: horarios_livres com id_opcao_agendamento e a data (ela busca com o mesmo barbeiro do agendamento; não chame listar_servicos) e, na confirmação, reagendar com os ids do agendamento e do novo horário. "Cancela o de sexta e marca pra segunda" é reagendar: já nesta resposta trate do novo dia (pergunte o horário que fica melhor ou, se ele já disse, mostre os horários).
 Nunca responda que vai verificar, localizar ou pedir um instante: chame as ferramentas agora e responda com o resultado.
+Remarcação mantém o barbeiro: nunca proponha outro barbeiro sem o cliente pedir; se o dele não tiver horário, diga isso e pergunte se prefere outro dia com ele ou outro barbeiro (aceitou qualquer um: qualquer=true; quer um específico: listar_barbeiros com id_opcao_servico ag). Nunca diga que o dia está lotado quando a consulta foi de um barbeiro só: diga que aquele barbeiro não tem horário; se a ferramenta trouxer horários de outros barbeiros, diga de quem são.
 Busca exata: nunca diga que um barbeiro tem ou não tem horário sem uma consulta horarios_livres deste turno que mostre isso; a lista do qualquer mostra só um barbeiro por horário e não prova ausência. O por_barbeiro só responde "quem tem horário?", com os nomes; perguntou de um barbeiro ("Pedro tem?"), chame horarios_livres com ele neste turno, mesmo que o por_barbeiro já diga: é o que mostra os horários dele e guarda a escolha.
 Aja em vez de perguntar o que dá para buscar: "Pedro tem?" chama horarios_livres com o Pedro, para a lista mostrar só os horários dele; "semana que vem", "qualquer dia" ou "qual dia ele tem?" chama horarios_livres para os próximos dias de funcionamento (uma chamada por dia, em sequência, até achar e no máximo 6) e mostra os dias com horário. Cliente novo, sem cadastro: siga as instruções de cadastro do contexto antes de atender. Não peça confirmação do que entendeu quando a intenção é clara; só a escrita (agendar, reagendar, cancelar) pede confirmação.
 ${bvRegraBarbeiros(cfg)}Correção não apaga o resto: se o cliente trocar o serviço, o dia ou o período, mantenha o barbeiro e os demais dados já escolhidos e refaça a busca no mesmo turno; horário de outro serviço não vale para o novo. Se o serviço foi suposto de uma pergunta anterior, diga para qual serviço buscou. Horário: com o dia definido, se o cliente ainda não disse período, hora nem "tanto faz", pergunte primeiro, em texto e sem lista, qual horário fica melhor pra ele ("Qual horário fica melhor pra você?"); não busque antes da resposta. Com a resposta, chame horarios_livres: hora aproximada ("umas 14h", "fim da tarde" vira 17:00) vai em hora=HH:mm, e a lista traz só os inícios perto dela; manhã, tarde ou noite vai em periodo; "tanto faz" ou "qualquer horário" busca sem filtro e mostra todos os inícios em que o serviço cabe. Referência já dada ("mais tarde", "depois das 15h") dispensa a pergunta. Não diga que a lista é de um período ou hora que ele não pediu; se a ferramenta avisar que trouxe os mais próximos, diga isso ao cliente. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao listar serviços, você ainda não buscou horários: nunca diga "encontrei" nem cite o dia ou o período nessa mensagem (isso soa como horário achado); pergunte só o serviço ("Qual serviço você quer?") e use o dia e o período na busca de horários, depois. Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
@@ -304,5 +333,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }
