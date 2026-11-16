@@ -207,8 +207,10 @@ const BV_ESCRITA_FEITA = /\b(confirmad[oa]s?|agendad[oa]s?|marcad[oa]s?|remarcad
 
 // Corrida (atendimentos de 2026-11-15): o cliente manda outra mensagem antes de ler a resposta anterior (digita em partes, toca na
 // lista e escreve). Cada mensagem vira um turno e o segundo repetia a pergunta ou o resumo do primeiro. itens: mensagens novas do
-// turno ({recebida_em}); historico: mensagens da sessao ({direcao, conteudo, criado_em}). margemMs cobre o "digitando" do envio.
-function bvCorrida(itens, historico, margemMs = 5000) {
+// turno ({recebida_em}); historico: mensagens da sessao ({direcao, conteudo, criado_em}). So e corrida a mensagem que chegou ANTES de
+// a ultima resposta ser gravada (o agente ainda respondia a anterior): com margem, quem respondia rapido a uma pergunta repetida
+// ficava em silencio (suite R20, 2026-11-16).
+function bvCorrida(itens, historico, margemMs = 0) {
   const saidas = (Array.isArray(historico) ? historico : []).filter((h) => h && h.direcao === 'saida' && h.conteudo).map((h) => Date.parse(h.criado_em)).filter(Number.isFinite);
   const novas = (Array.isArray(itens) ? itens : []).map((i) => Date.parse(i && i.recebida_em)).filter(Number.isFinite);
   return saidas.length > 0 && novas.length > 0 && Math.max(...novas) < Math.max(...saidas) + margemMs;

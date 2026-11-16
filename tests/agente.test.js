@@ -328,6 +328,7 @@ console.log('agente.test.js sem numero da loja ok');
   const novas = [{ recebida_em: '2026-11-15T12:15:45.000Z' }];
   assert.equal(a.bvCorrida(novas, hist), true);
   assert.equal(a.bvCorrida([{ recebida_em: '2026-11-15T12:16:10Z' }], hist), false); // respondeu depois de ler
+  assert.equal(a.bvCorrida([{ recebida_em: '2026-11-15T12:15:48Z' }], hist), false); // 1 s depois da resposta gravada: ja nao e corrida (sem margem)
   assert.equal(a.bvCorrida(novas, []), false);
   assert.equal(a.bvCorrida([{ recebida_em: '2026-11-15T12:15:45Z' }, { recebida_em: '2026-11-15T12:16:10Z' }], hist), false); // a ultima veio depois de ler
   assert.equal(a.bvQuaseIgual('Perfeito! Para **corte adulto**, qual barbeiro você prefere?', hist[1].conteudo), true);

@@ -45,10 +45,10 @@ critério com a transcrição.
 | R17 | Pedido de humano | "Quero falar com uma pessoa" | **Depois da C:** handoff para o setor 78 e o agente para de responder. Antes da C: passa o contato da loja |
 | R18 | Memória do barbeiro e busca exata (PR #27) | "Quem tem horário amanhã?" / "O Pedro tem?" / troca o serviço | Diz quem tem horário pelo resumo por barbeiro; busca o Pedro direto; mantém o Pedro ao trocar o serviço |
 | R19 | Pergunta o horário antes de listar (alteração 1, 2026-10-28) | "Quero cortar o cabelo amanhã, pode ser com qualquer barbeiro" / "umas 2 da tarde" / escolhe / "Pode confirmar" | Usa o serviço do último atendimento; com o dia definido e sem período nem hora, pergunta qual horário fica melhor, sem lista; depois lista só os inícios perto da hora dita (ou vai direto ao resumo se ela estiver livre) |
-| R20 | Agenda pelo último corte (alteração 2, 2026-11-14) | "Oi, quero marcar um horário" / "Amanhã de manhã" / escolhe / "Pode confirmar" | Chama pelo nome; propõe repetir serviço e barbeiro do histórico da Graces e pergunta dia e horário de uma vez; resumo com serviço, data e horário |
+| R20 | Agenda pelo último corte (alteração 2, 2026-11-14) | "Oi, quero marcar um horário" / "Amanhã, em qualquer horário" / escolhe / "Pode confirmar" | Chama pelo nome; propõe repetir serviço e barbeiro do histórico da Graces e pergunta dia e horário de uma vez; resumo com serviço, data e horário |
 | R21 | Pede o Jayme (cláusula pétrea, 2026-11-14) | "Quero cortar o cabelo com o Jayme amanhã" / dados do cadastro | Cadastra, avisa que vai transferir para o atendimento humano e transfere; nunca mostra nem agenda o Jayme |
 | R22 | Barbeiro antes dos horários (2026-11-14) | "Quero cortar o cabelo amanhã à tarde" / dados do cadastro / "corte adulto" | Depois do serviço, pergunta o barbeiro por lista, sem o Jayme, antes de mostrar horários |
-| R23 | Só o corte de cabelo (2026-11-16) | "Pra hoje ainda dá pra cortar o cabelo?" / dados do cadastro | A lista de serviços traz os cortes, com o corte adulto, e não só os combos com barba |
+| R23 | Só o corte de cabelo (2026-11-16) | "Quero cortar só o cabelo, quais opções vocês têm?" / dados do cadastro | A lista de serviços traz os cortes, com o corte adulto, e não só os combos com barba |
 
 ## Decisão pendente do owner, sem bloquear a suíte
 
