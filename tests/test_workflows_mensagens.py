@@ -489,7 +489,7 @@ class LembreteUnicoPorGrupo(unittest.TestCase):
 
     def nos(self, arq):
         w = json.load(open(os.path.join(RAIZ, arq), encoding="utf-8"))
-        return {n["name"]: n for n in w["nodes"]}, {k: [[d["node"] for d in o] for o in v["main"]] for k, v in w["connections"].items()}
+        return {n["name"]: n for n in w["nodes"]}, {k: [[d["node"] for d in o] for o in v.get("main", [])] for k, v in w["connections"].items()}
 
     def test_pendencias_devolve_o_grupo(self):
         nos, _ = self.nos("workflows/bv-mensagens.json")
@@ -516,6 +516,71 @@ class LembreteUnicoPorGrupo(unittest.TestCase):
             c = json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))
             self.assertEqual(c["mensagens"]["juntar_min"], 120)
             self.assertEqual(c["graces"]["servicos_destaque"][0], "corte adulto")  # item 10: mais pedidos primeiro
+
+
+class FilaHumana(unittest.TestCase):
+    """Owner, 2026-11-16: na fila de atendimento humano o agente nao interage; 30 min sem interacao encerra o atendimento humano."""
+
+    def nos(self, arq):
+        w = json.load(open(os.path.join(RAIZ, arq), encoding="utf-8"))
+        return {n["name"]: n for n in w["nodes"]}, {k: [[d["node"] for d in o] for o in v.get("main", [])] for k, v in w["connections"].items()}
+
+    def test_recepcao_guarda_a_fila_e_a_mensagem_da_equipe(self):
+        nos, con = self.nos("workflows/bv-recepcao.json")
+        up = nos["Upsert contato"]["parameters"]
+        self.assertIn("fila_id = $4::int", up["query"])
+        self.assertTrue(up["options"]["queryReplacement"].endswith("msg.filaId ?? null, {{BV:handoff.setor_id}}] }}"))
+        self.assertIn('bvEquipe(ev.body, {{BV:handoff.setor_id}}, "{{BV:textos.encaminhar_equipe}}")', nos["Normalizar"]["parameters"]["jsCode"])
+        self.assertEqual(con["Responder 200 descartada"], [["Registrar equipe"]])
+        q = nos["Registrar equipe"]["parameters"]["query"]
+        self.assertIn("fila_ultima_de = 'equipe'", q)
+        self.assertIn("'equipe-' || $3::text", q)
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertTrue(nos["Registrar equipe"]["alwaysOutputData"])
+
+    def test_agente_calado_na_fila_humana(self):
+        nos, _ = self.nos("workflows/sub/entregar-rajada.json")
+        self.assertIn("AS fila_id FROM (SELECT $1::bigint AS cid) x", nos["Ler contexto"]["parameters"]["query"])
+        self.assertIn("const naFilaHumana = filaAtual === {{BV:handoff.setor_id}};", nos["Preparar"]["parameters"]["jsCode"])
+
+    def test_vigia_encerra_o_atendimento_parado(self):
+        nos, con = self.nos("workflows/bv-vigia.json")
+        self.assertIn("Filas paradas", con["A cada 5 minutos"][0])
+        self.assertEqual([con[n] for n in ("Filas paradas", "Encerrar atendimento")], [[["Encerrar atendimento"]], [["Gravar encerramento"]]])
+        p = nos["Filas paradas"]["parameters"]
+        self.assertIn("c.fila_ultima_de = 'equipe'", p["query"])  # so encerra depois de a equipe ter respondido
+        self.assertIn("'{{BV:handoff.encerrar_ativo}}' === 'True'", p["options"]["queryReplacement"])
+        self.assertEqual(nos["Encerrar atendimento"]["parameters"]["url"], "https://api.chatmasterveloz.com/api/tickets/updateAPI")
+        self.assertIn("status: 'closed'", nos["Encerrar atendimento"]["parameters"]["jsonBody"])
+        for n in ("Filas paradas", "Gravar encerramento"):
+            q = nos[n]["parameters"]["query"]
+            self.assertEqual(q.count("("), q.count(")"))
+
+    def test_config(self):
+        for amb, ativo in (("integracao", False), ("producao", True)):
+            c = json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))
+            self.assertEqual([c["handoff"]["encerrar_ativo"], c["handoff"]["encerrar_apos_min"], c["handoff"]["encerrar_so_respondido"]], [ativo, 30, True])
+            self.assertEqual([c["retomada"]["resposta_max_min"], c["retomada"]["apos_min_urgente"]], [720, 20])
+
+    def test_lembrete_recem_enviado_vale_como_enviado(self):
+        cond = "m.situacao = 'pendente' AND m.tipo = 'lembrete_dia' AND m.agendamento_canal_id IS NOT NULL AND m.previsto_para <= now() + interval '2 minutes'"
+        nos, _ = self.nos("workflows/sub/bv-confirmacao.json")
+        for n in ("Selecionar", "Reivindicar"):
+            q = nos[n]["parameters"]["query"]
+            self.assertIn(cond, q)
+            self.assertEqual(q.count("("), q.count(")"))
+        self.assertIn("situacao = 'enviada', enviada_em = COALESCE(m.enviada_em, m.previsto_para)", nos["Reivindicar"]["parameters"]["query"])
+        self.assertIn("com_data", nos["Graces confirmacao"]["parameters"]["jsonBody"])
+        self.assertIn(cond, self.nos("workflows/bv-recepcao.json")[0]["Confirmacao aberta?"]["parameters"]["query"])
+        self.assertIn(cond, self.nos("workflows/sub/entregar-rajada.json")[0]["Ler contexto"]["parameters"]["query"])
+
+    def test_retomada_fora_da_fila_humana_e_sem_proposta_vencida(self):
+        nos, _ = self.nos("workflows/bv-mensagens.json")
+        p = nos["Reivindicar retomadas"]["parameters"]
+        self.assertIn("t.fila_id = $10::int", p["query"])
+        self.assertIn("THEN $9::int ELSE $4::int END", p["query"])
+        self.assertEqual(p["query"].count("("), p["query"].count(")"))
+        self.assertTrue(p["options"]["queryReplacement"].endswith("{{BV:retomada.apos_min_urgente}}, {{BV:handoff.setor_id}}] }}"))
 
 
 if __name__ == "__main__":
