@@ -10,11 +10,11 @@ Análise das 282 mensagens de 21 contatos de PROD (2 de spam), feita em 2026-11-
 | 2 | Remarcação trocava o barbeiro em silêncio | Mantém o barbeiro do agendamento; outro só se o cliente pedir |
 | 3 | "Lotado" olhando um barbeiro só | Barbeiro habitual sem horário: mostra os outros e avisa; barbeiro escolhido: diz que ele não tem |
 | 4 | Respostas duplicadas quando o cliente escreve antes de ler a resposta anterior | O turno seguinte é avisado e não reenvia o que acabou de sair |
+| 5 | Mensagem de cliente sem resposta por 2h25: a chamada à OpenAI travou sem tempo limite e o n8n matou a execução aos 5 min, em silêncio | Tempo limite de 45 s e 1 retentativa no modelo (cai na contingência); o vigia fecha o turno preso e avisa o cliente (2026-11-16) |
 | 6 | Conversas abandonadas sem retomada | Uma retomada, 2 h depois da última mensagem do agente, só para quem parou no meio de um agendamento (2026-11-16) |
 
 ## Pendente, por prioridade
 
-5. **Mensagem sem resposta.** A pergunta de um cliente às 10:09 de 15/11 ficou 2h25 sem resposta, e havia um turno preso em "em andamento". Em diagnóstico: depende de uma leitura do banco de PROD pelo owner (turnos não concluídos e entradas sem resposta em 5 minutos).
 7. **Cadastro duplicado de quem já é cliente.** Dois disseram "já somos clientes" e "já cortei aí" e foram cadastrados de novo. A busca por nome da API da Graces devolve vazio nesta loja, então o duplicado não é detectado. Opções: perguntar antes se já é cliente e, se for, transferir para a equipe unir o cadastro.
 8. **Cadastro antes de pergunta simples.** "Vocês estão abertos hoje?" exigiu nome, nascimento e origem. Sugestão: responder horário de funcionamento e endereço sem cadastro. Depende de decisão do owner, que pediu o cadastro antes.
 9. **Becos sem saída com e-mail e Instagram.** Sem o telefone, quando o agente não resolve ele manda e-mail e Instagram. Sugestão: transferir para a fila humana (106) no próprio WhatsApp. "Estou a caminho" também recebeu um texto longo com esses contatos; deveria ser uma resposta curta.

@@ -24,7 +24,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH v AS (DELETE FROM tentativas_recepcao WHERE iniciada_em < now() - make_interval(secs => $1::int + 30) RETURNING mensagem_id) INSERT INTO falhas_recepcao (tipo, motivo, contato_id) SELECT 'redis_indisponivel', 'tempo_esgotado', m.contato_id FROM v JOIN mensagens m ON m.id = v.mensagem_id RETURNING id",
+        "query": "WITH v AS (DELETE FROM tentativas_recepcao WHERE iniciada_em < now() - make_interval(secs => $1::int + 30) RETURNING mensagem_id), f AS (INSERT INTO falhas_recepcao (tipo, motivo, contato_id) SELECT 'redis_indisponivel', 'tempo_esgotado', m.contato_id FROM v JOIN mensagens m ON m.id = v.mensagem_id RETURNING contato_id), t AS (UPDATE turnos SET estado = 'falhou', concluido_em = now() WHERE estado = 'em_andamento' AND iniciado_em < now() - make_interval(secs => $1::int) AND contato_id IN (SELECT contato_id FROM f) RETURNING 1) SELECT c.id AS contato_id, c.telefone, (SELECT count(*) FROM t)::int AS turnos_fechados FROM (SELECT m.contato_id, min(m.criado_em) AS desde FROM v JOIN mensagens m ON m.id = v.mensagem_id GROUP BY 1) x JOIN contatos c ON c.id = x.contato_id WHERE NOT EXISTS (SELECT 1 FROM mensagens s WHERE s.contato_id = x.contato_id AND s.direcao = 'saida' AND s.criado_em > x.desde) AND coalesce((SELECT k.pedido->>'handoff' FROM conversas k WHERE k.contato_id = x.contato_id), 'false') <> 'true'",
         "options": {
           "queryReplacement": "={{ [{{BV:execucao.timeout_s}}] }}"
         }
@@ -68,6 +68,126 @@
           "name": "Postgres Barbearia Vila"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// Turno que estourou o tempo sem resposta (PROD, 2026-11-15: a mensagem de um cliente ficou 2h25 parada): o cliente recebe o texto\n// de contingencia e, quando escrever de novo, a mensagem antiga e reprocessada junto. TESTE: so envia para teste.contatos_escrita.\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}' };\nconst dig = (s) => String(s || '').replace(/\\D/g, '');\nconst escrita = {{BV:teste.contatos_escrita}}.map(dig);\nconst texto = \"{{BV:textos.contingencia}}\";\nreturn $input.all().map((x) => x.json).filter((l) => l.contato_id != null).map((l, k) => ({ json: { contato_id: l.contato_id, texto,\n  req: bvMTexto({ texto }, l.telefone, cfg), simulado: '{{BV:ambiente}}' === 'integracao' && !escrita.includes(dig(l.telefone)) }, pairedItem: k }));"
+      },
+      "id": "ec4a7ca8-4613-5306-b42d-29861712c1a1",
+      "name": "Montar aviso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2c483197-462a-51dd-bcca-f4711d0baad0",
+              "leftValue": "={{ String(!$json.simulado) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d399ddb9-a2a8-59a3-8561-2fd4c7dee6ab",
+      "name": "Envia aviso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chatmasterveloz.com{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "e1735e9b-9852-5f25-bdb2-d59c143c3d1f",
+      "name": "Enviar aviso",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        140
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const p = $('Montar aviso').item.json;\nconst st = p.simulado ? 200 : Number($input.item.json.statusCode || 0); // 0 = sem resposta\nconst ok = st >= 200 && st < 300;\n// a tentativa ja saiu de tentativas_recepcao: falha nao repete, so fica registrada\nreturn { json: { contato_id: p.contato_id, texto: ok ? p.texto : null, code: ok ? null : (st ? `HTTP_${st}` : 'SEM_RESPOSTA'), status: st } };"
+      },
+      "id": "d446fc6a-9353-5054-b0bb-31786f434f49",
+      "name": "Resultado aviso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT $1::bigint, 'vigia-' || $1::text || '-' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint::text, 'saida', 'texto', $2::text WHERE $2::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', 'mensagem|aviso_vigia_falhou', 'aviso_vigia', $3::text, $4::int, $1::bigint WHERE $3::text IS NOT NULL RETURNING 1) SELECT (SELECT count(*) FROM ms) AS gravada, (SELECT count(*) FROM fa) AS falha",
+        "options": {
+          "queryReplacement": "={{ [$json.contato_id, $json.texto ?? null, $json.code ?? null, $json.status ?? null] }}"
+        }
+      },
+      "id": "4a28c6d5-2004-59ec-ad11-991c93d0d7bd",
+      "name": "Gravar aviso",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1340,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
     }
   ],
   "connections": {
@@ -81,6 +201,68 @@
           },
           {
             "node": "Reter midia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar estouradas": {
+      "main": [
+        [
+          {
+            "node": "Montar aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar aviso": {
+      "main": [
+        [
+          {
+            "node": "Envia aviso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envia aviso?": {
+      "main": [
+        [
+          {
+            "node": "Enviar aviso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar aviso": {
+      "main": [
+        [
+          {
+            "node": "Resultado aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado aviso": {
+      "main": [
+        [
+          {
+            "node": "Gravar aviso",
             "type": "main",
             "index": 0
           }

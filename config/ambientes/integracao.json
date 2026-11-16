@@ -120,7 +120,9 @@
     "raciocinio": "low",
     "iteracoes_max": 8,
     "mensagens_contexto": 20,
-    "turnos_max_contato_hora": 20
+    "turnos_max_contato_hora": 20,
+    "modelo_timeout_ms": 45000,
+    "modelo_retentativas": 1
   },
   "conversa": {
     "janela_recencia_min": 120

@@ -346,6 +346,8 @@ console.log('agente.test.js sem numero da loja ok');
   assert.equal(a.bvSemRepetir(dup, novas, velho, false).length, 1);
   const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
   assert.match(p, /Remarcação mantém o barbeiro/);
+  assert.match(p, /Nunca diga que encontrou, achou ou que há horários sem mandar a lista deles nesta mesma resposta/); // suite R8, 2026-11-16
+  assert.match(p, /nunca diga que o horário ficou reservado, separado, garantido ou marcado: nada é marcado antes do sim do cliente/); // suite R19 e PROD, 2026-11-16
   assert.match(p, /Nunca diga que o dia está lotado quando a consulta foi de um barbeiro só/);
 }
 console.log('agente.test.js sem repetir ok');
@@ -363,3 +365,12 @@ console.log('agente.test.js sem repetir ok');
   assert.equal(rec({ ultimaEntradaMs: agora - 1 * H, retomadaMs: null }).sessaoNova, false);
 }
 console.log('agente.test.js retomada ok');
+
+// Datas por extenso (suite R11, 2026-11-16): "amanha" logo depois da meia-noite
+{
+  const a = require('../workflows/shared/agente.js');
+  assert.equal(a.bvDatas('2026-11-16 00:55:10'), 'Hoje é segunda-feira, 2026-11-16; amanhã é terça-feira, 2026-11-17; depois de amanhã é quarta-feira, 2026-11-18. "Amanhã" é sempre a data acima, mesmo de madrugada.');
+  assert.match(a.bvDatas('2026-12-31 23:59:00'), /Hoje é quinta-feira, 2026-12-31; amanhã é sexta-feira, 2027-01-01/);
+  assert.equal(a.bvDatas(''), '');
+}
+console.log('agente.test.js datas ok');
