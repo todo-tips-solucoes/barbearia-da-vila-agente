@@ -14,7 +14,7 @@ def roteiros():
 
 class Roteiros(unittest.TestCase):
     def test_ids_unicos_r1_a_r19(self):
-        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 23)])
+        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 24)])
 
     def test_criterios_validos(self):
         for r in roteiros():
