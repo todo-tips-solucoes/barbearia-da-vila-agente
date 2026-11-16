@@ -16,6 +16,8 @@ const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente',
 const BVG_MOTIVOS = {
   barbeiro_equipe: '',
   ja_cliente: 'Como você já é cliente, seu cadastro deve estar com outro número. ',
+  outra_pessoa: '',
+  pacote: 'A equipe confere o seu pacote por aqui. ',
   pediu_pessoa: '',
   atraso: 'Entendi! Quem confirma isso é a equipe. ',
   nao_resolvi: '',
@@ -345,6 +347,7 @@ function bvgTocaHumano(i, ctx, cfg) {
 function bvgFase1(i, ctx, cfg) {
   const bloq = bvgEscritaPermitida(cfg);
   if (bloq) return bvgFim(bloq);
+  if (!ctx.pedido.idCliente && ctx.pedido.cliente_sem_cadastro) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente sem cadastro: faça agora o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e, com ele feito, chame esta ferramenta de novo com a mesma opção'));
   if (!ctx.pedido.idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
   const fora = bvgRecusa('escrita_fora_do_teste', 'só é possível mexer em agendamentos de teste neste ambiente');
   if (i.operacao !== 'cancelar' && bvgTocaHumano(i, ctx, cfg)) return bvgEncaminhar('barbeiro_humano', i.operacao, cfg);
@@ -377,6 +380,12 @@ function bvgFase1(i, ctx, cfg) {
   if (!real && ag0 && ag0.idProfissional !== cfg.testeId) return bvgFim(fora); // TESTE e PROD fechada: nunca altera agenda de barbeiro real
   if (h && soTeste && h.idProfissional !== cfg.testeId) return bvgFim(fora); // PROD fechada: nunca escreve na agenda de barbeiro real
   if (h && !soTeste && h.idProfissional === cfg.testeId) return bvgFim(bvgOpcaoInvalida()); // FR-012: o modelo nao escolhe o de teste
+  // Quem escolhe e o cliente (16/11: o agente pedia confirmacao de um horario que o cliente nao disse): no turno da busca, so vai ao
+  // resumo o horario pedido que esta livre ou o unico da lista; os demais esperam a resposta do cliente.
+  const bu = ctx.pedido.busca;
+  if (h && i.operacao !== 'cancelar' && bu && bu.turno === i.turno_id && bu.n > 1 && bu.livre !== String(i.id_opcao_horario)) {
+    return bvgFim(bvgRecusa('cliente_nao_escolheu', 'o cliente ainda não escolheu esse horário: diga o que não há (se for o caso), mostre as opções e pergunte qual ele prefere; só chame esta ferramenta com a escolha dele'));
+  }
   const alvo = i.operacao === 'reagendar' ? ag : h; // serviço que seria escrito; cancelar segue permitido
   if (i.operacao !== 'cancelar' && alvo && bvSegundaVez(alvo.servico)) return bvgFim(bvgNaoOferecido()); // FR-005
   const agAnt = { idAgenda: ag0 && ag0.idAgenda, horaInicio: ag0 && ag0.horaInicio, recorrente: !!(ag0 && ag0.recorrente) };
@@ -408,6 +417,7 @@ function bvgFase2(i, ctx, cfg, chamar) {
     const f = ctx.info;
     if (!f) return bvgFim(bvgRecusa('proposta_invalida', 'não achei essa confirmação; refaça o resumo'));
     if (f.mesmo_turno) return bvgFim(bvgRecusa('confirmacao_no_mesmo_turno', 'peça a confirmação ao cliente e só execute depois que ele responder'));
+    if (f.estado === 'pendente' && f.antes_da_pergunta) return bvgFim(bvgRecusa('confirmacao_antes_da_pergunta', 'a mensagem do cliente chegou antes de ele ver o pedido de confirmação: peça a confirmação de novo, em uma frase, e espere a resposta'));
     if (f.estado !== 'pendente') return bvgFim(bvgRecusa('proposta_nao_pendente', 'essa confirmação já foi usada; refaça o resumo'));
     return bvgFim(bvgRecusa('proposta_expirada', 'a confirmação venceu; refaça o resumo e peça de novo'), {}); // expirada: a pendente fica para o proximo "substituida"
   }
@@ -507,7 +517,7 @@ function bvGPasso(st, resps0, cfg) {
   return r.reqs ? { ...r, st: { ...r.st, estagio: n } } : r;
 }
 
-const BVG_ORIENT_CADASTRO = 'cliente novo, sem cadastro: antes de atender, peça o nome completo, a data de nascimento e como conheceu a barbearia, chame cadastrar_cliente e depois responda o pedido dele';
+const BVG_ORIENT_CADASTRO = 'cliente sem cadastro neste número: responda dúvidas e mostre horários livres sem cadastro; para agendar, peça o nome completo, a data de nascimento e como conheceu a barbearia, chame cadastrar_cliente e depois siga com o agendamento';
 // Cadastro feito (POST ou, no TESTE, o cliente de teste): o pedido passa a ter o cliente; como_conheceu vai para contatos.
 const bvgCadastrado = (cad, idCliente) => bvgFim(
   { ok: true, cadastrado: true, nome: cad.ns.nome, orientacao: 'cadastro feito: agradeça em poucas palavras e, nesta mesma resposta, retome o que ficou pendente antes do cadastro (o pedido que ainda não foi respondido; se ele já tinha aceitado agendar, siga para o agendamento), chamando as ferramentas que precisar; não pergunte como pode ajudar' },
@@ -669,7 +679,7 @@ function bvgPassoUm(st, resps0, cfg) {
       }
       // o barbeiro so vira escolha da conversa quando o cliente o escolheu (ou e o da remarcacao); o habitual segue sendo sugestao
       const um = soUm && !meta.habitual ? { barbeiro: { idProfissional: soUm.idProfissional, apelido: soUm.apelido }, barbeiro_ag: meta.agId || null } : {};
-      return bvgFim(res, { opcoes: of, pedido: { servico: s, ...um } });
+      return bvgFim(res, { opcoes: of, pedido: { servico: s, ...um, busca: { turno: i.turno_id, n: of.itens.length, livre: exato ? String(exato.id) : null } } });
     }
     case 'funcionamento': {
       const hs = (r0.body && Array.isArray(r0.body.horarios) ? r0.body.horarios : []).filter((h) => h && h.dia)

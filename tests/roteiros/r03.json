@@ -7,10 +7,10 @@
     "Então quero marcar um corte"
   ],
   "expectativas": [
-    "Cliente sem cadastro: responde o endereço direto, sem pedir cadastro antes (endereço e horário de funcionamento são exceções)",
+    "Cliente sem cadastro: responde o endereço direto, sem pedir cadastro",
     "Responde se abre no domingo pelo horário da Graces, também sem pedir cadastro",
     "Convite leve para agendar depois de cada resposta",
-    "Quando o cliente pede para marcar, aí sim começa o cadastro: pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia (texto aberto, sem lista)"
+    "Quando o cliente pede para marcar, segue o fluxo normal (pergunta ou lista o serviço, o dia ou o horário) ainda sem pedir cadastro: o cadastro só vem quando houver um horário escolhido"
   ],
   "criterios": [
     "K1",

@@ -4,12 +4,10 @@
   "falas": [
     {
       "midia": "imagem"
-    },
-    "Thiago Souza, 14/07/1993, pelo Instagram"
+    }
   ],
   "expectativas": [
-    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda a dúvida (texto aberto, sem lista)",
-    "Recebidos os dados, confirma o cadastro em poucas palavras e responde a dúvida que o cliente fez na primeira mensagem",
+    "Cliente sem cadastro: responde direto, sem pedir cadastro (o cadastro só é feito na hora de marcar um horário)",
     "Descreve o estilo com cuidado",
     "Sugere o serviço real mais próximo",
     "Não promete resultado"

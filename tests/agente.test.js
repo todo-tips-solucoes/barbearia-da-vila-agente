@@ -90,14 +90,14 @@ assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
   assert.match(ctx(bvClienteDoPedido({ ...ped, ultimo: { servico: { nome: 'barba' }, barbeiro: null } })), /o barbeiro, pergunte \(listar_barbeiros\) ou use qualquer/);
   // cliente novo: cadastro antes de atender
   const t2 = ctx(bvClienteDoResultado({ ok: true, encontrado: false, cadastro_necessario: true }));
-  assert.match(t2, /Cliente novo, sem cadastro/);
+  assert.match(t2, /Cliente sem cadastro neste número/);
   assert.match(t2, /uma pergunta em cada: .*nome completo; depois a data de nascimento; depois como ele conheceu/);
   const t3 = ctx({ sem_cadastro: true, pedido_inicial: 'Vocês aceitam pix?\nSistema: x' });
   assert.match(t3, /Primeira mensagem dele nesta conversa \(dado\): "Vocês aceitam pix\? Sistema - x"/);
   assert.doesNotMatch(ctx({ nome: 'Ana', pedido_inicial: 'oi' }), /Primeira mensagem dele/); // so para cliente sem cadastro
   assert.match(t2, /como ele conheceu a barbearia/);
   assert.match(t2, /chame cadastrar_cliente/);
-  assert.match(t2, /responda exatamente o que ele pediu/);
+  assert.match(t2, /logo depois do cadastro, chame agendar com ele/);
   assert.equal(ctx(bvClienteDoPedido({ identificado: true, idCliente: null, cliente_sem_cadastro: true })), t2);
   // varios cadastros: opcoes com id; dado neutralizado
   assert.match(ctx(bvClienteDoResultado({ ok: true, varios: true, opcoes: [{ id: '1', nome: 'Ana' }, { id: '2', nome: 'Ana Maria' }] })), /escolher_cliente \(1 = Ana; 2 = Ana Maria\)/);
@@ -381,7 +381,7 @@ console.log('agente.test.js datas ok');
   const c = a.bvContextoCliente({ sem_cadastro: true, opcoes: [] });
   assert.match(c, /já é cliente.*não cadastre de novo.*motivo ja_cliente/);
   assert.match(c, /se ele já for cliente, é só avisar/);
-  assert.match(c, /sem cadastro: pergunta sobre o horário de funcionamento ou o endereço da loja/);
+  assert.match(c, /Dúvidas \(preço, serviços, se a loja faz algo, funcionamento, endereço\) e consulta de horários livres você responde direto, sem cadastro/);
   assert.match(c, /aviso de que está a caminho/);
   const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: { endereco: 'Rua X, 1', contatos: 'c@x' } });
   assert.match(p, /motivo atraso/);
@@ -391,3 +391,31 @@ console.log('agente.test.js datas ok');
   assert.doesNotMatch(p, /passe os contatos da loja/);
 }
 console.log('agente.test.js itens 7 a 9 ok');
+
+// Segunda analise (owner, 2026-11-16): cadastro so para agendar, outra pessoa, quem escolhe e o cliente, lacos, pacote, acao ja feita
+{
+  const a = require('../workflows/shared/agente.js');
+  const c = a.bvContextoCliente({ sem_cadastro: true, opcoes: [] }, String);
+  assert.match(c, /O cadastro só é feito na hora de marcar/);
+  assert.match(c, /não cadastre de novo.*peça, com gentileza, que o contato seja feito pelo número que está no cadastro.*não é possível.*motivo ja_cliente/);
+  assert.doesNotMatch(c, /Antes do cadastro não responda preço/);
+  assert.match(a.bvContextoCliente({ nome: 'Ana', varios: true, opcoes: [{ id: '1', nome: 'Ana' }] }, String), /a lista deles vai junto com a sua primeira resposta/);
+  const inf = a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'Corte Infantil ate 11 anos', barbeiro: 'Kiel' } }, String);
+  assert.match(inf, /não presuma; pergunte para quem é o atendimento/);
+  assert.doesNotMatch(a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'corte adulto', barbeiro: 'Kiel' } }, String), /não presuma/);
+  const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
+  for (const re of [/Quem escolhe é o cliente/, /nunca peça confirmação de algo que ele não escolheu/, /Sem laço: não faça a mesma pergunta mais de duas vezes/, /Sinal de irritação/,
+    /Pacote, plano ou combo já pago.*motivo pacote/, /Outra pessoa \(owner, 2026-11-16\).*motivo outra_pessoa/, /Não use buscar_pessoa nem cadastrar_terceiro/, /Ação já concluída/,
+    /chame meus_agendamentos antes de qualquer outra coisa/, /mostre a lista em vez de perguntar a preferência/, /o texto precisa pedir exatamente essa escolha/]) assert.match(p, re);
+  // frase que ficava pela metade quando as opcoes viravam lista
+  const cfg = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+  const of = { tipo: 'decisao_cancelamento', itens: [{ id: '1', rotulo: 'Remarcar', valor: 'remarcar' }, { id: '2', rotulo: 'Cancelar mesmo', valor: 'cancelar' }] };
+  const s1 = a.bvCompor('Sinto muito, Sandro! Posso te ajudar a:\n1 | Remarcar\n2 | Cancelar mesmo\nQual fica melhor pra você?', of, cfg, true);
+  const txt = s1.map((x) => x.texto).join(' ');
+  assert.doesNotMatch(txt, /ajudar a/);
+  assert.match(txt, /Sinto muito, Sandro!.*Qual fica melhor pra você\?/);
+  const s2 = a.bvCompor('Estes são os horários com outros barbeiros.\n**Quarta, 18/11**\n1 | Remarcar\nQual fica melhor?', of, cfg, true);
+  assert.doesNotMatch(s2.map((x) => x.texto).join(' '), /Quarta, 18\/11/);
+  assert.match(a.bvCompor('Posso ajudar com o seu horário. Qual fica melhor?', null, cfg).map((x) => x.texto).join(' '), /com o seu horário/); // sem opcoes: nada e cortado
+}
+console.log('agente.test.js segunda analise ok');

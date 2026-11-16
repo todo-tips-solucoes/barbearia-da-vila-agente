@@ -2,12 +2,10 @@
   "id": "R14",
   "situacao": "Fora do assunto",
   "falas": [
-    "Me indica um restaurante aí perto?",
-    "André Luiz Pereira, 18/06/1992, Google"
+    "Me indica um restaurante aí perto?"
   ],
   "expectativas": [
-    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda a dúvida (texto aberto, sem lista)",
-    "Recebidos os dados, confirma o cadastro em poucas palavras e responde a dúvida que o cliente fez na primeira mensagem",
+    "Cliente sem cadastro: responde direto, sem pedir cadastro (o cadastro só é feito na hora de marcar um horário)",
     "Recusa gentil",
     "Reconduz para a barbearia"
   ],

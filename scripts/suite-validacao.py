@@ -594,7 +594,7 @@ def referencia_graces(get=None):
             partes.append(f"Ultimo atendimento do cliente cadastrado (roteiros com agenda; historico da Graces): {h.get('descricaoServico')} com {str(h.get('profissional', '')).strip()}")
     except Exception:  # noqa: BLE001
         pass
-    partes.append("Cliente sem cadastro (roteiros sem agenda, contato simulado): o agente pede nome completo, data de nascimento e como conheceu antes de atender; o cadastro no TESTE nao vai a Graces")
+    partes.append("Cliente sem cadastro (roteiros sem agenda, contato simulado): duvidas e horarios livres saem sem cadastro; o cadastro (nome completo, data de nascimento e como conheceu) so e pedido na hora de marcar um horario, ou antes de transferir quem pede um barbeiro que so a equipe agenda; o cadastro no TESTE nao vai a Graces")
     try:
         partes.append("Funcionamento: " + json.dumps(get("/agenda/configuracao").get("horarios"), ensure_ascii=False))
     except Exception:  # noqa: BLE001

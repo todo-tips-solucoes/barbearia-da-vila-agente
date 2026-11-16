@@ -6,7 +6,7 @@
     "Fábio Gomes Pinto, 07/04/1990, pelo Instagram"
   ],
   "expectativas": [
-    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda o pedido (texto aberto, sem lista)",
+    "Cliente sem cadastro que pede um barbeiro que só a equipe agenda: antes de transferir, faz o cadastro rápido (nome completo, data de nascimento, como conheceu), para a equipe recebê-lo pronto",
     "Depois do cadastro, diz com gentileza que vai transferir para o atendimento humano continuar o agendamento com o Jayme",
     "Não mostra horários nem lista de barbeiros e não agenda com o Jayme"
   ],
