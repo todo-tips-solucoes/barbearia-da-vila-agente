@@ -1,0 +1,19 @@
+{
+  "id": "R25",
+  "situacao": "Aviso de que está a caminho (owner, 2026-11-16): resposta curta, sem contatos e sem transferir",
+  "falas": [
+    "Estou a caminho!"
+  ],
+  "expectativas": [
+    "Resposta curta e simpática (uma ou duas frases), como \"Te esperamos!\"",
+    "Não pede cadastro, não manda e-mail, Instagram nem telefone e não transfere para a equipe"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "handoff": false
+}

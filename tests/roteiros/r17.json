@@ -5,8 +5,7 @@
     "Quero falar com uma pessoa"
   ],
   "expectativas": [
-    "Antes da C: passa o contato da loja",
-    "Depois da C: handoff para o setor 78 e o agente para de responder",
+    "Diz que vai passar para a equipe, que responde por esta mesma conversa, e transfere; não manda e-mail, Instagram nem telefone",
     "Responde direto, sem pedir cadastro antes (atraso e pedido de pessoa são exceções)"
   ],
   "criterios": [
@@ -16,5 +15,5 @@
     "K6"
   ],
   "agenda": false,
-  "antes_da_c": true
+  "handoff": true
 }
