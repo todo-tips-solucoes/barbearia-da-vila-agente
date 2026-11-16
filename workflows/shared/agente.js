@@ -246,8 +246,10 @@ function bvSaudar(saida, sessaoNova) {
 }
 
 // Sessao nova se a ultima entrada passou da janela: pedido vira pedido_anterior abandonado e opcoes zera (data-model).
+// A retomada (retomadaMs) conta como atividade: quem responde a ela dentro da janela continua de onde parou (owner, 2026-11-16).
 function bvRecencia(p) {
-  const velha = p.ultimaEntradaMs == null || (p.agoraMs - p.ultimaEntradaMs) > p.janelaMin * 60000;
+  const ult = Math.max(p.ultimaEntradaMs == null ? -Infinity : p.ultimaEntradaMs, p.retomadaMs == null ? -Infinity : p.retomadaMs);
+  const velha = p.ultimaEntradaMs == null || (p.agoraMs - ult) > p.janelaMin * 60000;
   if (!velha) return { sessaoNova: false, pedido: p.pedido, opcoes: p.opcoes };
   const tem = p.pedido && Object.keys(p.pedido).length > 0;
   return { sessaoNova: true, pedido: {}, opcoes: null, pedido_anterior: tem ? { ...p.pedido, abandonado: true } : null };

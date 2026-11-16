@@ -342,3 +342,18 @@ console.log('mensagens.test.js bigint como texto ok');
   assert.notEqual(m.bvMSincPlano([l({ etiqueta_id: '534', etiqueta_ticket_id: '172345', etiqueta_removida_em: '2026-11-22T17:00:00Z', inicio: '2026-11-21T09:00:00' })], agora, cfg)[0].acao, 'desetiquetar');
 }
 console.log('mensagens.test.js etiquetas da confirmacao ok');
+
+// Retomada de agendamento abandonado (owner, 2026-11-16)
+{
+  const m = require('../workflows/shared/mensagens.js');
+  const cfg = { wid: '159', fila: '107', textos: { retomada_confirmar: 'Oi, {nome}! Ficou faltando só confirmar {resumo}. Ainda quer esse horário?', retomada_continuar: 'Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?' } };
+  const l = (o) => ({ contato_id: 1, telefone: '5511999998888', nome: 'Daniel', servico: 'corte adulto', proposta: null, ...o });
+  assert.equal(m.bvMRetomada(l(), cfg).texto, 'Oi, Daniel! A gente não terminou de marcar o seu corte adulto. Quer continuar de onde paramos?');
+  assert.equal(m.bvMRetomada(l({ nome: null, servico: null }), cfg).texto, 'Oi! A gente não terminou de marcar o seu horário. Quer continuar de onde paramos?');
+  const conj = { acao: 'agendar_conjunto', dados: { itens: [{ servico: 'corte adulto', barbeiro: 'Kiel', data: '2026-11-20', hora: '10:00' }, { servico: 'barba design', barbeiro: 'Kiel', data: '2026-11-20', hora: '10:40' }] } };
+  assert.equal(m.bvMRetomada(l({ proposta: conj }), cfg).texto, 'Oi, Daniel! Ficou faltando só confirmar corte adulto com Kiel em 20/11 às 10:00 + barba design com Kiel em 20/11 às 10:40. Ainda quer esse horário?');
+  const r = m.bvMRetomada(l({ telefone: '123@lid', proposta: { acao: 'reagendar', dados: { servico: 'corte adulto', barbeiro: 'Kiel', data: '2026-11-17', hora: '12:00' } } }), cfg);
+  assert.match(r.texto, /confirmar a remarcação do seu corte adulto com Kiel em 17\/11 às 12:00/);
+  assert.deepEqual([r.req.path, r.req.body.number, r.req.body.queueId, r.req.body.openTicket], ['/api/messages/whatsmeow/sendTextPROLid', '123@lid', '107', '0']);
+}
+console.log('mensagens.test.js retomada ok');
