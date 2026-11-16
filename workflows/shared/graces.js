@@ -284,8 +284,9 @@ function bvGPlano(i, ctx0, cfg) {
           return chamar(bvgReqsLivre([{ idServico: s.idServico, idProfissional: b.idProfissional, data: i.data }]), { servico: s, barbeiros: [b], qualquer: false, data: i.data, periodo: i.periodo, hora: i.hora, agId: ag.idAgenda });
         }
       }
-      // Reagendar com qualquer barbeiro: barbeiros do servico do agendamento neste passo (poupa duas rodadas do modelo, R8)
-      if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data, periodo: i.periodo, hora: i.hora });
+      // Reagendar com qualquer barbeiro: barbeiros do servico do agendamento neste passo (poupa duas rodadas do modelo, R8).
+      // agQualquer: a lista NAO e do barbeiro do agendamento (cliente aceitou outro, ou o do agendamento nao pode ser ofertado)
+      if (ag && !i.id_opcao_barbeiro) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data, periodo: i.periodo, hora: i.hora, agQualquer: true });
       // FR-002/FR-012: defesa extra, o barbeiro de teste nunca entra na uniao nem se vier no pedido.
       // Memoria (teste do owner, 2026-10-22): sem id_opcao_barbeiro, vale o barbeiro que o cliente ja escolheu na sessao
       // "Qualquer barbeiro" sem a lista de barbeiros deste servico (ex.: servico do ultimo atendimento): busca os barbeiros neste passo
@@ -634,6 +635,8 @@ function bvgPassoUm(st, resps0, cfg) {
       else if (!horas.length) res.orientacao = todas.length ? `sem horário livre de ${meta.periodo} nesse dia; ofereça outro período ou outro dia` : 'dia lotado; sugira outro dia';
       // suite R18 (2026-11-16): o modelo tirava "a partir de que horas" da lista (um barbeiro por horario) e errava o primeiro horario
       else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário e não serve para dizer quando cada um começa: para dizer quem tem horário e a partir de que horas, use quem_tem_horario como está, sem trocar as horas; para falar de um barbeiro específico, chame horarios_livres com id_opcao_barbeiro dele';
+      // suite R8 (2026-11-16): com a lista de qualquer barbeiro numa remarcacao, o modelo dizia que "a troca mantem o barbeiro"
+      if (meta.agQualquer && horas.length) res.orientacao = 'os horários da lista são de qualquer barbeiro, não do barbeiro do agendamento: não diga que a remarcação mantém o barbeiro; ' + (res.orientacao || '');
       if (meta.sem) res.orientacao = `${meta.sem}, o barbeiro do último atendimento, não tem horário ${meta.periodo ? `de ${meta.periodo} ` : ''}nesse dia: diga isso ao cliente${horas.length ? ' e que os horários da lista são de outros barbeiros' : ''}` + (res.orientacao ? '; ' + res.orientacao : '');
       if (perto.aproximada) res.orientacao = bvgAvisoPerto(meta.hora, cfg) + (res.orientacao ? '; ' + res.orientacao : '');
       // Dia e hora escolhidos (owner, 2026-11-14): o horario pedido livre vai direto ao resumo e a confirmacao, sem lista

@@ -885,3 +885,14 @@ console.log('graces.test.js servico pelo nome ok');
   assert.match(r.orientacao, /use quem_tem_horario como está/);
 }
 console.log('graces.test.js quem tem horario ok');
+
+// Remarcacao com a lista de qualquer barbeiro (suite R8, 2026-11-16): a ferramenta diz que a lista nao e do barbeiro do agendamento
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const agT = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: TESTE, profissional: 'ZZ TESTE' };
+  let p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-27' }), { opcoes: {}, pedido: { agendamentos: [agT] } }, cfg);
+  p = g.bvGPasso(p.st, [ok([{ idProfissional: 'b1', apelido: 'Kiel' }])], cfg);
+  const r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['10:00'] }), resp(500, {})], cfg).final.resultado;
+  assert.match(r.orientacao, /^os horários da lista são de qualquer barbeiro, não do barbeiro do agendamento: não diga que a remarcação mantém o barbeiro/);
+}
+console.log('graces.test.js remarcacao com qualquer barbeiro ok');
