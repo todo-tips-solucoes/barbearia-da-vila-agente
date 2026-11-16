@@ -33,7 +33,7 @@ A lista completa, e as pendências, estão em **`docs/decisoes-pre-00c.md`**. O 
   - oferecer todos os inícios em que o serviço cabe;
   - não retomar uma coleta antiga num "Oi";
   - não mostrar o barbeiro de teste.
-- `docs/melhorias-atendimento.md`: análise dos atendimentos reais de PROD, com o que já foi corrigido (itens 1 a 11) e as pendências menores. Consulte antes de mexer no atendimento.
+- `docs/melhorias-atendimento.md`: análise dos atendimentos reais de PROD, com o que já foi corrigido (itens 1 a 11) e as pendências priorizadas da segunda análise (itens 12 a 26). Consulte antes de mexer no atendimento.
 - `informacaoes_barbearia.txt`: endereço, contatos, CNPJ e preços de referência humana (o horário de funcionamento já foi alinhado à Graces).
 - Versão anterior (Python/FastAPI, abandonada): repositório `todo-tips-solucoes/agente-barbearia-da-vila`, que só contém briefing e mapas de API. Serve como histórico de decisões, não como base de código.
 
