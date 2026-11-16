@@ -7,9 +7,19 @@ if (typeof module !== 'undefined' && typeof bvMProgramar === 'undefined') Object
 
 const BVG_CAMPOS = ['operacao', 'contato_id', 'telefone', 'turno_id', 'ambiente', 'texto', 'id_opcao', 'id_opcao_servico',
   'id_opcao_barbeiro', 'qualquer', 'data', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento',
-  'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos', 'periodo', 'hora', 'nascimento', 'como_conheceu'];
+  'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos', 'periodo', 'hora', 'nascimento', 'como_conheceu', 'motivo'];
 const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente', 'listar_servicos', 'listar_barbeiros',
   'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro', 'funcionamento', 'transferir_atendimento'];
+// Motivos de transferir_atendimento (owner, 2026-11-16): a equipe atende nesta mesma conversa, entao em vez de mandar o cliente
+// para e-mail ou Instagram o agente transfere. Valor desconhecido vira nao_resolvi; ausente vale barbeiro_equipe (clausula do Jayme).
+// O valor e a frase que abre o texto de encaminhamento (texto pronto: o modelo so repete).
+const BVG_MOTIVOS = {
+  barbeiro_equipe: '',
+  ja_cliente: 'Como você já é cliente, seu cadastro deve estar com outro número. ',
+  pediu_pessoa: '',
+  atraso: 'Entendi! Quem confirma isso é a equipe. ',
+  nao_resolvi: '',
+};
 const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BVG_OPC = /^[A-Za-z0-9_-]{1,12}$/;
 const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto', cadastrar_terceiro: 'cadastrar_terceiro' };
@@ -42,6 +52,7 @@ function bvGNormalizar(raw, cfg) {
     v[k] = typeof x === 'string' ? x.trim() : x;
   }
   v.qualquer = v.qualquer === true || v.qualquer === 'true';
+  if (v.motivo !== undefined) v.motivo = Object.prototype.hasOwnProperty.call(BVG_MOTIVOS, String(v.motivo)) ? String(v.motivo) : 'nao_resolvi';
   // Nascimento: o modelo as vezes repete o formato do cliente (DD/MM/AAAA) ou escreve "nao informado"; converte ou trata como ausente
   if (typeof v.nascimento === 'string') {
     const m = v.nascimento.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -190,7 +201,7 @@ const bvgReqsLivre = (pares) => [...pares.map((q) => ({ m: 'GET', path: '/agenda
 // updateAPI {ticketId, queueId} fica no Code node (ticketId do estado da conversa, nunca do modelo) apos a sonda S5.
 const bvgEncaminhar = (motivo, operacao, cfg) => bvgFim(
   { ok: false, code: 'encaminhar_equipe', motivo, orientacao: 'a conversa foi transferida para a equipe, que continua por aqui: responda com o texto de encaminhamento (texto), sem dar nomes, detalhes nem outro contato', texto: cfg.textos && cfg.textos.encaminhar_equipe },
-  { pedido: { handoff: true }, handoff: { queueId: (cfg.handoff && cfg.handoff.setor_id) || 78 } /* setor do config (TESTE 78, PROD 107) */, falha: { motivo: `encaminhar_equipe|${motivo}`, operacao, code: 'encaminhar_equipe', status: 0, trace: null } });
+  { pedido: { handoff: true }, handoff: { queueId: (cfg.handoff && cfg.handoff.setor_id) || 78 } /* setor do config (TESTE 78, PROD 106) */, falha: { motivo: `encaminhar_equipe|${motivo}`, operacao, code: 'encaminhar_equipe', status: 0, trace: null } });
 
 function bvGPlano(i, ctx0, cfg) {
   const ctx = { pedido: (ctx0 && ctx0.pedido) || {}, opcoes: (ctx0 && ctx0.opcoes) || {}, proposta: ctx0 && ctx0.proposta, info: ctx0 && ctx0.info, dia: (ctx0 && ctx0.dia) || {} };
@@ -304,8 +315,12 @@ function bvGPlano(i, ctx0, cfg) {
     }
     case 'transferir_atendimento': // barbeiro so da equipe (clausula petrea, owner 2026-11-14): a equipe continua o agendamento
       // cliente novo e cadastrado antes, para a equipe ja recebe-lo pronto (o modelo as vezes pulava: suite R21, 2026-11-16)
-      if (ctx.pedido.cliente_sem_cadastro && cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente novo: faça antes o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e só então transfira'));
-      return bvgEncaminhar('barbeiro_humano', 'transferir_atendimento', cfg);
+      // (so para o barbeiro da equipe: quem ja e cliente, pediu uma pessoa ou avisou atraso vai direto)
+      const mot = i.motivo || 'barbeiro_equipe';
+      if (mot === 'barbeiro_equipe' && ctx.pedido.cliente_sem_cadastro && cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente novo: faça antes o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e só então transfira'));
+      const enc = bvgEncaminhar(mot === 'barbeiro_equipe' ? 'barbeiro_humano' : mot, 'transferir_atendimento', cfg);
+      enc.final.resultado.texto = BVG_MOTIVOS[mot] + (enc.final.resultado.texto || '');
+      return enc;
     case 'funcionamento': // horario da loja por dia da semana (graces-api/03 GET /agenda/configuracao), so leitura
       return chamar([{ m: 'GET', path: '/agenda/configuracao' }]);
     case 'meus_agendamentos':
@@ -495,7 +510,7 @@ function bvGPasso(st, resps0, cfg) {
 const BVG_ORIENT_CADASTRO = 'cliente novo, sem cadastro: antes de atender, peça o nome completo, a data de nascimento e como conheceu a barbearia, chame cadastrar_cliente e depois responda o pedido dele';
 // Cadastro feito (POST ou, no TESTE, o cliente de teste): o pedido passa a ter o cliente; como_conheceu vai para contatos.
 const bvgCadastrado = (cad, idCliente) => bvgFim(
-  { ok: true, cadastrado: true, nome: cad.ns.nome, orientacao: 'cadastro feito: agradeça em poucas palavras e, nesta mesma resposta, responda a primeira mensagem do cliente nesta conversa (chame as ferramentas que precisar); não pergunte como pode ajudar' },
+  { ok: true, cadastrado: true, nome: cad.ns.nome, orientacao: 'cadastro feito: agradeça em poucas palavras e, nesta mesma resposta, retome o que ficou pendente antes do cadastro (o pedido que ainda não foi respondido; se ele já tinha aceitado agendar, siga para o agendamento), chamando as ferramentas que precisar; não pergunte como pode ajudar' },
   { pedido: { idCliente, cliente_sem_cadastro: false, cliente_nome: cad.ns.nome, identificado: true }, ...(cad.como ? { contato: { como_conheceu: cad.como } } : {}) });
 
 // Ultimo atendimento (owner, 2026-11-14): agendar "pelo ultimo corte dele". Estagio hist: GET /agenda/historico (mais recente
@@ -654,7 +669,7 @@ function bvgPassoUm(st, resps0, cfg) {
     case 'funcionamento': {
       const hs = (r0.body && Array.isArray(r0.body.horarios) ? r0.body.horarios : []).filter((h) => h && h.dia)
         .map((h) => ({ dia: String(h.dia), abre: String(h.horaInicio || ''), fecha: String(h.horaFim || '') }));
-      return bvgFim({ ok: true, horarios: hs, orientacao: hs.length ? 'dia fora da lista: diga que não tem essa informação e passe os contatos da loja' : 'sem horário de funcionamento; passe os contatos da loja' });
+      return bvgFim({ ok: true, horarios: hs, orientacao: hs.length ? 'dia fora da lista: diga que não tem essa informação e ofereça passar para a equipe' : 'sem horário de funcionamento; ofereça passar para a equipe' });
     }
     case 'meus_agendamentos': {
       if (meta.etapa === 'ident') { // 0 ou varios cadastros: devolve a propria identificacao (pedir nome | escolher_cliente)

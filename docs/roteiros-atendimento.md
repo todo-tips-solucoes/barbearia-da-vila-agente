@@ -17,7 +17,7 @@ critério com a transcrição.
 | K1 | **Acolhimento.** Cumprimenta pelo nome quando conhece. Tom caloroso, sem formalidade de robô. Assume que é IA se perguntarem. |
 | K2 | **Uma pergunta por mensagem.** No máximo 4 mensagens curtas por turno. |
 | K3 | **Múltipla escolha sempre por lista**, com texto humano (Constituição X). |
-| K4 | **Nada inventado.** Preço, serviço, horário e barbeiro vêm da Graces. Endereço e contatos vêm da config `loja`. O que o agente não sabe vira "não tenho essa informação" e o contato da loja. |
+| K4 | **Nada inventado.** Preço, serviço, horário e barbeiro vêm da Graces. Endereço e contatos vêm da config `loja`. O que o agente não sabe vira "não tenho essa informação" e a oferta de passar para a equipe, que atende por esta mesma conversa (owner, 2026-11-16). |
 | K5 | **Condução comercial.** Toda dúvida respondida termina com um convite leve para agendar ("Quer que eu já veja um horário pra você?"), sem insistir depois de um não. |
 | K6 | **O barbeiro de teste nunca aparece** para o cliente. |
 | K7 | **Latência:** dentro do limite da suíte (ver "Parâmetros"). |
@@ -28,7 +28,7 @@ critério com a transcrição.
 |---|---|---|---|
 | R1 | Primeiro contato, agenda direto | "Oi, boa tarde!" / "Queria cortar o cabelo amanhã à tarde" / escolhe na lista / "Pode confirmar" | Saudação acolhedora; identifica ou cadastra o cliente; oferece serviços e barbeiros por lista; todos os inícios em que o serviço cabe; resumo e confirmação; agendamento criado |
 | R2 | Dúvida de preço antes de decidir | "Quanto custa o corte?" / "E a barba?" | Preço da Graces para cada serviço; não cita preço de `informacaoes_barbearia.txt` se divergir; convite para agendar (K5) |
-| R3 | Onde fica e quando abre | "Vocês ficam onde?" / "Abre domingo?" | Endereço da config `loja`; horário da Graces; convite para agendar |
+| R3 | Onde fica e quando abre, sem cadastro (2026-11-16) | "Vocês ficam onde?" / "Abre domingo?" / "Então quero marcar um corte" | Endereço da config `loja` e horário da Graces respondidos sem cadastro; convite para agendar; o cadastro só começa quando o cliente quer marcar |
 | R4 | Indeciso sobre o serviço | "Quero dar um trato no visual, não sei o que fazer" | Pergunta aberta e acolhedora; oferece os serviços reais por lista; não empurra o mais caro |
 | R5 | Corte + barba no mesmo dia | "Quero cortar e fazer a barba sábado de manhã" | Encadeia os serviços (um agendamento por serviço); horários em sequência; resumo único |
 | R6 | Agendar para o filho | "Queria marcar pro meu filho de 10 anos" | Pede o nome do filho, busca ou cadastra a pessoa; serviço infantil da Graces; nunca "2ª vez" |
@@ -38,17 +38,19 @@ critério com a transcrição.
 | R10 | "Oi" depois de coleta abandonada | (coleta parada há mais de 2 h) "Oi" | Não retoma a coleta antiga; cumprimenta e pergunta como pode ajudar |
 | R11 | Áudio | nota de voz "quero cortar amanhã de tarde" (`midia-real.local.json`) | Entende o áudio e segue como o R1 |
 | R12 | Foto de referência | imagem de corte | Descreve o estilo com cuidado e sugere o serviço real mais próximo; não promete resultado |
-| R13 | Pergunta sem resposta conhecida | "Vocês aceitam pix? Tem estacionamento?" | Não inventa (K4); diz que não tem essa informação e passa o contato da loja; convite para agendar |
+| R13 | Pergunta sem resposta conhecida | "Vocês aceitam pix? Tem estacionamento?" | Não inventa (K4); diz que não tem essa informação e oferece passar para a equipe, por esta mesma conversa; sem e-mail, Instagram nem telefone; convite para agendar |
 | R14 | Fora do assunto | "Me indica um restaurante aí perto?" | Recusa gentil e reconduz para a barbearia |
-| R15 | Cliente apressado ou irritado | "Tô atrasado 15 min, ainda dá?" | Empatia; não decide pela loja; passa o contato da loja ou o handoff (depois da C) |
+| R15 | Cliente apressado ou irritado | "Tô atrasado 15 min, ainda dá?" | Empatia; não decide pela loja; transfere para a equipe confirmar (conferido no estado da conversa) |
 | R16 | Confirmação da véspera | toque em "Confirmo" e, em outro roteiro, em "Não vou poder" | Status 3 na Graces / status 10 + oferta de remarcar (já coberto pelo `smoke-mensagens` m2, m3 e m7) |
-| R17 | Pedido de humano | "Quero falar com uma pessoa" | **Depois da C:** handoff para o setor 78 e o agente para de responder. Antes da C: passa o contato da loja |
+| R17 | Pedido de humano | "Quero falar com uma pessoa" | Transfere para a equipe (TESTE: setor 78) e o agente para de responder; sem e-mail, Instagram nem telefone |
 | R18 | Memória do barbeiro e busca exata (PR #27) | "Quem tem horário amanhã?" / "O Pedro tem?" / troca o serviço | Diz quem tem horário pelo resumo por barbeiro; busca o Pedro direto; mantém o Pedro ao trocar o serviço |
 | R19 | Pergunta o horário antes de listar (alteração 1, 2026-10-28) | "Quero cortar o cabelo amanhã, pode ser com qualquer barbeiro" / "umas 2 da tarde" / escolhe / "Pode confirmar" | Usa o serviço do último atendimento; com o dia definido e sem período nem hora, pergunta qual horário fica melhor, sem lista; depois lista só os inícios perto da hora dita (ou vai direto ao resumo se ela estiver livre) |
 | R20 | Agenda pelo último corte (alteração 2, 2026-11-14) | "Oi, quero marcar um horário" / "Amanhã, em qualquer horário" / escolhe / "Pode confirmar" | Chama pelo nome; propõe repetir serviço e barbeiro do histórico da Graces e pergunta dia e horário de uma vez; resumo com serviço, data e horário |
 | R21 | Pede o Jayme (cláusula pétrea, 2026-11-14) | "Quero cortar o cabelo com o Jayme amanhã" / dados do cadastro | Cadastra, avisa que vai transferir para o atendimento humano e transfere; nunca mostra nem agenda o Jayme |
 | R22 | Barbeiro antes dos horários (2026-11-14) | "Quero cortar o cabelo amanhã à tarde" / dados do cadastro / "corte adulto" | Depois do serviço, pergunta o barbeiro por lista, sem o Jayme, antes de mostrar horários |
 | R23 | Só o corte de cabelo (2026-11-16) | "Quero cortar só o cabelo, quais opções vocês têm?" / dados do cadastro | A lista de serviços traz os cortes, com o corte adulto, e não só os combos com barba |
+| R24 | Já é cliente, número sem cadastro (2026-11-16) | "Oi, quero marcar um corte" / "Mas eu já sou cliente de vocês, já cortei aí várias vezes" | Não cadastra de novo; explica que o cadastro deve estar com outro número e transfere para a equipe |
+| R25 | Aviso de que está a caminho (2026-11-16) | "Estou a caminho!" | Resposta curta e simpática; sem cadastro, sem contatos e sem transferir |
 
 ## Decisão pendente do owner, sem bloquear a suíte
 
@@ -74,5 +76,5 @@ critério com a transcrição.
 
 ## Aprovação para o princípio XV
 
-Só vale a rodada **completa com todos os roteiros aprovados** (23 em 2026-11-16: R18 memória do barbeiro e busca exata, R19 pergunta o horário antes de listar, R20 agenda pelo último corte, R21 Jayme só pela equipe, R22 barbeiro antes dos horários, R23 só o corte de cabelo; desde 2026-11-14 os roteiros sem agenda usam contato sem cadastro e passam pelo cadastro antes da dúvida) (e K7 da rodada dentro do limite). Relatório parcial, com roteiro
+Só vale a rodada **completa com todos os roteiros aprovados** (25 em 2026-11-16: R18 memória do barbeiro e busca exata, R19 pergunta o horário antes de listar, R20 agenda pelo último corte, R21 Jayme só pela equipe, R22 barbeiro antes dos horários, R23 só o corte de cabelo, R24 já é cliente em número sem cadastro, R25 aviso de que está a caminho; a transferência para a equipe é conferida no estado da conversa nos roteiros com a marca `handoff`; desde 2026-11-14 os roteiros sem agenda usam contato sem cadastro e passam pelo cadastro antes da dúvida) (e K7 da rodada dentro do limite). Relatório parcial, com roteiro
 pulado, pendente ou `erro_infra` nunca conta como aprovação.

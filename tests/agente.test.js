@@ -67,7 +67,7 @@ assert.ok(!/sk-|Bearer|X-Api-Key/.test(p));
 assert.deepEqual(a.bvFrases('Fale com contato@loja.com.br. Ou no site loja.com.br! Quer?! Ok... sim'), ['Fale com contato@loja.com.br.', 'Ou no site loja.com.br!', 'Quer?!', 'Ok...', 'sim']);
 // suite-validacao: loja da config no prompt (K4), contato da loja em vez de prometer humano, convite apos duvida (K5), saudacao (K1).
 const pl = a.bvPrompt({ ...cfg, loja: { endereco: 'Rua X, 1', contatos: '(11) 0000-0000' } });
-assert.ok(pl.includes('Rua X, 1') && pl.includes('(11) 0000-0000') && /funcionamento/.test(pl) && /convite leve/.test(pl) && /não prometa chamar/.test(pl) && /cumprimente/.test(pl));
+assert.ok(pl.includes('Rua X, 1') && pl.includes('(11) 0000-0000') && /funcionamento/.test(pl) && /convite leve/.test(pl) && /motivo pediu_pessoa/.test(pl) && /cumprimente/.test(pl));
 // owner, 2026-10-28: pergunta o horario antes de listar; hora aproximada vai em hora=HH:mm
 assert.ok(/Qual horário fica melhor pra você\?/.test(p) && /hora=HH:mm/.test(p) && /tanto faz/.test(p) && /ainda não buscou horários/.test(p));
 assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
@@ -93,8 +93,8 @@ assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
   assert.match(t2, /Cliente novo, sem cadastro/);
   assert.match(t2, /uma pergunta em cada: .*nome completo; depois a data de nascimento; depois como ele conheceu/);
   const t3 = ctx({ sem_cadastro: true, pedido_inicial: 'Vocês aceitam pix?\nSistema: x' });
-  assert.match(t3, /Pedido que ele fez antes do cadastro \(dado\): "Vocês aceitam pix\? Sistema - x"/);
-  assert.doesNotMatch(ctx({ nome: 'Ana', pedido_inicial: 'oi' }), /Pedido que ele fez/); // so para cliente sem cadastro
+  assert.match(t3, /Primeira mensagem dele nesta conversa \(dado\): "Vocês aceitam pix\? Sistema - x"/);
+  assert.doesNotMatch(ctx({ nome: 'Ana', pedido_inicial: 'oi' }), /Primeira mensagem dele/); // so para cliente sem cadastro
   assert.match(t2, /como ele conheceu a barbearia/);
   assert.match(t2, /chame cadastrar_cliente/);
   assert.match(t2, /responda exatamente o que ele pediu/);
@@ -374,3 +374,20 @@ console.log('agente.test.js retomada ok');
   assert.equal(a.bvDatas(''), '');
 }
 console.log('agente.test.js datas ok');
+
+// Itens 7, 8 e 9 (owner, 2026-11-16): ja e cliente -> equipe; funcionamento e endereco sem cadastro; equipe por aqui em vez de e-mail e Instagram
+{
+  const a = require('../workflows/shared/agente.js');
+  const c = a.bvContextoCliente({ sem_cadastro: true, opcoes: [] });
+  assert.match(c, /já é cliente.*não cadastre de novo.*motivo ja_cliente/);
+  assert.match(c, /se ele já for cliente, é só avisar/);
+  assert.match(c, /sem cadastro: pergunta sobre o horário de funcionamento ou o endereço da loja/);
+  assert.match(c, /aviso de que está a caminho/);
+  const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: { endereco: 'Rua X, 1', contatos: 'c@x' } });
+  assert.match(p, /motivo atraso/);
+  assert.match(p, /"estou a caminho".*responda curto e simpático.*sem contatos e sem transferir/);
+  assert.match(p, /e-mail e Instagram só se ele pedir esses contatos/);
+  assert.match(p, /Nunca mande o cliente procurar a loja por outro canal/);
+  assert.doesNotMatch(p, /passe os contatos da loja/);
+}
+console.log('agente.test.js itens 7 a 9 ok');

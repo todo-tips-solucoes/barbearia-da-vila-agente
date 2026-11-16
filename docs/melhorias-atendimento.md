@@ -12,12 +12,12 @@ Análise das 282 mensagens de 21 contatos de PROD (2 de spam), feita em 2026-11-
 | 4 | Respostas duplicadas quando o cliente escreve antes de ler a resposta anterior | O turno seguinte é avisado e não reenvia o que acabou de sair |
 | 5 | Mensagem de cliente sem resposta por 2h25: a chamada à OpenAI travou sem tempo limite e o n8n matou a execução aos 5 min, em silêncio | Tempo limite de 45 s e 1 retentativa no modelo (cai na contingência); o vigia fecha o turno preso e avisa o cliente (2026-11-16) |
 | 6 | Conversas abandonadas sem retomada | Uma retomada, 2 h depois da última mensagem do agente, só para quem parou no meio de um agendamento (2026-11-16) |
+| 7 | Quem dizia "já sou cliente" era cadastrado de novo | Não cadastra: explica que o cadastro deve estar com outro número e transfere para a equipe localizar. O convite ao cadastro avisa que, se já for cliente, é só dizer (2026-11-16) |
+| 8 | Cadastro exigido antes de pergunta simples | Horário de funcionamento e endereço são respondidos sem cadastro; o cadastro começa quando o cliente quer agendar ou pergunta outra coisa (2026-11-16) |
+| 9 | Becos sem saída com e-mail e Instagram | A equipe atende na mesma conversa: pedido de pessoa e atraso transferem direto; o que o agente não resolve vira oferta de passar para a equipe. E-mail e Instagram só se o cliente pedir. "Estou a caminho" recebe resposta curta (2026-11-16) |
 
 ## Pendente, por prioridade
 
-7. **Cadastro duplicado de quem já é cliente.** Dois disseram "já somos clientes" e "já cortei aí" e foram cadastrados de novo. A busca por nome da API da Graces devolve vazio nesta loja, então o duplicado não é detectado. Opções: perguntar antes se já é cliente e, se for, transferir para a equipe unir o cadastro.
-8. **Cadastro antes de pergunta simples.** "Vocês estão abertos hoje?" exigiu nome, nascimento e origem. Sugestão: responder horário de funcionamento e endereço sem cadastro. Depende de decisão do owner, que pediu o cadastro antes.
-9. **Becos sem saída com e-mail e Instagram.** Sem o telefone, quando o agente não resolve ele manda e-mail e Instagram. Sugestão: transferir para a fila humana (106) no próprio WhatsApp. "Estou a caminho" também recebeu um texto longo com esses contatos; deveria ser uma resposta curta.
 10. **Lista de serviços em ordem alfabética.** Sem filtro, aparecem os 10 primeiros; o corte adulto é o 13º. Sugestão: mostrar os mais pedidos ou perguntar a categoria.
 11. **Dois lembretes para quem tem dois serviços.** Um por serviço, no mesmo minuto. Sugestão: um só, citando os dois.
 

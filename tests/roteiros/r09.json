@@ -17,6 +17,5 @@
     "K6"
   ],
   "agenda": true,
-  "antes_da_c": false,
   "preparo": "agendamento_previo"
 }

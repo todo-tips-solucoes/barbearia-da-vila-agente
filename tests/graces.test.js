@@ -187,7 +187,7 @@ p = g.bvGPlano(entrada({ operacao: 'funcionamento' }), ctxOp({}, {}), cfg);
 assert.deepEqual(p.reqs, [{ m: 'GET', path: '/agenda/configuracao' }]);
 r = g.bvGPasso(p.st, [ok({ prazoMinimoAntecedencia: 0, horarios: [{ dia: 'Domingo', horaInicio: '08:00', horaFim: '16:00' }, null] })], cfg).final;
 assert.deepEqual(r.resultado.horarios, [{ dia: 'Domingo', abre: '08:00', fecha: '16:00' }]);
-assert.match(g.bvGPasso(p.st, [ok({})], cfg).final.resultado.orientacao, /contatos da loja/);
+assert.match(g.bvGPasso(p.st, [ok({})], cfg).final.resultado.orientacao, /ofereça passar para a equipe/);
 assert.equal(g.bvGPasso(p.st, [resp(500, {})], cfg).final.resultado.ok, false);
 
 // meus_agendamentos: usa so pedido.idCliente (FR-020); nunca /agenda/completa.
@@ -896,3 +896,26 @@ console.log('graces.test.js quem tem horario ok');
   assert.match(r.orientacao, /^os horários da lista são de qualquer barbeiro, não do barbeiro do agendamento: não diga que a remarcação mantém o barbeiro/);
 }
 console.log('graces.test.js remarcacao com qualquer barbeiro ok');
+
+// Motivos de transferir_atendimento (itens 7 e 9, 2026-11-16)
+{
+  const aberto = { ...cfg, cadastroLiberado: true, textos: { encaminhar_equipe: 'Vou passar para a equipe.' } };
+  const novo = { pedido: { cliente_sem_cadastro: true } };
+  const t = (motivo, ctx) => g.bvGPlano(entrada({ operacao: 'transferir_atendimento', ...(motivo ? { motivo } : {}) }), ctx || novo, aberto).final;
+  assert.equal(t().resultado.code, 'cadastre_primeiro'); // barbeiro da equipe: cadastro antes
+  assert.equal(t('barbeiro_equipe').resultado.code, 'cadastre_primeiro');
+  for (const m of ['ja_cliente', 'pediu_pessoa', 'atraso', 'nao_resolvi']) { // esses vao direto, mesmo sem cadastro
+    const r = t(m);
+    assert.equal(r.resultado.code, 'encaminhar_equipe');
+    assert.equal(r.efeitos.pedido.handoff, true);
+    assert.equal(r.efeitos.falha.motivo, 'encaminhar_equipe|' + m);
+  }
+  const base = t('pediu_pessoa').resultado.texto; // texto de encaminhamento do config, sem frase de abertura
+  assert.equal(base, 'Vou passar para a equipe.');
+  assert.equal(t('ja_cliente').resultado.texto, 'Como você já é cliente, seu cadastro deve estar com outro número. ' + base);
+  assert.equal(t('atraso').resultado.texto, 'Entendi! Quem confirma isso é a equipe. ' + base);
+  assert.equal(t('nao_resolvi').resultado.texto, base);
+  assert.equal(t('qualquer coisa').efeitos.falha.motivo, 'encaminhar_equipe|nao_resolvi'); // valor desconhecido
+  assert.equal(t(null, { pedido: {} }).efeitos.falha.motivo, 'encaminhar_equipe|barbeiro_humano'); // sem motivo: clausula do Jayme, como antes
+}
+console.log('graces.test.js motivos de transferencia ok');
