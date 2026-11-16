@@ -101,7 +101,18 @@
         "nome": "Jayme"
       }
     ],
-    "escrita_liberada": true
+    "escrita_liberada": true,
+    "servicos_destaque": [
+      "corte adulto",
+      "corte com maquina",
+      "barba design",
+      "Corte Infantil ate 11 anos",
+      "Cabelo adulto + barba",
+      "corte juvenil 12 a 17 anos",
+      "Cabelo máquina + barba",
+      "CORTE MAQUINA SIMPLES (1 PENTE)",
+      "BARBA EXPRESS"
+    ]
   },
   "textos": {
     "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho?",
@@ -217,7 +228,8 @@
         "antes_min": 60
       }
     ],
-    "antecedencia_min_s": 120
+    "antecedencia_min_s": 120,
+    "juntar_min": 120
   },
   "teste": {
     "contatos_escrita": [],

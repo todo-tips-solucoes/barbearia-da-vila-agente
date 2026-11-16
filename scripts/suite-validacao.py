@@ -363,7 +363,7 @@ def preparar(r, n):
 
 
 def rodar_delegado(r):
-    """R16: o smoke-mensagens (m2, m3, m7) por subprocesso, lista de argumentos e sem shell; o veredito e o codigo de saida."""
+    """R16: o smoke-mensagens (m2, m3, m7, m8) por subprocesso, lista de argumentos e sem shell; o veredito e o codigo de saida."""
     nomes = r["delegado"].split(":", 1)[1].split(",")
     p = subprocess.run([sys.executable, "-I", os.path.join(RAIZ, "scripts", "smoke-mensagens.py"), *nomes], capture_output=True, text=True, timeout=1800)
     return p.returncode, sanitizar((p.stdout or "")[-600:])
@@ -599,6 +599,7 @@ def referencia_graces(get=None):
         partes.append("Funcionamento: " + json.dumps(get("/agenda/configuracao").get("horarios"), ensure_ascii=False))
     except Exception:  # noqa: BLE001
         pass
+    partes.append("A lista de servicos vem com os mais pedidos primeiro (config, medido na agenda): " + ", ".join(sa.CFG["graces"].get("servicos_destaque", [])) + ". Dizer que sao os mais pedidos e correto.")
     partes.append("Loja: " + json.dumps(sa.CFG["loja"], ensure_ascii=False))
     return "\n".join(partes)[:8000]
 
