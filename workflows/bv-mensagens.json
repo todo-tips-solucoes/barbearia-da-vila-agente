@@ -632,6 +632,169 @@
           "name": "Postgres Barbearia Vila"
         }
       }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": "{{BV:NUM:retomada.varredura_min}}"
+            }
+          ]
+        }
+      },
+      "id": "39104cc0-a7dd-523f-868a-a6a5e52e1f19",
+      "name": "A cada retomada",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH cand AS (SELECT c.contato_id FROM conversas c JOIN LATERAL (SELECT m.direcao, m.conteudo, m.criado_em FROM mensagens m WHERE m.contato_id = c.contato_id ORDER BY m.criado_em DESC, m.id DESC LIMIT 1) u ON true WHERE $1::boolean AND (now() AT TIME ZONE 'America/Sao_Paulo')::time >= $2::time AND (now() AT TIME ZONE 'America/Sao_Paulo')::time < $3::time AND u.direcao = 'saida' AND position('?' in coalesce(u.conteudo, '')) > 0 AND u.criado_em <= now() - make_interval(mins => $4::int) AND u.criado_em >= now() - make_interval(mins => $5::int) AND u.criado_em >= c.sessao_iniciada_em AND (c.retomada_em IS NULL OR c.retomada_em < c.sessao_iniciada_em) AND coalesce(c.pedido->>'handoff', 'false') <> 'true' AND nullif(c.pedido->>'idCliente', '') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM propostas p WHERE p.contato_id = c.contato_id AND p.estado IN ('executada','executando','incerta') AND p.atualizada_em >= c.sessao_iniciada_em) AND (EXISTS (SELECT 1 FROM propostas p WHERE p.contato_id = c.contato_id AND p.estado = 'pendente' AND p.acao = ANY(string_to_array($6::text, ',')) AND p.criada_em >= c.sessao_iniciada_em) OR c.opcoes->>'tipo' = ANY(string_to_array($7::text, ',')) OR jsonb_typeof(c.pedido->'servico') = 'object') ORDER BY u.criado_em LIMIT $8::int FOR UPDATE OF c SKIP LOCKED), upd AS (UPDATE conversas c SET retomada_em = now(), atualizado_em = now() FROM cand WHERE c.contato_id = cand.contato_id RETURNING c.contato_id, c.pedido) SELECT upd.contato_id, t.telefone, upd.pedido->>'cliente_nome' AS nome, upd.pedido->'servico'->>'nome' AS servico, (SELECT jsonb_build_object('acao', p.acao, 'dados', p.dados) FROM propostas p WHERE p.contato_id = upd.contato_id AND p.estado = 'pendente' AND p.acao = ANY(string_to_array($6::text, ',')) ORDER BY p.criada_em DESC LIMIT 1) AS proposta FROM upd JOIN contatos t ON t.id = upd.contato_id",
+        "options": {
+          "queryReplacement": "={{ ['{{BV:retomada.ativo}}' === 'True', '{{BV:retomada.hora_inicio}}', '{{BV:retomada.hora_fim}}', {{BV:retomada.apos_min}}, {{BV:retomada.max_min}}, {{BV:retomada.acoes}}.join(','), {{BV:retomada.ofertas}}.join(','), {{BV:retomada.max_por_varredura}}] }}"
+        }
+      },
+      "id": "71e29040-cef7-5059-b638-af21973dac49",
+      "name": "Reivindicar retomadas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        1100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// Retomada de agendamento abandonado (owner, 2026-11-16): uma mensagem por conversa reivindicada. TESTE: so envia de verdade para\n// teste.contatos_escrita; os demais sao simulados (a mensagem e gravada, nada vai ao WhatsApp).\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}', textos: { retomada_confirmar: \"{{BV:textos.retomada_confirmar}}\", retomada_continuar: \"{{BV:textos.retomada_continuar}}\" } };\nconst dig = (s) => String(s || '').replace(/\\D/g, '');\nconst escrita = {{BV:teste.contatos_escrita}}.map(dig);\nreturn $input.all().map((x) => x.json).filter((l) => l.contato_id != null).map((l, k) => {\n  const r = bvMRetomada(l, cfg);\n  const simulado = '{{BV:ambiente}}' === 'integracao' && !escrita.includes(dig(l.telefone));\n  return { json: { contato_id: l.contato_id, texto: r.texto, req: r.req, simulado }, pairedItem: k };\n});"
+      },
+      "id": "86aa36ce-8d58-5295-ad9a-c75666887ff4",
+      "name": "Montar retomada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "24df747c-6b91-54ff-9aca-302e0859642e",
+              "leftValue": "={{ String(!$json.simulado) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "72f056a7-c0aa-5d50-b0f7-e55f86b465ae",
+      "name": "Envia retomada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chatmasterveloz.com{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "b54ab1da-a5f0-532f-b177-d0128a83105f",
+      "name": "Enviar retomada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        1040
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const p = $('Montar retomada').item.json;\nconst st = p.simulado ? 200 : Number($input.item.json.statusCode || 0); // 0 = sem resposta\nconst ok = st >= 200 && st < 300;\n// a conversa ja foi marcada (retomada_em): falha nao repete, so fica registrada\nreturn { json: { contato_id: p.contato_id, texto: ok ? p.texto : null, code: ok ? null : (st ? `HTTP_${st}` : 'SEM_RESPOSTA'), status: st } };"
+      },
+      "id": "e674f6ce-c557-5a59-83b1-a7ac21553e6f",
+      "name": "Resultado retomada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT $1::bigint, 'retomada-' || $1::text || '-' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint::text, 'saida', 'texto', $2::text WHERE $2::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', 'mensagem|retomada_falhou', 'retomada', $3::text, $4::int, $1::bigint WHERE $3::text IS NOT NULL RETURNING 1) SELECT (SELECT count(*) FROM ms) AS gravada, (SELECT count(*) FROM fa) AS falha",
+        "options": {
+          "queryReplacement": "={{ [$json.contato_id, $json.texto ?? null, $json.code ?? null, $json.status ?? null] }}"
+        }
+      },
+      "id": "bc346fe5-780f-591a-9b92-eea6b19b21eb",
+      "name": "Gravar retomada",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1320,
+        1100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
     }
   ],
   "connections": {
@@ -899,6 +1062,79 @@
         [
           {
             "node": "Gravar sincronizacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada retomada": {
+      "main": [
+        [
+          {
+            "node": "Reivindicar retomadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reivindicar retomadas": {
+      "main": [
+        [
+          {
+            "node": "Montar retomada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar retomada": {
+      "main": [
+        [
+          {
+            "node": "Envia retomada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envia retomada?": {
+      "main": [
+        [
+          {
+            "node": "Enviar retomada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado retomada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar retomada": {
+      "main": [
+        [
+          {
+            "node": "Resultado retomada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado retomada": {
+      "main": [
+        [
+          {
+            "node": "Gravar retomada",
             "type": "main",
             "index": 0
           }

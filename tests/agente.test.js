@@ -349,3 +349,17 @@ console.log('agente.test.js sem numero da loja ok');
   assert.match(p, /Nunca diga que o dia está lotado quando a consulta foi de um barbeiro só/);
 }
 console.log('agente.test.js sem repetir ok');
+
+// Retomada (owner, 2026-11-16): conta como atividade e mantem a sessao para a resposta do cliente continuar de onde parou
+{
+  const a = require('../workflows/shared/agente.js');
+  const H = 3600000, agora = 100 * H, ped = { servico: { nome: 'corte adulto' } };
+  const rec = (o) => a.bvRecencia({ agoraMs: agora, janelaMin: 120, pedido: ped, opcoes: { tipo: 'horario' }, ...o });
+  assert.equal(rec({ ultimaEntradaMs: agora - 3 * H }).sessaoNova, true); // 3 h parado, sem retomada: sessao nova
+  const r = rec({ ultimaEntradaMs: agora - 3 * H, retomadaMs: agora - 0.5 * H }); // retomada ha 30 min: mesma sessao
+  assert.deepEqual([r.sessaoNova, r.pedido, r.opcoes], [false, ped, { tipo: 'horario' }]);
+  assert.equal(rec({ ultimaEntradaMs: agora - 6 * H, retomadaMs: agora - 2.5 * H }).sessaoNova, true); // respondeu tarde demais
+  assert.equal(rec({ ultimaEntradaMs: null, retomadaMs: agora - 0.5 * H }).sessaoNova, true); // nunca falou: sempre nova
+  assert.equal(rec({ ultimaEntradaMs: agora - 1 * H, retomadaMs: null }).sessaoNova, false);
+}
+console.log('agente.test.js retomada ok');

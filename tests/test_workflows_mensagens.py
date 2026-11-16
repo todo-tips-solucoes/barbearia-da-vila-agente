@@ -203,10 +203,44 @@ class BvMensagens(Base, unittest.TestCase):
 
     def test_dois_agendadores(self):
         gat = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]
-        self.assertEqual(len(gat), 3)  # varredura (legado), reconciliacao e sincronizacao com o Chat Master (owner, 2026-11-15)
+        self.assertEqual(len(gat), 4)  # varredura (legado), reconciliacao, sincronizacao com o Chat Master e retomada (owner, 2026-11-16)
         j = json.dumps(self.wf)
         self.assertIn("{{BV:NUM:mensagens.varredura_s}}", j)
         self.assertIn("{{BV:NUM:mensagens.reconciliacao_min}}", j)
+
+    def test_retomada_de_agendamento_abandonado(self):  # owner, 2026-11-16 (roadmap feature 9): uma vez por sessao, nunca duplica
+        self.assertEqual(self.destinos("A cada retomada"), ["Reivindicar retomadas"])
+        self.assertEqual(self.destinos("Envia retomada?", 0), ["Enviar retomada"])
+        self.assertEqual(self.destinos("Envia retomada?", 1), ["Resultado retomada"])  # simulado no TESTE: grava sem enviar
+        self.assertEqual(self.destinos("Resultado retomada"), ["Gravar retomada"])
+        q = self.nos["Reivindicar retomadas"]["parameters"]["query"]
+        for t in ("$1::boolean", "FOR UPDATE OF c SKIP LOCKED", "UPDATE conversas c SET retomada_em = now()", "c.retomada_em < c.sessao_iniciada_em",
+                  "position('?' in coalesce(u.conteudo, '')) > 0", "coalesce(c.pedido->>'handoff', 'false') <> 'true'", "p.estado IN ('executada','executando','incerta')"):
+            self.assertIn(t, q)
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", q)}), list(range(1, 9)))
+        self.assertEqual(q.count("("), q.count(")"))
+        g = self.nos["Gravar retomada"]["parameters"]["query"]
+        self.assertEqual((sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), g.count("(") == g.count(")")), ([1, 2, 3, 4], True))
+        self.assertEqual(self.nos["Enviar retomada"]["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.chatmaster}}")
+        lin = {"contato_id": "9", "telefone": TEL, "nome": "DANIEL", "servico": "Cabelo adulto + barba",
+               "proposta": {"acao": "agendar", "dados": {"servico": "Cabelo adulto + barba", "barbeiro": "Pedro Henrique", "data": "2030-01-10", "hora": "14:40"}}}
+        esc, CFG["teste"]["contatos_escrita"] = CFG["teste"]["contatos_escrita"], ["+" + TEL]
+        try:
+            r = rodar("workflows/bv-mensagens.json", "Montar retomada", [lin])
+        finally:
+            CFG["teste"]["contatos_escrita"] = esc
+        self.assertEqual(r[0]["texto"], "Oi, Daniel! Ficou faltando só confirmar o seu Cabelo adulto + barba com Pedro Henrique em 10/01 às 14:40. Ainda quer esse horário?")
+        self.assertEqual((r[0]["simulado"], r[0]["req"]["body"]["number"], r[0]["req"]["body"]["openTicket"]), (False, TEL, "0"))  # na lista de escrita do TESTE: envia de verdade
+        r2 = rodar("workflows/bv-mensagens.json", "Montar retomada", [{**lin, "telefone": "5500000000510", "proposta": None}])
+        self.assertEqual((r2[0]["simulado"], r2[0]["texto"]), (True, "Oi, Daniel! A gente não terminou de marcar o seu Cabelo adulto + barba. Quer continuar de onde paramos?"))
+        ok = rodar("workflows/bv-mensagens.json", "Resultado retomada", [{"statusCode": 200}], {"Montar retomada": r}, each=True)
+        self.assertEqual((ok["texto"], ok["code"]), (r[0]["texto"], None))
+        ko = rodar("workflows/bv-mensagens.json", "Resultado retomada", [{"error": "x"}], {"Montar retomada": r}, each=True)
+        self.assertEqual((ko["texto"], ko["code"]), (None, "SEM_RESPOSTA"))  # falha: nada gravado como enviado, sem nova tentativa
+        rj = json.loads(ler("workflows/sub/entregar-rajada.json")) if "ler" in globals() else json.load(open(os.path.join(RAIZ, "workflows", "sub", "entregar-rajada.json"), encoding="utf-8"))
+        nos = {n["name"]: n for n in rj["nodes"]}
+        self.assertIn("retomada_ms", nos["Ler contexto"]["parameters"]["query"])
+        self.assertIn("retomadaMs: ctx.retomada_ms == null ? null : Number(ctx.retomada_ms)", nos["Preparar"]["parameters"]["jsCode"])
 
     def test_sincronizacao_chatmaster(self):  # owner, 2026-11-15: lembretes no modulo de Agendamentos, so a diferenca vira chamada
         self.assertEqual(self.destinos("A cada sincronizacao"), ["Pendencias"])
