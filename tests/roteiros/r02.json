@@ -10,7 +10,7 @@
     "Preço da Graces para cada serviço",
     "Não cita preço de informacaoes_barbearia.txt se divergir",
     "Não oferece o pacote de 4 serviços com 20% de desconto (sem fonte; reprova K4)",
-    "Convite para agendar (K5)"
+    "Convite para agendar (K5): perguntar qual serviço ele quer, para seguir com o agendamento, também conta como convite"
   ],
   "criterios": [
     "K1",
