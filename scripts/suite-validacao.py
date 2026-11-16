@@ -578,7 +578,8 @@ def referencia_graces(get=None):
         pass
     try:  # R18: sem isso a avaliadora so via a lista (um barbeiro por horario) e lia o resumo por barbeiro como invencao
         amanha = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))) + datetime.timedelta(days=1)).date().isoformat()
-        for s in [x for x in ss if re.search(r"^corte adulto$|infantil", str(x.get("descricaoAgenda", "")), re.I)][:2]:
+        # sem os "2a vez": a referencia trazia "Corte Infantil 2º vez" no lugar do infantil normal e a avaliadora reprovava o R18 (2026-11-16)
+        for s in [x for x in ss if re.search(r"^corte adulto$|infantil", str(x.get("descricaoAgenda", "")), re.I) and not re.search(r"2\s*[ªaºo°]?\s*vez", str(x.get("descricaoAgenda", "")), re.I)][:2]:
             ps = [p for p in get(f"/servicos/profissionais?idServico={s['idServico']}") if p.get("idProfissional") not in humanos | {sa.TESTE_ID}]
             livres = {str(p.get("apelido", "")).strip(): get(f"/agenda/horarios-livres?idServico={s['idServico']}&idProfissional={p['idProfissional']}&data={amanha}").get("horarios", []) for p in ps}
             partes.append(f"Horarios livres em {amanha} para {s.get('descricaoAgenda')} (so este dia e servico; outros dias e servicos nao constam aqui e nao sao invencao): " + json.dumps(livres, ensure_ascii=False))

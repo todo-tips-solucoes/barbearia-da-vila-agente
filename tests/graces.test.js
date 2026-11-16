@@ -844,3 +844,30 @@ console.log('graces.test.js nome normal ok');
   assert.match(r.resultado.orientacao, /^Black não tem horário nesse dia/);
 }
 console.log('graces.test.js melhorias dos atendimentos ok');
+
+// Suite R18 e R21 (2026-11-16): servico pelo nome ou ja escolhido; cliente novo e cadastrado antes da transferencia
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const inf = { idServico: S, nome: 'Corte Infantil ate 11 anos', preco: 70, minutos: 40, opcao_id: '1' };
+  const ofH = { tipo: 'horario', itens: [] }; // depois de ver horarios a oferta nao e mais de servicos
+  // o modelo manda o NOME no lugar do id: casa com o servico escolhido
+  let n = g.bvGNormalizar({ ...base, operacao: 'listar_barbeiros', id_opcao_servico: 'Corte Infantil ate 11 anos' }, cfg);
+  assert.deepEqual([n.ok, n.in.id_opcao_servico, n.in.servico_nome], [true, undefined, 'Corte Infantil ate 11 anos']);
+  assert.deepEqual(g.bvGPlano(n.in, { opcoes: ofH, pedido: { servico: inf } }, cfg).reqs[0].qs, { idServico: S });
+  // sem id nem nome: usa o servico ja escolhido; sem servico nenhum: pede para escolher
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros' }), { opcoes: ofH, pedido: { servico: inf } }, cfg).reqs[0].qs, { idServico: S });
+  assert.equal(g.bvGPlano(entrada({ operacao: 'listar_barbeiros' }), { opcoes: ofH, pedido: {} }, cfg).final.resultado.code, 'servico_nao_escolhido');
+  // nome de um servico que nao foi ofertado nem escolhido: nunca troca em silencio
+  n = g.bvGNormalizar({ ...base, operacao: 'listar_barbeiros', id_opcao_servico: 'Coloração completa' }, cfg);
+  assert.equal(g.bvGPlano(n.in, { opcoes: ofH, pedido: { servico: inf } }, cfg).final.resultado.code, 'opcao_desconhecida');
+  // nome casando com um item da oferta de servicos em curso
+  const ofS = { tipo: 'servico', itens: [{ id: '2', rotulo: 'corte adulto', valor: { idServico: 'sa', nome: 'corte adulto', preco: 90, minutos: 40 } }] };
+  n = g.bvGNormalizar({ ...base, operacao: 'horarios_livres', id_opcao_servico: 'Corte Adulto', qualquer: true, data: '2026-10-27' }, cfg);
+  assert.deepEqual(g.bvGPlano(n.in, { opcoes: ofS, pedido: { servico: inf } }, cfg).reqs[0].qs, { idServico: 'sa' });
+  // transferir: cliente novo e cadastrado antes; ja cadastrado (ou cadastro desligado) transfere direto
+  const aberto2 = { ...cfg, cadastroLiberado: true };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { cliente_sem_cadastro: true } }, aberto2).final.resultado.code, 'cadastre_primeiro');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { cliente_sem_cadastro: true } }, cfg).final.resultado.code, 'encaminhar_equipe');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { idCliente: 'c1', cliente_sem_cadastro: false } }, aberto2).final.resultado.code, 'encaminhar_equipe');
+}
+console.log('graces.test.js servico pelo nome ok');

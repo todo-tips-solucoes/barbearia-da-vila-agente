@@ -676,7 +676,7 @@
             "telefone": "={{ String($('Gatilho').first().json.telefone) }}",
             "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
             "ambiente": "{{BV:ambiente}}",
-            "id_opcao_servico": "={{ $fromAI('id_opcao_servico', 'id da opção de serviço escolhida, como oferecida', 'string') }}"
+            "id_opcao_servico": "={{ $fromAI('id_opcao_servico', 'id da opção de serviço ofertada; vazio para usar o serviço que o cliente já escolheu', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [

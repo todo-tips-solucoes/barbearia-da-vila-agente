@@ -58,6 +58,9 @@ function bvGNormalizar(raw, cfg) {
   if (v.proposta_id !== undefined && !BVG_UUID.test(v.proposta_id)) return ruim('proposta_id');
   if (v.periodo !== undefined && !BVG_PERIODOS[v.periodo]) return ruim('periodo');
   if (v.hora !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(v.hora)) return ruim('hora');
+  // Suite R18 (2026-11-16): depois de ver horarios o modelo nao tem mais o id do servico e manda o NOME; recusar fazia o
+  // agente desistir ("a consulta nao aceitou o servico"). O nome vira servico_nome e e casado com o que foi ofertado/escolhido.
+  if (v.id_opcao_servico !== undefined && !BVG_OPC.test(String(v.id_opcao_servico))) { v.servico_nome = String(v.id_opcao_servico).slice(0, 80); delete v.id_opcao_servico; }
   for (const k of ['id_opcao', 'id_opcao_servico', 'id_opcao_barbeiro', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento']) {
     if (v[k] !== undefined && !BVG_OPC.test(String(v[k]))) return ruim(k);
   }
@@ -77,7 +80,6 @@ function bvGNormalizar(raw, cfg) {
   v.contato_id = String(v.contato_id);
   const falta = {
     escolher_cliente: !v.id_opcao,
-    listar_barbeiros: !v.id_opcao_servico,
     horarios_livres: !v.data, // sem barbeiro: usa o escolhido no pedido (bvgPlano)
     cadastrar_cliente: !v.nome,
     buscar_pessoa: !v.nome || v.nome.length < 3,
@@ -112,6 +114,17 @@ function bvgTermosServico(t) {
   const n = bvgNomeNorm(t);
   if (/\b(cabelos?|cortar|cortes?)\b/.test(n) && /\bbarbas?\b/.test(n)) return ['cabelo'];
   return bvgSoCabelo(t) ? ['corte'] : [t];
+}
+
+// Servico da chamada: pelo id ofertado; pelo nome (so entre o ofertado, o escolhido e o do ultimo atendimento); ou o ja escolhido.
+// Devolve null quando o id ou o nome nao casam com nada (nunca troca de servico em silencio).
+function bvgServicoDe(i, ctx, ult) {
+  if (i.id_opcao_servico) { const s = bvgResolver(i.id_opcao_servico, 'servico', ctx); return s ? { ...s, opcao_id: s.opcao_id || i.id_opcao_servico } : null; }
+  const u = ult && ult.servico;
+  if (!i.servico_nome) return ctx.pedido.servico || u || null;
+  const of = ctx.opcoes && ctx.opcoes.tipo === 'servico' && Array.isArray(ctx.opcoes.itens) ? ctx.opcoes.itens.map((x) => ({ ...x.valor, opcao_id: x.id })) : [];
+  const n = bvgNomeNorm(i.servico_nome);
+  return [...of, ctx.pedido.servico, u].filter(Boolean).find((x) => bvgNomeNorm(x.nome) === n) || null;
 }
 
 const bvgNaoOferecido = () => bvgRecusa('servico_nao_oferecido', 'esse serviço não é oferecido por aqui; ofereça o serviço regular, sem falar em desconto');
@@ -236,9 +249,9 @@ function bvGPlano(i, ctx0, cfg) {
       return chamar(bvgTermosServico(t).map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: bvgSoCabelo(t) });
     }
     case 'listar_barbeiros': {
-      const s = bvgResolver(i.id_opcao_servico, 'servico', ctx);
-      if (!s) return bvgFim(bvgOpcaoInvalida());
-      return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { servico: { ...s, opcao_id: i.id_opcao_servico }, escolhido: ctx.pedido.barbeiro || null });
+      const s = bvgServicoDe(i, ctx, !ctx.pedido.para_terceiro && ctx.pedido.ultimo);
+      if (!s) return bvgFim(i.id_opcao_servico || i.servico_nome ? bvgOpcaoInvalida() : bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
+      return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { servico: s, escolhido: ctx.pedido.barbeiro || null });
     }
     case 'horarios_livres': {
       if (i.id_opcao) { // FR-012: resposta do cliente a modo_encadeamento (barbeiros diferentes | separados); nunca escolhida pelo modelo
@@ -258,10 +271,8 @@ function bvGPlano(i, ctx0, cfg) {
       }
       const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
       const ult = (!ctx.pedido.para_terceiro && ctx.pedido.ultimo) || {}; // ultimo atendimento do remetente: padrao so para ele mesmo
-      const s0 = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : (i.id_opcao_servico ? bvgResolver(i.id_opcao_servico, 'servico', ctx) : (ctx.pedido.servico || ult.servico));
-      // o servico vindo da oferta nao tem opcao_id: sem guarda-lo, a consulta seguinte com o mesmo id era recusada (suite R18, 2026-11-16)
-      const s = s0 && i.id_opcao_servico && !s0.opcao_id ? { ...s0, opcao_id: i.id_opcao_servico } : s0;
-      if (!s) return bvgFim(bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
+      const s = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : bvgServicoDe(i, ctx, ult);
+      if (!s) return bvgFim(i.id_opcao_servico || i.servico_nome ? bvgOpcaoInvalida() : bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
       // Remarcar mantem o barbeiro (atendimentos de 2026-11-15): a busca ia a todos os barbeiros e a proposta trocava o barbeiro em
       // silencio (quase sempre para o primeiro da lista). Vale o barbeiro do agendamento, ou o que o cliente escolheu para esta
       // remarcacao; outros barbeiros so com qualquer=true. Barbeiro so da equipe: encaminha. O de teste (TESTE) segue para a uniao.
@@ -291,6 +302,8 @@ function bvGPlano(i, ctx0, cfg) {
       return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data, periodo: i.periodo, hora: i.hora, habitual, agId: ag ? ag.idAgenda : null });
     }
     case 'transferir_atendimento': // barbeiro so da equipe (clausula petrea, owner 2026-11-14): a equipe continua o agendamento
+      // cliente novo e cadastrado antes, para a equipe ja recebe-lo pronto (o modelo as vezes pulava: suite R21, 2026-11-16)
+      if (ctx.pedido.cliente_sem_cadastro && cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente novo: faça antes o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e só então transfira'));
       return bvgEncaminhar('barbeiro_humano', 'transferir_atendimento', cfg);
     case 'funcionamento': // horario da loja por dia da semana (graces-api/03 GET /agenda/configuracao), so leitura
       return chamar([{ m: 'GET', path: '/agenda/configuracao' }]);

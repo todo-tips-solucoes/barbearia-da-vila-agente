@@ -145,7 +145,7 @@ function bvContextoPedido(pedido, sessaoNova, neutralizar) {
   let t = '';
   if (pedido.servico && pedido.servico.nome) {
     t += '\nServiço já escolhido (dado): ' + neutralizar(String(pedido.servico.nome))
-      + '. Para horários dele, chame horarios_livres direto (sem listar_servicos), a menos que o cliente mude de serviço.';
+      + '. Para horários dele, chame horarios_livres direto (sem listar_servicos) e, para os barbeiros dele, listar_barbeiros sem id_opcao_servico, a menos que o cliente mude de serviço.';
   }
   // Memoria (teste do owner, 2026-10-22): trocar o servico nao apaga o barbeiro; o agente perguntava de novo "com quem?"
   if (pedido.barbeiro && pedido.barbeiro.apelido) {
