@@ -270,7 +270,9 @@
         },
         "responsesApiEnabled": true,
         "options": {
-          "reasoningEffort": "{{BV:agente.raciocinio}}"
+          "reasoningEffort": "{{BV:agente.raciocinio}}",
+          "timeout": "{{BV:NUM:agente.modelo_timeout_ms}}",
+          "maxRetries": "{{BV:NUM:agente.modelo_retentativas}}"
         }
       },
       "id": "e4b037fa-645d-5af6-8343-d62d0d7012ed",
