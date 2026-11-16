@@ -17,7 +17,7 @@ Arquivo `tests/roteiros/rNN.json`, versionado. Formato `[PROPOSTA — a validar 
 | `agenda` | bool | `true` ⇒ fila `>= 520` com o cliente de teste |
 | `preparo` | texto opcional | `agendamento_previo` (R7–R9) ou `coleta_abandonada` (R10) |
 | `delegado` | texto opcional | `smoke-mensagens:m2,m3,m7` (R16) |
-| `antes_da_c` | bool | R15/R17: espera só o contato da loja |
+| `handoff` | bool, opcional | Transferência para a equipe conferida no estado da conversa (`true`: R15, R17, R24; `false`: R3, R13, R25). Substitui `antes_da_c` desde 2026-11-16 |
 
 Validação (teste unitário): nenhum dígito de telefone, CPF ou e-mail nas falas (FR-020); ids únicos; `criterios` ⊆ K1–K6.
 

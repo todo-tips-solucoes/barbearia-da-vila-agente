@@ -3206,7 +3206,7 @@
     {
       "parameters": {
         "name": "transferir_atendimento",
-        "description": "Transfere a conversa para o atendimento humano da loja. Use só quando o cliente quiser agendar com um barbeiro que só a equipe agenda (o prompt diz quais) ou o contexto mandar. Depois, responda com o texto devolvido e não continue o agendamento.",
+        "description": "Transfere a conversa para a equipe humana da loja, que continua por esta mesma conversa. Informe o motivo: barbeiro_equipe (o cliente quer agendar com um barbeiro que só a equipe agenda), ja_cliente (cliente sem cadastro neste número diz que já é cliente), pediu_pessoa (pediu para falar com uma pessoa), atraso (avisou atraso ou imprevisto no horário) ou nao_resolvi (você não conseguiu resolver e ele aceitou falar com a equipe). Depois, responda com o texto devolvido e não continue o atendimento.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -3220,7 +3220,8 @@
             "contato_id": "={{ String($('Gatilho').first().json.contato_id) }}",
             "telefone": "={{ String($('Gatilho').first().json.telefone) }}",
             "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
-            "ambiente": "{{BV:ambiente}}"
+            "ambiente": "{{BV:ambiente}}",
+            "motivo": "={{ $fromAI('motivo', 'barbeiro_equipe, ja_cliente, pediu_pessoa, atraso ou nao_resolvi', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -3263,6 +3264,15 @@
             {
               "id": "ambiente",
               "displayName": "ambiente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
               "required": false,
               "defaultMatch": false,
               "display": true,
