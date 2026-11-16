@@ -364,3 +364,12 @@ console.log('agente.test.js sem repetir ok');
   assert.equal(rec({ ultimaEntradaMs: agora - 1 * H, retomadaMs: null }).sessaoNova, false);
 }
 console.log('agente.test.js retomada ok');
+
+// Datas por extenso (suite R11, 2026-11-16): "amanha" logo depois da meia-noite
+{
+  const a = require('../workflows/shared/agente.js');
+  assert.equal(a.bvDatas('2026-11-16 00:55:10'), 'Hoje é segunda-feira, 2026-11-16; amanhã é terça-feira, 2026-11-17; depois de amanhã é quarta-feira, 2026-11-18. "Amanhã" é sempre a data acima, mesmo de madrugada.');
+  assert.match(a.bvDatas('2026-12-31 23:59:00'), /Hoje é quinta-feira, 2026-12-31; amanhã é sexta-feira, 2027-01-01/);
+  assert.equal(a.bvDatas(''), '');
+}
+console.log('agente.test.js datas ok');

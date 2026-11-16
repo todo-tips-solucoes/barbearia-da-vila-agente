@@ -140,7 +140,7 @@ assert.equal(r.resultado.total, 3);
 assert.ok(!/mais próximos/.test(r.resultado.orientacao || ''));
 r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00', '08:40', '09:20', '17:20', '18:00', '18:40'] }), ok({ minutos: 40, horarios: [] })], cfg).final;
 assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['08:40', '09:20', '17:20', '18:00']);
-assert.match(r.resultado.orientacao, /até 60 min das 14:00.*mais próximos.*por_barbeiro/);
+assert.match(r.resultado.orientacao, /até 60 min das 14:00.*mais próximos.*quem_tem_horario/);
 assert.match(g.bvGPasso(p.st, [ok({ horarios: [] }), ok({ horarios: [] })], cfg).final.resultado.orientacao, /lotado/);
 p = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: 'tarde', hora: '12:30' }), ctxH, cfg);
 r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['11:20', '12:00', '13:20', '14:00'] }), ok({ horarios: [] })], cfg).final;
@@ -328,7 +328,7 @@ assert.equal(g.bvGPasso(s3.st, [resp(500, {})], cfg).final.resultado.code, 'novo
   const ru = g.bvGPasso(pu.st, [ok({ minutos: 40, horarios: h14.slice(0, 8) }), ok({ minutos: 40, horarios: h14.slice(4) })], cfg).final;
   assert.deepEqual(ru.efeitos.opcoes.itens.map((x) => x.valor.hora), h14);
   assert.equal(ru.efeitos.opcoes.completa, true);
-  assert.match(ru.resultado.orientacao, /por_barbeiro/);
+  assert.match(ru.resultado.orientacao, /quem_tem_horario/);
   // a lista esconde o Kiel em 09:00-11:40 (o Rodrigo vem antes): o resumo diz quantos inicios cada um tem
   assert.deepEqual(ru.resultado.por_barbeiro, [{ barbeiro: 'Rodrigo', total: 8, primeiro: '09:00' }, { barbeiro: 'Kiel', total: 10, primeiro: '11:40' }]);
   assert.equal(ru.efeitos.pedido.barbeiro, undefined); // "qualquer" nao vira escolha do cliente
@@ -871,3 +871,17 @@ console.log('graces.test.js melhorias dos atendimentos ok');
   assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), { pedido: { idCliente: 'c1', cliente_sem_cadastro: false } }, aberto2).final.resultado.code, 'encaminhar_equipe');
 }
 console.log('graces.test.js servico pelo nome ok');
+
+// Quem tem horario, em frase pronta (suite R18, 2026-11-16)
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const bs = [{ opcao_id: '1', idProfissional: 'bk', apelido: 'Kiel' }, { opcao_id: '2', idProfissional: 'br', apelido: 'Rodrigo' }, { opcao_id: '3', idProfissional: 'bp', apelido: 'Pedro' }, { opcao_id: '4', idProfissional: 'bb', apelido: 'Black' }];
+  const ped = { servico: { idServico: S, nome: 'Corte Infantil', opcao_id: '1' }, barbeiros: bs };
+  const p = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-27' }), { opcoes: {}, pedido: ped }, cfg);
+  const grade = (hs) => ok({ minutos: 40, horarios: hs });
+  const r = g.bvGPasso(p.st, [grade(['09:20', '12:00']), grade(['11:20', '12:00', '12:40']), grade(['16:00']), grade([]), resp(500, {}), resp(500, {}), resp(500, {}), resp(500, {})], cfg).final.resultado;
+  assert.equal(r.quem_tem_horario, 'Kiel a partir de 09:20; Rodrigo a partir de 11:20; Pedro a partir de 16:00 (só esse horário); Black sem horário');
+  assert.deepEqual(r.opcoes.filter((o) => o.barbeiro === 'Rodrigo').map((o) => o.hora), ['11:20', '12:40']); // a lista mostra um barbeiro por horario
+  assert.match(r.orientacao, /use quem_tem_horario como está/);
+}
+console.log('graces.test.js quem tem horario ok');

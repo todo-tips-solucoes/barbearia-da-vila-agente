@@ -205,6 +205,16 @@ function bvContextoCliente(c, neutralizar) {
 // Resposta que fecha uma escrita (agendou, remarcou, cancelou): nao leva convite para agendar.
 const BV_ESCRITA_FEITA = /\b(confirmad[oa]s?|agendad[oa]s?|marcad[oa]s?|remarcad[oa]s?|cancelad[oa]s?|reservad[oa]s?|te esperamos)\b/i;
 
+// Datas por extenso no contexto (suite R11, 2026-11-16): logo depois da meia-noite o modelo tratava "amanha" como o proprio dia.
+// agora: "AAAA-MM-DD HH:mm:ss" no relogio de Sao Paulo. Devolve a frase com hoje e amanha, com dia da semana e data.
+const BV_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+function bvDatas(agora) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(agora || ''));
+  if (!m) return '';
+  const dia = (n) => { const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)); return `${BV_SEMANA[d.getUTCDay()]}, ${d.toISOString().slice(0, 10)}`; };
+  return `Hoje é ${dia(0)}; amanhã é ${dia(1)}; depois de amanhã é ${dia(2)}. "Amanhã" é sempre a data acima, mesmo de madrugada.`;
+}
+
 // Corrida (atendimentos de 2026-11-15): o cliente manda outra mensagem antes de ler a resposta anterior (digita em partes, toca na
 // lista e escreve). Cada mensagem vira um turno e o segundo repetia a pergunta ou o resumo do primeiro. itens: mensagens novas do
 // turno ({recebida_em}); historico: mensagens da sessao ({direcao, conteudo, criado_em}). So e corrida a mensagem que chegou ANTES de
@@ -335,5 +345,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvDatas, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }

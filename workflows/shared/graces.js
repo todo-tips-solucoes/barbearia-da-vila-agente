@@ -618,7 +618,11 @@ function bvgPassoUm(st, resps0, cfg) {
       }), cfg, true); // FR-001: oferta completa; o Compor divide em listas
       const res = { ok: true, data: meta.data, total: horas.length, completa: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.hora, barbeiro: x.valor.apelido })) };
       // A lista mostra um barbeiro por horario: sem o resumo, o modelo concluia "fulano nao tem horario" (teste do owner, 2026-10-22)
-      if (meta.qualquer) res.por_barbeiro = porBarbeiro;
+      if (meta.qualquer) {
+        res.por_barbeiro = porBarbeiro;
+        // frase pronta (suite R18, 2026-11-16): o modelo tirava o primeiro horario de cada barbeiro da lista geral e errava
+        res.quem_tem_horario = porBarbeiro.map((x) => (x.total ? `${x.barbeiro} a partir de ${x.primeiro}${x.total === 1 ? ' (só esse horário)' : ''}` : `${x.barbeiro} sem horário`)).join('; ');
+      }
       // "Lotado" olhando um barbeiro so (atendimentos de 2026-11-15): com o barbeiro habitual sem horario, consulta os outros neste
       // passo; com barbeiro escolhido (ou o do agendamento), o texto fala dele, nunca do dia
       const soUm = !meta.qualquer && meta.barbeiros.length === 1 ? meta.barbeiros[0] : null;
@@ -629,7 +633,7 @@ function bvgPassoUm(st, resps0, cfg) {
       if (!horas.length && soUm) res.orientacao = `${soUm.apelido} não tem horário ${quando} (não diga que o dia está lotado: você só consultou ele); ofereça outro ${todas.length && meta.periodo ? 'período ou ' : ''}dia com ele ou veja os outros barbeiros (horarios_livres com qualquer=true)`;
       else if (!horas.length) res.orientacao = todas.length ? `sem horário livre de ${meta.periodo} nesse dia; ofereça outro período ou outro dia` : 'dia lotado; sugira outro dia';
       // suite R18 (2026-11-16): o modelo tirava "a partir de que horas" da lista (um barbeiro por horario) e errava o primeiro horario
-      else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário e não serve para dizer quando cada um começa: para dizer quem tem horário e a partir de que horas, use só por_barbeiro (primeiro é o primeiro horário de cada um; total 0 é sem horário); para falar de um barbeiro específico, chame horarios_livres com id_opcao_barbeiro dele';
+      else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário e não serve para dizer quando cada um começa: para dizer quem tem horário e a partir de que horas, use quem_tem_horario como está, sem trocar as horas; para falar de um barbeiro específico, chame horarios_livres com id_opcao_barbeiro dele';
       if (meta.sem) res.orientacao = `${meta.sem}, o barbeiro do último atendimento, não tem horário ${meta.periodo ? `de ${meta.periodo} ` : ''}nesse dia: diga isso ao cliente${horas.length ? ' e que os horários da lista são de outros barbeiros' : ''}` + (res.orientacao ? '; ' + res.orientacao : '');
       if (perto.aproximada) res.orientacao = bvgAvisoPerto(meta.hora, cfg) + (res.orientacao ? '; ' + res.orientacao : '');
       // Dia e hora escolhidos (owner, 2026-11-14): o horario pedido livre vai direto ao resumo e a confirmacao, sem lista
