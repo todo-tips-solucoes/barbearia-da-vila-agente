@@ -15,11 +15,12 @@ Análise das 282 mensagens de 21 contatos de PROD (2 de spam), feita em 2026-11-
 | 7 | Quem dizia "já sou cliente" era cadastrado de novo | Não cadastra: explica que o cadastro deve estar com outro número e transfere para a equipe localizar. O convite ao cadastro avisa que, se já for cliente, é só dizer (2026-11-16) |
 | 8 | Cadastro exigido antes de pergunta simples | Horário de funcionamento e endereço são respondidos sem cadastro; o cadastro começa quando o cliente quer agendar ou pergunta outra coisa (2026-11-16) |
 | 9 | Becos sem saída com e-mail e Instagram | A equipe atende na mesma conversa: pedido de pessoa e atraso transferem direto; o que o agente não resolve vira oferta de passar para a equipe. E-mail e Instagram só se o cliente pedir. "Estou a caminho" recebe resposta curta (2026-11-16) |
+| 10 | Lista de serviços em ordem alfabética: sem filtro apareciam os 10 primeiros e o corte adulto era o 13º | Os mais pedidos vêm primeiro, na ordem medida na agenda (`graces.servicos_destaque`); os demais seguem depois (2026-11-16) |
+| 11 | Dois lembretes para quem tem dois serviços, e o "SIM" ficava ambíguo | Um lembrete só por cliente e dia, citando todos os serviços que começam até 2 h depois do primeiro (`mensagens.juntar_min`); a resposta SIM ou NÃO vale para todos (2026-11-16) |
 
-## Pendente, por prioridade
+## Pendente
 
-10. **Lista de serviços em ordem alfabética.** Sem filtro, aparecem os 10 primeiros; o corte adulto é o 13º. Sugestão: mostrar os mais pedidos ou perguntar a categoria.
-11. **Dois lembretes para quem tem dois serviços.** Um por serviço, no mesmo minuto. Sugestão: um só, citando os dois.
+Os 11 itens priorizados estão feitos. Restam os menores abaixo.
 
 ## Menores
 

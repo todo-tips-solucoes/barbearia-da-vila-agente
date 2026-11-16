@@ -455,7 +455,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4080,
+        5040,
         0
       ]
     },
@@ -541,6 +541,124 @@
         3360,
         150
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH l AS (SELECT contato_id, inicio FROM mensagens_agendadas WHERE id = $1::bigint AND tipo = 'lembrete_dia' AND $2::boolean), u AS (UPDATE mensagens_agendadas m SET resposta = $3::text, respondida_em = now(), etiqueta_id = 0, atualizado_em = now() FROM l WHERE m.contato_id = l.contato_id AND m.tipo = 'lembrete_dia' AND m.id <> $1::bigint AND m.resposta IS NULL AND m.inicio::date = l.inicio::date AND m.inicio >= l.inicio AND m.inicio <= l.inicio + make_interval(mins => $4::int) AND ((m.situacao = 'pendente' AND m.agendamento_canal_id IS NULL) OR (m.situacao = 'cancelada' AND m.motivo = 'junto')) AND ($5::text = '' OR m.id_profissional = $5::text) RETURNING m.graces_agendamento_id, to_char(m.inicio, 'YYYY-MM-DD') AS dia, COALESCE((m.dados->>'recorrente')::boolean, false) AS recorrente), rp AS (UPDATE mensagens_agendadas h SET situacao = 'cancelada', motivo = 'recusada', atualizado_em = now() FROM u WHERE $3::text = 'recusada' AND h.graces_agendamento_id = u.graces_agendamento_id AND h.tipo = 'lembrete_hora' AND h.situacao = 'pendente' AND h.reservada_em IS NULL RETURNING 1) SELECT graces_agendamento_id, dia, recorrente FROM u",
+        "options": {
+          "queryReplacement": "={{ (() => { const d = $('Desfecho').first().json; return [d.id || null, d.code === 'confirmada' || d.code === 'recusada', d.code, {{BV:mensagens.juntar_min}}, '{{BV:ambiente}}' === 'integracao' ? '{{BV:graces.barbeiro_teste_id}}' : '']; })() }}"
+        }
+      },
+      "id": "942f863c-a45e-5495-a195-41d1d9ae25f7",
+      "name": "Irmas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4080,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6268e1d2-3041-55d1-ad68-81f9cef7b9b6",
+              "leftValue": "={{ String(!!$json.graces_agendamento_id) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "15c3fa7c-3b7b-588e-979e-e847a0309c38",
+      "name": "Tem irma?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{BV:graces.host}}/public/v1/agenda/confirmacao",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ idAgenda: $json.graces_agendamento_id, confirmado: $('Desfecho').first().json.code === 'confirmada', ...($json.recorrente ? { data: $json.dia } : {}) }) }}"
+      },
+      "id": "62c7cd1f-e8b0-507f-baaf-f12563df8842",
+      "name": "Graces irmas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4560,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', 'mensagem|graces_confirmacao', 'confirmar_junto', $1::text, $2::int, $3::bigint WHERE $2::int NOT BETWEEN 200 AND 299 AND $2::int <> 409 RETURNING 1",
+        "options": {
+          "queryReplacement": "={{ [$json.statusCode ? 'HTTP_' + $json.statusCode : 'SEM_RESPOSTA', Number($json.statusCode || 0), $('Desfecho').first().json.contato_id] }}"
+        }
+      },
+      "id": "607c1998-e745-52a3-adeb-79c2f5280ab2",
+      "name": "Registrar irmas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4800,
+        -100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -770,7 +888,7 @@
       "main": [
         [
           {
-            "node": "Saida",
+            "node": "Irmas",
             "type": "main",
             "index": 0
           }
@@ -811,6 +929,57 @@
         [
           {
             "node": "Desfecho",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Irmas": {
+      "main": [
+        [
+          {
+            "node": "Tem irma?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem irma?": {
+      "main": [
+        [
+          {
+            "node": "Graces irmas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces irmas": {
+      "main": [
+        [
+          {
+            "node": "Registrar irmas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar irmas": {
+      "main": [
+        [
+          {
+            "node": "Saida",
             "type": "main",
             "index": 0
           }

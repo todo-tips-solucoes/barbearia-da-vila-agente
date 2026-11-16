@@ -357,3 +357,42 @@ console.log('mensagens.test.js etiquetas da confirmacao ok');
   assert.deepEqual([r.req.path, r.req.body.number, r.req.body.queueId, r.req.body.openTicket], ['/api/messages/whatsmeow/sendTextPROLid', '123@lid', '107', '0']);
 }
 console.log('mensagens.test.js retomada ok');
+
+// Um lembrete so para quem tem mais de um servico no mesmo dia (item 11, owner 2026-11-16)
+{
+  const m = require('../workflows/shared/mensagens.js');
+  const textos = { lembrete_dia: 'Oi, {nome}! Seu {servico} com {barbeiro} amanhã, às {hora}.', lembrete_hora: 'x' };
+  const cfg = { textos, user_id: '234', wid: '159', retentativas_min: [1, 5, 15] };
+  const agora = '2026-11-20T12:00:00Z';
+  const G = [{ id: 1, servico: 'corte adulto', barbeiro: 'Kiel' }, { id: 2, servico: 'barba design', barbeiro: 'Kiel ' }];
+  const linha = (o) => ({ id: '1', tipo: 'lembrete_dia', situacao: 'pendente', previsto_para: '2026-11-21T17:00:00.000Z', inicio: '2026-11-22T14:00:00', dados: { nome: 'PAULO', servico: 'corte adulto', barbeiro: 'Kiel' },
+    canal_id: null, contato_id: 7, telefone: '+5511967296849', contato_canal_id: 236429, ticket_id: 172345, grupo: G, ...o });
+  // lider: um agendamento no Chat Master citando os dois servicos
+  let [a, b] = m.bvMSincPlano([linha(), linha({ id: '2', previsto_para: '2026-11-21T17:40:00.000Z', inicio: '2026-11-22T14:40:00', dados: { nome: 'PAULO', servico: 'barba design', barbeiro: 'Kiel' } })], agora, cfg);
+  assert.equal(a.acao, 'criar');
+  assert.equal(a.req.body.body, 'Oi, Paulo! Seu corte adulto e barba design com Kiel amanhã, às 14:00.');
+  // seguidora: nenhuma chamada; reavaliada em ate 30 min e encerrada como `junto` no horario dela
+  assert.deepEqual([b.acao, b.fim, b.req], ['junto', false, undefined]);
+  assert.deepEqual(m.bvMSincResultado(b, 200, null, 0, cfg, agora), { id: '2', proxima: '2026-11-20T12:30:00.000Z' });
+  assert.deepEqual(m.bvMSincResultado({ ...b, previsto_para: '2026-11-20T12:10:00.000Z' }, 200, null, 0, cfg, agora), { id: '2', proxima: '2026-11-20T12:10:00.000Z' });
+  [b] = m.bvMSincPlano([linha({ id: '2' })], '2026-11-21T17:01:00Z', cfg);
+  assert.deepEqual(m.bvMSincResultado(b, 200, null, 0, cfg, agora), { id: '2', situacao: 'cancelada', motivo: 'junto' });
+  // seguidora que ja tinha agendamento no Chat Master (lembretes criados antes desta regra): apaga
+  [b] = m.bvMSincPlano([linha({ id: '2', canal_id: '900' })], agora, cfg);
+  assert.deepEqual([b.acao, b.req], ['apagar', { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: '900' } }]);
+  // lider ja agendada com o texto de um servico so: atualiza o texto (PUT), sem recriar
+  [a] = m.bvMSincPlano([linha({ canal_id: '899', canal_previsto_para: '2026-11-21T17:00:00.000Z', canal_texto: 'Oi, Paulo! Seu corte adulto com Kiel amanhã, às 14:00.' })], agora, cfg);
+  assert.deepEqual([a.acao, a.req.body.body], ['atualizar', 'Oi, Paulo! Seu corte adulto e barba design com Kiel amanhã, às 14:00.']);
+  // barbeiros diferentes (pai e filho): cada servico com o seu barbeiro; tres servicos: virgula e "e"
+  assert.deepEqual(m.bvMServicos(linha({ grupo: [G[0], { id: 2, servico: 'Corte Infantil', barbeiro: 'Rodrigo' }] })), { servico: 'corte adulto com Kiel e Corte Infantil', barbeiro: 'Rodrigo' });
+  assert.deepEqual(m.bvMServicos(linha({ grupo: [...G, { id: 3, servico: 'Pezinho', barbeiro: 'Kiel' }] })), { servico: 'corte adulto, barba design e Pezinho', barbeiro: 'Kiel' });
+  // sem grupo, grupo de um so ou linha fora do grupo (servico bem mais tarde): lembrete proprio, como antes
+  for (const g of [undefined, null, [G[0]], [{ id: 8 }, { id: 9 }]]) {
+    assert.equal(m.bvMSeguidora(linha({ id: '2', grupo: g })), false);
+    assert.deepEqual(m.bvMServicos(linha({ grupo: g })), { servico: 'corte adulto', barbeiro: 'Kiel' });
+  }
+  // lider cancelada sai do grupo na consulta: a seguidora vira lider e manda o proprio lembrete
+  [b] = m.bvMSincPlano([linha({ id: '2', grupo: [G[1]], dados: { nome: 'Paulo', servico: 'barba design', barbeiro: 'Kiel' } })], agora, cfg);
+  assert.deepEqual([b.acao, b.req.body.body], ['criar', 'Oi, Paulo! Seu barba design com Kiel amanhã, às 14:00.']);
+}
+console.log('mensagens.test.js lembrete unico por grupo ok');

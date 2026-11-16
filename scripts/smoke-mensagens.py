@@ -197,6 +197,28 @@ def m7():
     checar("re-toque: nenhum turno do agente", sa.sql(sem_agente + ";") == "0" and sa.sql(f"SELECT count(*) FROM turnos WHERE contato_id={cid};") == "0")
 
 
+def m8():
+    print("M8 um lembrete para dois servicos do mesmo dia: a resposta vale para os dois (owner, 2026-11-16)")
+    for n, toque, resposta, alvo in ((503, "s", "confirmada", 3), (504, "n", "recusada", 10)):
+        cid = contato(n)
+        (ag1, ini1), (ag2, ini2) = agenda_teste(), agenda_teste()
+        checar(f"{resposta}: dois horarios no mesmo dia", ini1[:10] == ini2[:10], f"{ini1} {ini2}")
+        i, _ = linha(cid, "lembrete_dia", situacao="enviada", ag=ag1, cliente=sa.PAULO, inicio=ini1)  # lider: o lembrete que saiu
+        j, _ = linha(cid, "lembrete_dia", situacao="cancelada", ag=ag2, cliente=sa.PAULO, inicio=ini2)  # seguidora: nao mandou lembrete
+        h, _ = linha(cid, "lembrete_hora", situacao="cancelada", ag=ag2, cliente=sa.PAULO, inicio=ini2)
+        # tentativas no teto: o sincronizador nao leva a linha pendente ao Chat Master (contato simulado)
+        sa.sql(f"UPDATE mensagens_agendadas SET motivo='junto' WHERE id={j}; UPDATE mensagens_agendadas SET situacao='pendente', tentativas=4 WHERE id={h}; "
+               f"INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ({cid}, 'agendada-{i}', 'saida', 'lista', 'smoke');")
+        sa.post(evento_lista(n, f"bvc:{i}:{toque}"))
+        checar(f"{resposta}: resposta gravada na lider", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='{resposta}'", 40) == "1", estado_linha(i))
+        checar(f"{resposta}: resposta gravada na seguidora, sem etiqueta propria",
+               esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={j} AND resposta='{resposta}' AND etiqueta_id=0", 30) == "1", estado_linha(j))
+        checar(f"{resposta}: Graces com status {alvo} nos dois servicos", (st := [status_graces_em(a, alvo) for a in (ag1, ag2)]) == [alvo, alvo], str(st))
+        checar(f"{resposta}: lembrete de 1 h da seguidora " + ("cancelado" if toque == "n" else "mantido"),
+               estado_linha(h).startswith("cancelada/recusada" if toque == "n" else "pendente/"), estado_linha(h))
+        checar(f"{resposta}: nenhuma falha registrada", sa.sql(f"SELECT count(*) FROM falhas_agente WHERE contato_id={cid};") == "0")
+
+
 def encerrar():
     for a in _agendas:
         sa._del(a)
@@ -208,7 +230,7 @@ def encerrar():
         sa.sql(f"DELETE FROM falhas_agente WHERE code IN ({codes}) AND contato_id IS NULL;")
 
 
-CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6, m7=m7)
+CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6, m7=m7, m8=m8)
 
 if __name__ == "__main__":
     sa._env(".env.smoke", ".env.n8n")
