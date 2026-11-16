@@ -363,7 +363,7 @@ def preparar(r, n):
 
 
 def rodar_delegado(r):
-    """R16: o smoke-mensagens (m2, m3, m7) por subprocesso, lista de argumentos e sem shell; o veredito e o codigo de saida."""
+    """R16: o smoke-mensagens (m2, m3, m7, m8) por subprocesso, lista de argumentos e sem shell; o veredito e o codigo de saida."""
     nomes = r["delegado"].split(":", 1)[1].split(",")
     p = subprocess.run([sys.executable, "-I", os.path.join(RAIZ, "scripts", "smoke-mensagens.py"), *nomes], capture_output=True, text=True, timeout=1800)
     return p.returncode, sanitizar((p.stdout or "")[-600:])

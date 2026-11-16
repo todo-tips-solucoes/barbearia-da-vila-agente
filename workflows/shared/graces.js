@@ -588,10 +588,15 @@ function bvgPassoUm(st, resps0, cfg) {
     case 'listar_servicos': {
       const vistos = new Set(); // uma busca por termo: junta sem repetir
       const juntas = resps.filter(ok200).flatMap((r) => (Array.isArray(r.body) ? r.body : [])).filter((s) => s && !vistos.has(s.idServico) && vistos.add(s.idServico));
+      // Mais pedidos primeiro (owner, 2026-11-16): a API devolve em ordem alfabetica e a lista do WhatsApp so cabe 10; o corte adulto,
+      // 55% da agenda, era o 13o. cfg.destaque = nomes na ordem medida; quem nao esta nela segue depois, na ordem da API.
+      const dest = (cfg.destaque || []).map((x) => String(x).trim().toLowerCase());
+      const peso = (s) => { const k = dest.indexOf(s.nome.trim().toLowerCase()); return k < 0 ? dest.length : k; };
       const ss = bvFiltrarServicos(juntas.filter((s) => s.ativo !== false).map((s) => ({ ...s, nome: String(s.descricaoAgenda || '') })))
-        .filter((s) => !meta.soCabelo || !/\bunhas?\b/i.test(s.nome));
+        .filter((s) => !meta.soCabelo || !/\bunhas?\b/i.test(s.nome))
+        .map((s, k) => [peso(s), k, s]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
       const of = bvMontarOferta('servico', ss.map((s) => ({ rotulo: s.nome, valor: { idServico: s.idServico, nome: s.nome, preco: s.valorPadrao, minutos: s.tempoPadrao } })), cfg);
-      const orientacao = meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'há mais serviços; peça ao cliente um termo para filtrar' : undefined;
+      const orientacao = meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'a lista traz os serviços mais pedidos e há outros: se o cliente não achar o que quer, peça um termo para filtrar' : undefined;
       return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of });
     }
     case 'listar_barbeiros': {

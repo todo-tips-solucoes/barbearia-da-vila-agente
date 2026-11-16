@@ -919,3 +919,18 @@ console.log('graces.test.js remarcacao com qualquer barbeiro ok');
   assert.equal(t(null, { pedido: {} }).efeitos.falha.motivo, 'encaminhar_equipe|barbeiro_humano'); // sem motivo: clausula do Jayme, como antes
 }
 console.log('graces.test.js motivos de transferencia ok');
+
+// Mais pedidos primeiro (item 10, owner 2026-11-16): a lista de 10 nao pode esconder o corte adulto
+{
+  const nomes = ['APLICAÇÃO', 'barba design', 'BARBA EXPRESS', 'Barba lisa', 'Barboterapia', 'Cabelo adulto + barba', 'Cabelo máquina + barba', 'Camuflagem', 'Camuflagem Barba', 'Coloração', 'corte adulto', 'corte adulto 2º vez', 'corte com maquina', 'Corte Infantil ate 11 anos'];
+  const corpo = nomes.map((n, k) => ({ idServico: 's' + k, descricaoAgenda: n, tempoPadrao: 40, valorPadrao: 50, ativo: true }));
+  const lista = (c) => g.bvGPasso(g.bvGPlano(entrada({ operacao: 'listar_servicos' }), null, c).st, [ok(corpo)], c).final.resultado;
+  const dest = { ...cfg, destaque: ['corte adulto', 'corte com maquina', 'barba design', 'Corte Infantil ate 11 anos', 'Cabelo adulto + barba', 'Serviço que saiu do catálogo'] };
+  const r = lista(dest);
+  // destaque na ordem do config (maiusculas e espacos nao importam); o resto depois, na ordem da API; "2a vez" segue fora
+  assert.deepEqual(r.servicos.map((s) => s.nome), ['corte adulto', 'corte com maquina', 'barba design', 'Corte Infantil ate 11 anos', 'Cabelo adulto + barba', 'APLICAÇÃO', 'BARBA EXPRESS', 'Barba lisa', 'Barboterapia', 'Cabelo máquina + barba']);
+  assert.equal(r.total, 13);
+  assert.match(r.orientacao, /mais pedidos e há outros/);
+  assert.deepEqual(lista(cfg).servicos.map((s) => s.nome).slice(0, 2), ['APLICAÇÃO', 'barba design']); // sem destaque no config: ordem da API, como antes
+}
+console.log('graces.test.js mais pedidos ok');

@@ -5,9 +5,9 @@
   "expectativas": [
     "Status 3 na Graces ao tocar em Confirmo",
     "Status 10 e oferta de remarcar ao tocar em Não vou poder",
-    "Coberto pelo smoke-mensagens m2, m3 e m7"
+    "Coberto pelo smoke-mensagens m2, m3, m7 e m8 (m8: um lembrete para dois serviços, a resposta vale para os dois)"
   ],
   "criterios": [],
   "agenda": false,
-  "delegado": "smoke-mensagens:m2,m3,m7"
+  "delegado": "smoke-mensagens:m2,m3,m7,m8"
 }

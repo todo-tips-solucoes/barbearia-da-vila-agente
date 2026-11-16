@@ -484,5 +484,39 @@ class SemRequireNoN8n(unittest.TestCase):
                         self.assertNotEqual(c.find("shared/" + dep), -1, f"{f}::{n['name']} sem {dep}")
 
 
+class LembreteUnicoPorGrupo(unittest.TestCase):
+    """Item 11 (owner, 2026-11-16): um lembrete so para quem tem mais de um servico no mesmo dia."""
+
+    def nos(self, arq):
+        w = json.load(open(os.path.join(RAIZ, arq), encoding="utf-8"))
+        return {n["name"]: n for n in w["nodes"]}, {k: [[d["node"] for d in o] for o in v["main"]] for k, v in w["connections"].items()}
+
+    def test_pendencias_devolve_o_grupo(self):
+        nos, _ = self.nos("workflows/bv-mensagens.json")
+        p = nos["Pendencias"]["parameters"]
+        self.assertIn("AS grupo FROM res r", p["query"])
+        self.assertIn("make_interval(mins => $4::int)", p["query"])
+        self.assertTrue(p["options"]["queryReplacement"].endswith("4, {{BV:mensagens.juntar_min}}] }}"))
+        self.assertEqual(p["query"].count("("), p["query"].count(")"))
+
+    def test_resposta_vale_para_os_outros_servicos(self):
+        nos, con = self.nos("workflows/sub/bv-confirmacao.json")
+        self.assertEqual([con[n] for n in ("Registrar", "Irmas", "Tem irma?", "Graces irmas", "Registrar irmas")],
+                         [[["Irmas"]], [["Tem irma?"]], [["Graces irmas"], ["Saida"]], [["Registrar irmas"]], [["Saida"]]])
+        q, r = nos["Irmas"]["parameters"]["query"], nos["Irmas"]["parameters"]["options"]["queryReplacement"]
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertIn("m.id_profissional = $5::text", q)  # TESTE: so o barbeiro de teste
+        self.assertIn("'{{BV:ambiente}}' === 'integracao' ? '{{BV:graces.barbeiro_teste_id}}' : ''", r)
+        self.assertTrue(nos["Irmas"]["alwaysOutputData"])  # sem irma: segue para a Saida
+        self.assertEqual(nos["Graces irmas"]["onError"], "continueRegularOutput")
+        self.assertIn("/public/v1/agenda/confirmacao", nos["Graces irmas"]["parameters"]["url"])
+
+    def test_config_dos_dois_ambientes(self):
+        for amb in ("integracao", "producao"):
+            c = json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))
+            self.assertEqual(c["mensagens"]["juntar_min"], 120)
+            self.assertEqual(c["graces"]["servicos_destaque"][0], "corte adulto")  # item 10: mais pedidos primeiro
+
+
 if __name__ == "__main__":
     unittest.main()

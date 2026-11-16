@@ -152,10 +152,24 @@ function bvMNomeProprio(t) {
   }).join(' ');
 }
 
+// Um lembrete so para quem tem mais de um servico no mesmo dia (owner, 2026-11-16). linha.grupo = [{id, servico, barbeiro}] na ordem do
+// horario, vindo da consulta: a primeira e a lider (manda o lembrete, citando todos) e as outras sao seguidoras (nao mandam).
+const bvMGrupo = (l) => (Array.isArray(l.grupo) && l.grupo.length > 1 && l.grupo.some((x) => String(x.id) === String(l.id)) ? l.grupo : null);
+const bvMSeguidora = (l) => { const g = bvMGrupo(l); return !!g && String(g[0].id) !== String(l.id); };
+// "corte adulto e barba design" com o mesmo barbeiro; barbeiros diferentes: "corte adulto com Kiel e barba design" + barbeiro do ultimo
+function bvMServicos(linha) {
+  const d = linha.dados || {}, g = bvMGrupo(linha);
+  if (!g || bvMSeguidora(linha)) return { servico: d.servico, barbeiro: d.barbeiro };
+  const e = (xs) => (xs.length > 1 ? xs.slice(0, -1).join(', ') + ' e ' + xs[xs.length - 1] : xs[0]);
+  const bs = g.map((x) => String(x.barbeiro || '').trim());
+  if (bs.every((b) => b === bs[0])) return { servico: e(g.map((x) => x.servico)), barbeiro: bs[0] };
+  return { servico: e(g.map((x, k) => (k < g.length - 1 && bs[k] ? `${x.servico} com ${bs[k]}` : x.servico))), barbeiro: bs[bs.length - 1] };
+}
+
 function bvMTextoDe(linha, textos) {
   const d = linha.dados || {};
   const nome = bvMNomeProprio(String(d.nome || '').trim().split(/\s+/)[0]);
-  return bvMTemplate(textos[linha.tipo === 'pos_atendimento' ? 'pos' : linha.tipo], { nome, servico: d.servico, barbeiro: d.barbeiro, dia: bvMDia(linha.inicio), hora: String(linha.inicio || '').slice(11, 16) })
+  return bvMTemplate(textos[linha.tipo === 'pos_atendimento' ? 'pos' : linha.tipo], { nome, ...bvMServicos(linha), dia: bvMDia(linha.inicio), hora: String(linha.inicio || '').slice(11, 16) })
     .replace(/,\s*!/g, '!'); // sem nome: "Oi, !" vira "Oi!"
 }
 
@@ -208,6 +222,10 @@ function bvMSincPlano(linhas, agora, cfg) {
       if (!l.canal_id) return { ...base, acao: 'nada' };
       return futuro ? { ...base, acao: 'apagar', req: { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: String(l.canal_id) } } } : { ...base, acao: 'liberar' };
     }
+    // Seguidora de um grupo (bvMGrupo): a lider manda um lembrete so. Se ja tinha agendamento no Chat Master, apaga; depois fica
+    // parada e e reavaliada (a lider pode ser cancelada e ela virar lider); no horario dela, encerra como `junto`.
+    if (bvMSeguidora(l) && futuro && l.canal_id) return { ...base, acao: 'apagar', req: { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: String(l.canal_id) } } };
+    if (bvMSeguidora(l) && !l.canal_id) return { ...base, acao: 'junto', fim: !futuro, previsto_para: l.previsto_para };
     const texto = bvMTextoDe(l, cfg.textos);
     if (l.canal_id) {
       if (new Date(l.previsto_para).getTime() <= t0) return { ...base, acao: 'enviada' };
@@ -276,6 +294,8 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
     case 'enviada': return { id, situacao: 'enviada' };
     case 'ja_passou': return { id, situacao: 'cancelada', motivo: 'ja_passou' };
     case 'sem_contato': return { id, situacao: 'cancelada', motivo: 'sem_contato_canal' };
+    case 'junto': // seguidora: sem chamada; reavalia em ate 30 min (sem ocupar a varredura) e encerra no horario dela
+      return p.fim ? { id, situacao: 'cancelada', motivo: 'junto' } : { id, proxima: new Date(Math.min(new Date(p.previsto_para).getTime(), new Date(agora).getTime() + 30 * 60000)).toISOString() };
     case 'buscar_contato': { const c = ok ? contatoDe(body) : null; return c === null ? falha() : { id, contato_id: p.contato_id, contato_canal_id: c }; }
     case 'criar_contato': { const c = ok ? contatoDe(body) : null; return c > 0 ? { id, contato_id: p.contato_id, contato_canal_id: c } : falha(ok ? 'SEM_ID' : undefined); } // sem id: falha visivel, nunca repete em silencio
     case 'buscar_ticket': { // lista de tickets do contato em todas as conexoes: so vale um desta conexao
@@ -421,5 +441,5 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax) {
   return ''; // fora_do_teste: sem texto
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };
