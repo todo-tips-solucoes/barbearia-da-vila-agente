@@ -196,7 +196,8 @@ console.log('mensagens.test.js (decisao) ok');
   assert.deepEqual(A(0, 0, true), { code: 'retry', espera_s: 1 });
   assert.deepEqual(A(503, 1, true), { code: 'retry', espera_s: 5 });
   assert.equal(A(503, 2, true).code, 'falhou');
-  assert.equal(A(400, 0, true).code, 'falhou');
+  assert.deepEqual(A(400, 0, true), { code: 'retry', espera_s: 1, com_data: true }); // recorrente sem `data` (PROD, 16/11): tenta de novo com a data
+  assert.equal(A(400, 1, true).code, 'falhou');
   // textos
   const tx = { confirmacao_ok: 'ok {dia} {hora}', confirmacao_recusada: 'r', confirmacao_repetida: 'rep', confirmacao_desatualizada: 'd', confirmacao_falhou: 'f' };
   assert.equal(X('confirmada', row(), 'id', tx, 2), 'ok quinta-feira (22/10) 14:00');

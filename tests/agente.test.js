@@ -419,3 +419,16 @@ console.log('agente.test.js itens 7 a 9 ok');
   assert.match(a.bvCompor('Posso ajudar com o seu horário. Qual fica melhor?', null, cfg).map((x) => x.texto).join(' '), /com o seu horário/); // sem opcoes: nada e cortado
 }
 console.log('agente.test.js segunda analise ok');
+
+// Resposta a retomada horas depois continua a sessao (PROD, 16/11: "Fecho" 4 h 30 depois virou "ate mais")
+{
+  const a = require('../workflows/shared/agente.js');
+  const h = 3600000, agora = 100 * h, ped = { servico: { nome: 'x' } };
+  const r = (o) => a.bvRecencia({ agoraMs: agora, janelaMin: 120, retomadaJanelaMin: 720, pedido: ped, opcoes: null, ...o }).sessaoNova;
+  assert.equal(r({ ultimaEntradaMs: agora - 20 * h, retomadaMs: agora - 4.5 * h }), false); // respondeu 4 h 30 depois da retomada
+  assert.equal(r({ ultimaEntradaMs: agora - 20 * h, retomadaMs: agora - 13 * h }), true); // passou das 12 h
+  assert.equal(r({ ultimaEntradaMs: agora - 3 * h, retomadaMs: agora - 6 * h }), true); // falou depois da retomada e sumiu por 3 h: regra normal
+  assert.equal(r({ ultimaEntradaMs: agora - 3 * h, retomadaMs: null }), true);
+  assert.equal(r({ ultimaEntradaMs: agora - 1 * h, retomadaMs: null }), false);
+}
+console.log('agente.test.js retomada longa ok');

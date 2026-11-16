@@ -214,7 +214,10 @@
   },
   "handoff": {
     "setor_id": 78,
-    "whatsapp_id": "145"
+    "whatsapp_id": "145",
+    "encerrar_ativo": false,
+    "encerrar_apos_min": 30,
+    "encerrar_so_respondido": true
   },
   "mensagens": {
     "ativo": true,
@@ -282,6 +285,8 @@
       "agendar_conjunto",
       "reagendar",
       "trocar_servico"
-    ]
+    ],
+    "resposta_max_min": 720,
+    "apos_min_urgente": 20
   }
 }

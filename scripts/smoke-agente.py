@@ -55,7 +55,7 @@ def cid(n):
 
 def evento(n, texto):
     b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-02.json"), encoding="utf-8"))["body"]
-    b.update(sender=tel(n), token_origin=TOKEN)
+    b.update(sender=tel(n), token_origin=TOKEN, queueId=1)  # fila 1: a 78 da fixture e a fila humana do TESTE (owner, 2026-11-16)
     b["mensagem"][0]["text"] = texto
     return b
 

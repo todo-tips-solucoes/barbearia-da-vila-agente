@@ -217,7 +217,7 @@ class BvMensagens(Base, unittest.TestCase):
         for t in ("$1::boolean", "FOR UPDATE OF c SKIP LOCKED", "UPDATE conversas c SET retomada_em = now()", "c.retomada_em < c.sessao_iniciada_em",
                   "position('?' in coalesce(u.conteudo, '')) > 0", "coalesce(c.pedido->>'handoff', 'false') <> 'true'", "p.estado IN ('executada','executando','incerta')"):
             self.assertIn(t, q)
-        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", q)}), list(range(1, 9)))
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", q)}), list(range(1, 11)))
         self.assertEqual(q.count("("), q.count(")"))
         g = self.nos["Gravar retomada"]["parameters"]["query"]
         self.assertEqual((sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), g.count("(") == g.count(")")), ([1, 2, 3, 4], True))
