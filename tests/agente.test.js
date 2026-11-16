@@ -318,3 +318,33 @@ console.log('agente.test.js jayme ok');
   }
 }
 console.log('agente.test.js sem numero da loja ok');
+
+// Respostas duplicadas (atendimentos de 2026-11-15): o cliente escreve antes de ler a resposta anterior
+{
+  const a = require('../workflows/shared/agente.js');
+  const h = (direcao, conteudo, criado_em, tipo = 'texto') => ({ direcao, tipo, conteudo, criado_em });
+  // caso real: "Apenas corte adulto" 09:15:34, resposta 09:15:47; "corte adulto" 09:15:45 chegou antes da resposta
+  const hist = [h('entrada', 'Apenas corte adulto', '2026-11-15T12:15:34Z'), h('saida', 'Perfeito, Rodrigo! Para o serviço **corte adulto**, qual barbeiro você prefere?', '2026-11-15T12:15:47Z', 'lista')];
+  const novas = [{ recebida_em: '2026-11-15T12:15:45.000Z' }];
+  assert.equal(a.bvCorrida(novas, hist), true);
+  assert.equal(a.bvCorrida([{ recebida_em: '2026-11-15T12:16:10Z' }], hist), false); // respondeu depois de ler
+  assert.equal(a.bvCorrida(novas, []), false);
+  assert.equal(a.bvCorrida([{ recebida_em: '2026-11-15T12:15:45Z' }, { recebida_em: '2026-11-15T12:16:10Z' }], hist), false); // a ultima veio depois de ler
+  assert.equal(a.bvQuaseIgual('Perfeito! Para **corte adulto**, qual barbeiro você prefere?', hist[1].conteudo), true);
+  assert.equal(a.bvQuaseIgual('Obrigado, Pedro Henrique! 😊 Qual é a sua data de nascimento?', 'E qual é a sua data de nascimento?'), true);
+  assert.equal(a.bvQuaseIgual('Qual barbeiro você prefere?', 'Qual horário fica melhor pra você?'), false);
+  assert.equal(a.bvQuaseIgual('Sim', 'Sim'), false); // curto demais para decidir
+  const dup = [{ n: 1, tipo: 'lista', texto: 'Perfeito! Para **corte adulto**, qual barbeiro você prefere?', opcoes: [] }];
+  assert.deepEqual(a.bvSemRepetir(dup, novas, hist, false), []); // corrida e mesma oferta: nao reenvia
+  assert.equal(a.bvSemRepetir(dup, novas, hist, true).length, 1); // oferta nova: a lista sai (ids da oferta gravada)
+  assert.equal(a.bvSemRepetir(dup, [{ recebida_em: '2026-11-15T12:16:10Z' }], hist, false).length, 1); // sem corrida: repetir e legitimo
+  const misto = [{ n: 1, tipo: 'texto', texto: 'Perfeito, Rodrigo! Para o serviço corte adulto, qual barbeiro você prefere?' }, { n: 2, tipo: 'texto', texto: 'O Kiel tem horário às 12:00 hoje.' }];
+  assert.deepEqual(a.bvSemRepetir(misto, novas, hist, false), [{ n: 1, tipo: 'texto', texto: 'O Kiel tem horário às 12:00 hoje.' }]); // so o repetido sai
+  // mensagem antiga (fora da janela) nao conta
+  const velho = [h('saida', 'Perfeito! Para corte adulto, qual barbeiro você prefere?', '2026-11-15T12:00:00Z'), h('saida', 'Tudo certo por aqui, Rodrigo!', '2026-11-15T12:15:47Z')];
+  assert.equal(a.bvSemRepetir(dup, novas, velho, false).length, 1);
+  const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
+  assert.match(p, /Remarcação mantém o barbeiro/);
+  assert.match(p, /Nunca diga que o dia está lotado quando a consulta foi de um barbeiro só/);
+}
+console.log('agente.test.js sem repetir ok');

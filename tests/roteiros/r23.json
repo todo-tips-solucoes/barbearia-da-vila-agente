@@ -1,0 +1,22 @@
+{
+  "id": "R23",
+  "situacao": "Cliente pede para cortar só o cabelo (atendimentos de 2026-11-15: a busca por \"cabelo\" só trazia os combos com barba e o cliente ia embora)",
+  "falas": [
+    "Boa tarde! Pra hoje ainda dá pra cortar o cabelo?",
+    "Renato Dias Moreira, 20/05/1996, indicação de um amigo"
+  ],
+  "expectativas": [
+    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda o pedido (texto aberto, sem lista)",
+    "Depois do cadastro, oferece por lista os serviços de corte de cabelo, incluindo o corte adulto (só o corte, sem barba)",
+    "Não oferece apenas os combos de cabelo com barba"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "antes_da_c": false
+}

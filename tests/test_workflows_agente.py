@@ -215,6 +215,12 @@ class EntregarRajadaAgente(unittest.TestCase):
             if n["name"] in ("Normalizar", "Planejar", "Passo", "Efeitos"):
                 self.assertIn("handoff: { setor_id: {{BV:handoff.setor_id}} }", n["parameters"]["jsCode"])
 
+    def test_corrida_nao_repete_resposta(self):  # atendimentos de 2026-11-15: respostas duplicadas
+        self.assertIn("bvCorrida(itens, hist)", self.nos["Preparar"]["parameters"]["jsCode"])
+        c = self.nos["Compor"]["parameters"]["jsCode"]
+        self.assertIn("saida = bvSemRepetir(saida, ($('Gatilho').first().json || {}).itens", c)
+        self.assertLess(c.index("bvSaudar("), c.index("bvSemRepetir("))  # depois do texto de reformular: saida vazia e silencio, nao "nao entendi"
+
     def test_jayme_clausula_petrea(self):  # owner, 2026-11-14: so a equipe agenda o Jayme
         self.assertEqual(self._destinos("Sessao"), {0: ["Transferido?"]})  # depois da transferencia o agente fica em silencio
         self.assertEqual(self._destinos("Transferido?"), {0: ["Silencio"], 1: ["So midia?"]})
