@@ -217,7 +217,8 @@
     "whatsapp_id": "145",
     "encerrar_ativo": false,
     "encerrar_apos_min": 30,
-    "encerrar_so_respondido": true
+    "encerrar_so_respondido": true,
+    "silencio_por_fila": true
   },
   "mensagens": {
     "ativo": true,

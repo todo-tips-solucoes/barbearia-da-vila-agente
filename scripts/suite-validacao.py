@@ -45,7 +45,7 @@ CRITERIOS = {
     "K2": "Uma pergunta por mensagem; no maximo 4 mensagens curtas por turno.",
     "K3": "Multipla escolha sempre por lista, com texto humano. Pergunta aberta sem opcoes (ex.: 'qual horario fica melhor pra voce?', antes de buscar horarios; regra do owner de 2026-10-28) nao e multipla escolha e nao conta contra.",
     "K4": "Nada inventado: preco, servico, horario e barbeiro vem da Graces; endereco e contatos vem da config loja; o que nao sabe vira 'nao tenho essa informacao' e a oferta de passar para a equipe, que atende por esta mesma conversa. Eliminatorio.",
-    "K5": "Conducao comercial: toda duvida respondida termina com convite leve para agendar, sem insistir depois de um nao.",
+    "K5": "Conducao comercial: toda duvida respondida termina com convite leve para agendar, sem insistir depois de um nao. Perguntar qual servico, barbeiro ou horario o cliente quer, para seguir com o agendamento, tambem conta como convite.",
     "K6": "O barbeiro de teste nunca aparece para o cliente.",
 }
 SEGREDOS = ("CHATMASTER_TOKEN_TESTE", "OPENAI_API_KEY", "GRACES_API_KEY", "N8N_API_KEY")

@@ -198,7 +198,8 @@
     "whatsapp_id": "159",
     "encerrar_ativo": true,
     "encerrar_apos_min": 30,
-    "encerrar_so_respondido": true
+    "encerrar_so_respondido": true,
+    "silencio_por_fila": true
   },
   "mensagens": {
     "ativo": true,
