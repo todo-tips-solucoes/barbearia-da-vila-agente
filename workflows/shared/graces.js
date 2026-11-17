@@ -323,7 +323,11 @@ function bvGPlano(i, ctx0, cfg) {
       // Cadastro em outro numero (owner, 2026-11-16): antes de transferir, pedir o contato pelo numero do cadastro; a transferencia
       // so vale num turno seguinte, depois da resposta do cliente (o modelo as vezes transferia direto: suite R24)
       if ((mot === 'ja_cliente' || mot === 'outra_pessoa') && (!ctx.pedido.pediu_numero || ctx.pedido.pediu_numero === i.turno_id)) {
-        return bvgFim(bvgRecusa('peca_o_numero_do_cadastro', 'antes de transferir: explique que o cadastro deve estar com outro número e peça, com gentileza, que o contato seja feito pelo número do cadastro; só chame esta ferramenta de novo se ele responder que não é possível'),
+        // a ferramenta entrega o texto pronto: quando o modelo pedia o numero por conta propria, ela nao ficava sabendo (suite R24)
+        const pedir = mot === 'ja_cliente'
+          ? 'Como você já é cliente, seu cadastro deve estar com outro número. Você consegue me chamar pelo número que está no cadastro? Se não for possível, me avisa que eu passo para a equipe continuar por aqui.'
+          : 'O atendimento é feito pelo número que está no cadastro de quem vai ser atendido. Essa pessoa consegue me chamar pelo número dela? Se não for possível, me avisa que eu passo para a equipe continuar por aqui.';
+        return bvgFim({ ok: false, code: 'peca_o_numero_do_cadastro', texto: pedir, orientacao: 'ainda não transferiu: responda só com o texto (texto); se o cliente responder que não é possível, chame esta ferramenta de novo com o mesmo motivo, que então ela transfere' },
           { pedido: { pediu_numero: i.turno_id } });
       }
       const enc = bvgEncaminhar(mot === 'barbeiro_equipe' ? 'barbeiro_humano' : mot, 'transferir_atendimento', cfg);

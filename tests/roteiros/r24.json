@@ -8,7 +8,7 @@
   ],
   "expectativas": [
     "Na primeira resposta segue o fluxo normal (pergunta ou lista o serviço), sem pedir cadastro",
-    "Quando ele diz que já é cliente, não cadastra: explica que o cadastro deve estar com outro número e pede, com gentileza, que o contato seja feito pelo número do cadastro",
+    "Quando ele diz que já é cliente, não cadastra: explica que o cadastro deve estar com outro número e pergunta se ele consegue chamar pelo número do cadastro, avisando que, se não for possível, passa para a equipe",
     "Quando ele diz que não é possível, passa para a equipe continuar por esta mesma conversa",
     "Não manda e-mail, Instagram nem telefone"
   ],

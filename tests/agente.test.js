@@ -397,7 +397,7 @@ console.log('agente.test.js itens 7 a 9 ok');
   const a = require('../workflows/shared/agente.js');
   const c = a.bvContextoCliente({ sem_cadastro: true, opcoes: [] }, String);
   assert.match(c, /O cadastro só é feito na hora de marcar/);
-  assert.match(c, /não cadastre de novo.*peça, com gentileza, que o contato seja feito pelo número que está no cadastro.*não é possível.*motivo ja_cliente/);
+  assert.match(c, /não cadastre de novo.*motivo ja_cliente: na primeira vez a ferramenta não transfere e devolve o texto.*chame de novo com o mesmo motivo e ela transfere/);
   assert.doesNotMatch(c, /Antes do cadastro não responda preço/);
   assert.match(a.bvContextoCliente({ nome: 'Ana', varios: true, opcoes: [{ id: '1', nome: 'Ana' }] }, String), /a lista deles vai junto com a sua primeira resposta/);
   const inf = a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'Corte Infantil ate 11 anos', barbeiro: 'Kiel' } }, String);

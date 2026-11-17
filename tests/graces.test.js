@@ -918,6 +918,8 @@ console.log('graces.test.js remarcacao com qualquer barbeiro ok');
   const p1 = t('ja_cliente');
   assert.equal(p1.resultado.code, 'peca_o_numero_do_cadastro');
   assert.ok(p1.efeitos.pedido.pediu_numero);
+  assert.match(p1.resultado.texto, /^Como você já é cliente, seu cadastro deve estar com outro número\. Você consegue me chamar pelo número que está no cadastro\?/);
+  assert.equal(p1.efeitos.pedido.handoff, undefined); // ainda nao transferiu
   assert.equal(t('outra_pessoa', { pedido: { idCliente: 'c1', pediu_numero: p1.efeitos.pedido.pediu_numero } }).resultado.code, 'peca_o_numero_do_cadastro');
   assert.equal(t('outra_pessoa', { pedido: { idCliente: 'c1', pediu_numero: jaPediu.pedido.pediu_numero } }).resultado.code, 'encaminhar_equipe');
   assert.equal(t('atraso').resultado.texto, 'Entendi! Quem confirma isso é a equipe. ' + base);
