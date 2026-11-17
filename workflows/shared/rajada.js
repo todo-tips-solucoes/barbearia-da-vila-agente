@@ -1,6 +1,20 @@
 // Logica pura da recepcao (sem rede). Incluida nos Code nodes via {{BV:INCLUDE:shared/rajada.js}}.
 // Contrato: docs/specs/recepcao-buffer/contracts/webhook-chatmaster.md (so campos observados).
 
+// queueId do evento do Chat Master (numero, texto numerico, 'null' ou ausente) -> inteiro ou null
+function bvFila(b) { return b && /^\d+$/.test(String(b.queueId)) ? Number(b.queueId) : null; }
+
+// Mensagem enviada pela equipe na fila humana (from_internal, fromMe) -> { telefone, fila, id, texto } ou null. O texto de
+// encaminhamento do proprio agente chega como eco ja na fila humana: nao conta como resposta da equipe.
+function bvEquipe(b, filaHumana, textoAgente) {
+  if (!b || b.acao !== 'from_internal' || b.fromMe !== true || bvFila(b) !== Number(filaHumana)) return null;
+  const m = b.mensagem && !Array.isArray(b.mensagem) && typeof b.mensagem === 'object' ? b.mensagem : null;
+  if (!m || typeof b.sender !== 'string' || !b.sender || b.isGroup === true) return null;
+  const texto = typeof m.body === 'string' && m.body.trim() ? m.body.slice(0, 4000) : null;
+  if (texto && textoAgente && texto.includes(String(textoAgente))) return null;
+  return { telefone: b.sender, fila: bvFila(b), id: m.id === undefined || m.id === null ? null : String(m.id), texto };
+}
+
 function bvNormalizar(evento, opcoes) {
   const maxKb = (opcoes && opcoes.maxKb) || 2048;
   const b = evento && evento.body;
@@ -33,6 +47,7 @@ function bvNormalizar(evento, opcoes) {
     msg: {
       telefone: b.sender,
       ticketId: Number.isInteger(b.chamadoId) ? b.chamadoId : null,
+      filaId: bvFila(b), // fila do ticket neste evento (owner, 2026-11-16): na fila humana o agente nao interage
       // id do contato no Chat Master (lembretes, owner 2026-11-15): poupa a busca pelo numero na hora de agendar
       contatoCanalId: b.ticketData && Number.isInteger(b.ticketData.contactId) && b.ticketData.contactId > 0 ? b.ticketData.contactId : null,
       tipo,
@@ -62,4 +77,4 @@ function consolidar(linhas) {
   });
 }
 
-if (typeof module !== 'undefined') module.exports = { bvNormalizar, deveEntregar, consolidar };
+if (typeof module !== 'undefined') module.exports = { bvFila, bvEquipe, bvNormalizar, deveEntregar, consolidar };

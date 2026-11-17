@@ -1,0 +1,25 @@
+{
+  "id": "R26",
+  "situacao": "Cadastro só na hora de marcar (owner, 2026-11-16): cliente novo vê serviços e horários sem cadastro; o cadastro vem quando ele escolhe o horário, antes do resumo",
+  "falas": [
+    "Quero cortar o cabelo amanhã",
+    "corte adulto",
+    "Qualquer barbeiro, em qualquer horário",
+    "Pode ser o primeiro horário da lista",
+    "João Pedro Almeida, 10/10/1990, indicação de um amigo"
+  ],
+  "expectativas": [
+    "Mostra os serviços, pergunta o barbeiro e mostra os horários livres de amanhã em lista, tudo sem pedir cadastro e sem escolher um horário pelo cliente",
+    "Quando o cliente escolhe o horário, pede o cadastro rápido antes do resumo: nome completo, data de nascimento e como conheceu a barbearia",
+    "Recebidos os dados, confirma o cadastro em poucas palavras e manda o resumo com serviço, barbeiro, data e horário, perguntando se pode confirmar",
+    "Não diz que está agendado nem reservado antes do sim do cliente"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "handoff": false
+}

@@ -3,16 +3,14 @@
   "situacao": "Dúvida de preço antes de decidir",
   "falas": [
     "Quanto custa o corte?",
-    "Rafael Costa Lima, 12/03/1991. Conheci pelo Instagram",
     "E a barba?"
   ],
   "expectativas": [
-    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda a dúvida (texto aberto, sem lista)",
-    "Recebidos os dados, confirma o cadastro em poucas palavras e responde a dúvida que o cliente fez na primeira mensagem",
+    "Cliente sem cadastro: responde direto, sem pedir cadastro (o cadastro só é feito na hora de marcar um horário)",
     "Preço da Graces para cada serviço",
     "Não cita preço de informacaoes_barbearia.txt se divergir",
     "Não oferece o pacote de 4 serviços com 20% de desconto (sem fonte; reprova K4)",
-    "Convite para agendar (K5)"
+    "Convite para agendar (K5): perguntar qual serviço ele quer, para seguir com o agendamento, também conta como convite"
   ],
   "criterios": [
     "K1",

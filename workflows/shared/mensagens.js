@@ -391,6 +391,9 @@ function bvMConfAvaliar(status, tent, confirmado) {
   if (s >= 200 && s < 300) return { code: confirmado ? 'confirmada' : 'recusada' };
   if (s === 409) return { code: 'conferir' };
   if ((s === 0 || s >= 500) && tent < 2) return { code: 'retry', espera_s: [1, 5][tent] };
+  // 400 na primeira chamada (PROD, 16/11): agendamento recorrente exige `data` e a reconciliacao nao sabe que ele e recorrente.
+  // Uma nova tentativa, com a data da ocorrencia; se o 400 se repetir, e falha.
+  if (s === 400 && tent === 0) return { code: 'retry', espera_s: 1, com_data: true };
   return { code: 'falhou', status: s };
 }
 

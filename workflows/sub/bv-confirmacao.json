@@ -92,7 +92,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT m.id, m.situacao, m.resposta, m.motivo, m.id_profissional, m.graces_agendamento_id, m.graces_cliente_id, to_char(m.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS inicio, m.dados, c.telefone, (m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS futuro, COALESCE(m.respondida_em > now() - make_interval(secs => $3::int), false) AS recente, (SELECT count(*) FROM mensagens r WHERE r.contato_id = m.contato_id AND r.direcao = 'saida' AND r.mensagem_id_canal LIKE 'conf-repetida-%' AND r.criado_em > now() - interval '1 hour') AS repetidas FROM mensagens_agendadas m JOIN contatos c ON c.id = m.contato_id WHERE m.contato_id = $1::bigint AND m.tipo IN ('confirmacao','lembrete_dia') AND m.situacao IN ('enviada', 'cancelada', 'falhou') AND (m.id = $2::bigint OR ($2::bigint IS NULL AND m.situacao = 'enviada' AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo') AND ((m.resposta IS NULL AND m.motivo IS NULL) OR m.respondida_em > now() - make_interval(secs => $3::int)))) ORDER BY m.enviada_em DESC NULLS LAST LIMIT 5",
+        "query": "SELECT m.id, CASE WHEN m.situacao = 'pendente' THEN 'enviada' ELSE m.situacao END AS situacao, m.resposta, m.motivo, m.id_profissional, m.graces_agendamento_id, m.graces_cliente_id, to_char(m.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS inicio, m.dados, c.telefone, (m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS futuro, COALESCE(m.respondida_em > now() - make_interval(secs => $3::int), false) AS recente, (SELECT count(*) FROM mensagens r WHERE r.contato_id = m.contato_id AND r.direcao = 'saida' AND r.mensagem_id_canal LIKE 'conf-repetida-%' AND r.criado_em > now() - interval '1 hour') AS repetidas FROM mensagens_agendadas m JOIN contatos c ON c.id = m.contato_id WHERE m.contato_id = $1::bigint AND m.tipo IN ('confirmacao','lembrete_dia') AND (m.situacao IN ('cancelada', 'falhou') OR (m.situacao = 'enviada' OR (m.situacao = 'pendente' AND m.tipo = 'lembrete_dia' AND m.agendamento_canal_id IS NOT NULL AND m.previsto_para <= now() + interval '2 minutes'))) AND (m.id = $2::bigint OR ($2::bigint IS NULL AND (m.situacao = 'enviada' OR (m.situacao = 'pendente' AND m.tipo = 'lembrete_dia' AND m.agendamento_canal_id IS NOT NULL AND m.previsto_para <= now() + interval '2 minutes')) AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo') AND ((m.resposta IS NULL AND m.motivo IS NULL) OR m.respondida_em > now() - make_interval(secs => $3::int)))) ORDER BY m.enviada_em DESC NULLS LAST LIMIT 5",
         "options": {
           "queryReplacement": "={{ [$json.contato_id, $json.mensagem_id, {{BV:mensagens.espera_texto_s}} * 2] }}"
         }
@@ -162,7 +162,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE mensagens_agendadas SET resposta = $3::text, respondida_em = now(), atualizado_em = now() WHERE id = $1::bigint AND contato_id = $2::bigint AND tipo IN ('confirmacao','lembrete_dia') AND situacao = 'enviada' AND resposta IS NULL AND motivo IS NULL RETURNING id, graces_agendamento_id",
+        "query": "UPDATE mensagens_agendadas m SET resposta = $3::text, respondida_em = now(), atualizado_em = now(), situacao = 'enviada', enviada_em = COALESCE(m.enviada_em, m.previsto_para) WHERE m.id = $1::bigint AND m.contato_id = $2::bigint AND m.tipo IN ('confirmacao','lembrete_dia') AND (m.situacao = 'enviada' OR (m.situacao = 'pendente' AND m.tipo = 'lembrete_dia' AND m.agendamento_canal_id IS NOT NULL AND m.previsto_para <= now() + interval '2 minutes')) AND m.resposta IS NULL AND m.motivo IS NULL RETURNING m.id, m.graces_agendamento_id",
         "options": {
           "queryReplacement": "={{ [$json.row.id, $json.ent.contato_id, $json.ent.confirmado ? 'confirmada' : 'recusada'] }}"
         }
@@ -185,7 +185,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst e = $('Escolher').first().json;\nconst r = $input.first().json;\n// sem linha retornada: outro toque ja reivindicou (claim atomico) => repetida, sem Graces\nif (!r || !r.id) return [{ json: { ...e, acao: 'fim', code: 'repetida', req: null } }];\nreturn [{ json: { ...e, acao: 'graces', req: bvMConfReq(r.graces_agendamento_id, e.row, e.ent.confirmado) } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\nconst e = $('Escolher').first().json;\nconst r = $input.first().json;\n// sem linha retornada: outro toque ja reivindicou (claim atomico) => repetida, sem Graces\nif (!r || !r.id) return [{ json: { ...e, acao: 'fim', code: 'repetida', req: null } }];\nreturn [{ json: { ...e, acao: 'graces', req: bvMConfReq(r.graces_agendamento_id, e.row, e.ent.confirmado), data: String((e.row || {}).inicio || '').slice(0, 10) } }];"
       },
       "id": "ec4ce504-aca0-5735-b9f4-7d17a20c26f6",
       "name": "Resolver claim",
@@ -248,7 +248,7 @@
         "sendQuery": false,
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Resolver claim').first().json.req) }}"
+        "jsonBody": "={{ (() => { const b = $('Resolver claim').first().json; let comData = false; try { comData = $runIndex > 0 && !!$('Avaliar').last().json.com_data; } catch (e) { comData = false; } return JSON.stringify(comData && b.data && !b.req.data ? { ...b.req, data: b.data } : b.req); })() }}"
       },
       "id": "b7f834a1-cd08-5e55-b505-69806898f3fb",
       "name": "Graces confirmacao",

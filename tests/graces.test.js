@@ -904,15 +904,24 @@ console.log('graces.test.js remarcacao com qualquer barbeiro ok');
   const t = (motivo, ctx) => g.bvGPlano(entrada({ operacao: 'transferir_atendimento', ...(motivo ? { motivo } : {}) }), ctx || novo, aberto).final;
   assert.equal(t().resultado.code, 'cadastre_primeiro'); // barbeiro da equipe: cadastro antes
   assert.equal(t('barbeiro_equipe').resultado.code, 'cadastre_primeiro');
+  const jaPediu = { pedido: { cliente_sem_cadastro: true, pediu_numero: '99999999-9999-4999-8999-999999999999' } }; // pediu o numero num turno anterior
   for (const m of ['ja_cliente', 'pediu_pessoa', 'atraso', 'nao_resolvi']) { // esses vao direto, mesmo sem cadastro
-    const r = t(m);
+    const r = t(m, m === 'ja_cliente' ? jaPediu : undefined);
     assert.equal(r.resultado.code, 'encaminhar_equipe');
     assert.equal(r.efeitos.pedido.handoff, true);
     assert.equal(r.efeitos.falha.motivo, 'encaminhar_equipe|' + m);
   }
   const base = t('pediu_pessoa').resultado.texto; // texto de encaminhamento do config, sem frase de abertura
   assert.equal(base, 'Vou passar para a equipe.');
-  assert.equal(t('ja_cliente').resultado.texto, 'Como você já é cliente, seu cadastro deve estar com outro número. ' + base);
+  assert.equal(t('ja_cliente', jaPediu).resultado.texto, 'Como você já é cliente, seu cadastro deve estar com outro número. ' + base);
+  // primeira chamada: pede o contato pelo numero do cadastro; no mesmo turno continua recusando; no turno seguinte transfere
+  const p1 = t('ja_cliente');
+  assert.equal(p1.resultado.code, 'peca_o_numero_do_cadastro');
+  assert.ok(p1.efeitos.pedido.pediu_numero);
+  assert.match(p1.resultado.texto, /^Como você já é cliente, seu cadastro deve estar com outro número\. Você consegue me chamar pelo número que está no cadastro\?/);
+  assert.equal(p1.efeitos.pedido.handoff, undefined); // ainda nao transferiu
+  assert.equal(t('outra_pessoa', { pedido: { idCliente: 'c1', pediu_numero: p1.efeitos.pedido.pediu_numero } }).resultado.code, 'peca_o_numero_do_cadastro');
+  assert.equal(t('outra_pessoa', { pedido: { idCliente: 'c1', pediu_numero: jaPediu.pedido.pediu_numero } }).resultado.code, 'encaminhar_equipe');
   assert.equal(t('atraso').resultado.texto, 'Entendi! Quem confirma isso é a equipe. ' + base);
   assert.equal(t('nao_resolvi').resultado.texto, base);
   assert.equal(t('qualquer coisa').efeitos.falha.motivo, 'encaminhar_equipe|nao_resolvi'); // valor desconhecido
@@ -934,3 +943,41 @@ console.log('graces.test.js motivos de transferencia ok');
   assert.deepEqual(lista(cfg).servicos.map((s) => s.nome).slice(0, 2), ['APLICAÇÃO', 'barba design']); // sem destaque no config: ordem da API, como antes
 }
 console.log('graces.test.js mais pedidos ok');
+
+// Segunda analise (2026-11-16): quem escolhe o horario e o cliente; sem cadastro a fase 1 pede o cadastro; motivos novos
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const T = '11111111-1111-4111-8111-111111111111', T2 = '22222222-2222-4222-8222-222222222222';
+  const b = { opcao_id: '1', idProfissional: 'bk', apelido: 'Kiel' };
+  const ped = { idCliente: 'c1', servico: { idServico: S, nome: 'corte adulto', opcao_id: '1', preco: 90 }, barbeiro: b, barbeiros: [b] };
+  const busca = (hora, hs, turno) => {
+    const p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '1', data: '2026-10-27', ...(hora ? { hora } : {}), turno_id: turno }), { opcoes: { tipo: 'barbeiro', itens: [{ id: '1', valor: b }] }, pedido: ped }, cfg);
+    return g.bvGPasso(p.st, [ok({ minutos: 40, horarios: hs }), resp(500, {})], cfg).final;
+  };
+  const agendar = (f, turno, id) => g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: id, turno_id: turno }), { opcoes: f.efeitos.opcoes, pedido: { ...ped, ...f.efeitos.pedido } }, cfg).final.resultado;
+  // pediu 09:30, so ha 13:20 e 14:00: no turno da busca o agente nao pode propor 13:20
+  let f = busca('09:30', ['13:20', '14:00'], T);
+  assert.deepEqual(f.efeitos.pedido.busca, { turno: T, n: 2, livre: null });
+  assert.equal(agendar(f, T, '1').code, 'cliente_nao_escolheu');
+  assert.equal(agendar(f, T2, '1').aguardando_confirmacao, true); // turno seguinte: o cliente escolheu
+  // pediu 14:00 e esta livre: vai direto ao resumo; so ele
+  f = busca('14:00', ['13:20', '14:00'], T);
+  const livre = f.resultado.horario_pedido_livre;
+  assert.equal(agendar(f, T, livre).aguardando_confirmacao, true);
+  assert.equal(agendar(f, T, livre === '1' ? '2' : '1').code, 'cliente_nao_escolheu');
+  // um unico horario na lista: pode propor
+  f = busca(null, ['16:00'], T);
+  assert.equal(agendar(f, T, '1').aguardando_confirmacao, true);
+  // sem cadastro: a fase 1 manda cadastrar e chamar de novo com a mesma opcao
+  const sem = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', turno_id: T2 }), { opcoes: f.efeitos.opcoes, pedido: { ...ped, idCliente: null, cliente_sem_cadastro: true } }, cfg).final.resultado;
+  assert.equal(sem.code, 'cadastre_primeiro');
+  assert.match(sem.orientacao, /chame esta ferramenta de novo com a mesma opção/);
+  // confirmacao escrita antes da pergunta
+  const antes = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: '33333333-3333-4333-8333-333333333333', turno_id: T2 }), { opcoes: {}, pedido: ped, proposta: null, info: { estado: 'pendente', mesmo_turno: false, antes_da_pergunta: true } }, cfg).final.resultado;
+  assert.equal(antes.code, 'confirmacao_antes_da_pergunta');
+  // motivos novos de transferencia
+  const tr = (m) => g.bvGPlano(entrada({ operacao: 'transferir_atendimento', motivo: m }), { pedido: ped }, { ...cfg, textos: { encaminhar_equipe: 'Vou passar.' } }).final;
+  assert.equal(tr('pacote').resultado.texto, 'A equipe confere o seu pacote por aqui. Vou passar.');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento', motivo: 'outra_pessoa' }), { pedido: { ...ped, pediu_numero: '99999999-9999-4999-8999-999999999999' } }, cfg).final.efeitos.falha.motivo, 'encaminhar_equipe|outra_pessoa');
+}
+console.log('graces.test.js segunda analise ok');

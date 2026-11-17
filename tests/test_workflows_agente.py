@@ -225,7 +225,9 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual(self._destinos("Sessao"), {0: ["Transferido?"]})  # depois da transferencia o agente fica em silencio
         self.assertEqual(self._destinos("Transferido?"), {0: ["Silencio"], 1: ["So midia?"]})
         self.assertEqual(self._destinos("Silencio"), {0: ["Saidas"]})
-        self.assertIn("transferido: !rec.sessaoNova && !!(ctx.pedido || {}).handoff", self.nos["Preparar"]["parameters"]["jsCode"])
+        # fila humana (owner, 2026-11-16): silencio pelo ticket na fila; sem fila no evento, vale a marca da transferencia na sessao
+        self.assertIn("transferido: porFila ? (naFilaHumana || (filaAtual === null && !rec.sessaoNova && !!(ctx.pedido || {}).handoff)) : (!rec.sessaoNova && !!(ctx.pedido || {}).handoff),", self.nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("const naFilaHumana = filaAtual === {{BV:handoff.setor_id}};", self.nos["Preparar"]["parameters"]["jsCode"])
         t = self.nos["Ferramenta transferir_atendimento"]["parameters"]
         self.assertEqual(t["workflowInputs"]["value"]["operacao"], "transferir_atendimento")
         self.assertEqual(self.wf["connections"]["Ferramenta transferir_atendimento"]["ai_tool"][0][0]["node"], "Agente")

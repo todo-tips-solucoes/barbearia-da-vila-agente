@@ -2,12 +2,11 @@
   "id": "R23",
   "situacao": "Cliente pede para cortar só o cabelo (atendimentos de 2026-11-15: a busca por \"cabelo\" só trazia os combos com barba e o cliente ia embora)",
   "falas": [
-    "Boa tarde! Quero cortar só o cabelo, quais opções vocês têm?",
-    "Renato Dias Moreira, 20/05/1996, indicação de um amigo"
+    "Boa tarde! Quero cortar só o cabelo, quais opções vocês têm?"
   ],
   "expectativas": [
-    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia, sem responder ainda o pedido (texto aberto, sem lista)",
-    "Depois do cadastro, oferece por lista os serviços de corte de cabelo, incluindo o corte adulto (só o corte, sem barba)",
+    "Cliente sem cadastro: responde direto, sem pedir cadastro (o cadastro só é feito na hora de marcar um horário)",
+    "Oferece por lista os serviços de corte de cabelo, incluindo o corte adulto (só o corte, sem barba)",
     "Não oferece apenas os combos de cabelo com barba"
   ],
   "criterios": [

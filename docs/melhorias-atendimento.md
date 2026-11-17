@@ -33,6 +33,31 @@ Leitura das 06:40 às 17:36 de 16/11 (segunda-feira), feita pelo owner com o scr
 
 O que já se vê funcionando: a lista de serviços abre com o corte adulto, a resposta SIM vale para os dois serviços do mesmo lembrete, quem diz que já é cliente não é cadastrado de novo, e a equipe assume depois da transferência (pelo ritmo das respostas dos clientes, entre 8 min e 1 h 20 depois).
 
+## Decisões do owner sobre a segunda análise (2026-11-16)
+
+- **Cadastro só para agendar.** Preço, serviços e horários livres saem sem cadastro; o cadastro é pedido na hora de marcar.
+- **Outra pessoa ou cadastro em outro número.** Pedir que o contato seja feito pelo número do cadastro; se não for possível, transferir para a equipe. Interpretação adotada: criança ou dependente sem cadastro próprio, trazido pelo titular do número, segue sendo agendado no cadastro do titular.
+- **Fila humana.** Enquanto a conversa está na fila de atendimento humano, o agente não interage. Sem interação há mais de 30 minutos, o atendimento humano pode ser encerrado.
+- **Descrição dos serviços (item 22).** Fica para depois dos demais. Ideia do owner: para quem não é cliente, oferecer um conjunto curto de serviços "coringa" por categoria (por exemplo, em barba: barboterapia, barba express e a barba mais cara do catálogo; o mesmo em cabelo). O desenho será feito junto com o owner.
+- **Todos os outros itens: corrigir.** O item 21 (Jayme nos lembretes) aguarda a resposta do owner à explicação.
+
+## Feito depois da segunda análise
+
+| # | Correção | Como |
+|---|---|---|
+| 13 | Cadastro só na hora de marcar | Dúvidas e horários livres sem cadastro; a ferramenta de agendar pede o cadastro antes do resumo. Quem diz que já é cliente é orientado a chamar pelo número do cadastro e, se não puder, vai para a equipe |
+| 14 | O cliente é quem escolhe | No turno da busca, a ferramenta só aceita o horário pedido que está livre ou o único da lista; os demais esperam a escolha do cliente |
+| 15 | Serviço presumido (parcial) | Último serviço infantil ou juvenil não é presumido quando a mensagem não fala da criança; horário que o cliente diz já ter é conferido antes de criar outro. Falta levar os agendamentos futuros ao contexto da conversa |
+| 18 | Laços e irritação | Mesma pergunta no máximo duas vezes; depois muda a abordagem ou oferece a equipe. Sinal de irritação leva à oferta da equipe |
+| 23 | Ação já concluída | A escrita dos últimos 10 minutos entra no contexto: repetir o pedido recebe "já está feito" |
+| 24 | Confirmação antes da pergunta | A proposta só é executada por mensagem que chegou depois do pedido de confirmação |
+| 25 | Texto quebrado e lista de cadastros (parcial) | Frase que ficava pela metade quando as opções viravam lista é descartada; com vários cadastros no telefone, a pergunta vai junto com a lista |
+| 16 | Agente calado na fila humana | O silêncio segue o ticket: enquanto ele está na fila de atendimento humano o agente não responde, mesmo horas depois. Atendimento humano sem interação há 30 min é encerrado, desde que a equipe já tenha respondido |
+| 17 | Mensagens da equipe no histórico (parcial) | O que a equipe escreve na fila humana entra no histórico da conversa. Mensagem escrita pela equipe fora da fila humana ainda não é registrada |
+| 19 | Respostas a lembrete | Resposta no primeiro minuto é reconhecida; erro 400 da Graces tenta de novo com a data da ocorrência (hipótese: agendamento recorrente); "combinado" e "estarei aí" contam como confirmação; depois do NÃO, o pedido de cancelar não volta à pergunta |
+| 20 | Retomada no contexto | Resposta até 12 h depois continua a conversa; proposta vencida não é retomada; horário para as próximas 6 h é retomado em 20 min |
+| 12 | Pacote ou plano (provisório) | O agente agenda normalmente, avisa que o valor é o avulso e passa para a equipe abater o pacote. Falta agendar pelo pacote na API da Graces, o que depende de um pacote de teste no cliente de teste |
+
 ## Pendente, por prioridade
 
 Compilado do que as duas análises encontraram e ainda não foi corrigido. "Decisão" marca o que depende do owner.
@@ -40,18 +65,10 @@ Compilado do que as duas análises encontraram e ainda não foi corrigido. "Deci
 | # | Problema | Evidência em 16/11 | Sugestão |
 |---|---|---|---|
 | 12 | **Cliente com pacote ou plano fica sem agendamento.** O agente trava no valor avulso e transfere, sem reservar o horário | 4 casos: 2 transferidos sem horário, 1 irritado, 1 em andamento | A API da Graces lista os pacotes do cliente (`GET /agenda/pacotes`) e agenda abatendo deles (`idClienteItemPacote` no `POST /agenda`). Consultar antes de propor e agendar pelo pacote |
-| 13 | **Cadastro exigido antes de responder preço ou "vocês fazem X?"** | 4 casos: 1 cliente foi embora, 2 sem resposta até a leitura, 1 esperou 12 min pela resposta | Responder preço e serviços sem cadastro; cadastro só na hora de agendar. **Decisão** |
-| 14 | **O agente escolhe dia, horário ou serviço pelo cliente** e já pede "posso confirmar?" | 5 casos; 1 agendou e cancelou 27 min depois, 1 parou sem responder | Sem o horário pedido, só mostrar opções. Trava em código: só propor confirmação de horário que o cliente disse ou escolheu |
 | 15 | **Serviço presumido errado.** Telefone do filho no cadastro vira "corte infantil" para o pai; quem tem barba marcada recebe proposta de corte | 3 casos; 1 terminou em "é só barba" e desistência | Dizer o serviço presumido na primeira resposta e pedir confirmação; olhar os agendamentos do dia antes de propor um novo |
-| 16 | **O agente volta a responder no meio do atendimento da equipe.** O silêncio da transferência dura só a sessão de 2 h | 1 caso grave: cadastro reiniciado e "ainda não está agendado" para quem a equipe atendia | Manter o silêncio até a equipe devolver a conversa, ou por um prazo maior. **Decisão** sobre o prazo |
 | 17 | **O agente não vê o que a equipe escreveu.** Respostas do cliente à equipe chegam sem contexto | 2 casos de laço: "essa IA aí tá querendo dominar" | Gravar as mensagens da equipe no histórico da conversa |
-| 18 | **Mesma pergunta repetida em laço**, e irritação sem saída | 4 conversas com a mesma pergunta 4 vezes; "robô pqp", "lixo isso aqui" | Depois de 2 repetições sem avanço, mudar a abordagem ou oferecer a equipe. Oferecer a equipe ao primeiro sinal de irritação |
-| 19 | **Lembrete de 24 h: respostas perdidas** | SIM no primeiro minuto não reconhecido (1 perdido, 1 pediu de novo); erro 400 da Graces em 2 tentativas do mesmo cliente; "NÃO" seguido de "cancelar" voltou à mesma pergunta e não cancelou | Aceitar resposta a lembrete recém-enviado; investigar o 400 (provável agendamento recorrente); depois do NÃO, executar o cancelamento pedido |
-| 20 | **Retomada fora de contexto** | "Fecho" 4 h 30 depois virou "até mais"; retomada às 17:00 de um horário das 16:00, com o serviço errado; quem pediu para cancelar o horário de hoje e parou na confirmação só foi retomado na hora do horário | Guardar o pedido até o fim do dia depois da retomada; não retomar proposta vencida; antecipar a retomada quando o horário envolvido é no mesmo dia |
 | 21 | **Clientes do Jayme recebem lembrete e confirmação do agente**, e o agente cita "com o Jayme" ao falar de agendamento existente | 3 casos | **Decisão**: manter, ou tirar os agendamentos do Jayme dos lembretes e transferir quem perguntar por eles |
 | 22 | **O agente não sabe descrever serviços nem dados da loja** | "o que é a express?", "barba italiana", "fazem platinado?", "sexta é feriado, ele trabalha?" | Glossário curto dos serviços e calendário de feriados no config. **Decisão**: o owner fornece o conteúdo |
-| 23 | **Resposta errada logo depois de uma ação feita**, e confirmações duplicadas | "não encontrei nenhum agendamento" 1 s depois de cancelar; duas confirmações seguidas do mesmo agendamento | Informar ao turno seguinte a escrita recém-feita |
-| 24 | **Confirmação por mensagem escrita antes da pergunta** | 1 caso (cancelamento) | Só aceitar como confirmação mensagem recebida depois do pedido de confirmação |
 | 25 | **Lista que não combina com o texto, e texto quebrado quando as opções viram lista** | "Posso te ajudar a. Qual fica melhor pra você?"; saudação com lista anexada | Só anexar a lista quando o texto pede aquela escolha; não cortar a frase ao extrair as opções |
 | 26 | **Falta registro para auditar** | Os itens das listas e as mensagens da equipe não ficam no banco; a tabela de transferências está vazia | Gravar os itens da lista enviada e o início e o fim de cada transferência |
 

@@ -42,10 +42,10 @@ TETO_PADRAO = 3_000_000
 NAO_MEDIDO = "não medido"
 CRITERIOS = {
     "K1": "Acolhimento: cumprimenta pelo nome quando conhece, tom caloroso sem formalidade de robo; assume que e IA se perguntarem.",
-    "K2": "Uma pergunta por mensagem; no maximo 4 mensagens curtas por turno.",
-    "K3": "Multipla escolha sempre por lista, com texto humano. Pergunta aberta sem opcoes (ex.: 'qual horario fica melhor pra voce?', antes de buscar horarios; regra do owner de 2026-10-28) nao e multipla escolha e nao conta contra.",
+    "K2": "Uma pergunta por mensagem; no maximo 4 mensagens curtas por turno. A mensagem 'Seguem mais opcoes:' e a continuacao automatica de uma lista com mais de 10 itens (limite do WhatsApp) e nao conta como mensagem a mais nem como pergunta.",
+    "K3": "Multipla escolha sempre por lista, com texto humano. Pergunta aberta sem opcoes (ex.: 'qual horario fica melhor pra voce?', antes de buscar horarios; regra do owner de 2026-10-28) nao e multipla escolha e nao conta contra. A linha 'Agente (lista)' mostra as opcoes que foram enviadas como lista: com ela presente, a escolha foi por lista, mesmo que o texto tambem cite algumas opcoes.",
     "K4": "Nada inventado: preco, servico, horario e barbeiro vem da Graces; endereco e contatos vem da config loja; o que nao sabe vira 'nao tenho essa informacao' e a oferta de passar para a equipe, que atende por esta mesma conversa. Eliminatorio.",
-    "K5": "Conducao comercial: toda duvida respondida termina com convite leve para agendar, sem insistir depois de um nao.",
+    "K5": "Conducao comercial: toda duvida respondida termina com convite leve para agendar, sem insistir depois de um nao. Perguntar qual servico, barbeiro ou horario o cliente quer, para seguir com o agendamento, tambem conta como convite.",
     "K6": "O barbeiro de teste nunca aparece para o cliente.",
 }
 SEGREDOS = ("CHATMASTER_TOKEN_TESTE", "OPENAI_API_KEY", "GRACES_API_KEY", "N8N_API_KEY")
@@ -406,7 +406,13 @@ def executar(r, n, orc, parar, referencia=""):
             hoje = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)).strftime("%Y-%m-%d (%A)")
             ref = referencia + "\nHoje em Sao Paulo: " + hoje
             if r.get("preparo") == "agendamento_previo":  # a avaliadora nao ve meus_agendamentos: o preparo e fonte do K4
-                ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + "."
+                ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + ". Regra do agente: a remarcacao mantem o barbeiro do agendamento; dizer que sera com o mesmo barbeiro e correto."
+                try:  # o cliente de teste e um cadastro real: pode ter outros agendamentos alem do semeado (R9, 2026-11-17)
+                    fut = sa.graces_get(f"/agenda/agendamentos?idCliente={sa.PAULO}&proximos=true")
+                    ref += "\nTodos os agendamentos futuros do cliente na Graces agora (dizer que ha mais de um e listar estes e correto): " + "; ".join(
+                        f"{str(a.get('horaInicio', ''))[:16].replace('T', ' ')} {a.get('servico') or a.get('descricaoServico') or a.get('nomeServico') or ''}".strip() for a in fut) + "."
+                except Exception:  # noqa: BLE001 - sem a lista, a referencia segue so com o semeado
+                    pass
             notas, tokens, erro = avaliar(r, transcricao(ex["turnos"], nome) + extra, ref)
             ex.update(notas=notas, erro_avaliadora=erro)
             ex["tokens"]["avaliadora"] = tokens
@@ -594,7 +600,7 @@ def referencia_graces(get=None):
             partes.append(f"Ultimo atendimento do cliente cadastrado (roteiros com agenda; historico da Graces): {h.get('descricaoServico')} com {str(h.get('profissional', '')).strip()}")
     except Exception:  # noqa: BLE001
         pass
-    partes.append("Cliente sem cadastro (roteiros sem agenda, contato simulado): o agente pede nome completo, data de nascimento e como conheceu antes de atender; o cadastro no TESTE nao vai a Graces")
+    partes.append("Cliente sem cadastro (roteiros sem agenda, contato simulado): duvidas e horarios livres saem sem cadastro; o cadastro (nome completo, data de nascimento e como conheceu) so e pedido na hora de marcar um horario, ou antes de transferir quem pede um barbeiro que so a equipe agenda; o cadastro no TESTE nao vai a Graces")
     try:
         partes.append("Funcionamento: " + json.dumps(get("/agenda/configuracao").get("horarios"), ensure_ascii=False))
     except Exception:  # noqa: BLE001

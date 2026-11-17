@@ -59,3 +59,19 @@ console.log('rajada.test.js ok');
   const outro = bvNormalizar({ body: { ...ev.body, sender: '5511900000000' } }, { liberados: ['5511967296849'] });
   assert.deepEqual(outro, { status: 'descartada', motivo: 'nao_liberado' });
 }
+
+// Fila humana (owner, 2026-11-16): fila do evento e mensagem da equipe
+{
+  const r = require('../workflows/shared/rajada.js');
+  const assert = require('assert');
+  assert.deepEqual([r.bvFila({ queueId: 78 }), r.bvFila({ queueId: '106' }), r.bvFila({ queueId: 'null' }), r.bvFila({ queueId: null }), r.bvFila({})], [78, 106, null, null, null]);
+  const ev = (o) => ({ acao: 'from_internal', fromMe: true, queueId: 106, sender: '5511999990000', mensagem: { id: 77, body: 'Oi, aqui é da equipe' }, ...o });
+  assert.deepEqual(r.bvEquipe(ev(), 106, 'Vou passar você para a equipe'), { telefone: '5511999990000', fila: 106, id: '77', texto: 'Oi, aqui é da equipe' });
+  assert.equal(r.bvEquipe(ev({ queueId: 107 }), 106, 'x'), null); // fila do agente: eco das mensagens dele
+  assert.equal(r.bvEquipe(ev({ fromMe: false }), 106, 'x'), null); // mensagem do cliente
+  assert.equal(r.bvEquipe(ev({ acao: 'start' }), 106, 'x'), null);
+  assert.equal(r.bvEquipe(ev({ isGroup: true }), 106, 'x'), null);
+  // o texto de encaminhamento do proprio agente chega como eco ja na fila humana: nao e resposta da equipe
+  assert.equal(r.bvEquipe(ev({ mensagem: { id: 1, body: 'Entendi! Vou passar você para a equipe, tá?' } }), 106, 'Vou passar você para a equipe'), null);
+}
+console.log('rajada.test.js fila humana ok');
