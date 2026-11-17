@@ -904,15 +904,22 @@ console.log('graces.test.js remarcacao com qualquer barbeiro ok');
   const t = (motivo, ctx) => g.bvGPlano(entrada({ operacao: 'transferir_atendimento', ...(motivo ? { motivo } : {}) }), ctx || novo, aberto).final;
   assert.equal(t().resultado.code, 'cadastre_primeiro'); // barbeiro da equipe: cadastro antes
   assert.equal(t('barbeiro_equipe').resultado.code, 'cadastre_primeiro');
+  const jaPediu = { pedido: { cliente_sem_cadastro: true, pediu_numero: '99999999-9999-4999-8999-999999999999' } }; // pediu o numero num turno anterior
   for (const m of ['ja_cliente', 'pediu_pessoa', 'atraso', 'nao_resolvi']) { // esses vao direto, mesmo sem cadastro
-    const r = t(m);
+    const r = t(m, m === 'ja_cliente' ? jaPediu : undefined);
     assert.equal(r.resultado.code, 'encaminhar_equipe');
     assert.equal(r.efeitos.pedido.handoff, true);
     assert.equal(r.efeitos.falha.motivo, 'encaminhar_equipe|' + m);
   }
   const base = t('pediu_pessoa').resultado.texto; // texto de encaminhamento do config, sem frase de abertura
   assert.equal(base, 'Vou passar para a equipe.');
-  assert.equal(t('ja_cliente').resultado.texto, 'Como você já é cliente, seu cadastro deve estar com outro número. ' + base);
+  assert.equal(t('ja_cliente', jaPediu).resultado.texto, 'Como você já é cliente, seu cadastro deve estar com outro número. ' + base);
+  // primeira chamada: pede o contato pelo numero do cadastro; no mesmo turno continua recusando; no turno seguinte transfere
+  const p1 = t('ja_cliente');
+  assert.equal(p1.resultado.code, 'peca_o_numero_do_cadastro');
+  assert.ok(p1.efeitos.pedido.pediu_numero);
+  assert.equal(t('outra_pessoa', { pedido: { idCliente: 'c1', pediu_numero: p1.efeitos.pedido.pediu_numero } }).resultado.code, 'peca_o_numero_do_cadastro');
+  assert.equal(t('outra_pessoa', { pedido: { idCliente: 'c1', pediu_numero: jaPediu.pedido.pediu_numero } }).resultado.code, 'encaminhar_equipe');
   assert.equal(t('atraso').resultado.texto, 'Entendi! Quem confirma isso é a equipe. ' + base);
   assert.equal(t('nao_resolvi').resultado.texto, base);
   assert.equal(t('qualquer coisa').efeitos.falha.motivo, 'encaminhar_equipe|nao_resolvi'); // valor desconhecido
@@ -969,6 +976,6 @@ console.log('graces.test.js mais pedidos ok');
   // motivos novos de transferencia
   const tr = (m) => g.bvGPlano(entrada({ operacao: 'transferir_atendimento', motivo: m }), { pedido: ped }, { ...cfg, textos: { encaminhar_equipe: 'Vou passar.' } }).final;
   assert.equal(tr('pacote').resultado.texto, 'A equipe confere o seu pacote por aqui. Vou passar.');
-  assert.equal(tr('outra_pessoa').efeitos.falha.motivo, 'encaminhar_equipe|outra_pessoa');
+  assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento', motivo: 'outra_pessoa' }), { pedido: { ...ped, pediu_numero: '99999999-9999-4999-8999-999999999999' } }, cfg).final.efeitos.falha.motivo, 'encaminhar_equipe|outra_pessoa');
 }
 console.log('graces.test.js segunda analise ok');

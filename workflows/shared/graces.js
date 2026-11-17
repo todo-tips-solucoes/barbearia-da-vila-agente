@@ -320,6 +320,12 @@ function bvGPlano(i, ctx0, cfg) {
       // (so para o barbeiro da equipe: quem ja e cliente, pediu uma pessoa ou avisou atraso vai direto)
       const mot = i.motivo || 'barbeiro_equipe';
       if (mot === 'barbeiro_equipe' && ctx.pedido.cliente_sem_cadastro && cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente novo: faça antes o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e só então transfira'));
+      // Cadastro em outro numero (owner, 2026-11-16): antes de transferir, pedir o contato pelo numero do cadastro; a transferencia
+      // so vale num turno seguinte, depois da resposta do cliente (o modelo as vezes transferia direto: suite R24)
+      if ((mot === 'ja_cliente' || mot === 'outra_pessoa') && (!ctx.pedido.pediu_numero || ctx.pedido.pediu_numero === i.turno_id)) {
+        return bvgFim(bvgRecusa('peca_o_numero_do_cadastro', 'antes de transferir: explique que o cadastro deve estar com outro número e peça, com gentileza, que o contato seja feito pelo número do cadastro; só chame esta ferramenta de novo se ele responder que não é possível'),
+          { pedido: { pediu_numero: i.turno_id } });
+      }
       const enc = bvgEncaminhar(mot === 'barbeiro_equipe' ? 'barbeiro_humano' : mot, 'transferir_atendimento', cfg);
       enc.final.resultado.texto = BVG_MOTIVOS[mot] + (enc.final.resultado.texto || '');
       return enc;
