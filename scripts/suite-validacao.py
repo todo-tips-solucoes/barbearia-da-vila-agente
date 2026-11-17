@@ -42,8 +42,8 @@ TETO_PADRAO = 3_000_000
 NAO_MEDIDO = "não medido"
 CRITERIOS = {
     "K1": "Acolhimento: cumprimenta pelo nome quando conhece, tom caloroso sem formalidade de robo; assume que e IA se perguntarem.",
-    "K2": "Uma pergunta por mensagem; no maximo 4 mensagens curtas por turno.",
-    "K3": "Multipla escolha sempre por lista, com texto humano. Pergunta aberta sem opcoes (ex.: 'qual horario fica melhor pra voce?', antes de buscar horarios; regra do owner de 2026-10-28) nao e multipla escolha e nao conta contra.",
+    "K2": "Uma pergunta por mensagem; no maximo 4 mensagens curtas por turno. A mensagem 'Seguem mais opcoes:' e a continuacao automatica de uma lista com mais de 10 itens (limite do WhatsApp) e nao conta como mensagem a mais nem como pergunta.",
+    "K3": "Multipla escolha sempre por lista, com texto humano. Pergunta aberta sem opcoes (ex.: 'qual horario fica melhor pra voce?', antes de buscar horarios; regra do owner de 2026-10-28) nao e multipla escolha e nao conta contra. A linha 'Agente (lista)' mostra as opcoes que foram enviadas como lista: com ela presente, a escolha foi por lista, mesmo que o texto tambem cite algumas opcoes.",
     "K4": "Nada inventado: preco, servico, horario e barbeiro vem da Graces; endereco e contatos vem da config loja; o que nao sabe vira 'nao tenho essa informacao' e a oferta de passar para a equipe, que atende por esta mesma conversa. Eliminatorio.",
     "K5": "Conducao comercial: toda duvida respondida termina com convite leve para agendar, sem insistir depois de um nao. Perguntar qual servico, barbeiro ou horario o cliente quer, para seguir com o agendamento, tambem conta como convite.",
     "K6": "O barbeiro de teste nunca aparece para o cliente.",
