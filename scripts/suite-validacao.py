@@ -407,6 +407,12 @@ def executar(r, n, orc, parar, referencia=""):
             ref = referencia + "\nHoje em Sao Paulo: " + hoje
             if r.get("preparo") == "agendamento_previo":  # a avaliadora nao ve meus_agendamentos: o preparo e fonte do K4
                 ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + ". Regra do agente: a remarcacao mantem o barbeiro do agendamento; dizer que sera com o mesmo barbeiro e correto."
+                try:  # o cliente de teste e um cadastro real: pode ter outros agendamentos alem do semeado (R9, 2026-11-17)
+                    fut = sa.graces_get(f"/agenda/agendamentos?idCliente={sa.PAULO}&proximos=true")
+                    ref += "\nTodos os agendamentos futuros do cliente na Graces agora (dizer que ha mais de um e listar estes e correto): " + "; ".join(
+                        f"{str(a.get('horaInicio', ''))[:16].replace('T', ' ')} {a.get('servico') or a.get('descricaoServico') or a.get('nomeServico') or ''}".strip() for a in fut) + "."
+                except Exception:  # noqa: BLE001 - sem a lista, a referencia segue so com o semeado
+                    pass
             notas, tokens, erro = avaliar(r, transcricao(ex["turnos"], nome) + extra, ref)
             ex.update(notas=notas, erro_avaliadora=erro)
             ex["tokens"]["avaliadora"] = tokens
