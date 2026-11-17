@@ -188,6 +188,89 @@
           "name": "Postgres Barbearia Vila"
         }
       }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id AS contato_id, c.ticket_id FROM contatos c WHERE $1::boolean AND c.fila_id = $2::int AND c.ticket_id IS NOT NULL AND c.fila_interacao_em < now() - make_interval(mins => $3::int) AND (NOT $4::boolean OR c.fila_ultima_de = 'equipe') ORDER BY c.fila_interacao_em LIMIT 20",
+        "options": {
+          "queryReplacement": "={{ ['{{BV:handoff.encerrar_ativo}}' === 'True', {{BV:handoff.setor_id}}, {{BV:handoff.encerrar_apos_min}}, '{{BV:handoff.encerrar_so_respondido}}' === 'True'] }}"
+        }
+      },
+      "id": "67df7031-3584-503a-b0dc-b8b95cc8c7c8",
+      "name": "Filas paradas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.chatmasterveloz.com/api/tickets/updateAPI",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ticketId: String($json.ticket_id), status: 'closed' }) }}"
+      },
+      "id": "72fb9e32-3157-5e7f-b09c-ad529a49170e",
+      "name": "Encerrar atendimento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ok AS (UPDATE contatos SET fila_id = NULL, fila_interacao_em = NULL, fila_ultima_de = NULL, atualizado_em = now() WHERE id = $1::bigint AND $2::int BETWEEN 200 AND 299 RETURNING id), cv AS (UPDATE conversas SET pedido = pedido - 'handoff', atualizado_em = now() FROM ok WHERE conversas.contato_id = ok.id RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'fila_humana|encerrar', 'updateAPI', 'encerrar_falhou', $2::int, $1::bigint WHERE $2::int NOT BETWEEN 200 AND 299 RETURNING 1) SELECT (SELECT count(*) FROM ok) AS encerrado",
+        "options": {
+          "queryReplacement": "={{ [$('Filas paradas').item.json.contato_id, Number($json.statusCode || 0)] }}"
+        }
+      },
+      "id": "5f644a7f-84ba-5000-85e6-647d366ad003",
+      "name": "Gravar encerramento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        720,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
     }
   ],
   "connections": {
@@ -201,6 +284,11 @@
           },
           {
             "node": "Reter midia",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filas paradas",
             "type": "main",
             "index": 0
           }
@@ -263,6 +351,28 @@
         [
           {
             "node": "Gravar aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filas paradas": {
+      "main": [
+        [
+          {
+            "node": "Encerrar atendimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encerrar atendimento": {
+      "main": [
+        [
+          {
+            "node": "Gravar encerramento",
             "type": "main",
             "index": 0
           }

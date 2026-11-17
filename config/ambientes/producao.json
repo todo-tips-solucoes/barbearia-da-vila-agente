@@ -195,7 +195,11 @@
   },
   "handoff": {
     "setor_id": 106,
-    "whatsapp_id": "159"
+    "whatsapp_id": "159",
+    "encerrar_ativo": true,
+    "encerrar_apos_min": 30,
+    "encerrar_so_respondido": true,
+    "silencio_por_fila": true
   },
   "mensagens": {
     "ativo": true,
@@ -267,6 +271,8 @@
       "agendar_conjunto",
       "reagendar",
       "trocar_servico"
-    ]
+    ],
+    "resposta_max_min": 720,
+    "apos_min_urgente": 20
   }
 }

@@ -37,7 +37,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\nconst ev = $input.first().json;\nif (ev.tokenHash !== '{{BV:TOKEN_SHA256}}') return [{ json: { resultado: 'nao_autenticada' } }];\nconst cfgM = { titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\" };\nconst rc = '{{BV:mensagens.ativo}}' === 'True' ? bvMReconhecer(ev.body, cfgM) : null;\n// selecao da lista de confirmacao (from_internal com selectedRowID bvc:<id>:<s|n>): nao e mensagem, vai para bv-confirmacao\nif (rc && rc.origem === 'id' && typeof ev.body.sender === 'string' && ev.body.sender) return [{ json: { resultado: 'selecao', telefone: ev.body.sender, rec: rc } }];\nconst r = bvNormalizar(ev, { maxKb: {{BV:payload.max_kb}}, liberados: {{BV:liberacao.contatos}} });\nif (r.status === 'aceita') return [{ json: { resultado: 'aceita', msg: { ...r.msg, confirmaTitulo: rc && rc.origem === 'titulo' ? (rc.confirmado ? 'sim' : 'nao') : '' } } }];\nreturn [{ json: { resultado: r.status === 'invalida' ? 'invalida' : 'descartada', motivo: r.motivo } }];"
+        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\nconst ev = $input.first().json;\nif (ev.tokenHash !== '{{BV:TOKEN_SHA256}}') return [{ json: { resultado: 'nao_autenticada' } }];\nconst cfgM = { titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\" };\nconst rc = '{{BV:mensagens.ativo}}' === 'True' ? bvMReconhecer(ev.body, cfgM) : null;\n// selecao da lista de confirmacao (from_internal com selectedRowID bvc:<id>:<s|n>): nao e mensagem, vai para bv-confirmacao\nif (rc && rc.origem === 'id' && typeof ev.body.sender === 'string' && ev.body.sender) return [{ json: { resultado: 'selecao', telefone: ev.body.sender, rec: rc } }];\n// mensagem da equipe na fila humana (owner, 2026-11-16): nao e mensagem do cliente; marca a interacao e entra no historico\nconst eq = bvEquipe(ev.body, {{BV:handoff.setor_id}}, \"{{BV:textos.encaminhar_equipe}}\");\nif (eq) return [{ json: { resultado: 'descartada', motivo: 'enviada_pela_equipe', equipe: eq } }];\nconst r = bvNormalizar(ev, { maxKb: {{BV:payload.max_kb}}, liberados: {{BV:liberacao.contatos}} });\nif (r.status === 'aceita') return [{ json: { resultado: 'aceita', msg: { ...r.msg, confirmaTitulo: rc && rc.origem === 'titulo' ? (rc.confirmado ? 'sim' : 'nao') : '' } } }];\nreturn [{ json: { resultado: r.status === 'invalida' ? 'invalida' : 'descartada', motivo: r.motivo } }];"
       },
       "id": "180eaef6-7e4d-597c-b04a-f89cb82f6315",
       "name": "Normalizar",
@@ -257,9 +257,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO contatos (telefone, ticket_id, chatmaster_contato_id) VALUES ($1::text, $2::bigint, $3::bigint) ON CONFLICT (telefone) DO UPDATE SET atualizado_em = now(), ticket_id = COALESCE($2::bigint, contatos.ticket_id), chatmaster_contato_id = COALESCE($3::bigint, contatos.chatmaster_contato_id) RETURNING id AS contato_id",
+        "query": "INSERT INTO contatos (telefone, ticket_id, chatmaster_contato_id, fila_id, fila_interacao_em, fila_ultima_de) VALUES ($1::text, $2::bigint, $3::bigint, $4::int, CASE WHEN $4::int = $5::int THEN now() END, CASE WHEN $4::int = $5::int THEN 'cliente' END) ON CONFLICT (telefone) DO UPDATE SET atualizado_em = now(), ticket_id = COALESCE($2::bigint, contatos.ticket_id), chatmaster_contato_id = COALESCE($3::bigint, contatos.chatmaster_contato_id), fila_id = $4::int, fila_interacao_em = CASE WHEN $4::int = $5::int THEN now() END, fila_ultima_de = CASE WHEN $4::int = $5::int THEN 'cliente' END RETURNING id AS contato_id",
         "options": {
-          "queryReplacement": "={{ [$('Normalizar').first().json.msg.telefone, $('Normalizar').first().json.msg.ticketId, $('Normalizar').first().json.msg.contatoCanalId ?? null] }}"
+          "queryReplacement": "={{ [$('Normalizar').first().json.msg.telefone, $('Normalizar').first().json.msg.ticketId, $('Normalizar').first().json.msg.contatoCanalId ?? null, $('Normalizar').first().json.msg.filaId ?? null, {{BV:handoff.setor_id}}] }}"
         }
       },
       "id": "0d640761-5846-5242-8280-4dff871ad3da",
@@ -1391,7 +1391,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT $1::bigint AS contato_id, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo IN ('confirmacao','lembrete_dia') AND situacao = 'enviada' AND resposta IS NULL AND motivo IS NULL AND inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS abertas, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo IN ('confirmacao','lembrete_dia') AND resposta IS NOT NULL AND respondida_em > now() - make_interval(secs => $2::int)) + (SELECT count(*) FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' AND mensagem_id_canal LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes, (SELECT count(*) FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND criada_em > now() - make_interval(mins => $3::int)) AS propostas, COALESCE((SELECT tipo = 'lista' AND mensagem_id_canal LIKE 'agendada-%' FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' ORDER BY criado_em DESC, id DESC LIMIT 1), false) AS ultima_lista",
+        "query": "SELECT $1::bigint AS contato_id, (SELECT count(*) FROM mensagens_agendadas m WHERE m.contato_id = $1::bigint AND m.tipo IN ('confirmacao','lembrete_dia') AND (m.situacao = 'enviada' OR (m.situacao = 'pendente' AND m.tipo = 'lembrete_dia' AND m.agendamento_canal_id IS NOT NULL AND m.previsto_para <= now() + interval '2 minutes')) AND m.resposta IS NULL AND m.motivo IS NULL AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS abertas, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo IN ('confirmacao','lembrete_dia') AND resposta IS NOT NULL AND respondida_em > now() - make_interval(secs => $2::int)) + (SELECT count(*) FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' AND mensagem_id_canal LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes, (SELECT count(*) FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND criada_em > now() - make_interval(mins => $3::int)) AS propostas, COALESCE((SELECT tipo = 'lista' AND mensagem_id_canal LIKE 'agendada-%' FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' ORDER BY criado_em DESC, id DESC LIMIT 1), false) AS ultima_lista",
         "options": {
           "queryReplacement": "={{ [$('Upsert contato').first().json.contato_id, {{BV:mensagens.espera_texto_s}} * 2, {{BV:proposta.validade_min}}] }}"
         }
@@ -1521,6 +1521,31 @@
         840,
         610
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH c AS (UPDATE contatos SET fila_id = $2::int, fila_interacao_em = now(), fila_ultima_de = 'equipe', atualizado_em = now() WHERE $1::text IS NOT NULL AND telefone = $1::text AND NOT EXISTS (SELECT 1 FROM mensagens s WHERE s.contato_id = contatos.id AND s.direcao = 'saida' AND s.conteudo = $4::text AND s.criado_em > now() - interval '5 minutes') RETURNING id) INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT c.id, 'equipe-' || $3::text, 'saida', 'texto', $4::text FROM c WHERE $3::text IS NOT NULL AND $4::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1",
+        "options": {
+          "queryReplacement": "={{ (() => { const e = $('Normalizar').first().json.equipe || {}; return [e.telefone ?? null, e.fila ?? null, e.id ?? null, e.texto ?? null]; })() }}"
+        }
+      },
+      "id": "ab121376-b524-578f-adb6-8fa4f215f9c0",
+      "name": "Registrar equipe",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1680,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -2251,6 +2276,17 @@
         [
           {
             "node": "Consumir titulo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder 200 descartada": {
+      "main": [
+        [
+          {
+            "node": "Registrar equipe",
             "type": "main",
             "index": 0
           }

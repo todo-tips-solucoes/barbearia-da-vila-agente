@@ -2,13 +2,11 @@
   "id": "R10",
   "situacao": "Oi depois de coleta abandonada",
   "falas": [
-    "Oi",
-    "Diego Martins Rocha, 30/01/1990, passei na frente da loja"
+    "Oi"
   ],
   "expectativas": [
-    "Cliente sem cadastro: na primeira resposta cumprimenta, pede o nome completo e a data de nascimento e pergunta como conheceu a barbearia (texto aberto, sem lista)",
-    "Não retoma a coleta antiga",
-    "Recebidos os dados, confirma o cadastro e pergunta como pode ajudar"
+    "Cumprimenta e pergunta como pode ajudar, sem pedir cadastro",
+    "Não retoma a coleta antiga"
   ],
   "criterios": [
     "K1",

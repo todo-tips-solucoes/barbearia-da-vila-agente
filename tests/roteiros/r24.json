@@ -1,14 +1,16 @@
 {
   "id": "R24",
-  "situacao": "Já é cliente, mas o número não tem cadastro (owner, 2026-11-16): não cadastra de novo; transfere para a equipe localizar o cadastro",
+  "situacao": "Já é cliente, mas o número não tem cadastro (owner, 2026-11-16): não cadastra de novo; pede o contato pelo número do cadastro e, se não for possível, transfere para a equipe",
   "falas": [
     "Oi, quero marcar um corte",
-    "Mas eu já sou cliente de vocês, já cortei aí várias vezes"
+    "Eu já sou cliente de vocês, já cortei aí várias vezes",
+    "Não tenho mais aquele número"
   ],
   "expectativas": [
-    "Cliente sem cadastro: na primeira resposta cumprimenta e começa o cadastro (nome completo, data de nascimento, como conheceu), avisando que, se ele já for cliente, é só dizer",
-    "Quando ele diz que já é cliente, não insiste no cadastro: explica que o cadastro deve estar com outro número e que vai passar para a equipe continuar por esta mesma conversa",
-    "Não mostra horários e não manda e-mail, Instagram nem telefone"
+    "Na primeira resposta segue o fluxo normal (pergunta ou lista o serviço), sem pedir cadastro",
+    "Quando ele diz que já é cliente, não cadastra: explica que o cadastro deve estar com outro número e pergunta se ele consegue chamar pelo número do cadastro, avisando que, se não for possível, passa para a equipe",
+    "Quando ele diz que não é possível, passa para a equipe continuar por esta mesma conversa",
+    "Não manda e-mail, Instagram nem telefone"
   ],
   "criterios": [
     "K1",

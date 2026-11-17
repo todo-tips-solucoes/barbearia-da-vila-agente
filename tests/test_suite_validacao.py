@@ -14,7 +14,7 @@ def roteiros():
 
 class Roteiros(unittest.TestCase):
     def test_ids_unicos_e_em_sequencia(self):
-        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 26)])
+        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 27)])
 
     def test_criterios_validos(self):
         for r in roteiros():
@@ -34,7 +34,7 @@ class Roteiros(unittest.TestCase):
         self.assertEqual([m[i].get("preparo") for i in ("R7", "R8", "R9", "R10")], ["agendamento_previo"] * 3 + ["coleta_abandonada"])
         self.assertEqual(m["R16"]["delegado"], "smoke-mensagens:m2,m3,m7,m8")
         self.assertEqual({r["id"] for r in m.values() if r.get("handoff")}, {"R15", "R17", "R24"})  # transferencia conferida no estado
-        self.assertEqual({r["id"] for r in m.values() if r.get("handoff") is False}, {"R3", "R13", "R25"})
+        self.assertEqual({r["id"] for r in m.values() if r.get("handoff") is False}, {"R3", "R13", "R25", "R26"})
         self.assertTrue(any("20%" in e for e in m["R2"]["expectativas"]))
 
 
