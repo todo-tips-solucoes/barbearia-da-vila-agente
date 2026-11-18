@@ -184,10 +184,14 @@ def chamador(api):
         yield chamar
     finally:
         for rota, metodo in ((f"/workflows/{wid}/deactivate", "POST"), (f"/workflows/{wid}", "DELETE")):
-            try:
-                api(metodo, rota, {} if metodo == "POST" else None)
-            except Exception as e:  # noqa: BLE001
-                print(f"  ATENCAO: {metodo} {rota} falhou ({type(e).__name__}); apague o chamador temporario a mao (id {wid}).")
+            for tentativa in range(3):  # o DELETE logo depois de desativar falha no n8n: sem repetir, o chamador ficava para tras
+                try:
+                    api(metodo, rota, {} if metodo == "POST" else None)
+                    break
+                except Exception as e:  # noqa: BLE001
+                    if tentativa == 2:
+                        print(f"  ATENCAO: {metodo} {rota} falhou ({type(e).__name__}); apague o chamador temporario a mao (id {wid}).")
+                    time.sleep(2)
 
 
 # ---------------------------------------------------------------- cenarios
