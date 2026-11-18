@@ -174,8 +174,10 @@ function bvgFuturos(ped, acao, d, novoId) {
 }
 // Duplicidade (revisao de 17/11): novo agendamento no mesmo dia ou do mesmo servico de um que o cliente ja tem sai com aviso.
 function bvgJaTem(ped, itens) {
-  const a = (Array.isArray(ped.futuros) ? ped.futuros : []).find((f) => itens.some((x) => String(f.horaInicio).slice(0, 10) === x.data || (f.idServico && f.idServico === x.idServico)));
-  return a ? { ja_tem: `${a.servico || 'agendamento'} em ${bvgDiaSem(a.horaInicio)} às ${String(a.horaInicio).slice(11, 16)}`, orientacao: 'o cliente já tem esse agendamento: no pedido de confirmação, diga isso e pergunte se é mesmo mais um horário ou se é para trocar aquele (trocar: meus_agendamentos e reagendar)' } : {};
+  const fs = Array.isArray(ped.futuros) ? ped.futuros : [];
+  const a = fs.find((f) => itens.some((x) => String(f.horaInicio).slice(0, 10) === x.data)) || fs.find((f) => f.idServico && itens.some((x) => f.idServico === x.idServico));
+  // pergunta de sim ou nao (suite, 18/11): "e mais um ou e para trocar?" deixava o "pode confirmar" do cliente sem resposta possivel
+  return a ? { ja_tem: `${a.servico || 'agendamento'} em ${bvgDiaSem(a.horaInicio)} às ${String(a.horaInicio).slice(11, 16)}`, orientacao: 'o cliente já tem esse agendamento: mande o resumo normalmente, avise em uma frase que ele já tem esse horário e pergunte só se pode confirmar mais este (o sim dele confirma); se ele disser que é para trocar aquele, use meus_agendamentos e reagendar' } : {};
 }
 // Texto final da escrita (revisao de 17/11): o modelo montava a confirmacao de memoria e trocava o dia ou o horario.
 function bvgFeito(p) {
