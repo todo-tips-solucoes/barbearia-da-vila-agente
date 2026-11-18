@@ -396,7 +396,9 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         cls.graces = {n["name"]: n for n in json.loads(ler("workflows/sub/bv-graces.json"))["nodes"]}
 
     def test_confirmacao_sem_lista_de_horarios(self):
-        self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid) AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
+        # so a proposta de agendar ou remarcar tira a lista: "cancela o de quarta e marca pra segunda" cria a de cancelar e busca os
+        # horarios de segunda no mesmo turno, e a lista deles tem de sair (suite R8, 18/11)
+        self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid AND p.acao NOT LIKE 'cancelar%') AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
         self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova)", self.nos["Compor"]["parameters"]["jsCode"])
 
     def test_limite_de_turnos_transfere_de_verdade(self):

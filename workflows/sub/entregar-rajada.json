@@ -1333,7 +1333,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT opcoes, EXISTS (SELECT 1 FROM propostas p WHERE p.contato_id = $1::bigint AND p.estado = 'pendente' AND p.turno_id = $2::uuid) AS proposta_nova FROM conversas WHERE contato_id = $1::bigint",
+        "query": "SELECT opcoes, EXISTS (SELECT 1 FROM propostas p WHERE p.contato_id = $1::bigint AND p.estado = 'pendente' AND p.turno_id = $2::uuid AND p.acao NOT LIKE 'cancelar%') AS proposta_nova FROM conversas WHERE contato_id = $1::bigint",
         "options": {
           "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, $('Gatilho').first().json.turno_id] }}"
         }
