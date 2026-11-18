@@ -183,7 +183,7 @@ function bvgJaTem(ped, itens) {
 function bvgFeito(p) {
   const r = String((p.dados || {}).resumo || '').replace(/^(Trocar serviço: |Remarcar |Cancelar )/, '');
   const v = { agendar: 'Agendado', agendar_conjunto: 'Agendado', trocar_servico: 'Serviço trocado', reagendar: 'Remarcado', cancelar: 'Cancelado', cancelar_conjunto: 'Cancelado' }[p.acao];
-  return r && v ? { feito: `${v}: ${r}`, orientacao: 'confirme ao cliente com exatamente estes dados (serviço, barbeiro, dia da semana, data e horário); não mude nem recalcule nada' } : {};
+  return r && v ? { feito: `${v}: ${r}`, orientacao: 'diga ao cliente que está feito, com o seu jeito caloroso de falar e exatamente estes dados (serviço, barbeiro, dia da semana, data e horário); não copie esta linha seca, e não mude nem recalcule nada' } : {};
 }
 const bvgReais = (v) => (v == null ? '' : ` (R$ ${Number(v).toFixed(2).replace('.', ',')})`);
 const bvgSoDigitos = (t) => String(t).replace(/\D/g, '');
