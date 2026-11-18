@@ -1,0 +1,31 @@
+{
+  "id": "R27",
+  "situacao": "Retomada (revisão de 17/11): o cliente para no resumo, a retomada automática sai horas depois e o \"sim\" dele agenda direto, sem pedir a confirmação de novo",
+  "falas": [
+    "Oi! Quero cortar o cabelo amanhã à tarde, com qualquer barbeiro",
+    {
+      "tocar": 1
+    },
+    {
+      "passar_horas": 3
+    },
+    "Sim, pode confirmar"
+  ],
+  "expectativas": [
+    "Mostra os horários de amanhã à tarde em lista e, escolhido o horário, manda o resumo e pede a confirmação",
+    "A retomada automática cita o que ficou faltando confirmar",
+    "Com o sim do cliente depois da retomada, agenda direto: não repete o resumo nem pede a confirmação outra vez",
+    "Confirma o agendamento com serviço, barbeiro, dia e horário"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "escritas": [
+    "agendar"
+  ]
+}

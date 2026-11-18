@@ -19,5 +19,9 @@
     "K6"
   ],
   "agenda": false,
-  "handoff": true
+  "handoff": true,
+  "cobre": [
+    9,
+    11
+  ]
 }

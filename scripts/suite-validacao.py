@@ -42,7 +42,7 @@ TETO_PADRAO = 3_000_000
 NAO_MEDIDO = "não medido"
 CRITERIOS = {
     "K1": "Acolhimento: cumprimenta pelo nome quando conhece, tom caloroso sem formalidade de robo; assume que e IA se perguntarem.",
-    "K2": "Uma pergunta por mensagem; no maximo 4 mensagens curtas por turno. A mensagem 'Seguem mais opcoes:' e a continuacao automatica de uma lista com mais de 10 itens (limite do WhatsApp) e nao conta como mensagem a mais nem como pergunta.",
+    "K2": "Uma pergunta por mensagem; no maximo 4 mensagens curtas por turno. O pedido de cadastro (nome completo, data de nascimento e como conheceu, numa mensagem so) conta como uma pergunta. A mensagem 'Seguem mais opcoes:' e a continuacao automatica de uma lista com mais de 10 itens (limite do WhatsApp) e nao conta como mensagem a mais nem como pergunta.",
     "K3": "Multipla escolha sempre por lista, com texto humano. Pergunta aberta sem opcoes (ex.: 'qual horario fica melhor pra voce?', antes de buscar horarios; regra do owner de 2026-10-28) nao e multipla escolha e nao conta contra. A linha 'Agente (lista)' mostra as opcoes que foram enviadas como lista: com ela presente, a escolha foi por lista, mesmo que o texto tambem cite algumas opcoes.",
     "K4": "Nada inventado: preco, servico, horario e barbeiro vem da Graces; endereco e contatos vem da config loja; o que nao sabe vira 'nao tenho essa informacao' e a oferta de passar para a equipe, que atende por esta mesma conversa. Eliminatorio.",
     "K5": "Conducao comercial: toda duvida respondida termina com convite leve para agendar, sem insistir depois de um nao. Perguntar qual servico, barbeiro ou horario o cliente quer, para seguir com o agendamento, tambem conta como convite.",
@@ -51,7 +51,8 @@ CRITERIOS = {
 SEGREDOS = ("CHATMASTER_TOKEN_TESTE", "OPENAI_API_KEY", "GRACES_API_KEY", "N8N_API_KEY")
 # smoke-mensagens usa os contatos 505-509: sem agendamento aloca-se 510-519 e, passando de 10 roteiros, 490-499
 # (dec: evita colisao e limpeza cruzada entre os dois smokes; >= 520 e o telefone do cliente de teste)
-CONTATOS_LIVRES = [*range(510, 520), *range(490, 500)]
+CONTATOS_LIVRES = [*range(510, 520), *range(490, 500), *range(480, 490)]
+FILA_HUMANA = sa.CFG["handoff"]["setor_id"]
 FILA_AGENDA = 520
 
 
@@ -251,8 +252,10 @@ def sanitizar(txt, nome=None):
 def transcricao(turnos, nome=None):
     linhas = []
     for t in turnos:
-        linhas.append(f"Cliente: {t['fala']}")
+        linhas.append(f"{t.get('quem', 'Cliente')}: {t['fala']}")
         linhas += [f"Agente: {s}" for s in t["saidas"]]
+        if t.get("nota"):
+            linhas.append(f"Sistema: {t['nota']}")
         if t.get("oferta"):
             linhas.append("Agente (lista): " + " | ".join(map(str, t["oferta"])))
     return sanitizar("\n".join(linhas), nome)
@@ -292,8 +295,96 @@ def dizer(ex, n, corpo, rotulo, parar):
         raise InfraTurno(f"webhook respondeu HTTP {t['http']}")
     if t["estado"] != "concluido" or not t["saidas"]:
         raise InfraTurno(f"turno terminou em '{t['estado']}' com {len(t['saidas'])} saidas")
+    # lista enviada NESTE turno, pelo que foi gravado (tipo lista): a mesma lista reenviada nao muda a oferta e nao aparecia na
+    # transcricao; a avaliadora lia "repetiu a pergunta sem reenviar as opcoes" (R38, 18/11)
+    listou = sa.sql(f"SELECT count(*) FROM mensagens WHERE contato_id={sa.cid(n)} AND tipo='lista' AND mensagem_id_canal LIKE 'out-{t['turno_id']}-%';") not in ("", "0")
+    depois = rotulos_oferta(n)
     ex["turnos"].append(dict(fala=rotulo, saidas=t["saidas"], latencia_s=latencia_s(n, t["turno_id"]), turno_id=t["turno_id"],
-                             estado=t["estado"], oferta=nova_oferta(antes, rotulos_oferta(n))))
+                             estado=t["estado"], oferta=depois if listou else nova_oferta(antes, depois)))
+
+
+# Passos que nao sao uma fala comum do cliente (revisao de 17/11: roteiros de retomada, fila humana e lembrete no meio da conversa).
+def passo(ex, quem, fala, saidas=(), nota=None):
+    """Entra na transcricao com quem falou; sem latencia (nao e turno do agente respondendo ao cliente)."""
+    ex["turnos"].append(dict(quem=quem, fala=fala, saidas=list(saidas), latencia_s=None, turno_id=None, estado="concluido", oferta=[], nota=nota))
+
+
+def _esperar(consulta, limite, passo_s=3):
+    fim = time.time() + limite
+    while time.time() < fim:
+        v = sa.sql(consulta)
+        if v:
+            return v
+        time.sleep(passo_s)
+    return ""
+
+
+def equipe(ex, n, texto, parar):
+    """Uma pessoa da equipe responde pela mesma conversa (evento from_internal na fila humana); o agente nao e chamado."""
+    if parar.is_set():
+        raise Interrompido()
+    b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-03.json"), encoding="utf-8"))["body"]
+    ident = int(time.time() * 1000)
+    b.update(sender=sa.tel(n), token_origin=sa.TOKEN, queueId=FILA_HUMANA)
+    b["mensagem"].update(body=texto, id=ident, queueId=FILA_HUMANA)
+    s, _ = sa.post(b)
+    if s != 200 or not _esperar(f"SELECT 1 FROM mensagens WHERE contato_id={sa.cid(n)} AND mensagem_id_canal = 'equipe-{ident}';", 20):
+        raise InfraTurno(f"mensagem da equipe nao foi registrada (HTTP {s})")
+    passo(ex, "Equipe (uma pessoa da loja, pela mesma conversa)", texto)
+
+
+def na_fila_humana(ex, n, texto, parar):
+    """Fala do cliente com a conversa na fila da equipe: o agente tem de ficar calado (falha deterministica se responder)."""
+    if parar.is_set():
+        raise Interrompido()
+    ev = sa.evento(n, texto)
+    ev["queueId"] = FILA_HUMANA
+    t = sa.turno(n, ev, limite=SEM_SAIDA_S)
+    if t is None or t.get("http") or t["estado"] != "concluido":
+        raise InfraTurno("turno na fila humana nao terminou")
+    if t["saidas"]:
+        ex.setdefault("det_passos", []).append("K1: o agente respondeu com a conversa na fila da equipe")
+    passo(ex, "Cliente (com a conversa na fila da equipe)", texto, t["saidas"], None if t["saidas"] else "o agente ficou em silencio, como deve: a conversa esta com a equipe")
+
+
+def passar_horas(ex, n, horas, parar):
+    """Envelhece a conversa e espera a retomada de verdade (o bv-mensagens do TESTE varre a cada minuto; contato simulado so grava a saida)."""
+    if parar.is_set():
+        raise Interrompido()
+    c, iv = sa.cid(n), f"interval '{int(horas)} hours'"
+    sa.sql(f"UPDATE mensagens SET criado_em = criado_em - {iv} WHERE contato_id={c}; "
+           f"UPDATE conversas SET ultima_entrada_em = ultima_entrada_em - {iv}, sessao_iniciada_em = sessao_iniciada_em - {iv} WHERE contato_id={c}; "
+           f"UPDATE propostas SET criada_em = criada_em - {iv}, atualizada_em = atualizada_em - {iv} WHERE contato_id={c}; "
+           f"UPDATE turnos SET iniciado_em = iniciado_em - {iv}, concluido_em = concluido_em - {iv} WHERE contato_id={c};")
+    texto = _esperar(f"SELECT conteudo FROM mensagens WHERE contato_id={c} AND mensagem_id_canal LIKE 'retomada-%' ORDER BY id DESC LIMIT 1;", 150, 5)
+    if not texto:
+        raise InfraTurno("a retomada nao saiu em 150 s")
+    passo(ex, "Sistema", f"passaram {int(horas)} h sem resposta do cliente; o agente manda a retomada automatica", [texto])
+
+
+def lembrete(ex, n, parar):
+    """Confirmacao de presenca aberta para o agendamento semeado, com a mensagem do lembrete como a ultima da conversa."""
+    if parar.is_set():
+        raise Interrompido()
+    ag = next(iter(sa._agendas_paulo()), None)
+    if not ag:
+        raise InfraTurno("sem agendamento semeado para o lembrete")
+    c, ini = sa.cid(n), str(ag["horaInicio"])
+    lid = sa.sql("INSERT INTO mensagens_agendadas (contato_id, tipo, previsto_para, graces_agendamento_id, situacao, graces_cliente_id, id_profissional, inicio, dados, enviada_em) "
+                 f"VALUES ({c}, 'confirmacao', now(), '{ag['idAgenda']}', 'enviada', '{sa.PAULO}', '{sa.TESTE_ID}', '{ini}', "
+                 "'{\"servico\":\"corte adulto\",\"barbeiro\":\"Pedro Henrique\",\"fim\":\"\"}', now()) RETURNING id;").split()[0]
+    texto = f"Oi! Passando para confirmar o seu corte adulto de {ini[8:10]}/{ini[5:7]} às {ini[11:16]}. Você confirma a presença?"
+    sa.sql(f"INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ({c}, 'agendada-{lid}', 'saida', 'texto', '{texto}');")
+    passo(ex, "Sistema", "o lembrete automatico do agendamento que o cliente ja tinha chega agora, no meio da conversa", [texto])
+
+
+def tocar_texto(ex, n, trecho, parar):
+    """Toca no item da lista oferecida cujo rotulo contem `trecho`. Sem esse item na lista, a falha e do agente (deterministica)
+    e o cliente digita o texto, para a conversa seguir."""
+    alvo = next((r for r in rotulos_oferta(n) if trecho.lower() in r.lower() and "TESTE" not in r.upper()), None)
+    if not alvo:
+        ex.setdefault("det_passos", []).append(f"K3: a lista com a opcao '{trecho}' nao foi oferecida")
+    dizer(ex, n, sa.evento(n, alvo or trecho), alvo or trecho, parar)
 
 
 def nova_oferta(antes, depois):
@@ -387,6 +478,16 @@ def executar(r, n, orc, parar, referencia=""):
         for fala in r["falas"]:
             if isinstance(fala, dict) and "tocar" in fala:
                 tocar(ex, n, int(fala["tocar"]), parar)
+            elif isinstance(fala, dict) and "tocar_texto" in fala:
+                tocar_texto(ex, n, fala["tocar_texto"], parar)
+            elif isinstance(fala, dict) and "equipe" in fala:
+                equipe(ex, n, fala["equipe"], parar)
+            elif isinstance(fala, dict) and "fila_humana" in fala:
+                na_fila_humana(ex, n, fala["fila_humana"], parar)
+            elif isinstance(fala, dict) and "passar_horas" in fala:
+                passar_horas(ex, n, fala["passar_horas"], parar)
+            elif isinstance(fala, dict) and "lembrete" in fala:
+                lembrete(ex, n, parar)
             elif isinstance(fala, dict):
                 corpo, rotulo = corpo_midia(n, fala["midia"])
                 dizer(ex, n, corpo, rotulo, parar)
@@ -394,13 +495,15 @@ def executar(r, n, orc, parar, referencia=""):
                 dizer(ex, n, sa.evento(n, fala), fala, parar)
         ped = sa.estado(n)["pedido"] or {}
         nome = ped.get("cliente_nome")
-        ex["deterministicas"] = deterministicas(ex["turnos"], nome)
+        ex["deterministicas"] = deterministicas(ex["turnos"], nome) + ex.pop("det_passos", [])
+        feitas = sorted(p["acao"] for p in sa.propostas(n) if p["estado"] == "executada") if sa.cid(n) else []
+        if "escritas" in r and feitas != sorted(r["escritas"]):  # o que foi escrito na agenda e conferido no estado, nao no texto
+            ex["deterministicas"].append(f"K4: escritas na agenda {feitas or 'nenhuma'}; o roteiro espera {sorted(r['escritas']) or 'nenhuma'}")
         if "handoff" in r and bool(ped.get("handoff")) != r["handoff"]:  # transferencia para a equipe: conferida no estado, nao no texto
             ex["deterministicas"].append("K1: a conversa " + ("deveria ter sido transferida para a equipe" if r["handoff"] else "nao deveria ter sido transferida para a equipe"))
         for t in ex["turnos"]:  # relatorio sem telefone, nome do cliente de teste ou segredo
             t["fala"], t["saidas"], t["oferta"] = sanitizar(t["fala"], nome), [sanitizar(x, nome) for x in t["saidas"]], [sanitizar(x, nome) for x in t["oferta"]]
         if r["criterios"]:
-            feitas = [p["acao"] for p in sa.propostas(n) if p["estado"] == "executada"] if sa.cid(n) else []
             extra = ("\nSistema (Graces): escrita executada nesta conversa: " + ", ".join(feitas)) if feitas else ""
             if ped.get("handoff"):
                 extra += "\nSistema: a conversa foi transferida para a equipe humana, que continua por esta mesma conversa."
@@ -408,6 +511,10 @@ def executar(r, n, orc, parar, referencia=""):
             agora_sp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
             # calendario pronto (R8, 18/11): a avaliadora ora aceitava, ora reprovava a data de "segunda"
             ref = referencia + "\nHoje em Sao Paulo: " + hoje + ". Proximos dias: " + "; ".join((agora_sp + datetime.timedelta(days=k)).strftime("%Y-%m-%d (%A)") for k in range(1, 8)) + ". Um dia da semana dito sem data e o proximo com esse nome nesta lista."
+            if r.get("referencia"):  # o que a avaliadora precisa saber so neste roteiro (R37: a referencia so traz a agenda de amanha)
+                ref += "\n" + str(r["referencia"])
+            if any(str(t.get("quem", "")).startswith("Equipe") for t in ex["turnos"]):  # R28: a fala da equipe era lida como invencao
+                ref += "\nAs falas marcadas como Equipe sao de uma pessoa da loja, nao do agente: o que ela informa vale como fonte e nao e avaliado."
             if r.get("preparo") == "agendamento_previo":  # a avaliadora nao ve meus_agendamentos: o preparo e fonte do K4
                 ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + ". Regra do agente: a remarcacao mantem o barbeiro do agendamento; dizer que sera com o mesmo barbeiro e correto."
             if r.get("agenda") or r.get("preparo") == "agendamento_previo":
@@ -568,7 +675,7 @@ def gravar_relatorio(rel, pasta=None):
         if e.get("erro_avaliadora"):
             md.append(f"- erro_infra (avaliadora): {e['erro_avaliadora']}")
         for t in e.get("turnos", []):
-            md.append(f"  - cliente: {t['fala']} ({t['latencia_s']} s)")
+            md.append(f"  - {str(t.get('quem', 'cliente')).lower()}: {t['fala']}" + (f" ({t['latencia_s']} s)" if t.get("latencia_s") is not None else ""))
             md += [f"    - agente: {s}" for s in t["saidas"]]
         md.append("")
     md += ["## Pendências", ""] + [f"- {p['item']}: {p['estado']} ({p['motivo']})" for p in rel["pendencias"]]

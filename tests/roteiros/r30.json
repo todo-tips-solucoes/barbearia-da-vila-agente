@@ -1,0 +1,28 @@
+{
+  "id": "R30",
+  "situacao": "Laço e irritação (item 18): respostas vagas não viram a mesma pergunta repetida; diante da irritação, pede desculpas e oferece a equipe",
+  "falas": [
+    "Quero marcar um horário",
+    "sei lá",
+    "tanto faz, você que sabe",
+    "Esse robô não entende nada, que lixo",
+    "Quero sim, me passa pra alguém"
+  ],
+  "expectativas": [
+    "Não faz a mesma pergunta mais de duas vezes: na segunda resposta vaga muda o jeito (manda as opções em lista ou diz com outras palavras o que falta), sem escolher pelo cliente; na terceira, oferece a equipe",
+    "Diante da irritação, pede desculpas em uma frase e oferece passar para a equipe, sem se justificar",
+    "Com o aceite do cliente, transfere e responde com o texto de encaminhamento, sem passar outro número"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "handoff": true,
+  "cobre": [
+    2,
+    9
+  ]
+}

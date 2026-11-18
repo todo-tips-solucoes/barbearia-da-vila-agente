@@ -1,0 +1,28 @@
+{
+  "id": "R31",
+  "situacao": "\"Sim\" com proposta e lembrete abertos (item 11): o cliente está confirmando um horário novo, o lembrete de outro agendamento chega no meio e ele responde só \"Sim\"",
+  "falas": [
+    "Oi! Quero marcar mais um corte, para depois de amanhã à tarde, com qualquer barbeiro",
+    {
+      "tocar": 1
+    },
+    {
+      "lembrete": true
+    },
+    "Sim"
+  ],
+  "expectativas": [
+    "No resumo do horário novo, avisa que o cliente já tem agendamento e pergunta só se pode confirmar mais este",
+    "O \"Sim\" que vem depois do lembrete responde à última pergunta feita, a do lembrete: o agente confirma a presença no agendamento que já existia, ou pergunta a qual dos dois o cliente está respondendo",
+    "Não marca o horário novo sem um sim claro para ele; se confirmou só a presença, volta a perguntar do horário novo"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "preparo": "agendamento_previo",
+  "escritas": []
+}

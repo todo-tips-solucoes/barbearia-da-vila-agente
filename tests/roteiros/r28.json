@@ -1,0 +1,31 @@
+{
+  "id": "R28",
+  "situacao": "Ida e volta da fila humana (revisão de 17/11): o cliente pede uma pessoa, a equipe responde pela mesma conversa e, quando a conversa volta, o agente atende de novo com as ferramentas",
+  "falas": [
+    "Oi, quero falar com uma pessoa da equipe",
+    {
+      "fila_humana": "Alguém pode me atender?"
+    },
+    {
+      "equipe": "Oi, aqui é o Pedro, da equipe. Pode vir sim, a gente aceita cartão e Pix."
+    },
+    "Obrigado! Aproveitando: quanto custa o corte adulto?"
+  ],
+  "expectativas": [
+    "Quando o cliente pede uma pessoa, transfere e avisa que a equipe responde por esta mesma conversa, sem passar outro número",
+    "Com a conversa na fila da equipe, fica em silêncio",
+    "Quando a conversa volta, responde o preço do corte adulto com o valor da Graces",
+    "Não repete nem contradiz o que a equipe respondeu e não diz que vai transferir de novo"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "handoff": false,
+  "cobre": [
+    9
+  ]
+}

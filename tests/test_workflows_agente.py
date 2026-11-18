@@ -114,10 +114,10 @@ class BvGraces(unittest.TestCase):
         # revalida antes de escrever e o POST/PUT so nasce depois da revalidacao
         self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda', body: { idCliente: d.idCliente"))
 
-    def test_fase2_reivindica_propostas_de_conjunto_e_de_terceiro(self):  # achado do roteiro r7/r9: conjunto e cadastro nunca eram reivindicados
+    def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
         rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
         i = self.js.index("const BVG_ACOES")
-        for acao in ("agendar_conjunto", "cancelar_conjunto", "cadastrar_terceiro"):
+        for acao in ("agendar_conjunto", "cancelar_conjunto"):
             self.assertIn(acao, rep)
             self.assertIn(acao, self.js[i:i + 300])
 
@@ -138,21 +138,21 @@ class BvGraces(unittest.TestCase):
         self.assertFalse(prod["teste"]["redirecionar_escrita"])
         self.assertEqual((integ["graces"]["escrita_liberada"], prod["graces"]["escrita_liberada"], prod["graces"]["teste_contatos"]), (False, True, []))
 
-    def test_contador_diario_terceiros_alimentado(self):  # SC-011: ctx.dia vem do banco, nunca fica vazio
+    def test_contador_diario_vem_do_banco(self):  # ctx.dia vem do banco, nunca fica vazio (hoje: o teto de agendamentos)
         q = self.nos["Contexto"]["parameters"]["query"]
         self.assertRegex(q, r"AS dia FROM")
-        self.assertIn("'buscas'", q)
-        self.assertIn("'cadastros'", q)
-        self.assertIn("busca_pessoa", q)
+        self.assertIn("'agendados'", q)
         self.assertIn("America/Sao_Paulo", q)
 
-    def test_cadastro_terceiro_configuravel_por_ambiente(self):
-        self.assertIn("terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True'", ler("workflows/shared/config.js"))
-        import json, pathlib
-        amb = pathlib.Path(__file__).resolve().parent.parent / "config" / "ambientes"
-        # revisao de 17/11: outra pessoa e atendida pelo numero do cadastro ou pela equipe; a chave fica desligada nos dois
-        self.assertIs(json.loads((amb / "producao.json").read_text())["terceiro"]["cadastro_liberado"], False)
-        self.assertIs(json.loads((amb / "integracao.json").read_text())["terceiro"]["cadastro_liberado"], False)
+    def test_sem_codigo_das_ferramentas_de_outra_pessoa(self):  # revisao de 17/11, etapa 4: sairam do agente na etapa 1 e do codigo aqui
+        import pathlib
+        raiz = pathlib.Path(__file__).resolve().parent.parent
+        for arq in ("workflows/shared/graces.js", "workflows/shared/config.js", "workflows/sub/bv-graces.json", "workflows/sub/entregar-rajada.json",
+                    "config/ambientes/producao.json", "config/ambientes/integracao.json"):
+            t = (raiz / arq).read_text(encoding="utf-8")
+            for termo in ("buscar_pessoa", "escolher_pessoa", "cadastrar_terceiro", "terceiroLiberado", "para_terceiro", "busca_pessoa"):
+                self.assertNotIn(termo, t, (arq, termo))
+        self.assertNotIn("terceiro", json.loads((raiz / "config/ambientes/producao.json").read_text()))
 
     def test_sem_segredo_nem_log(self):
         self.assertNotIn("console.log", self.texto)
@@ -399,7 +399,18 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         # so a proposta de agendar ou remarcar tira a lista: "cancela o de quarta e marca pra segunda" cria a de cancelar e busca os
         # horarios de segunda no mesmo turno, e a lista deles tem de sair (suite R8, 18/11)
         self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid AND p.acao NOT LIKE 'cancelar%') AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
-        self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova)", self.nos["Compor"]["parameters"]["jsCode"])
+        self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova, repete)", self.nos["Compor"]["parameters"]["jsCode"])
+        self.assertIn("bvTerceiraVez(out, histC, antes, ofertaNova) ? [{ n: 1, tipo: 'texto', texto: \"{{BV:textos.laco}}\" }] :", self.nos["Compor"]["parameters"]["jsCode"])
+        for amb in ("producao", "integracao"):
+            self.assertIn("passe para a equipe", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"]["laco"])
+        # etapa 4: a mesma pergunta pela segunda vez leva a lista junto; a terceira nao sai (o contexto manda oferecer a equipe)
+        self.assertIn("const repete = !ofertaNova && bvVezesDaLista(histC, antes) === 1 && bvRepetePergunta(out, histC);", self.nos["Compor"]["parameters"]["jsCode"])
+        self.assertIn("+ bvLaco(hist, rec.opcoes)", self.nos["Preparar"]["parameters"]["jsCode"])
+        # a oferta nasce carimbada com a hora (em): e o que permite contar quantas vezes a lista dela ja foi enviada
+        qp = self.graces["Persistir"]["parameters"]["query"]
+        self.assertEqual(qp.count("WHEN ($2::jsonb -> 'itens') IS NOT NULL THEN $2::jsonb || jsonb_build_object('em',"), 2)
+        # a mesma lista buscada de novo guarda a hora em que nasceu: chamar a ferramenta outra vez nao zera a contagem (suite R38)
+        self.assertIn("CASE WHEN conversas.opcoes - 'em' = $2::jsonb AND conversas.opcoes->>'em' IS NOT NULL THEN conversas.opcoes->>'em' ELSE", qp)
 
     def test_limite_de_turnos_transfere_de_verdade(self):
         self.assertEqual(self.con["Limite?"]["main"][0][0]["node"], "Transferir por limite")

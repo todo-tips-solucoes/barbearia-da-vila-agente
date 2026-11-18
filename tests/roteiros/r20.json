@@ -24,5 +24,8 @@
     "K5",
     "K6"
   ],
-  "agenda": true
+  "agenda": true,
+  "cobre": [
+    1
+  ]
 }

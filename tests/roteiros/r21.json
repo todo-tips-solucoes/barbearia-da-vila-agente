@@ -16,5 +16,9 @@
     "K4",
     "K6"
   ],
-  "agenda": false
+  "agenda": false,
+  "cobre": [
+    10,
+    12
+  ]
 }

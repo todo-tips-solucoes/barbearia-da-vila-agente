@@ -196,7 +196,8 @@
     "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!",
     "retomada_confirmar": "Oi, {nome}! Ficou faltando só confirmar {resumo}. Ainda quer esse horário?",
     "retomada_continuar": "Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?",
-    "fila_sem_resposta": "A equipe não conseguiu te responder por aqui agora. Se eu puder ajudar em mais alguma coisa, é só me chamar."
+    "fila_sem_resposta": "A equipe não conseguiu te responder por aqui agora. Se eu puder ajudar em mais alguma coisa, é só me chamar.",
+    "laco": "Desculpa, acho que não estou conseguindo te entender. Quer que eu passe para a equipe te ajudar por aqui?"
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
@@ -204,12 +205,6 @@
   },
   "encadeamento": {
     "max_servicos": 3
-  },
-  "terceiro": {
-    "buscas_max_sessao": 3,
-    "buscas_max_dia": 5,
-    "cadastros_max_dia": 1,
-    "cadastro_liberado": false
   },
   "cadastro": {
     "liberado": true,

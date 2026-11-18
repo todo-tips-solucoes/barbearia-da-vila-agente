@@ -1,0 +1,32 @@
+{
+  "id": "R33",
+  "situacao": "Cancelar sem dizer qual, com mais de um agendamento (conflitos 3 e 5): manda a lista dos agendamentos antes de qualquer proposta; no toque em Remarcar, pergunta o dia e o horário antes de buscar",
+  "falas": [
+    "Oi, quero cancelar um horário meu",
+    {
+      "tocar_texto": "15:00"
+    },
+    {
+      "tocar_texto": "Remarcar"
+    }
+  ],
+  "expectativas": [
+    "Com mais de um agendamento e sem o cliente dizer qual, manda a lista dos agendamentos e pergunta qual deles; não escolhe um nem afirma qual é o mais próximo",
+    "Escolhido o agendamento, oferece remarcar ou cancelar em lista",
+    "No toque em Remarcar, pergunta o dia e o horário que o cliente prefere antes de buscar horários; não manda lista de horários nesse turno"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "preparo": "agendamento_previo",
+  "escritas": [],
+  "cobre": [
+    3,
+    5
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "R34",
+  "situacao": "\"Sim\" depois da oferta de outro horário (conflito 7): cancelado o agendamento, o agente oferece marcar outro e o \"Sim\" responde a essa oferta",
+  "falas": [
+    "Preciso cancelar meu horário de amanhã às 15h",
+    {
+      "tocar_texto": "Cancelar mesmo"
+    },
+    "Sim"
+  ],
+  "expectativas": [
+    "Oferece remarcar antes de cancelar, em lista",
+    "No toque em Cancelar mesmo, cancela e oferece marcar outro horário",
+    "O \"Sim\" seguinte responde à oferta de outro horário: o agente começa o novo agendamento (propõe repetir o último atendimento e pergunta o dia e o horário), em vez de responder só que já está cancelado"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K5",
+    "K6"
+  ],
+  "agenda": true,
+  "preparo": "agendamento_previo",
+  "escritas": [
+    "cancelar"
+  ],
+  "cobre": [
+    7
+  ]
+}
