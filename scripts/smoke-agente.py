@@ -1094,7 +1094,10 @@ def verificar_implantado():
     d, api = _api_deploy()
     wf = api("GET", f"/workflows/{CFG['workflows_sub']['entregar_rajada']}")
     cod = next(n["parameters"]["jsCode"] for n in wf["nodes"] if n["name"] == "Saidas")
-    checar("entregar-rajada implantado: lista de envio real vazia", "const escrita = [].map(dig);" in cod.replace("[ ]", "[]"))
+    # a lista de escrita e a trava de simulacao vem de shared/config.js, renderizado dentro do no (revisao de 17/11)
+    cod = cod.replace("[ ]", "[]")
+    checar("entregar-rajada implantado: lista de envio real vazia",
+           "const BV_ESCRITA_TESTE = 'integracao' === 'integracao' ? [] : null;" in cod and "const simulado = bvSimulado(g.telefone);" in cod)
 
 
 CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13,

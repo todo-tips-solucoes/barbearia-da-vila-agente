@@ -176,7 +176,9 @@ def main(argv=None, raiz=RAIZ, api=None):
             with open(arq, encoding="utf-8") as f:
                 bruto = f.read()
             # teste.* em PROD so com as chaves conhecidas e inertes (o codigo as usa atras de ambiente === 'integracao')
-            usadas = set(re.findall(r"\{\{BV:(?:NUM:)?teste\.([a-z_]+)\}\}", bruto))
+            # as chaves usadas dentro dos arquivos incluidos contam tambem (shared/config.js guarda a lista de escrita do TESTE)
+            incluidos = "".join(open(os.path.join(raiz, "workflows", i), encoding="utf-8").read() for i in sorted(set(re.findall(r"\{\{BV:INCLUDE:([^}]+)\}\}", bruto))))
+            usadas = set(re.findall(r"\{\{BV:(?:NUM:)?teste\.([a-z_]+)\}\}", bruto + incluidos))
             t = cfg.get("teste", {})
             if a.ambiente == "producao" and usadas and (usadas - {"contatos_escrita", "redirecionar_escrita"}
                                                         or t.get("redirecionar_escrita") is not False or t.get("contatos_escrita") != []):

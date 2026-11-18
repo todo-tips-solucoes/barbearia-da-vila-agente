@@ -159,6 +159,15 @@ class T(unittest.TestCase):
             self.pcfg["teste"] = {"redirecionar_escrita": False, "contatos_escrita": []}
             json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
             self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], FakeApi())[0], 0)
+            # a chave usada dentro de um arquivo incluido conta tambem (revisao de 17/11: a lista de escrita mora em shared/config.js)
+            os.makedirs(f"{self.d}/workflows/shared", exist_ok=True)
+            open(f"{self.d}/workflows/shared/c.js", "w").write("const e = {{BV:teste.contatos_escrita}};\n")
+            json.dump(dict(WF, name="x {{BV:INCLUDE:shared/c.js}}"), open(f"{self.d}/workflows/bv-verificacao.json", "w"))
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], FakeApi())[0], 0)
+            self.pcfg["teste"] = {"redirecionar_escrita": False, "contatos_escrita": ["+55"]}
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            api = FakeApi()
+            self.assertEqual((self.run_main(["producao", "--confirmar-id", "wfP"], api)[0], api.chamadas), (2, []))
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
