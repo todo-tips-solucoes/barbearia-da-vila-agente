@@ -231,7 +231,8 @@ function bvDatas(agora) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(agora || ''));
   if (!m) return '';
   const dia = (n) => { const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)); return `${BV_SEMANA[d.getUTCDay()]}, ${d.toISOString().slice(0, 10)}`; };
-  return `Hoje é ${dia(0)}; amanhã é ${dia(1)}; depois de amanhã é ${dia(2)}. "Amanhã" é sempre a data acima, mesmo de madrugada.`;
+  // proximos dias (suite R8, 18/11): numa quarta, "marca pra segunda" saia ora na segunda seguinte, ora na outra; a data vem pronta
+  return `Hoje é ${dia(0)}; amanhã é ${dia(1)}; depois de amanhã é ${dia(2)}. "Amanhã" é sempre a data acima, mesmo de madrugada. Depois: ${[3, 4, 5, 6, 7].map(dia).join('; ')}. Dia da semana sem data ("segunda", "sábado") é o próximo com esse nome nesta lista: não calcule a data de cabeça.`;
 }
 
 // Corrida (atendimentos de 2026-11-15): o cliente manda outra mensagem antes de ler a resposta anterior (digita em partes, toca na

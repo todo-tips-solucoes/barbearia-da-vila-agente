@@ -370,7 +370,7 @@ console.log('agente.test.js retomada ok');
 // Datas por extenso (suite R11, 2026-11-16): "amanha" logo depois da meia-noite
 {
   const a = require('../workflows/shared/agente.js');
-  assert.equal(a.bvDatas('2026-11-16 00:55:10'), 'Hoje é segunda-feira, 2026-11-16; amanhã é terça-feira, 2026-11-17; depois de amanhã é quarta-feira, 2026-11-18. "Amanhã" é sempre a data acima, mesmo de madrugada.');
+  assert.equal(a.bvDatas('2026-11-16 00:55:10'), 'Hoje é segunda-feira, 2026-11-16; amanhã é terça-feira, 2026-11-17; depois de amanhã é quarta-feira, 2026-11-18. "Amanhã" é sempre a data acima, mesmo de madrugada. Depois: quinta-feira, 2026-11-19; sexta-feira, 2026-11-20; sábado, 2026-11-21; domingo, 2026-11-22; segunda-feira, 2026-11-23. Dia da semana sem data ("segunda", "sábado") é o próximo com esse nome nesta lista: não calcule a data de cabeça.');
   assert.match(a.bvDatas('2026-12-31 23:59:00'), /Hoje é quinta-feira, 2026-12-31; amanhã é sexta-feira, 2027-01-01/);
   assert.equal(a.bvDatas(''), '');
 }

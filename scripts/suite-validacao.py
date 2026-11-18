@@ -405,7 +405,9 @@ def executar(r, n, orc, parar, referencia=""):
             if ped.get("handoff"):
                 extra += "\nSistema: a conversa foi transferida para a equipe humana, que continua por esta mesma conversa."
             hoje = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)).strftime("%Y-%m-%d (%A)")
-            ref = referencia + "\nHoje em Sao Paulo: " + hoje
+            agora_sp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
+            # calendario pronto (R8, 18/11): a avaliadora ora aceitava, ora reprovava a data de "segunda"
+            ref = referencia + "\nHoje em Sao Paulo: " + hoje + ". Proximos dias: " + "; ".join((agora_sp + datetime.timedelta(days=k)).strftime("%Y-%m-%d (%A)") for k in range(1, 8)) + ". Um dia da semana dito sem data e o proximo com esse nome nesta lista."
             if r.get("preparo") == "agendamento_previo":  # a avaliadora nao ve meus_agendamentos: o preparo e fonte do K4
                 ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + ". Regra do agente: a remarcacao mantem o barbeiro do agendamento; dizer que sera com o mesmo barbeiro e correto."
             if r.get("agenda") or r.get("preparo") == "agendamento_previo":
