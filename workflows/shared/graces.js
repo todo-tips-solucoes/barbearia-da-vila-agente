@@ -388,6 +388,9 @@ function bvgFase1(i, ctx, cfg) {
   if (bloq) return bvgFim(bloq);
   if (!ctx.pedido.idCliente && ctx.pedido.cliente_sem_cadastro) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente sem cadastro: faça agora o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e, com ele feito, chame esta ferramenta de novo com a mesma opção'));
   if (!ctx.pedido.idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
+  // Teto por contato e dia (owner, 17/11): acima dele quem agenda e a equipe; sem ele um numero so conseguia lotar a agenda.
+  // Conta as escritas de agendar deste contato no dia (ctx.dia.agendados, do Contexto); trocar de servico nao e agendamento novo.
+  if (i.operacao === 'agendar' && !i.substitui_id_opcao_agendamento && cfg.agendamentosMaxDia > 0 && (ctx.dia.agendados || 0) >= cfg.agendamentosMaxDia) return bvgEncaminhar('limite_agendamentos', 'agendar', cfg);
   const fora = bvgRecusa('escrita_fora_do_teste', 'só é possível mexer em agendamentos de teste neste ambiente');
   if (i.operacao !== 'cancelar' && bvgTocaHumano(i, ctx, cfg)) return bvgEncaminhar('barbeiro_humano', i.operacao, cfg);
   const prod = cfg.ambiente === 'producao';

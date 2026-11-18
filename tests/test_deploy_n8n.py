@@ -185,6 +185,15 @@ class T(unittest.TestCase):
             with self.assertRaises(dep.Falha):
                 dep.renderizar('"{{BV:NUM:a.b}}"', ruim, self.d)
 
+    def test_include_troca_os_placeholders_de_dentro(self):  # revisao de 17/11: config de varios nos num arquivo so
+        os.makedirs(f"{self.d}/workflows/shared", exist_ok=True)
+        open(f"{self.d}/workflows/shared/c.js", "w").write("const c = { amb: '{{BV:ambiente}}', lista: {{BV:t.lista}} };\n")
+        out = dep.renderizar('{"js": "{{BV:INCLUDE:shared/c.js}}return c;"}', {"ambiente": "integracao", "t": {"lista": ["55\"1"]}}, self.d)
+        self.assertEqual(json.loads(out)["js"], "const c = { amb: 'integracao', lista: ['55\"1'] };\nreturn c;")
+        open(f"{self.d}/workflows/shared/c.js", "w").write("{{BV:nao.existe}}")
+        with self.assertRaises(dep.Falha):
+            dep.renderizar("{{BV:INCLUDE:shared/c.js}}", {}, self.d)
+
     def test_placeholder_sem_valor_falha(self):
         with self.assertRaises(dep.Falha):
             dep.renderizar("{{BV:nao.existe}}", {}, self.d)

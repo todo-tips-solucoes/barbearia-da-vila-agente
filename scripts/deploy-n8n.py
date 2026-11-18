@@ -40,7 +40,8 @@ class Api:
 
 
 def renderizar(texto, cfg, raiz):
-    """Troca {{BV:a.b}} pelo valor do config, {{BV:INCLUDE:shared/x.js}} pelo arquivo e {{BV:TOKEN_SHA256}} por
+    """Troca {{BV:a.b}} pelo valor do config, {{BV:INCLUDE:shared/x.js}} pelo arquivo (com os {{BV:a.b}} de dentro dele trocados
+    tambem, um nivel so: config que varios nos usam fica num arquivo) e {{BV:TOKEN_SHA256}} por
     BV_WEBHOOK_TOKEN_SHA256 (PROD: BV_WEBHOOK_TOKEN_SHA256_PRODUCAO), de .env.n8n, nunca versionado. Valores entram escapados como conteudo de string JSON.
     "{{BV:NUM:a.b}}" (com aspas) vira o numero cru, para campos que o n8n exige numericos (ex.: executionTimeout)."""
     def num(m):
@@ -54,6 +55,14 @@ def renderizar(texto, cfg, raiz):
         return str(v)
     texto = re.sub(r'"\{\{BV:NUM:([^}]+)\}\}"', num, texto)
 
+    def do_config(k):
+        v = cfg
+        for p in k.split("."):
+            if not isinstance(v, dict) or p not in v:
+                raise Falha(f"placeholder {{{{BV:{k}}}}} sem valor no config")
+            v = v[p]
+        return str(v)
+
     def sub(m):
         k = m.group(1)
         if k == "TOKEN_SHA256":
@@ -65,13 +74,10 @@ def renderizar(texto, cfg, raiz):
                 raise Falha(f"{var} ausente no .env.n8n")
         elif k.startswith("INCLUDE:"):
             with open(os.path.join(raiz, "workflows", k[8:]), encoding="utf-8") as f:
-                v = f.read()
+                # o INCLUDE citado em comentario do proprio arquivo fica como esta (um nivel so)
+                v = re.sub(r"\{\{BV:([^}]+)\}\}", lambda i: i.group(0) if i.group(1).startswith("INCLUDE:") else do_config(i.group(1)), f.read())
         else:
-            v = cfg
-            for p in k.split("."):
-                if not isinstance(v, dict) or p not in v:
-                    raise Falha(f"placeholder {{{{BV:{k}}}}} sem valor no config")
-                v = v[p]
+            v = do_config(k)
         return json.dumps(str(v), ensure_ascii=False)[1:-1]
     return re.sub(r"\{\{BV:([^}]+)\}\}", sub, texto)
 

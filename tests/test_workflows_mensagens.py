@@ -240,7 +240,7 @@ class BvMensagens(Base, unittest.TestCase):
         rj = json.loads(ler("workflows/sub/entregar-rajada.json")) if "ler" in globals() else json.load(open(os.path.join(RAIZ, "workflows", "sub", "entregar-rajada.json"), encoding="utf-8"))
         nos = {n["name"]: n for n in rj["nodes"]}
         self.assertIn("retomada_ms", nos["Ler contexto"]["parameters"]["query"])
-        self.assertIn("retomadaMs: ctx.retomada_ms == null ? null : Number(ctx.retomada_ms)", nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("retomadaMs: ctx.retomada_ms == null ? null : Number(ctx.retomada_ms)", nos["Decidir silencio"]["parameters"]["jsCode"])
 
     def test_sincronizacao_chatmaster(self):  # owner, 2026-11-15: lembretes no modulo de Agendamentos, so a diferenca vira chamada
         self.assertEqual(self.destinos("A cada sincronizacao"), ["Pendencias"])
@@ -288,8 +288,10 @@ class BvMensagens(Base, unittest.TestCase):
 
     def test_revalidacao_e_envio(self):  # 3.2.2 / 3.2.3
         d = self.nos["Decidir"]["parameters"]["jsCode"]
-        for t in ("bvMDecidir", "{{BV:INCLUDE:shared/mensagens.js}}", "barbeiro_teste_id", "teste.contatos_escrita"):
+        for t in ("bvMDecidir", "{{BV:INCLUDE:shared/mensagens.js}}", "{{BV:INCLUDE:shared/config.js}}\nconst cfg = bvMCfgEnvio();"):
             self.assertIn(t, d)
+        for t in ("barbeiro_teste_id", "teste.contatos_escrita"):
+            self.assertIn(t, open(os.path.join(RAIZ, "workflows", "shared", "config.js"), encoding="utf-8").read())
         self.assertIn("proximos: $json.tipo !== 'pos_atendimento'", json.dumps(self.nos["Graces agendamentos"]["parameters"]))
         self.assertIn("api.chatmasterveloz.com", self.nos["Enviar"]["parameters"]["url"])
         self.assertIn("bvMResultadoEnvio", self.nos["Resultado"]["parameters"]["jsCode"])
@@ -400,7 +402,8 @@ class RevisaoOnda7(CodeNodes):
         agora = int(time.time() * 1000)
         ctx = {"ultima_ms": agora - 5 * 86400000, "pedido": {"confirmacao_recusada": {"idAgenda": "A", "em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}},
                "opcoes": None, "historico": [], "pendente": None, "confirmacoes": [{"id": 9, "servico": "Corte", "barbeiro": "Ze", "inicio": "2026-10-22T14:00:00"}]}
-        r = rodar("workflows/sub/entregar-rajada.json", "Preparar", [], {"Gatilho": [{"itens": [{"tipo": "texto", "conteudo": "oi"}]}], "Ler contexto": [ctx], "Registrar turno": [{"turnos_hora": 0}]})[0]
+        ds = rodar("workflows/sub/entregar-rajada.json", "Decidir silencio", [], {"Ler contexto": [ctx]})[0]
+        r = rodar("workflows/sub/entregar-rajada.json", "Preparar", [], {"Gatilho": [{"itens": [{"tipo": "texto", "conteudo": "oi"}]}], "Ler contexto": [ctx], "Registrar turno": [{"turnos_hora": 0}], "Decidir silencio": [ds]})[0]
         self.assertTrue(r["sessao_nova"])
         self.assertIn("id=9 (Corte com Ze", r["system"])
         self.assertIn("não vai poder comparecer ao agendamento A", r["system"])
@@ -543,7 +546,7 @@ class FilaHumana(unittest.TestCase):
     def test_agente_calado_na_fila_humana(self):
         nos, _ = self.nos("workflows/sub/entregar-rajada.json")
         self.assertIn("AS fila_id FROM (SELECT $1::bigint AS cid) x", nos["Ler contexto"]["parameters"]["query"])
-        self.assertIn("bvTransferido({ porFila:", nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("bvTransferido({ porFila:", nos["Decidir silencio"]["parameters"]["jsCode"])
 
     def test_vigia_encerra_o_atendimento_parado(self):
         nos, con = self.nos("workflows/bv-vigia.json")
@@ -573,16 +576,21 @@ class FilaHumana(unittest.TestCase):
             self.assertEqual([c["retomada"]["resposta_max_min"], c["retomada"]["apos_min_urgente"]], [720, 20])
 
     def test_lembrete_recem_enviado_vale_como_enviado(self):
-        cond = "m.situacao = 'pendente' AND m.tipo = 'lembrete_dia' AND m.agendamento_canal_id IS NOT NULL AND m.previsto_para <= now() + interval '2 minutes'"
+        # a regra mora numa funcao SQL (migracao 0018, revisao de 17/11); nenhuma consulta a copia
+        cond = "situacao = 'pendente' AND tipo = 'lembrete_dia' AND agendamento_canal_id IS NOT NULL AND previsto_para <= now() + interval '2 minutes'"
+        self.assertIn("SELECT situacao = 'enviada' OR (" + cond + ")", open(os.path.join(RAIZ, "db", "migrations", "0018_revisao_etapa3.sql"), encoding="utf-8").read())
+        chamada = "bv_respondivel(m.situacao, m.tipo, m.agendamento_canal_id, m.previsto_para)"
         nos, _ = self.nos("workflows/sub/bv-confirmacao.json")
-        for n in ("Selecionar", "Reivindicar"):
+        for n, vezes in (("Selecionar", 2), ("Reivindicar", 1)):
             q = nos[n]["parameters"]["query"]
-            self.assertIn(cond, q)
+            self.assertEqual(q.count(chamada), vezes)
             self.assertEqual(q.count("("), q.count(")"))
+        for arq, no in (("workflows/bv-recepcao.json", "Confirmacao aberta?"), ("workflows/sub/entregar-rajada.json", "Ler contexto")):
+            self.assertEqual(self.nos(arq)[0][no]["parameters"]["query"].count(chamada), 1)
+        for arq in ("workflows/bv-recepcao.json", "workflows/sub/bv-confirmacao.json", "workflows/sub/entregar-rajada.json", "workflows/bv-mensagens.json"):
+            self.assertNotIn("interval '2 minutes'", open(os.path.join(RAIZ, arq), encoding="utf-8").read())
         self.assertIn("situacao = 'enviada', enviada_em = COALESCE(m.enviada_em, m.previsto_para)", nos["Reivindicar"]["parameters"]["query"])
         self.assertIn("com_data", nos["Graces confirmacao"]["parameters"]["jsonBody"])
-        self.assertIn(cond, self.nos("workflows/bv-recepcao.json")[0]["Confirmacao aberta?"]["parameters"]["query"])
-        self.assertIn(cond, self.nos("workflows/sub/entregar-rajada.json")[0]["Ler contexto"]["parameters"]["query"])
 
     def test_retomada_fora_da_fila_humana_e_sem_proposta_vencida(self):
         nos, _ = self.nos("workflows/bv-mensagens.json")

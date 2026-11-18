@@ -139,6 +139,11 @@ def verificar(cfgs, infra):
     for a, l in lk.items():
         if l and l.get("espera_s", 0) * l.get("tentativas", 0) < l.get("ttl_s", 0):
             erros.append(f"{a}: lock.espera_s * lock.tentativas deve ser >= lock.ttl_s")
+        # o turno tem de terminar (ou ser cancelado) antes de a posse do contato expirar: senao outro turno reentrega as mesmas
+        # mensagens e a resposta sai em dobro (revisao de 17/11)
+        t = cfgs[a].get("execucao", {}).get("turno_timeout_s")
+        if l and t is not None and not t < l.get("ttl_s", 0):
+            erros.append(f"{a}: execucao.turno_timeout_s deve ser menor que lock.ttl_s")
     paths = {a: c.get("webhook", {}).get("path", "") for a, c in cfgs.items()}
     if paths.get("integracao") and paths.get("integracao") == paths.get("producao"):
         erros.append("webhook.path de integracao e producao devem ser diferentes")
