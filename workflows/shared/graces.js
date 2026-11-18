@@ -707,7 +707,7 @@ function bvgPassoUm(st, resps0, cfg) {
       // suite R18 (2026-11-16): o modelo tirava "a partir de que horas" da lista (um barbeiro por horario) e errava o primeiro horario
       else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário e não serve para dizer quando cada um começa: para dizer quem tem horário e a partir de que horas, use quem_tem_horario como está, sem trocar as horas; para falar de um barbeiro específico, chame horarios_livres com id_opcao_barbeiro dele';
       // suite R8 (2026-11-16): com a lista de qualquer barbeiro numa remarcacao, o modelo dizia que "a troca mantem o barbeiro"
-      if (meta.agQualquer && horas.length) res.orientacao = 'os horários da lista são de qualquer barbeiro, não do barbeiro do agendamento: não diga que a remarcação mantém o barbeiro; ' + (res.orientacao || '');
+      if (meta.agQualquer && horas.length) res.orientacao = 'os horários da lista são de qualquer barbeiro, não do barbeiro do agendamento: não diga que a remarcação mantém o barbeiro, não diga com quem é o agendamento atual e não cite barbeiro nenhum pelo nome; diga só que há horários nesse dia e pergunte qual fica melhor; ' + (res.orientacao || '');
       if (meta.sem) res.orientacao = `${meta.sem}, o barbeiro do último atendimento, não tem horário ${meta.periodo ? `de ${meta.periodo} ` : ''}nesse dia: diga isso ao cliente${horas.length ? ' e que os horários da lista são de outros barbeiros' : ''}` + (res.orientacao ? '; ' + res.orientacao : '');
       if (perto.aproximada) res.orientacao = bvgAvisoPerto(meta.hora, cfg) + (res.orientacao ? '; ' + res.orientacao : '');
       // Dia e hora escolhidos (owner, 2026-11-14): o horario pedido livre vai direto ao resumo e a confirmacao, sem lista

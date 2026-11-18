@@ -203,7 +203,7 @@ function bvContextoCliente(c, neutralizar, agora) {
   const fut = (c.futuros || []).filter((a) => a && a.horaInicio && (!agora || String(a.horaInicio).replace('T', ' ') > String(agora)));
   if (fut.length) {
     t += '\nAgendamentos futuros do cliente (dado): ' + fut.map((a) => `${n(a.servico || 'agendamento')} em ${bvDiaSemana(a.horaInicio)} às ${String(a.horaInicio).slice(11, 16)}`).join('; ')
-      + '. Se ele falar de um horário que já tem (mudar, trocar, adiantar, manter, cancelar, "o meu horário"), é um destes: chame meus_agendamentos e siga para reagendar ou cancelar; nunca crie outro no lugar. Novo agendamento só se ele pedir mais um.';
+      + '. Se ele falar de um horário que já tem (mudar, trocar, adiantar, manter, cancelar, "o meu horário"), é um destes: chame meus_agendamentos e trate como remarcação ou cancelamento dele, pelo fluxo normal (o barbeiro do agendamento é o que a ferramenta devolver, não o do último atendimento); nunca crie outro no lugar. Novo agendamento só se ele pedir mais um.';
   }
   if (c.ultimo && c.ultimo.humano) {
     t += '\nO último atendimento do cliente foi com ' + n(c.ultimo.humano) + ', que só a equipe agenda (dado). Num pedido de agendamento, diga com gentileza que vai transferir para o atendimento humano continuar o agendamento e chame transferir_atendimento; não ofereça horários.';
