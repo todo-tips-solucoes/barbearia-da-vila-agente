@@ -66,7 +66,8 @@ console.log('rajada.test.js ok');
   const assert = require('assert');
   assert.deepEqual([r.bvFila({ queueId: 78 }), r.bvFila({ queueId: '106' }), r.bvFila({ queueId: 'null' }), r.bvFila({ queueId: null }), r.bvFila({})], [78, 106, null, null, null]);
   const ev = (o) => ({ acao: 'from_internal', fromMe: true, queueId: 106, sender: '5511999990000', mensagem: { id: 77, body: 'Oi, aqui é da equipe' }, ...o });
-  assert.deepEqual(r.bvEquipe(ev(), 106, 'Vou passar você para a equipe'), { telefone: '5511999990000', fila: 106, id: '77', texto: 'Oi, aqui é da equipe' });
+  assert.deepEqual(r.bvEquipe(ev(), 106, 'Vou passar você para a equipe'), { telefone: '5511999990000', fila: 106, id: '77', texto: 'Oi, aqui é da equipe', ticket: null });
+  assert.equal(r.bvEquipe(ev({ chamadoId: 4321 }), 106, 'x').ticket, 4321); // o vigia encerra o ticket do evento da equipe
   assert.equal(r.bvEquipe(ev({ queueId: 107 }), 106, 'x'), null); // fila do agente: eco das mensagens dele
   assert.equal(r.bvEquipe(ev({ fromMe: false }), 106, 'x'), null); // mensagem do cliente
   assert.equal(r.bvEquipe(ev({ acao: 'start' }), 106, 'x'), null);

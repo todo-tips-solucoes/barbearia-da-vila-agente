@@ -85,3 +85,36 @@ Compilado do que as duas análises encontraram e ainda não foi corrigido. "Deci
 - Agendamentos recorrentes continuam sem lembrete (limitação conhecida da reconciliação).
 - Agendamento feito pelo agente e replanejado pela equipe depois da transferência: o horário original pode ficar ocupado.
 - Quem pediu para agendar e parou na lista de serviços não recebe retomada.
+
+## Revisão da solução aplicada (17/11/2026)
+
+Depois da publicação das correções, o owner relatou atendimentos ainda confusos na manhã de 17/11. Três revisões independentes (atendimento, arquitetura e segurança) leram o que foi aplicado, sem acesso às conversas do dia. Conclusão: as correções entraram quase todas como texto no prompt, e os defeitos que mais confundem estavam no código.
+
+### Decisões do owner (17/11)
+
+- **Fila humana sem interação há 30 minutos:** encerra também quando o cliente falou por último; nesse caso o cliente recebe um aviso (`textos.fila_sem_resposta`). Consequência assumida: o pedido sai da fila da equipe.
+- **Teto de agendamentos por contato por dia:** 3; acima disso, transfere para a equipe (etapa 3).
+- **Item 21 (Jayme):** manter os lembretes e as confirmações dos agendamentos dele.
+- **OpenAI:** chave separada para o TESTE, com orçamento próprio (depende de o owner criar a chave e a credencial no n8n).
+
+### Etapa 1: feito
+
+| Defeito | Correção |
+|---|---|
+| Depois de uma transferência, se a equipe devolvia ou encerrava o ticket, o agente respondia mas toda ferramenta recusava com `handoff_ativo` | A regra da fila humana virou `bvTransferido` (testada): com o ticket fora da fila humana, a marca da transferência é apagada |
+| O pedido de confirmação saía com a lista de horários da busca do mesmo turno | O resumo com pedido de confirmação nunca leva lista de horários |
+| Resposta à retomada exigia confirmar duas vezes (proposta vale 30 min, retomada sai aos 120) | A retomada mantém a proposta válida pelo prazo de resposta (`retomada.resposta_max_min`) |
+| Acima de 20 turnos por hora o agente dizia que a equipe ia ajudar e não transferia | O limite transfere de verdade (motivo `nao_resolvi`) |
+| `**negrito**` de Markdown ia cru ao WhatsApp | Vira `*negrito*` |
+| Buscar e cadastrar outra pessoa só eram proibidos no prompt | As três ferramentas saíram do agente e `terceiro.cadastro_liberado` foi desligado em PROD. O código delas em `shared/graces.js` fica para a etapa 4 |
+| Ticket na fila humana com o cliente por último nunca fechava; falha no encerramento repetia a cada 5 min | Encerra em 30 min nos dois casos (com aviso ao cliente quando ele falou por último); o estado local sai mesmo se o Chat Master recusar, e a falha é registrada uma vez |
+| O vigia podia encerrar um ticket diferente do que a equipe usou; eco de lembrete agendado contava como resposta da equipe | A mensagem da equipe grava o ticket do evento; texto igual ao de um lembrete agendado do contato não conta |
+| Falha de rede na transferência deixava o cliente avisado e o ticket na fila do agente | A transferência tenta de novo uma vez |
+
+Não exercitado fora de PROD: a chamada que encerra o ticket no Chat Master (`handoff.encerrar_ativo` é desligado no TESTE).
+
+### Etapas seguintes
+
+2. **Estado para o modelo:** agendamentos futuros no contexto com aviso de duplicidade; textos finais vindos da ferramenta (resumo com dia da semana, "agendado"); mensagem da equipe rotulada como "Equipe:" e contando para a recência; cadastro numa mensagem só; texto digitado pelo cliente neutralizado como o áudio.
+3. **Duplicação, banco e limites:** índice `mensagens_agendadas (contato_id, tipo, inicio)`; regra única de "confirmação respondível" (hoje em 5 consultas); bloco de configuração e trava de simulação num lugar só; posse do contato (120 s) menor que o turno (até 300 s); teto de agendamentos por contato; limite de taxa no webhook; mídia interpretada só depois de decidir o silêncio.
+4. **Prompt e cobertura:** resolver os 11 conflitos do prompt, remover o código das ferramentas de outra pessoa, e roteiros para retomada, ida e volta da fila humana, pacote, laço, "sim" com proposta aberta e cadastro em pedaços.

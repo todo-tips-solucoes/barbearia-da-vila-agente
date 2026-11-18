@@ -138,7 +138,8 @@
     "lembrete_dia": "Oi, {nome}! Passando para lembrar do seu {servico} com {barbeiro} amanhã, às {hora}, aqui na Barbearia da Vila. Você confirma? É só responder SIM para confirmar ou NÃO se não puder vir.",
     "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!",
     "retomada_confirmar": "Oi, {nome}! Ficou faltando só confirmar {resumo}. Ainda quer esse horário?",
-    "retomada_continuar": "Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?"
+    "retomada_continuar": "Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?",
+    "fila_sem_resposta": "A equipe não conseguiu te responder por aqui agora. Se eu puder ajudar em mais alguma coisa, é só me chamar."
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",
@@ -187,7 +188,7 @@
     "buscas_max_sessao": 3,
     "buscas_max_dia": 5,
     "cadastros_max_dia": 1,
-    "cadastro_liberado": true
+    "cadastro_liberado": false
   },
   "cadastro": {
     "liberado": true,
@@ -198,7 +199,7 @@
     "whatsapp_id": "159",
     "encerrar_ativo": true,
     "encerrar_apos_min": 30,
-    "encerrar_so_respondido": true,
+    "encerrar_so_respondido": false,
     "silencio_por_fila": true
   },
   "mensagens": {

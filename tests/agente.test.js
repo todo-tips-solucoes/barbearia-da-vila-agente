@@ -405,7 +405,7 @@ console.log('agente.test.js itens 7 a 9 ok');
   assert.doesNotMatch(a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'corte adulto', barbeiro: 'Kiel' } }, String), /não presuma/);
   const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
   for (const re of [/Quem escolhe é o cliente/, /nunca peça confirmação de algo que ele não escolheu/, /Sem laço: não faça a mesma pergunta mais de duas vezes/, /Sinal de irritação/,
-    /Pacote, plano ou combo já pago.*motivo pacote/, /Outra pessoa \(owner, 2026-11-16\).*motivo outra_pessoa/, /Não use buscar_pessoa nem cadastrar_terceiro/, /Ação já concluída/,
+    /Pacote, plano ou combo já pago.*motivo pacote/, /Outra pessoa \(owner, 2026-11-16\).*motivo outra_pessoa/, /Ação já concluída/,
     /chame meus_agendamentos antes de qualquer outra coisa/, /nunca diga que vai passar, está passando ou passou para a equipe sem ter chamado transferir_atendimento neste turno/, /mostre a lista em vez de perguntar a preferência/, /o texto precisa pedir exatamente essa escolha/]) assert.match(p, re);
   // frase que ficava pela metade quando as opcoes viravam lista
   const cfg = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
@@ -432,3 +432,29 @@ console.log('agente.test.js segunda analise ok');
   assert.equal(r({ ultimaEntradaMs: agora - 1 * h, retomadaMs: null }), false);
 }
 console.log('agente.test.js retomada longa ok');
+
+// Revisao de 17/11/2026
+{
+  const t = (o) => a.bvTransferido({ porFila: true, filaHumana: 106, fila: null, sessaoNova: false, handoff: false, ...o });
+  assert.deepEqual(t({ fila: 106 }), { transferido: true, limpar: false }); // na fila humana: calado
+  assert.deepEqual(t({ fila: '106', sessaoNova: true }), { transferido: true, limpar: false }); // mesmo em sessao nova
+  assert.deepEqual(t({ fila: 107, handoff: true }), { transferido: false, limpar: true }); // a equipe devolveu: responde e a marca sai
+  assert.deepEqual(t({ fila: 107 }), { transferido: false, limpar: false });
+  assert.deepEqual(t({ handoff: true }), { transferido: true, limpar: false }); // sem fila no evento: vale a marca
+  assert.deepEqual(t({ handoff: true, sessaoNova: true }), { transferido: false, limpar: false });
+  assert.deepEqual(t({ porFila: false, fila: 106 }), { transferido: false, limpar: false }); // chave desligada: so a marca
+  assert.deepEqual(t({ porFila: false, fila: 107, handoff: true }), { transferido: true, limpar: false });
+
+  const cfgC = { saida: { max_mensagens: 4, max_chars_mensagem: 300 }, lista: { max_itens: 10, max_titulo: 24 } };
+  const horarios = { tipo: 'horario', completa: true, itens: [{ id: 'h1', rotulo: '14:00' }, { id: 'h2', rotulo: '14:40' }] };
+  const resumo = 'Corte com Pedro em 18/11 às 14:00, por R$ 80,00. Posso confirmar?';
+  // busca e resumo no mesmo turno: antes a lista de horarios ia junto do pedido de confirmacao
+  assert.equal(a.bvCompor(resumo, horarios, cfgC, true, false).some((m) => m.tipo === 'lista'), true);
+  assert.deepEqual(a.bvCompor(resumo, horarios, cfgC, true, true).map((m) => m.tipo), ['texto']);
+  assert.deepEqual(a.bvCompor(resumo + '\nOPCOES:\nh1 | 14:00\nh2 | 14:40', horarios, cfgC, true, true).map((m) => m.tipo), ['texto']);
+  // a pergunta de cancelar (remarcar ou cancelar mesmo) continua indo como lista
+  const cancelar = { tipo: 'cancelar', itens: [{ id: 'c1', rotulo: 'Remarcar' }, { id: 'c2', rotulo: 'Cancelar mesmo' }] };
+  assert.equal(a.bvCompor('Prefere remarcar?', cancelar, cfgC, true, true).some((m) => m.tipo === 'lista'), true);
+  // negrito de Markdown vira negrito de WhatsApp
+  assert.equal(a.bvCompor('O corte custa **R$ 80,00** com o **Pedro**. Quer agendar?', null, cfgC)[0].texto, 'O corte custa *R$ 80,00* com o *Pedro*. Quer agendar?');
+}
