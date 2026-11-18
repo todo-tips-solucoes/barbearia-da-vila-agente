@@ -99,6 +99,12 @@ class T(unittest.TestCase):
         e = " ".join(vr.verificar(ruim, ""))
         self.assertIn("lock.espera_s", e)
         self.assertIn("webhook.path", e)
+        # turno maior que a posse do contato: resposta em dobro (revisao de 17/11)
+        lk = {"ttl_s": 150, "espera_s": 3, "tentativas": 50}
+        for turno, erro in ((140, False), (150, True), (300, True)):
+            c = {"integracao": cfg("bv:teste:", "barbearia_vila_teste", lock=lk, execucao={"timeout_s": 300, "turno_timeout_s": turno}, webhook={"path": "a"}),
+                 "producao": cfg("bv:prod:", "barbearia_vila", webhook={"path": ""})}
+            self.assertEqual("execucao.turno_timeout_s" in " ".join(vr.verificar(c, "")), erro, turno)
 
     def test_prefixo_nao_disjunto(self):
         c = {"integracao": cfg("bv:teste:", "barbearia_vila_teste"), "producao": cfg("bv:", "barbearia_vila")}

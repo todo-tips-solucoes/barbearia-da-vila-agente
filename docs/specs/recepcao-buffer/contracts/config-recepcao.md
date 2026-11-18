@@ -10,9 +10,9 @@ Sem segredos; valores numéricos em segundos/horas no nome da chave.
 | `chatmaster.whatsapp_id` | `145` | `""` até o owner | conexão (fonte: `docs/decisoes-pre-00c.md`) |
 | `buffer.janela_s` | 8 | 8 | espera de silêncio (FR-009) |
 | `buffer.teto_s` | 60 | 60 | espera máxima da rajada (FR-011) |
-| `lock.ttl_s` | 120 | 120 | posse do contato (FR-013) |
+| `lock.ttl_s` | 150 | 150 | posse do contato (FR-013); maior que `execucao.turno_timeout_s` (140) |
 | `lock.espera_s` | 3 | 3 | intervalo entre tentativas |
-| `lock.tentativas` | 45 | 45 | `espera_s × tentativas >= ttl_s` |
+| `lock.tentativas` | 50 | 50 | `espera_s × tentativas >= ttl_s` |
 | `redis.ttl.ultima_s` | 120 | 120 | validade do token `ultima` |
 | `midia.retencao_h` | 24 | 24 | só se `midias_recebidas` existir `[PROPOSTA — CHK026 aguarda o owner]` |
 | `dedup.janela_h` | 24 | 24 | janela de deduplicação por id do canal (FR-014/FR-023) `[PROPOSTA]` |

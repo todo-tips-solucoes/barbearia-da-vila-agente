@@ -81,7 +81,10 @@ class WorkflowRecepcao(unittest.TestCase):
     def test_resposta_so_depois_de_gravar(self):  # FR-001..FR-004
         n, g = self._grafo()
         self.assertEqual(g["Roteador"][3], ["Upsert contato"])
-        self.assertEqual(g["Upsert contato"], [["Titulo de confirmacao?"], ["Registrar falha contato"]])  # mensagens-agendadas: titulo da lista antes do buffer
+        self.assertEqual(g["Upsert contato"], [["Contar taxa"], ["Registrar falha contato"]])  # limite de taxa por contato antes de gravar a mensagem (revisao de 17/11)
+        self.assertEqual(g["Contar taxa"], [["Taxa ok?"]])
+        self.assertEqual(g["Taxa ok?"], [["Titulo de confirmacao?"], ["Responder 200 taxa"]])  # mensagens-agendadas: titulo da lista antes do buffer
+        self.assertEqual(g["Responder 200 taxa"], [["Registrar taxa"]])
         self.assertEqual(g["Titulo de confirmacao?"], [["Confirmacao aberta?"], ["Inserir mensagem"]])
         self.assertEqual(g["Confirmacao aberta?"], [["Rota do titulo"]])
         self.assertEqual(g["Rota do titulo"], [["Consumir titulo?"]])
@@ -179,3 +182,26 @@ class WorkflowRecepcao(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LimiteDeTaxa(unittest.TestCase):  # revisao de 17/11: um numero so nao enche a fila de execucoes
+    @classmethod
+    def setUpClass(cls):
+        wf = json.load(open(os.path.join(RAIZ, "workflows", "bv-recepcao.json"), encoding="utf-8"))
+        cls.nos = {n["name"]: n for n in wf["nodes"]}
+
+    def test_conta_por_contato_e_minuto_sem_telefone_na_chave(self):
+        n = self.nos["Contar taxa"]
+        self.assertEqual(n["parameters"]["key"], "={{ '{{BV:redis.prefixo}}taxa:' + $('Upsert contato').first().json.contato_id + ':' + Math.floor(Date.now() / 60000) }}")
+        self.assertEqual([n["parameters"]["operation"], n["parameters"]["expire"], n["parameters"]["ttl"]], ["incr", True, 120])
+        self.assertEqual(n["onError"], "continueRegularOutput")  # Redis fora: a mensagem segue (o limite nao pode calar o atendimento)
+
+    def test_acima_do_limite_responde_200_e_registra_uma_vez(self):
+        cond = self.nos["Taxa ok?"]["parameters"]["conditions"]["conditions"][0]
+        self.assertIn("|| 0) <= {{BV:taxa.max_por_minuto}}", cond["leftValue"])
+        self.assertEqual(self.nos["Responder 200 taxa"]["parameters"]["options"]["responseCode"], 200)
+        q = self.nos["Registrar taxa"]["parameters"]["query"]
+        self.assertIn("SELECT 'taxa', 'taxa_excedida', $1::bigint WHERE $2::int = $3::int + 1", q)  # so o primeiro evento acima do limite
+        self.assertIn("$('Upsert contato').first().json.contato_id", self.nos["Inserir mensagem"]["parameters"]["options"]["queryReplacement"])
+        for a in ("integracao", "producao"):
+            self.assertEqual(json.load(open(os.path.join(RAIZ, "config", "ambientes", a + ".json"), encoding="utf-8"))["taxa"]["max_por_minuto"], 30)

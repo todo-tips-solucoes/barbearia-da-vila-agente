@@ -159,6 +159,15 @@ class T(unittest.TestCase):
             self.pcfg["teste"] = {"redirecionar_escrita": False, "contatos_escrita": []}
             json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
             self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], FakeApi())[0], 0)
+            # a chave usada dentro de um arquivo incluido conta tambem (revisao de 17/11: a lista de escrita mora em shared/config.js)
+            os.makedirs(f"{self.d}/workflows/shared", exist_ok=True)
+            open(f"{self.d}/workflows/shared/c.js", "w").write("const e = {{BV:teste.contatos_escrita}};\n")
+            json.dump(dict(WF, name="x {{BV:INCLUDE:shared/c.js}}"), open(f"{self.d}/workflows/bv-verificacao.json", "w"))
+            self.assertEqual(self.run_main(["producao", "--confirmar-id", "wfP"], FakeApi())[0], 0)
+            self.pcfg["teste"] = {"redirecionar_escrita": False, "contatos_escrita": ["+55"]}
+            json.dump(self.pcfg, open(f"{self.d}/config/ambientes/producao.json", "w"))
+            api = FakeApi()
+            self.assertEqual((self.run_main(["producao", "--confirmar-id", "wfP"], api)[0], api.chamadas), (2, []))
         finally:
             os.environ.pop("BV_DEPLOY_PRODUCAO_AUTORIZADO")
 
@@ -184,6 +193,15 @@ class T(unittest.TestCase):
         for ruim in ({"a": {"b": "x"}}, {"a": {}}):
             with self.assertRaises(dep.Falha):
                 dep.renderizar('"{{BV:NUM:a.b}}"', ruim, self.d)
+
+    def test_include_troca_os_placeholders_de_dentro(self):  # revisao de 17/11: config de varios nos num arquivo so
+        os.makedirs(f"{self.d}/workflows/shared", exist_ok=True)
+        open(f"{self.d}/workflows/shared/c.js", "w").write("const c = { amb: '{{BV:ambiente}}', lista: {{BV:t.lista}} };\n")
+        out = dep.renderizar('{"js": "{{BV:INCLUDE:shared/c.js}}return c;"}', {"ambiente": "integracao", "t": {"lista": ["55\"1"]}}, self.d)
+        self.assertEqual(json.loads(out)["js"], "const c = { amb: 'integracao', lista: ['55\"1'] };\nreturn c;")
+        open(f"{self.d}/workflows/shared/c.js", "w").write("{{BV:nao.existe}}")
+        with self.assertRaises(dep.Falha):
+            dep.renderizar("{{BV:INCLUDE:shared/c.js}}", {}, self.d)
 
     def test_placeholder_sem_valor_falha(self):
         with self.assertRaises(dep.Falha):
