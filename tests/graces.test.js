@@ -24,7 +24,7 @@ assert.equal(r.resultado.encontrado, false);
 assert.equal(r.efeitos.pedido.cliente_sem_cadastro, true);
 // 1 cliente: identificado ja no 1o estagio do pedido; o nome do cliente e so a 1a palavra do nomeCliente
 let st1 = g.bvGPasso(p.st, [ok([{ idCliente: 'c1', nomeCliente: 'Ana Paula', sobrenomeCliente: 'Souza' }])], cfg);
-assert.deepEqual(st1.reqs, [{ m: 'GET', path: '/agenda/historico', qs: { idCliente: 'c1', pageSize: 10 } }]);
+assert.deepEqual(st1.reqs, [{ m: 'GET', path: '/agenda/historico', qs: { idCliente: 'c1', pageSize: 10 } }, { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: 'c1', proximos: true } }]);
 // historico com falha ou vazio: segue identificado, sem sugestao
 r = g.bvGPasso(st1.st, [resp(500, { code: 'ERRO_INTERNO' })], cfg).final;
 assert.equal(r.efeitos.pedido.idCliente, 'c1');
@@ -33,6 +33,14 @@ assert.equal(r.efeitos.pedido.identificado, true);
 assert.equal(r.efeitos.pedido.ultimo, null);
 assert.ok(!JSON.stringify(r.resultado).includes('c1'));
 assert.equal(g.bvGPasso(st1.st, [ok([])], cfg).final.resultado.nome, 'Ana');
+// agendamentos futuros (revisao de 17/11): lidos junto do historico, vao ao pedido e ao resultado; falha na leitura = lista vazia
+assert.deepEqual(r.efeitos.pedido.futuros, []);
+const FUT = [{ idAgenda: 'ag1', idServico: 's1', horaInicio: '2026-11-20T15:00:00', descricaoServico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro' }];
+r = g.bvGPasso(st1.st, [ok([]), ok(FUT)], cfg).final;
+assert.deepEqual(r.efeitos.pedido.futuros, [{ idAgenda: 'ag1', idServico: 's1', horaInicio: '2026-11-20T15:00:00', servico: 'corte adulto' }]);
+assert.deepEqual(r.resultado.futuros, r.efeitos.pedido.futuros);
+// em PROD o agendamento com o barbeiro de teste nao aparece para cliente comum
+assert.deepEqual(g.bvGPasso(st1.st, [ok([]), ok([{ ...FUT[0], idProfissional: TESTE }])], { ...cfg, ambiente: 'producao' }).final.efeitos.pedido.futuros, []);
 // historico: mais recente primeiro; confere servico no catalogo e barbeiro do servico
 const H = [{ idServico: '046519b1-e111-44b4-8779-3e64366f9d8f', descricaoServico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro Henrique ' }, { idServico: '23f2faf7-e848-45e3-b822-ef16af69a2df', idProfissional: 'b2' }];
 const st2 = g.bvGPasso(st1.st, [ok(H)], cfg);
@@ -42,6 +50,7 @@ r = g.bvGPasso(st2.st, [CAT, ok([{ idProfissional: 'b1', apelido: 'Pedro Henriqu
 assert.deepEqual(r.efeitos.pedido.ultimo, { servico: { idServico: H[0].idServico, nome: 'corte adulto', preco: 85, minutos: 40, opcao_id: 'ult' }, barbeiro: { idProfissional: 'b1', apelido: 'Pedro Henrique' } });
 assert.deepEqual(r.resultado.ultimo, { servico: 'corte adulto', barbeiro: 'Pedro Henrique' });
 const pedUlt = r.efeitos.pedido;
+assert.deepEqual(g.bvGPasso(g.bvGPasso(st1.st, [ok(H), ok(FUT)], cfg).st, [CAT, ok([])], cfg).final.efeitos.pedido.futuros.map((a) => a.idAgenda), ['ag1']); // os futuros atravessam o estagio do catalogo
 // barbeiro que nao faz mais o servico: so o servico; servico fora do catalogo (ou "2a vez"): sem sugestao
 assert.equal(g.bvGPasso(st2.st, [CAT, ok([{ idProfissional: 'b9', apelido: 'Kiel' }])], cfg).final.efeitos.pedido.ultimo.barbeiro, null);
 assert.equal(g.bvGPasso(st2.st, [ok([{ idServico: H[0].idServico, descricaoAgenda: 'corte 2ª vez', ativo: true }]), ok([])], cfg).final.efeitos.pedido.ultimo, null);
@@ -289,6 +298,33 @@ assert.equal(s2.reqs[0].body.idCliente, 'c1');
 r = g.bvGPasso(s2.st, [ok({ sucesso: true, idAgenda: 'n1' })], cfg).final;
 assert.equal(r.resultado.ok, true);
 assert.equal(r.efeitos.proposta_upd.estado, 'executada');
+{ // Revisao de 17/11: resumo com dia da semana, texto final e agendamentos futuros saem do codigo, nao da memoria do modelo
+  assert.match(dadosAg.resumo, /em (domingo|sábado|(segunda|terça|quarta|quinta|sexta)-feira), \d{2}\/\d{2} às 14:00/);
+  assert.equal(r.resultado.feito, `Agendado: ${dadosAg.resumo}`);
+  assert.deepEqual(r.efeitos.pedido.futuros, [{ idAgenda: 'n1', idServico: dadosAg.idServico, horaInicio: `${dadosAg.data}T14:00:00`, servico: dadosAg.servico }]);
+  assert.equal(r.efeitos.pedido.agendamentos, null); // a lista com ids segue apagada: reagendar pede meus_agendamentos de novo
+  // proposta antiga, sem resumo nos dados: escreve igual, so nao devolve o texto
+  const semResumo = { ...dadosAg }; delete semResumo.resumo;
+  const pv = f2({ operacao: 'agendar' }, prop('agendar', semResumo));
+  assert.equal(g.bvGPasso(g.bvGPasso(pv.st, [ok({ horarios: ['14:00'] })], cfg).st, [ok({ sucesso: true, idAgenda: 'n2' })], cfg).final.resultado.feito, undefined);
+  // duplicidade: mesmo dia ou mesmo servico de um agendamento futuro sai com aviso; outro dia e outro servico, nao
+  const comFut = (fut) => g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora, { futuros: [fut] }), cfg).final.resultado;
+  assert.match(comFut({ idAgenda: 'x', idServico: 'outro', horaInicio: `${dadosAg.data}T09:00:00`, servico: 'barba' }).ja_tem, /^barba em .* às 09:00$/);
+  assert.match(comFut({ idAgenda: 'x', idServico: dadosAg.idServico, horaInicio: '2027-01-04T09:00:00', servico: 'corte adulto' }).ja_tem, /^corte adulto em segunda-feira, 04\/01 às 09:00$/);
+  // mesmo dia vem antes de mesmo servico
+  assert.match(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora, { futuros: [{ idAgenda: 'x', idServico: dadosAg.idServico, horaInicio: '2027-01-04T09:00:00', servico: 'corte adulto' }, { idAgenda: 'y', idServico: 'outro', horaInicio: `${dadosAg.data}T09:00:00`, servico: 'barba' }] }), cfg).final.resultado.ja_tem, /^barba /);
+  assert.match(comFut({ idAgenda: 'x', idServico: 'outro', horaInicio: `${dadosAg.data}T09:00:00`, servico: 'barba' }).orientacao, /pergunte só se pode confirmar mais este/);
+  const livre = comFut({ idAgenda: 'x', idServico: 'outro', horaInicio: '2027-01-04T09:00:00', servico: 'barba' });
+  assert.equal(livre.ja_tem, undefined);
+  assert.equal(livre.aguardando_confirmacao, true);
+  // cancelar: sai da lista de futuros e devolve o texto final
+  const pc = f2({ operacao: 'cancelar' }, { pedido: { idCliente: 'c1', futuros: [{ idAgenda: dadosCanc.idAgenda, horaInicio: dadosCanc.horaInicio, servico: 'corte adulto' }, { idAgenda: 'fica', horaInicio: '2027-01-04T09:00:00', servico: 'barba' }] }, proposta: { id: PID, acao: 'cancelar', dados: dadosCanc } });
+  const rc = g.bvGPasso(pc.st, [ok({ sucesso: true })], cfg).final;
+  assert.match(rc.resultado.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00 com ZZ TESTE$/);
+  assert.deepEqual(rc.efeitos.pedido.futuros.map((x) => x.idAgenda), ['fica']);
+  // meus_agendamentos atualiza os futuros
+  assert.deepEqual(g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg).st, [ok(agBruto)], cfg).final.efeitos.pedido.futuros, [{ idAgenda: 'a1', idServico: 's1', horaInicio: '2026-10-20T14:00:00', servico: 'corte adulto' }]);
+}
 // erro de escrita nao repete: 409 -> falhou; timeout/5xx -> incerta, com orientacao de conferir antes
 r = g.bvGPasso(s2.st, [resp(409, { code: 'CONFLITO', traceId: '00-abc-01' })], cfg).final;
 assert.equal(r.efeitos.proposta_upd.estado, 'falhou');

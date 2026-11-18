@@ -358,6 +358,7 @@ def preparar(r, n):
         sa.semear(n, {"idCliente": sa.FANTASMA, "cliente_nome": "Teste", "servico": {"idServico": sa.FANTASMA, "nome": "Corte", "opcao_id": "1"}})
         sa.sql(f"UPDATE conversas SET ultima_entrada_em = now() - interval '3 hours' WHERE contato_id={sa.cid(n)};")
     elif r.get("agenda"):
+        sa.limpar_paulo()  # o agente ve os agendamentos futuros: o que o roteiro anterior marcou no barbeiro de teste nao pode sobrar
         sa.novo_paulo(n)
     return "preparo falhou" if len(sa._falhas) > antes else None
 
@@ -404,13 +405,19 @@ def executar(r, n, orc, parar, referencia=""):
             if ped.get("handoff"):
                 extra += "\nSistema: a conversa foi transferida para a equipe humana, que continua por esta mesma conversa."
             hoje = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)).strftime("%Y-%m-%d (%A)")
-            ref = referencia + "\nHoje em Sao Paulo: " + hoje
+            agora_sp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=3)
+            # calendario pronto (R8, 18/11): a avaliadora ora aceitava, ora reprovava a data de "segunda"
+            ref = referencia + "\nHoje em Sao Paulo: " + hoje + ". Proximos dias: " + "; ".join((agora_sp + datetime.timedelta(days=k)).strftime("%Y-%m-%d (%A)") for k in range(1, 8)) + ". Um dia da semana dito sem data e o proximo com esse nome nesta lista."
             if r.get("preparo") == "agendamento_previo":  # a avaliadora nao ve meus_agendamentos: o preparo e fonte do K4
                 ref += "\nAgendamento do cliente (semeado antes da conversa): corte adulto, 15:00 de " + (proximo_dia(r.get("preparo_dia_semana")) or "amanha") + ". Regra do agente: a remarcacao mantem o barbeiro do agendamento; dizer que sera com o mesmo barbeiro e correto."
-                try:  # o cliente de teste e um cadastro real: pode ter outros agendamentos alem do semeado (R9, 2026-11-17)
+            if r.get("agenda") or r.get("preparo") == "agendamento_previo":
+                # o cliente de teste e um cadastro real, com agendamentos alem do semeado (R9, 2026-11-17), e o agente os conhece desde a
+                # identificacao (revisao de 17/11): sem a lista, a avaliadora lia o aviso "voce ja tem..." como invencao
+                try:
                     fut = sa.graces_get(f"/agenda/agendamentos?idCliente={sa.PAULO}&proximos=true")
-                    ref += "\nTodos os agendamentos futuros do cliente na Graces agora (dizer que ha mais de um e listar estes e correto): " + "; ".join(
-                        f"{str(a.get('horaInicio', ''))[:16].replace('T', ' ')} {a.get('servico') or a.get('descricaoServico') or a.get('nomeServico') or ''}".strip() for a in fut) + "."
+                    ref += ("\nTodos os agendamentos futuros do cliente na Graces agora (o agente os conhece desde o inicio da conversa; a lista inclui o que esta conversa acabou de marcar). "
+                            "Citar um destes e correto, e tambem e correto, ao pedir a confirmacao de um horario novo, avisar que o cliente ja tem um destes no mesmo dia ou do mesmo servico e perguntar se pode confirmar mais um: "
+                            + "; ".join(f"{str(a.get('horaInicio', ''))[:16].replace('T', ' ')} {a.get('servico') or a.get('descricaoServico') or a.get('nomeServico') or ''}".strip() for a in fut) + ".")
                 except Exception:  # noqa: BLE001 - sem a lista, a referencia segue so com o semeado
                     pass
             notas, tokens, erro = avaliar(r, transcricao(ex["turnos"], nome) + extra, ref)
