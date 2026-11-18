@@ -535,20 +535,29 @@ class FilaHumana(unittest.TestCase):
         q = nos["Registrar equipe"]["parameters"]["query"]
         self.assertIn("fila_ultima_de = 'equipe'", q)
         self.assertIn("'equipe-' || $3::text", q)
+        self.assertIn("ticket_id = COALESCE($5::bigint, ticket_id)", q)  # o ticket encerrado pelo vigia e o do evento da equipe
+        self.assertIn("a.canal_texto = $4::text", q)  # eco de lembrete agendado nao conta como resposta da equipe
         self.assertEqual(q.count("("), q.count(")"))
         self.assertTrue(nos["Registrar equipe"]["alwaysOutputData"])
 
     def test_agente_calado_na_fila_humana(self):
         nos, _ = self.nos("workflows/sub/entregar-rajada.json")
         self.assertIn("AS fila_id FROM (SELECT $1::bigint AS cid) x", nos["Ler contexto"]["parameters"]["query"])
-        self.assertIn("const naFilaHumana = filaAtual === {{BV:handoff.setor_id}};", nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("bvTransferido({ porFila:", nos["Preparar"]["parameters"]["jsCode"])
 
     def test_vigia_encerra_o_atendimento_parado(self):
         nos, con = self.nos("workflows/bv-vigia.json")
         self.assertIn("Filas paradas", con["A cada 5 minutos"][0])
-        self.assertEqual([con[n] for n in ("Filas paradas", "Encerrar atendimento")], [[["Encerrar atendimento"]], [["Gravar encerramento"]]])
+        self.assertEqual([con[n] for n in ("Filas paradas", "Encerrar atendimento", "Gravar encerramento")], [[["Encerrar atendimento"]], [["Gravar encerramento"]], [["Montar aviso"]]])
         p = nos["Filas paradas"]["parameters"]
-        self.assertIn("c.fila_ultima_de = 'equipe'", p["query"])  # so encerra depois de a equipe ter respondido
+        self.assertIn("(NOT $4::boolean OR c.fila_ultima_de = 'equipe')", p["query"])  # a chave so_respondido restringe a quem a equipe respondeu
+        self.assertIn("coalesce(c.fila_ultima_de, '') AS ultima_de", p["query"])
+        g = nos["Gravar encerramento"]["parameters"]
+        # owner, 2026-11-17: encerra tambem com o cliente por ultimo, e so nesse caso o cliente e avisado (pela cadeia de aviso do vigia)
+        self.assertIn("WHERE $2::int BETWEEN 200 AND 299 AND $3::text = 'cliente'", g["query"])
+        self.assertIn("WHERE id = $1::bigint RETURNING id, telefone", g["query"])  # o estado local sai mesmo se o Chat Master recusar: nao repete a cada varredura
+        self.assertIn("{{BV:textos.fila_sem_resposta}}", g["options"]["queryReplacement"])
+        self.assertIn("texto: l.texto || contingencia", nos["Montar aviso"]["parameters"]["jsCode"])
         self.assertIn("'{{BV:handoff.encerrar_ativo}}' === 'True'", p["options"]["queryReplacement"])
         self.assertEqual(nos["Encerrar atendimento"]["parameters"]["url"], "https://api.chatmasterveloz.com/api/tickets/updateAPI")
         self.assertIn("status: 'closed'", nos["Encerrar atendimento"]["parameters"]["jsonBody"])
@@ -559,7 +568,8 @@ class FilaHumana(unittest.TestCase):
     def test_config(self):
         for amb, ativo in (("integracao", False), ("producao", True)):
             c = json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))
-            self.assertEqual([c["handoff"]["encerrar_ativo"], c["handoff"]["encerrar_apos_min"], c["handoff"]["encerrar_so_respondido"]], [ativo, 30, True])
+            self.assertEqual([c["handoff"]["encerrar_ativo"], c["handoff"]["encerrar_apos_min"], c["handoff"]["encerrar_so_respondido"]], [ativo, 30, False])
+            self.assertTrue(c["textos"]["fila_sem_resposta"])
             self.assertEqual([c["retomada"]["resposta_max_min"], c["retomada"]["apos_min_urgente"]], [720, 20])
 
     def test_lembrete_recem_enviado_vale_como_enviado(self):

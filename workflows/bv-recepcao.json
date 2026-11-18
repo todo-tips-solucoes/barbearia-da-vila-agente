@@ -1525,9 +1525,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH c AS (UPDATE contatos SET fila_id = $2::int, fila_interacao_em = now(), fila_ultima_de = 'equipe', atualizado_em = now() WHERE $1::text IS NOT NULL AND telefone = $1::text AND NOT EXISTS (SELECT 1 FROM mensagens s WHERE s.contato_id = contatos.id AND s.direcao = 'saida' AND s.conteudo = $4::text AND s.criado_em > now() - interval '5 minutes') RETURNING id) INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT c.id, 'equipe-' || $3::text, 'saida', 'texto', $4::text FROM c WHERE $3::text IS NOT NULL AND $4::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1",
+        "query": "WITH c AS (UPDATE contatos SET fila_id = $2::int, fila_interacao_em = now(), fila_ultima_de = 'equipe', ticket_id = COALESCE($5::bigint, ticket_id), atualizado_em = now() WHERE $1::text IS NOT NULL AND telefone = $1::text AND NOT EXISTS (SELECT 1 FROM mensagens s WHERE s.contato_id = contatos.id AND s.direcao = 'saida' AND s.conteudo = $4::text AND s.criado_em > now() - interval '5 minutes') AND NOT EXISTS (SELECT 1 FROM mensagens_agendadas a WHERE a.contato_id = contatos.id AND a.canal_texto = $4::text) RETURNING id) INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT c.id, 'equipe-' || $3::text, 'saida', 'texto', $4::text FROM c WHERE $3::text IS NOT NULL AND $4::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1",
         "options": {
-          "queryReplacement": "={{ (() => { const e = $('Normalizar').first().json.equipe || {}; return [e.telefone ?? null, e.fila ?? null, e.id ?? null, e.texto ?? null]; })() }}"
+          "queryReplacement": "={{ (() => { const e = $('Normalizar').first().json.equipe || {}; return [e.telefone ?? null, e.fila ?? null, e.id ?? null, e.texto ?? null, e.ticket ?? null]; })() }}"
         }
       },
       "id": "ab121376-b524-578f-adb6-8fa4f215f9c0",

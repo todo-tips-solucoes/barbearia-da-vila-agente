@@ -148,7 +148,8 @@ class BvGraces(unittest.TestCase):
         self.assertIn("terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
         import json, pathlib
         amb = pathlib.Path(__file__).resolve().parent.parent / "config" / "ambientes"
-        self.assertIs(json.loads((amb / "producao.json").read_text())["terceiro"]["cadastro_liberado"], True)
+        # revisao de 17/11: outra pessoa e atendida pelo numero do cadastro ou pela equipe; a chave fica desligada nos dois
+        self.assertIs(json.loads((amb / "producao.json").read_text())["terceiro"]["cadastro_liberado"], False)
         self.assertIs(json.loads((amb / "integracao.json").read_text())["terceiro"]["cadastro_liberado"], False)
 
     def test_sem_segredo_nem_log(self):
@@ -226,8 +227,9 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual(self._destinos("Transferido?"), {0: ["Silencio"], 1: ["So midia?"]})
         self.assertEqual(self._destinos("Silencio"), {0: ["Saidas"]})
         # fila humana (owner, 2026-11-16): silencio pelo ticket na fila; sem fila no evento, vale a marca da transferencia na sessao
-        self.assertIn("transferido: porFila ? (naFilaHumana || (filaAtual === null && !rec.sessaoNova && !!(ctx.pedido || {}).handoff)) : (!rec.sessaoNova && !!(ctx.pedido || {}).handoff),", self.nos["Preparar"]["parameters"]["jsCode"])
-        self.assertIn("const naFilaHumana = filaAtual === {{BV:handoff.setor_id}};", self.nos["Preparar"]["parameters"]["jsCode"])
+        # a regra mora em bvTransferido (agente.js, testada em agente.test.js); o no so a chama
+        self.assertIn("const fh = bvTransferido({ porFila: '{{BV:handoff.silencio_por_fila}}' === 'True', filaHumana: {{BV:handoff.setor_id}}, fila: ctx.fila_id, sessaoNova: rec.sessaoNova, handoff: (ctx.pedido || {}).handoff });", self.nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("transferido: fh.transferido, limpar_handoff: fh.limpar,", self.nos["Preparar"]["parameters"]["jsCode"])
         t = self.nos["Ferramenta transferir_atendimento"]["parameters"]
         self.assertEqual(t["workflowInputs"]["value"]["operacao"], "transferir_atendimento")
         self.assertEqual(self.wf["connections"]["Ferramenta transferir_atendimento"]["ai_tool"][0][0]["node"], "Agente")
@@ -245,7 +247,9 @@ class EntregarRajadaAgente(unittest.TestCase):
         q = self.nos["Sessao"]["parameters"]["query"]
         self.assertIn("COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())", q)
         self.assertNotIn("THEN now()", q)
-        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id] }}"))
+        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff)] }}"))
+        # ticket fora da fila humana: a marca da transferencia sai, senao toda ferramenta recusava com handoff_ativo (17/11)
+        self.assertIn("WHEN $5::boolean THEN conversas.pedido - 'handoff' ELSE conversas.pedido END", q)
 
     def test_identifica_o_cliente_antes_do_modelo(self):  # owner, 2026-11-14
         self.assertEqual(self._destinos("Limite?")[1], ["Identificar?"])
@@ -313,7 +317,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
             "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",
-            "buscar_pessoa", "escolher_pessoa", "cadastrar_terceiro", "funcionamento", "transferir_atendimento"})
+            "funcionamento", "transferir_atendimento"})  # sem buscar_pessoa, escolher_pessoa e cadastrar_terceiro (17/11)
         campos_graces = set(re.search(r"BVG_CAMPOS = \[(.*?)\]", ler("workflows/shared/graces.js"), re.S).group(1).replace("'", "").replace("\n", "").replace(" ", "").split(","))
         for t in tools:
             self.assertEqual(t["typeVersion"], 2.2)
@@ -381,3 +385,35 @@ class EntregarRajadaAgente(unittest.TestCase):
             if n["type"] == "n8n-nodes-base.code":
                 p = subprocess.run(["node", "--check", "-"], input="async function f(){" + n["parameters"]["jsCode"] + "\n}", capture_output=True, text=True)
                 self.assertEqual(p.returncode, 0, (n["name"], p.stderr[:200]))
+
+
+class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que confundiam o cliente
+    @classmethod
+    def setUpClass(cls):
+        w = json.loads(ler("workflows/sub/entregar-rajada.json"))
+        cls.nos = {n["name"]: n for n in w["nodes"]}
+        cls.con = w["connections"]
+        cls.graces = {n["name"]: n for n in json.loads(ler("workflows/sub/bv-graces.json"))["nodes"]}
+
+    def test_confirmacao_sem_lista_de_horarios(self):
+        self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid) AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
+        self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova)", self.nos["Compor"]["parameters"]["jsCode"])
+
+    def test_limite_de_turnos_transfere_de_verdade(self):
+        self.assertEqual(self.con["Limite?"]["main"][0][0]["node"], "Transferir por limite")
+        self.assertEqual(self.con["Transferir por limite"]["main"][0][0]["node"], "Compor humano")
+        p = self.nos["Transferir por limite"]["parameters"]
+        self.assertEqual(p["workflowId"]["value"], "{{BV:workflows_sub.bv_graces}}")
+        v = p["workflowInputs"]["value"]
+        self.assertEqual([v["operacao"], v["motivo"]], ["transferir_atendimento", "nao_resolvi"])
+        self.assertNotIn("$fromAI", json.dumps(v))  # contato, telefone e turno vem do Gatilho, nunca do modelo
+        self.assertIn("($input.first().json || {}).texto", self.nos["Compor humano"]["parameters"]["jsCode"])
+
+    def test_retomada_mantem_a_proposta_valida(self):
+        q = self.graces["Contexto"]["parameters"]["query"]
+        self.assertIn("r.retomada_em > propostas.criada_em AND r.retomada_em > now() - make_interval(mins => $6::int)", q)
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertTrue(self.graces["Contexto"]["parameters"]["options"]["queryReplacement"].endswith("{{BV:retomada.resposta_max_min}}] }}"))
+
+    def test_transferencia_tenta_de_novo(self):
+        self.assertEqual([self.graces["Transferir ticket"].get(k) for k in ("retryOnFail", "maxTries")], [True, 2])
