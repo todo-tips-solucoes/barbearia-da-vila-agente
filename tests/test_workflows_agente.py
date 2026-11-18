@@ -262,7 +262,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual(idf["parameters"]["workflowInputs"]["value"]["telefone"], "={{ String($('Gatilho').first().json.telefone) }}")  # nunca do modelo
         self.assertIn("identificar: rec.sessaoNova || !(ctx.pedido || {}).identificado", self.nos["Preparar"]["parameters"]["jsCode"])
         self.assertEqual(self.nos["Agente"]["parameters"]["options"]["systemMessage"], "={{ $('Cliente').first().json.system }}")
-        self.assertIn("bvContextoCliente(c, bvNeutralizar)", self.nos["Cliente"]["parameters"]["jsCode"])
+        self.assertIn("bvContextoCliente(c, bvNeutralizar, p.agora)", self.nos["Cliente"]["parameters"]["jsCode"])
         cad = self.nos["Ferramenta cadastrar_cliente"]["parameters"]["workflowInputs"]
         self.assertTrue({"nome", "nascimento", "como_conheceu"} <= set(cad["value"]) and {"nascimento", "como_conheceu"} <= {x["id"] for x in cad["schema"]})
 
@@ -396,7 +396,9 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         cls.graces = {n["name"]: n for n in json.loads(ler("workflows/sub/bv-graces.json"))["nodes"]}
 
     def test_confirmacao_sem_lista_de_horarios(self):
-        self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid) AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
+        # so a proposta de agendar ou remarcar tira a lista: "cancela o de quarta e marca pra segunda" cria a de cancelar e busca os
+        # horarios de segunda no mesmo turno, e a lista deles tem de sair (suite R8, 18/11)
+        self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid AND p.acao NOT LIKE 'cancelar%') AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
         self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova)", self.nos["Compor"]["parameters"]["jsCode"])
 
     def test_limite_de_turnos_transfere_de_verdade(self):
@@ -417,3 +419,20 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
 
     def test_transferencia_tenta_de_novo(self):
         self.assertEqual([self.graces["Transferir ticket"].get(k) for k in ("retryOnFail", "maxTries")], [True, 2])
+
+
+class RevisaoEtapa2(unittest.TestCase):  # revisao de 17/11/2026: estado para o modelo
+    @classmethod
+    def setUpClass(cls):
+        cls.nos = {n["name"]: n for n in json.loads(ler("workflows/sub/entregar-rajada.json"))["nodes"]}
+
+    def test_mensagem_da_equipe_tem_rotulo_e_conta_para_a_recencia(self):
+        self.assertIn("(mensagem_id_canal LIKE 'equipe-%') AS equipe FROM mensagens", self.nos["Ler contexto"]["parameters"]["query"])
+        c = self.nos["Preparar"]["parameters"]["jsCode"]
+        self.assertIn("hist.map(bvLinhaHistorico).join", c)
+        self.assertIn("bvRecencia({ equipeMs: eq.length ? Math.max(...eq) : null,", c)
+        self.assertNotIn("'Atendente: '", c)  # o rotulo de quem falou fica so em bvLinhaHistorico (testada)
+
+    def test_agendamentos_futuros_no_contexto_so_os_que_nao_passaram(self):
+        self.assertIn("json: { texto, system, agora,", self.nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("bvContextoCliente(c, bvNeutralizar, p.agora)", self.nos["Cliente"]["parameters"]["jsCode"])
