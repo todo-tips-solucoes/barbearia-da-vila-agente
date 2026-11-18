@@ -35,8 +35,9 @@ Qualquer outra saída ou erro = falha; as mensagens voltam a pendentes e o conta
 ## Semântica de posse
 
 - A recepção detém `lock:<contato_id>` durante toda a chamada; o sub NÃO libera o lock.
-- Tempo máximo: `lock.ttl_s` (120). Sub que passar disso perde a garantia de exclusividade
-  (FR-013); a feature 3 deve caber nesse tempo ou pedir aumento do TTL.
+- Tempo máximo: `lock.ttl_s` (150). O sub tem tempo limite próprio, `execucao.turno_timeout_s` (140), menor que a
+  posse (revisão de 17/11): o turno termina ou é cancelado antes de a posse expirar. O n8n aplica o tempo limite entre
+  um nó e outro, então um nó longo em curso termina antes do cancelamento.
 - Se a chamada exceder `lock.ttl_s`, a posse expira e outro turno do mesmo contato pode iniciar
   (turno duplicado possível). Dever de idempotência (FR-026): a feature 3 trata `turno_id` como
   chave de idempotência (turno já visto = não repetir efeitos, ex.: não reenviar resposta). A

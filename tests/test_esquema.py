@@ -172,3 +172,17 @@ class Migracao0008(unittest.TestCase):
     def test_ticket_id_idempotente(self):
         self.assertIn("ADD COLUMN IF NOT EXISTS ticket_id bigint", M8)
         self.assertNotIn("CREATE TABLE", M8)
+
+
+M18 = open("db/migrations/0018_revisao_etapa3.sql").read()
+
+
+class Migracao0018(unittest.TestCase):  # revisao de 17/11, etapa 3
+    def test_indices_funcao_e_tipo_idempotentes(self):
+        self.assertIn("CREATE INDEX IF NOT EXISTS mensagens_agendadas_contato_idx ON mensagens_agendadas (contato_id, tipo, inicio);", M18)
+        self.assertIn("CREATE INDEX IF NOT EXISTS propostas_contato_idx ON propostas (contato_id, atualizada_em);", M18)
+        self.assertIn("CREATE OR REPLACE FUNCTION bv_respondivel(situacao text, tipo text, agendamento_canal_id text, previsto_para timestamptz)", M18)
+        self.assertIn("LANGUAGE sql STABLE", M18)  # expressao unica e STABLE: o planejador expande a funcao e usa os indices
+        self.assertIn("DROP CONSTRAINT IF EXISTS falhas_recepcao_tipo_check", M18)
+        self.assertIn("('redis_indisponivel','payload_invalido','entrega','gravacao','taxa')", M18)
+        self.assertNotIn("CREATE TABLE", M18)

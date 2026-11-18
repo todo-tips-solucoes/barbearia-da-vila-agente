@@ -1017,3 +1017,25 @@ console.log('graces.test.js mais pedidos ok');
   assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento', motivo: 'outra_pessoa' }), { pedido: { ...ped, pediu_numero: '99999999-9999-4999-8999-999999999999' } }, cfg).final.efeitos.falha.motivo, 'encaminhar_equipe|outra_pessoa');
 }
 console.log('graces.test.js segunda analise ok');
+
+{ // Teto de agendamentos por contato e dia (owner, 17/11): acima dele quem agenda e a equipe
+  const teto = { ...cfg, agendamentosMaxDia: 3, textos: { encaminhar_equipe: 'A equipe continua por aqui.' }, handoff: { setor_id: 78 } };
+  const ag = (agendados, extra = {}, c = teto) => g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', ...extra }), { ...ctxE(opcoesHora), dia: { agendados } }, c).final;
+  assert.equal(ag(2).resultado.aguardando_confirmacao, true);
+  const r3 = ag(3);
+  assert.equal(r3.resultado.code, 'encaminhar_equipe');
+  assert.equal(r3.resultado.motivo, 'limite_agendamentos');
+  assert.equal(r3.resultado.texto, 'A equipe continua por aqui.');
+  assert.equal(r3.efeitos.pedido.handoff, true);
+  assert.equal(r3.efeitos.handoff.queueId, 78);
+  assert.equal(r3.efeitos.proposta_nova, undefined); // nenhuma proposta: nada a confirmar
+  assert.equal(ag(7).resultado.code, 'encaminhar_equipe');
+  // sem o teto no config (ou zero) nada muda; a contagem ausente vale zero
+  assert.equal(ag(9, {}, cfg).resultado.aguardando_confirmacao, true);
+  assert.equal(ag(9, {}, { ...teto, agendamentosMaxDia: 0 }).resultado.aguardando_confirmacao, true);
+  assert.equal(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora), teto).final.resultado.aguardando_confirmacao, true);
+  // cancelar e remarcar seguem liberados acima do teto: o cliente consegue desfazer o que marcou
+  const canc = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), { ...ctxE(opcoesAg), dia: { agendados: 5 } }, teto).final;
+  assert.equal(canc.resultado.aguardando_confirmacao, true);
+  console.log('graces.test.js teto de agendamentos ok');
+}

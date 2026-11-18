@@ -184,10 +184,14 @@ def chamador(api):
         yield chamar
     finally:
         for rota, metodo in ((f"/workflows/{wid}/deactivate", "POST"), (f"/workflows/{wid}", "DELETE")):
-            try:
-                api(metodo, rota, {} if metodo == "POST" else None)
-            except Exception as e:  # noqa: BLE001
-                print(f"  ATENCAO: {metodo} {rota} falhou ({type(e).__name__}); apague o chamador temporario a mao (id {wid}).")
+            for tentativa in range(3):  # o DELETE logo depois de desativar falha no n8n: sem repetir, o chamador ficava para tras
+                try:
+                    api(metodo, rota, {} if metodo == "POST" else None)
+                    break
+                except Exception as e:  # noqa: BLE001
+                    if tentativa == 2:
+                        print(f"  ATENCAO: {metodo} {rota} falhou ({type(e).__name__}); apague o chamador temporario a mao (id {wid}).")
+                    time.sleep(2)
 
 
 # ---------------------------------------------------------------- cenarios
@@ -1090,7 +1094,10 @@ def verificar_implantado():
     d, api = _api_deploy()
     wf = api("GET", f"/workflows/{CFG['workflows_sub']['entregar_rajada']}")
     cod = next(n["parameters"]["jsCode"] for n in wf["nodes"] if n["name"] == "Saidas")
-    checar("entregar-rajada implantado: lista de envio real vazia", "const escrita = [].map(dig);" in cod.replace("[ ]", "[]"))
+    # a lista de escrita e a trava de simulacao vem de shared/config.js, renderizado dentro do no (revisao de 17/11)
+    cod = cod.replace("[ ]", "[]")
+    checar("entregar-rajada implantado: lista de envio real vazia",
+           "const BV_ESCRITA_TESTE = 'integracao' === 'integracao' ? [] : null;" in cod and "const simulado = bvSimulado(g.telefone);" in cod)
 
 
 CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13,

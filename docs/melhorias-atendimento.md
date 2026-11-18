@@ -132,7 +132,24 @@ Suíte: os roteiros com agenda limpam o barbeiro de teste antes de começar, e a
 
 Limite conhecido: telefone com vários cadastros (`escolher_cliente`) não lê os agendamentos futuros nem o último atendimento.
 
-### Etapas seguintes
+### Etapa 3: feito (duplicação, banco e limites)
 
-3. **Duplicação, banco e limites:** índice `mensagens_agendadas (contato_id, tipo, inicio)`; regra única de "confirmação respondível" (hoje em 5 consultas); bloco de configuração e trava de simulação num lugar só; posse do contato (120 s) menor que o turno (até 300 s); teto de agendamentos por contato; limite de taxa no webhook; mídia interpretada só depois de decidir o silêncio.
+| Problema | Correção |
+|---|---|
+| Consultas de `mensagens_agendadas` por contato varriam a tabela (a regra do lembrete saiu do único índice por contato) | Migração 0018: índice `mensagens_agendadas (contato_id, tipo, inicio)` e `propostas (contato_id, atualizada_em)` |
+| A regra "confirmação respondível" estava copiada em 5 consultas de 3 workflows | Função SQL `bv_respondivel` (migração 0018), usada nos cinco lugares; o planejador a expande e usa o índice |
+| O bloco de configuração do `bv-graces` estava copiado em 4 nós, o do envio em 2 nós do `bv-mensagens` e a trava de simulação do TESTE em 4 nós | `workflows/shared/config.js` (`bvGCfg`, `bvMCfgEnvio`, `bvSimulado`, `BV_ESCRITA_TESTE`); o deploy passou a trocar os placeholders também dentro do arquivo incluído |
+| A posse do contato durava 120 s e o turno podia durar 300 s: acima de 120 s outro turno reentregava as mesmas mensagens e a resposta saía em dobro | O turno tem tempo limite próprio (`execucao.turno_timeout_s`, 140 s), menor que a posse (`lock.ttl_s`, 150 s); o verificador do repositório exige essa ordem |
+| Um número só conseguia lotar a agenda | Teto de 3 agendamentos por contato por dia (`graces.agendamentos_max_dia`, decisão do owner): acima disso `agendar` transfere para a equipe; cancelar e remarcar seguem liberados |
+| Um número só conseguia encher a fila de execuções | Limite de 30 mensagens por contato por minuto no webhook (`taxa.max_por_minuto`): acima disso a mensagem é descartada com resposta 200 e a falha é registrada uma vez por minuto |
+| Com a conversa na fila humana, o áudio e a imagem eram interpretados (chamada à OpenAI) para o agente ficar calado | O silêncio é decidido antes da mídia (nó `Decidir silencio`); na fila humana a mídia não é interpretada |
+
+Como o tempo limite funciona no n8n (medido no TESTE): o `executionTimeout` de um sub-workflow é aplicado entre um nó e outro; o nó em curso termina e a execução é cancelada em seguida. Um turno que estoura não envia resposta, e as mensagens voltam a pendentes.
+
+Ordem de publicação: a migração 0018 vem antes do deploy (os workflows chamam `bv_respondivel`).
+
+Fora desta etapa, apontado na revisão e ainda aberto: reserva do sincronizador (`mensagens.reserva_s`) menor que uma varredura lenta, `bv-vigia` sem tempo limite, tempo limite próprio para o Chat Master e a âncora de `Irmas` diferente da de `Pendencias`.
+
+### Etapa seguinte
+
 4. **Prompt e cobertura:** resolver os 11 conflitos do prompt, remover o código das ferramentas de outra pessoa, e roteiros para retomada, ida e volta da fila humana, pacote, laço, "sim" com proposta aberta e cadastro em pedaços.

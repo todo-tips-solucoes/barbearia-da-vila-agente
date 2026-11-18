@@ -123,14 +123,16 @@ class BvGraces(unittest.TestCase):
 
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
         self.assertIn("cfg.ambiente === 'producao' ? !(cfg.escritaLiberada || cfg.testeLiberado) : !cfg.redirecionar", self.js)
-        for no in ("Normalizar", "Planejar", "Passo", "Efeitos"):  # owner, 2026-11-15: agenda real em PROD por config
-            self.assertIn("escritaLiberada: '{{BV:graces.escrita_liberada}}' === 'True'", self.nos[no]["parameters"]["jsCode"])
+        for no in ("Normalizar", "Planejar", "Passo", "Efeitos"):  # a configuracao vem de um lugar so (revisao de 17/11)
+            self.assertIn("{{BV:INCLUDE:shared/config.js}}\nconst cfg = bvGCfg(($('Gatilho').first().json || {}).telefone);", self.nos[no]["parameters"]["jsCode"])
+            self.assertNotIn("{{BV:graces.", self.nos[no]["parameters"]["jsCode"])
+        self.assertIn("escritaLiberada: '{{BV:graces.escrita_liberada}}' === 'True'", ler("workflows/shared/config.js"))  # owner, 2026-11-15: agenda real em PROD por config
         self.assertIn("const prof = redir ? cfg.testeId", self.js)
         self.assertIn("escrita_fora_do_teste", self.js)
-        self.assertIn("'{{BV:teste.redirecionar_escrita}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
+        self.assertIn("'{{BV:teste.redirecionar_escrita}}' === 'True'", ler("workflows/shared/config.js"))
         # Cadastro proprio (owner, 2026-11-14): trava por ambiente no config; no TESTE redireciona ao cliente de teste
         for no in ("Normalizar", "Planejar", "Passo", "Efeitos"):
-            self.assertIn("cadastroLiberado: '{{BV:cadastro.liberado}}' === 'True', clienteTesteId: '{{BV:cadastro.cliente_teste_id}}'", self.nos[no]["parameters"]["jsCode"])
+            self.assertIn("cadastroLiberado: '{{BV:cadastro.liberado}}' === 'True', clienteTesteId: '{{BV:cadastro.cliente_teste_id}}'", ler("workflows/shared/config.js"))
         integ, prod = (json.load(open(os.path.join(RAIZ, "config", "ambientes", f"{a}.json"), encoding="utf-8")) for a in ("integracao", "producao"))
         self.assertTrue(integ["teste"]["redirecionar_escrita"] and integ["cadastro"]["cliente_teste_id"])
         self.assertFalse(prod["teste"]["redirecionar_escrita"])
@@ -145,7 +147,7 @@ class BvGraces(unittest.TestCase):
         self.assertIn("America/Sao_Paulo", q)
 
     def test_cadastro_terceiro_configuravel_por_ambiente(self):
-        self.assertIn("terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True'", self.nos["Planejar"]["parameters"]["jsCode"])
+        self.assertIn("terceiroLiberado: '{{BV:terceiro.cadastro_liberado}}' === 'True'", ler("workflows/shared/config.js"))
         import json, pathlib
         amb = pathlib.Path(__file__).resolve().parent.parent / "config" / "ambientes"
         # revisao de 17/11: outra pessoa e atendida pelo numero do cadastro ou pela equipe; a chave fica desligada nos dois
@@ -173,7 +175,7 @@ class BvGraces(unittest.TestCase):
         self.assertEqual(con["Tem chamada?"]["main"][0][0]["node"], "Corpo?")
         self.assertEqual(con["Tem chamada?"]["main"][1][0]["node"], "Efeitos")
         self.assertEqual({n for n in self.nos if n.startswith("Graces")}, {"Graces", "Graces corpo"})
-        self.assertIn("graces: { max_estagios: {{BV:graces.max_estagios}}", self.nos["Passo"]["parameters"]["jsCode"])
+        self.assertIn("graces: { max_estagios: {{BV:graces.max_estagios}}", ler("workflows/shared/config.js"))
         self.assertIn("estagios_esgotados", self.js)
 
 if __name__ == "__main__":
@@ -211,10 +213,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertNotEqual(prod["credenciais"]["chatmaster"], integ_cred := json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))["credenciais"]["chatmaster"])  # 159 e de outra conta
         integ = json.load(open(os.path.join(RAIZ, "config", "ambientes", "integracao.json"), encoding="utf-8"))
         self.assertEqual((integ["chatmaster"], integ["handoff"]["setor_id"]), ({"whatsapp_id": "145", "queue_id": "0", "user_id": "100", "etiquetas": {"confirmado": 0, "cancelado": 0}}, 78))
-        g = json.loads(ler("workflows/sub/bv-graces.json"))
-        for n in g["nodes"]:
-            if n["name"] in ("Normalizar", "Planejar", "Passo", "Efeitos"):
-                self.assertIn("handoff: { setor_id: {{BV:handoff.setor_id}} }", n["parameters"]["jsCode"])
+        self.assertIn("handoff: { setor_id: {{BV:handoff.setor_id}} }", ler("workflows/shared/config.js"))
 
     def test_corrida_nao_repete_resposta(self):  # atendimentos de 2026-11-15: respostas duplicadas
         self.assertIn("bvCorrida(itens, hist)", self.nos["Preparar"]["parameters"]["jsCode"])
@@ -228,7 +227,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertEqual(self._destinos("Silencio"), {0: ["Saidas"]})
         # fila humana (owner, 2026-11-16): silencio pelo ticket na fila; sem fila no evento, vale a marca da transferencia na sessao
         # a regra mora em bvTransferido (agente.js, testada em agente.test.js); o no so a chama
-        self.assertIn("const fh = bvTransferido({ porFila: '{{BV:handoff.silencio_por_fila}}' === 'True', filaHumana: {{BV:handoff.setor_id}}, fila: ctx.fila_id, sessaoNova: rec.sessaoNova, handoff: (ctx.pedido || {}).handoff });", self.nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("const fh = bvTransferido({ porFila: '{{BV:handoff.silencio_por_fila}}' === 'True', filaHumana: {{BV:handoff.setor_id}}, fila: ctx.fila_id, sessaoNova: rec.sessaoNova, handoff: (ctx.pedido || {}).handoff });", self.nos["Decidir silencio"]["parameters"]["jsCode"])
         self.assertIn("transferido: fh.transferido, limpar_handoff: fh.limpar,", self.nos["Preparar"]["parameters"]["jsCode"])
         t = self.nos["Ferramenta transferir_atendimento"]["parameters"]
         self.assertEqual(t["workflowInputs"]["value"]["operacao"], "transferir_atendimento")
@@ -237,11 +236,8 @@ class EntregarRajadaAgente(unittest.TestCase):
         for a in ("integracao", "producao"):
             cfg = json.load(open(os.path.join(RAIZ, "config", "ambientes", f"{a}.json"), encoding="utf-8"))
             self.assertIn({"id": "b623cd84-6068-4a57-9ce6-2f7d9a37a11e", "nome": "Jayme"}, cfg["graces"]["barbeiros_humanos"])
-        g = json.loads(ler("workflows/sub/bv-graces.json"))
-        for n in g["nodes"]:
-            if n["name"] in ("Normalizar", "Planejar", "Passo", "Efeitos"):
-                self.assertIn("humanos: {{BV:graces.barbeiros_humanos}}", n["parameters"]["jsCode"])
-                self.assertIn("textos: { encaminhar_equipe: '{{BV:textos.encaminhar_equipe}}' }", n["parameters"]["jsCode"])  # texto da transferencia chega a ferramenta
+        self.assertIn("humanos: {{BV:graces.barbeiros_humanos}}", ler("workflows/shared/config.js"))
+        self.assertIn("textos: { encaminhar_equipe: '{{BV:textos.encaminhar_equipe}}' }", ler("workflows/shared/config.js"))  # texto da transferencia chega a ferramenta
 
     def test_sessao_comeca_na_mensagem_que_a_abriu(self):  # 2026-11-14: a 1a mensagem sumia do historico do turno seguinte
         q = self.nos["Sessao"]["parameters"]["query"]
@@ -278,7 +274,11 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertNotIn("{{BV:textos.midia}}", cm)
 
     def test_ramo_de_midia_no_turno(self):  # 5.1.1, 5.1.4
-        self.assertEqual(self._destinos("Ler contexto")[0], ["Tem midia?"])
+        # silencio decidido antes da midia (revisao de 17/11): na fila humana o audio e a imagem nem sao interpretados
+        self.assertEqual(self._destinos("Ler contexto")[0], ["Decidir silencio"])
+        self.assertEqual(self._destinos("Decidir silencio")[0], ["Tem midia?"])
+        self.assertIn("&& !$('Decidir silencio').first().json.transferido", json.dumps(self.nos["Tem midia?"]["parameters"]))
+        self.assertIn("const rec = ds.rec, fh = ds;", self.nos["Preparar"]["parameters"]["jsCode"])
         self.assertEqual(self._destinos("Tem midia?"), {0: ["Itens de midia"], 1: ["Preparar"]})
         self.assertEqual(self._destinos("Itens de midia")[0], ["Interpretar midia"])
         self.assertEqual(self._destinos("Interpretar midia")[0], ["Preparar"])
@@ -368,7 +368,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         js = self.nos["Saidas"]["parameters"]["jsCode"]
         self.assertIn("{{BV:chatmaster.whatsapp_id}}", js)
         self.assertEqual(js.count("whatsappId: wid"), 3)  # digitando, texto e lista
-        self.assertIn("{{BV:teste.contatos_escrita}}", js)  # so contato de escrita recebe de verdade
+        self.assertIn("const simulado = bvSimulado(g.telefone);", js)  # so contato de escrita recebe de verdade (shared/config.js)
         self.assertIn("sendListPRO", js)
         self.assertNotIn("1.", self.nos["Compor"]["parameters"]["jsCode"].split("OPCOES")[0])  # sem lista numerada em texto
 
@@ -430,9 +430,72 @@ class RevisaoEtapa2(unittest.TestCase):  # revisao de 17/11/2026: estado para o 
         self.assertIn("(mensagem_id_canal LIKE 'equipe-%') AS equipe FROM mensagens", self.nos["Ler contexto"]["parameters"]["query"])
         c = self.nos["Preparar"]["parameters"]["jsCode"]
         self.assertIn("hist.map(bvLinhaHistorico).join", c)
-        self.assertIn("bvRecencia({ equipeMs: eq.length ? Math.max(...eq) : null,", c)
+        self.assertIn("bvRecencia({ equipeMs: eq.length ? Math.max(...eq) : null,", self.nos["Decidir silencio"]["parameters"]["jsCode"])
         self.assertNotIn("'Atendente: '", c)  # o rotulo de quem falou fica so em bvLinhaHistorico (testada)
 
     def test_agendamentos_futuros_no_contexto_so_os_que_nao_passaram(self):
         self.assertIn("json: { texto, system, agora,", self.nos["Preparar"]["parameters"]["jsCode"])
         self.assertIn("bvContextoCliente(c, bvNeutralizar, p.agora)", self.nos["Cliente"]["parameters"]["jsCode"])
+
+
+class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, banco e limites
+    @classmethod
+    def setUpClass(cls):
+        cls.rajada = json.loads(ler("workflows/sub/entregar-rajada.json"))
+        cls.graces = {n["name"]: n for n in json.loads(ler("workflows/sub/bv-graces.json"))["nodes"]}
+        cls.cfgs = {a: json.loads(ler(f"config/ambientes/{a}.json")) for a in ("integracao", "producao")}
+
+    def _config_js(self, amb, corpo):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("deploy_n8n_e3", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
+        dep = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(dep)
+        js = json.loads(dep.renderizar(json.dumps({"js": "{{BV:INCLUDE:shared/config.js}}\n" + corpo}), self.cfgs[amb], RAIZ))["js"]
+        r = subprocess.run(["node", os.path.join(RAIZ, "tests", "harness_code_node.js")], capture_output=True, text=True, input=json.dumps({"js": js, "input": [{}]}))
+        self.assertEqual(r.returncode, 0, r.stderr[:500])
+        return json.loads(r.stdout)[0]
+
+    def test_trava_de_simulacao_num_lugar_so(self):
+        if not shutil.which("node"):
+            self.skipTest("node ausente")
+        escrita = self.cfgs["integracao"]["teste"]["contatos_escrita"]
+        corpo = "return [{ json: { fora: bvSimulado('+55 00 00000-0500'), vazio: bvSimulado(null), lista: BV_ESCRITA_TESTE, dentro: BV_ESCRITA_TESTE ? BV_ESCRITA_TESTE.map((t) => bvSimulado('+' + t)) : [] } }];"
+        t = self._config_js("integracao", corpo)
+        self.assertEqual([t["fora"], t["vazio"], t["lista"]], [True, True, escrita])  # TESTE: so a lista de escrita recebe de verdade
+        self.assertFalse(any(t["dentro"]))
+        p = self._config_js("producao", corpo)
+        self.assertEqual([p["fora"], p["vazio"], p["lista"]], [False, False, None])  # producao: ninguem e simulado
+        for arq, no in (("workflows/sub/entregar-rajada.json", "Saidas"), ("workflows/sub/bv-confirmacao.json", "Desfecho"), ("workflows/bv-mensagens.json", "Montar retomada"), ("workflows/bv-vigia.json", "Montar aviso")):
+            js = next(n for n in json.loads(ler(arq))["nodes"] if n["name"] == no)["parameters"]["jsCode"]
+            self.assertIn("{{BV:INCLUDE:shared/config.js}}", js)
+            self.assertIn("bvSimulado(", js)
+            self.assertNotIn("contatos_escrita}}", js)
+        for arq in ("workflows/sub/entregar-rajada.json", "workflows/sub/bv-confirmacao.json", "workflows/sub/bv-graces.json", "workflows/bv-vigia.json"):
+            self.assertNotIn("{{BV:teste.contatos_escrita}}", ler(arq))  # a lista de escrita so aparece em shared/config.js
+
+    def test_config_do_bv_graces_renderiza_nos_dois_ambientes(self):
+        if not shutil.which("node"):
+            self.skipTest("node ausente")
+        for amb in ("integracao", "producao"):
+            c = self._config_js(amb, "return [{ json: bvGCfg('+55 11 90000-0000') }];")
+            self.assertEqual([c["ambiente"], c["agendamentosMaxDia"], c["testeLiberado"]], [amb, 3, False])
+            self.assertEqual(c["handoff"]["setor_id"], self.cfgs[amb]["handoff"]["setor_id"])
+            self.assertEqual(c["graces"]["max_estagios"], self.cfgs[amb]["graces"]["max_estagios"])
+            self.assertTrue(c["humanos"])  # clausula petrea: os barbeiros so da equipe chegam a todos os nos
+
+    def test_teto_de_agendamentos_por_contato(self):
+        q = self.graces["Contexto"]["parameters"]["query"]
+        self.assertIn("'agendados', (SELECT count(*)::int FROM propostas WHERE contato_id = x.cid AND acao IN ('agendar', 'agendar_conjunto') AND estado = 'executada' AND atualizada_em >= date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')", q)
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertIn("agendamentosMaxDia: {{BV:graces.agendamentos_max_dia}}", ler("workflows/shared/config.js"))
+        self.assertEqual([c["graces"]["agendamentos_max_dia"] for c in self.cfgs.values()], [3, 3])  # owner, 17/11
+
+    def test_turno_cabe_na_posse_do_contato(self):
+        self.assertEqual(self.rajada["settings"]["executionTimeout"], "{{BV:NUM:execucao.turno_timeout_s}}")
+        for c in self.cfgs.values():
+            lk, ex = c["lock"], c["execucao"]
+            self.assertLess(c["midia"]["execucao_timeout_s"], ex["turno_timeout_s"])
+            self.assertLess(ex["turno_timeout_s"], lk["ttl_s"])
+            self.assertGreaterEqual(lk["espera_s"] * lk["tentativas"], lk["ttl_s"])
+            # quem esperou a posse inteira e rodou um turno inteiro ainda cabe na execucao da recepcao
+            self.assertLessEqual(c["buffer"]["janela_s"] + lk["espera_s"] * lk["tentativas"] + ex["turno_timeout_s"], ex["timeout_s"])
