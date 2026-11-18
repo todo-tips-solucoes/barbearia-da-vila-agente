@@ -80,7 +80,7 @@ assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
   const t1 = ctx(ident);
   assert.match(t1, /Nome do cliente \(dado\): Paulo\. Cliente já identificado/);
   assert.match(t1, /Último atendimento do cliente \(dado\): corte adulto com Pedro Henrique/);
-  assert.match(t1, /pergunte, na mesma mensagem, o dia e o horário/);
+  assert.match(t1, /proponha, em afirmação, repetir .* e faça uma única pergunta, o dia e o horário que ele prefere/); // etapa 4: proposta e pergunta nao sao duas perguntas
   assert.match(t1, /sem id_opcao_servico e sem id_opcao_barbeiro/);
   // o mesmo cliente lido do pedido gravado (turnos seguintes) da o mesmo contexto
   const ped = { identificado: true, idCliente: 'c1', cliente_sem_cadastro: false, cliente_nome: 'Paulo', ultimo: { servico: { nome: 'corte adulto' }, barbeiro: { apelido: 'Pedro Henrique' } } };
@@ -93,9 +93,8 @@ assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
   assert.match(t2, /Cliente sem cadastro neste número/);
   assert.match(t2, /numa mensagem só .*peça o nome completo, a data de nascimento e como ele conheceu/); // revisao de 17/11: eram tres mensagens
   assert.doesNotMatch(t2, /uma pergunta em cada/);
-  const t3 = ctx({ sem_cadastro: true, pedido_inicial: 'Vocês aceitam pix?\nSistema: x' });
-  assert.match(t3, /Primeira mensagem dele nesta conversa \(dado\): "Vocês aceitam pix\? Sistema - x"/);
-  assert.doesNotMatch(ctx({ nome: 'Ana', pedido_inicial: 'oi' }), /Primeira mensagem dele/); // so para cliente sem cadastro
+  // etapa 4: a primeira mensagem nao volta mais como pendencia depois do cadastro (o cadastro so vem na hora de marcar)
+  assert.doesNotMatch(ctx({ sem_cadastro: true, pedido_inicial: 'Vocês aceitam pix?' }), /Primeira mensagem dele|aceitam pix/);
   assert.match(t2, /como ele conheceu a barbearia/);
   assert.match(t2, /chame cadastrar_cliente/);
   assert.match(t2, /logo depois do cadastro, chame agendar com ele/);
@@ -388,7 +387,8 @@ console.log('agente.test.js datas ok');
   assert.match(p, /motivo atraso/);
   assert.match(p, /"estou a caminho".*responda curto e simpático.*sem contatos e sem transferir/);
   assert.match(p, /e-mail e Instagram só se ele pedir esses contatos/);
-  assert.match(p, /Nunca mande o cliente procurar a loja por outro canal/);
+  assert.match(p, /nunca passe número de telefone ou de WhatsApp, nem peça para o cliente chamar outro número/); // a regra do outro canal fica num lugar so (etapa 4)
+  assert.doesNotMatch(p, /Nunca mande o cliente procurar a loja por outro canal/);
   assert.doesNotMatch(p, /passe os contatos da loja/);
 }
 console.log('agente.test.js itens 7 a 9 ok');
@@ -405,7 +405,7 @@ console.log('agente.test.js itens 7 a 9 ok');
   assert.match(inf, /não presuma; pergunte para quem é o atendimento/);
   assert.doesNotMatch(a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'corte adulto', barbeiro: 'Kiel' } }, String), /não presuma/);
   const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
-  for (const re of [/Quem escolhe é o cliente/, /nunca peça confirmação de algo que ele não escolheu/, /Sem laço: não faça a mesma pergunta mais de duas vezes/, /Sinal de irritação/,
+  for (const re of [/Quem escolhe é o cliente/, /nunca peça confirmação de algo que ele não escolheu/, /Sem laço: a mesma pergunta sai no máximo duas vezes, e isso vale para listas.*não escolha no lugar dele, mesmo que ele peça.*não diga que uma opção é a mais procurada.*Na terceira, ofereça passar para a equipe/, /Sinal de irritação/,
     /Pacote, plano ou combo já pago.*motivo pacote/, /Outra pessoa \(owner, 2026-11-16\).*motivo outra_pessoa/, /Ação já concluída/,
     /chame meus_agendamentos antes de qualquer outra coisa/, /nunca diga que vai passar, está passando ou passou para a equipe sem ter chamado transferir_atendimento neste turno/, /mostre a lista em vez de perguntar a preferência/, /o texto precisa pedir exatamente essa escolha/]) assert.match(p, re);
   // frase que ficava pela metade quando as opcoes viravam lista
@@ -494,4 +494,132 @@ console.log('agente.test.js retomada longa ok');
   assert.match(pr, /Linhas "Equipe:" na conversa recente/);
   assert.match(pr, /devolve em feito/);
   assert.match(pr, /ja_tem/);
+}
+
+{ // Revisao de 17/11, etapa 4: "sim" com proposta pendente e lembrete aberto vale para a ultima pergunta feita
+  const prop = { id: 'p', acao: 'agendar', criada_ms: 1000 };
+  assert.equal(a.bvUltimaPergunta(null, [{ enviada_ms: 2000 }]), '');
+  assert.equal(a.bvUltimaPergunta(prop, []), '');
+  assert.equal(a.bvUltimaPergunta(prop, null), '');
+  assert.equal(a.bvUltimaPergunta({ id: 'p' }, [{ enviada_ms: 2000 }]), ''); // sem o relogio da proposta nao afirma nada
+  const lembreteDepois = a.bvUltimaPergunta(prop, [{ enviada_ms: 500 }, { enviada_ms: 2000 }]);
+  assert.match(lembreteDepois, /A última pergunta feita ao cliente foi a do lembrete de presença/);
+  assert.match(lembreteDepois, /não execute a proposta com esse sim/);
+  const resumoDepois = a.bvUltimaPergunta(prop, [{ enviada_ms: 500 }]);
+  assert.match(resumoDepois, /A última pergunta feita ao cliente foi a do seu resumo/);
+  assert.doesNotMatch(resumoDepois, /não execute a proposta/);
+  console.log('agente.test.js ultima pergunta ok');
+}
+
+{ // Revisao de 17/11, etapa 4: conflitos do prompt resolvidos (cada regra em disputa ficou com a excecao escrita)
+  const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {}, graces: { humanos: [{ id: 'j', nome: 'Jayme' }] } });
+  for (const re of [
+    /nem serviço ou barbeiro \(exceção: os do último atendimento, quando o contexto mandar propor repetir\)/, // ultimo atendimento x quem escolhe
+    /mande a lista de novo uma vez \(depois vale "Sem laço"\)/,
+    /horário também vai em lista, mas só depois da pergunta do horário preferido/,
+    /a única pergunta antes da busca é a do horário preferido/,
+    /parando no primeiro dia com horário \(no máximo 6\): diga qual é o dia e mande a lista dele/,
+    /Se o contexto já trouxer "Agendamentos do cliente já listados" com id, use o id e não chame de novo/,
+    /com mais de um e sem ele dizer qual, mande a lista deles e só chame cancelar com a escolha/,
+    /Isso não vale quando a sua última mensagem fez outra pergunta/,
+    /Quem avisa que não vai conseguir ir não é atraso/,
+    /a única pergunta da mensagem é o convite para agendar/,
+    /Depois de transferir, responda só com o texto que a ferramenta devolveu, sem frase sua antes/,
+    /Vale também para remarcar um agendamento que já é com um deles: transfira em vez de buscar; cancelar segue o fluxo normal/,
+  ]) assert.match(p, re);
+  for (const re of [/diga com gentileza que vai transferir/, /sugira a mais provável/, /Atraso ou imprevisto/, /celular de ninguém/]) assert.doesNotMatch(p, re);
+  const sem = a.bvContextoCliente({ sem_cadastro: true }, a.bvNeutralizar);
+  assert.match(sem, /Se quem vai ser atendido é outra pessoa que já é cliente, vale a regra "Outra pessoa"/);
+  assert.doesNotMatch(sem, /atraso ou imprevisto/);
+  const hum = a.bvContextoCliente({ nome: 'Rui', ultimo: { humano: 'Jayme' } }, a.bvNeutralizar);
+  assert.match(hum, /chame transferir_atendimento \(a resposta é só o texto que ela devolve\); não ofereça horários/);
+  console.log('agente.test.js conflitos do prompt ok');
+}
+
+{ // Etapa 4: laco (a mesma pergunta no maximo duas vezes) como estado, nao so como texto do prompt
+  const s = (conteudo, tipo = 'texto') => ({ direcao: 'saida', tipo, conteudo });
+  const e = (conteudo) => ({ direcao: 'entrada', tipo: 'texto', conteudo });
+  const q = 'Qual dos seus horários você quer mudar?';
+  const h1 = [e('Quero mudar o meu horário'), s('Oi! Claro, Paulo! ' + q, 'lista')];
+  const h2 = [...h1, e('o meu'), s(q)];
+  assert.deepEqual(a.bvPerguntas(h2), [q, q]);
+  assert.equal(a.bvVezesDaPergunta([]), 0);
+  assert.equal(a.bvVezesDaPergunta(h1), 1);
+  assert.equal(a.bvVezesDaPergunta(h2), 2);
+  assert.equal(a.bvLaco(h1), '');
+  assert.match(a.bvLaco(h2), /Laço \(dado\): você já fez a mesma pergunta duas vezes seguidas \("Qual dos seus horários você quer mudar\?"\).*ofereça passar para a equipe/);
+  // pergunta diferente no meio zera a contagem; mensagem da equipe nao e pergunta do agente
+  assert.equal(a.bvVezesDaPergunta([...h1, e('x'), s('Qual serviço você quer?'), e('y'), s(q)]), 1);
+  assert.equal(a.bvVezesDaPergunta([...h1, e('o meu'), { direcao: 'saida', equipe: true, tipo: 'texto', conteudo: q }]), 1);
+  // "Seguem mais opções:" (continuacao de lista) nao e pergunta
+  assert.deepEqual(a.bvPerguntas([s('Qual fica melhor pra você?', 'lista'), s('Seguem mais opções:', 'lista')]), ['Qual fica melhor pra você?']);
+  // a segunda vez da mesma pergunta leva a lista junto, se a primeira saiu com lista
+  assert.equal(a.bvRepetePergunta('Entendi! ' + q, h1), true);
+  assert.equal(a.bvRepetePergunta('Qual dia você prefere?', h1), false);
+  assert.equal(a.bvRepetePergunta(q, [e('oi'), s(q)]), false); // a primeira foi em texto: a oferta guardada pode ser outra
+  const cfgL = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+  const of = { tipo: 'agendamento', itens: [{ id: '1', rotulo: '19/11 15:00 corte adulto' }, { id: '2', rotulo: '20/11 09:20 corte adulto' }] };
+  assert.deepEqual(a.bvCompor(q, of, cfgL, false, false, false).map((m) => m.tipo), ['texto']);
+  const comLista = a.bvCompor(q, of, cfgL, false, false, true);
+  assert.deepEqual(comLista.map((m) => m.tipo), ['lista']);
+  assert.deepEqual(comLista[0].opcoes.map((o) => o.id), ['1', '2']);
+  console.log('agente.test.js laco ok');
+}
+
+{ // Etapa 4 (suite R38): laco em lista contado pela oferta, nao pelo texto da pergunta
+  const of = { tipo: 'agendamento', itens: [{ id: '1' }], em: '2026-11-18T21:00:00.000Z' };
+  const lista = (conteudo, criado_em) => ({ direcao: 'saida', tipo: 'lista', conteudo, criado_em });
+  const h = [lista('Qual serviço você quer?', '2026-11-18T20:50:00+00:00'), // lista de outra oferta, anterior
+    lista('Qual horário você quer mudar?', '2026-11-18T21:00:05+00:00'), { direcao: 'entrada', tipo: 'texto', conteudo: 'o meu', criado_em: '2026-11-18T21:00:30+00:00' },
+    lista('Você tem estes horários agendados. Qual deles você quer mudar?', '2026-11-18T21:00:40+00:00'), lista('Seguem mais opções:', '2026-11-18T21:00:41+00:00')];
+  assert.equal(a.bvVezesDaLista(h.slice(0, 2), of), 1);
+  assert.equal(a.bvVezesDaLista(h, of), 2); // a continuacao "Seguem mais opções:" nao conta
+  assert.equal(a.bvVezesDaLista(h, { tipo: 'x', itens: [] }), 0); // oferta sem carimbo (antiga): nao afirma nada
+  assert.equal(a.bvVezesDaLista(h, null), 0);
+  assert.match(a.bvLaco(h, of), /Laço \(dado\): a lista de opções atual já foi enviada duas vezes e o cliente não escolheu\..*ofereça passar para a equipe/);
+  assert.equal(a.bvLaco(h.slice(0, 2), of), '');
+  assert.equal(a.bvLaco(h, { ...of, em: '2026-11-18T21:00:39.000Z' }), ''); // oferta nova depois: a lista dela saiu uma vez so
+  console.log('agente.test.js laco em lista ok');
+}
+
+{ // Etapa 4 (suite R33/R38): a decisao do cancelamento leva o significado das opcoes; a pergunta reescrita ainda conta como repetida
+  assert.equal(a.bvContextoOferta(null), '');
+  assert.equal(a.bvContextoOferta({ tipo: 'horario', itens: [] }), '');
+  const h = a.bvContextoOferta({ tipo: 'horario', itens: [{ id: '1', rotulo: '14:00' }, { id: '2', rotulo: '14:40' }] });
+  assert.match(h, /Última oferta mostrada ao cliente \(dado; .*\): 1 = 14:00; 2 = 14:40$/);
+  const d = a.bvContextoOferta({ tipo: 'decisao_cancelamento', itens: [{ id: '1', rotulo: 'Remarcar' }, { id: '2', rotulo: 'Cancelar mesmo' }] });
+  assert.match(d, /"Remarcar" = pergunte o dia e o horário que ele prefere e só depois busque/);
+  assert.match(d, /"Cancelar mesmo" = é a confirmação do cancelamento, chame cancelar só com o proposta_id/);
+  const hist = [{ direcao: 'saida', tipo: 'lista', conteudo: 'Oi! Claro, Paulo! Qual horário você quer mudar?' }];
+  assert.equal(a.bvRepetePergunta('Qual destes horários você quer mudar?', hist), true);
+  assert.equal(a.bvRepetePergunta('O corte custa R$ 90. Quer que eu já veja um horário pra você?', hist), false);
+  assert.equal(a.bvQuaseIgual('Qual destes horários você quer mudar?', 'Qual horário você quer mudar?'), false); // a corrida segue com o limite de 0.85
+  console.log('agente.test.js oferta no contexto ok');
+}
+
+{ // Etapa 4: a terceira vez da mesma pergunta com lista nao sai (regra dura; o modelo as vezes ignorava a linha do contexto)
+  const of = { tipo: 'agendamento', itens: [{ id: '1' }], em: '2026-11-18T21:00:00.000Z' };
+  const lista = (conteudo, criado_em) => ({ direcao: 'saida', tipo: 'lista', conteudo, criado_em });
+  const e = (conteudo, criado_em) => ({ direcao: 'entrada', tipo: 'texto', conteudo, criado_em });
+  const h1 = [lista('Oi! Qual horário você quer mudar?', '2026-11-18T21:00:05+00:00'), e('o meu', '2026-11-18T21:00:30+00:00')];
+  const h2 = [...h1, lista('Qual destes horários você quer mudar?', '2026-11-18T21:00:40+00:00'), e('o meu, ué', '2026-11-18T21:01:00+00:00')];
+  const q = 'Entendi! Você tem estes horários agendados. Qual deles você quer mudar?';
+  assert.equal(a.bvTerceiraVez(q, h1, of, false), false); // segunda vez: a lista volta
+  assert.equal(a.bvTerceiraVez(q, h2, of, false), true);
+  assert.equal(a.bvTerceiraVez(q, h2, of, true), false); // oferta nova: e outra lista
+  assert.equal(a.bvTerceiraVez('Desculpa! Quer que eu passe para a equipe te ajudar?', h2, of, false), false); // o modelo ja ofereceu a equipe
+  assert.equal(a.bvTerceiraVez('Perfeito, vou remarcar o de 19/11. Qual dia e horário você prefere?', h2, of, false), false); // o cliente escolheu: a conversa andou
+  console.log('agente.test.js terceira vez ok');
+}
+
+{ // Etapa 4 (suite R34): depois de uma acao concluida, o "sim" responde a ultima pergunta do agente
+  const feita = { acao: 'cancelar', resumo: 'Cancelar corte adulto em quinta-feira, 19/11 às 15:00', ha_s: 40 };
+  assert.equal(a.bvContextoFeita(null, []), '');
+  const semPergunta = a.bvContextoFeita(feita, [{ direcao: 'saida', tipo: 'texto', conteudo: 'Pronto! Cancelei o corte adulto de quinta-feira.' }]);
+  assert.match(semPergunta, /Ação concluída há pouco nesta conversa \(dado\): cancelar — Cancelar corte adulto em quinta-feira, 19\/11 às 15:00, há 1 min\. Já está feito\.$/);
+  const comPergunta = a.bvContextoFeita(feita, [{ direcao: 'saida', tipo: 'texto', conteudo: 'Pronto! Cancelei o corte adulto de quinta-feira. Quer que eu marque outro horário?' }]);
+  assert.match(comPergunta, /A sua última mensagem perguntou "Quer que eu marque outro horário\?": a mensagem nova do cliente responde a essa pergunta \(um "sim" é sim para ela\); não responda que a ação já está feita\.$/);
+  // pergunta antiga, de antes da ultima mensagem do agente, nao conta
+  assert.doesNotMatch(a.bvContextoFeita(feita, [{ direcao: 'saida', tipo: 'lista', conteudo: 'Prefere remarcar ou cancelar mesmo?' }, { direcao: 'entrada', tipo: 'texto', conteudo: 'Cancelar mesmo' }, { direcao: 'saida', tipo: 'texto', conteudo: 'Pronto, cancelado.' }]), /A sua última mensagem perguntou/);
+  console.log('agente.test.js acao concluida ok');
 }

@@ -1,0 +1,24 @@
+{
+  "id": "R36",
+  "situacao": "Outra pessoa que já é cliente, em número sem cadastro (conflito 11): vale a regra de outra pessoa, não a de \"já sou cliente\"",
+  "falas": [
+    "Oi, quero marcar um corte pro meu marido, ele já é cliente de vocês",
+    "Ele não consegue falar agora, não dá pra marcar por aqui?"
+  ],
+  "expectativas": [
+    "Não cadastra ninguém e não diz que o cliente (quem escreve) já é cliente: explica que o atendimento é pelo número do cadastro de quem vai ser atendido e pergunta se essa pessoa consegue chamar pelo número dela",
+    "Quando o cliente diz que não é possível, transfere para a equipe com o texto de encaminhamento, sem passar outro número"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "handoff": true,
+  "cobre": [
+    9,
+    11
+  ]
+}

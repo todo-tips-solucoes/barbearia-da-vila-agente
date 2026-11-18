@@ -1,0 +1,29 @@
+{
+  "id": "R32",
+  "situacao": "Cadastro em pedaços (item 13): o cliente novo responde o cadastro aos poucos; o agente pede só o que falta e não insiste nos dados opcionais",
+  "falas": [
+    "Quero cortar o cabelo amanhã",
+    "corte adulto",
+    "Qualquer barbeiro, em qualquer horário",
+    "Pode ser o primeiro horário da lista",
+    "João",
+    "João Pedro Almeida"
+  ],
+  "expectativas": [
+    "Quando o cliente escolhe o horário, pede o cadastro numa mensagem só: nome completo, data de nascimento e como conheceu a barbearia",
+    "Com só o primeiro nome, pede só o sobrenome, sem repetir o pedido inteiro",
+    "Com o nome completo, cadastra sem perguntar de novo a data de nascimento nem como conheceu, e manda o resumo do horário escolhido pedindo a confirmação",
+    "Não diz que está agendado nem reservado antes do sim do cliente"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "handoff": false,
+  "cobre": [
+    12
+  ]
+}

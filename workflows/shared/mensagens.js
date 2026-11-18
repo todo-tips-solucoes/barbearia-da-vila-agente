@@ -428,7 +428,7 @@ function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro) {
   if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ');
   const r = ctx && ctx.pedido && ctx.pedido.confirmacao_recusada;
   const em = r ? Date.parse(r.em) : NaN;
-  if (Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado): ofereça remarcar ou cancelar.';
+  if (Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado), e a pergunta "remarcar ou cancelar?" já foi feita a ele: não a repita. Respondeu que quer cancelar: chame meus_agendamentos e cancelar (fase 1) desse agendamento e peça só a confirmação. Respondeu que quer remarcar: pergunte o dia e o horário que ele prefere e siga a remarcação.';
   return s;
 }
 

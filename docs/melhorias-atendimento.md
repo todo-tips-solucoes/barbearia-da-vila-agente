@@ -150,6 +150,53 @@ Ordem de publicação: a migração 0018 vem antes do deploy (os workflows chama
 
 Fora desta etapa, apontado na revisão e ainda aberto: reserva do sincronizador (`mensagens.reserva_s`) menor que uma varredura lenta, `bv-vigia` sem tempo limite, tempo limite próprio para o Chat Master e a âncora de `Irmas` diferente da de `Pendencias`.
 
-### Etapa seguinte
+### Etapa 4: feito (prompt, código morto e cobertura)
 
-4. **Prompt e cobertura:** resolver os 11 conflitos do prompt, remover o código das ferramentas de outra pessoa, e roteiros para retomada, ida e volta da fila humana, pacote, laço, "sim" com proposta aberta e cadastro em pedaços.
+A lista de 11 conflitos da primeira revisão não ficou guardada; o levantamento foi refeito por um especialista em prompt e chegou a 15. Cada um foi resolvido a favor da decisão do owner, com a exceção escrita na própria regra:
+
+| # | Conflito | Como ficou | Roteiros |
+|---|---|---|---|
+| 1 | "Nunca escolha um serviço que ele não disse" contra "proponha repetir o último atendimento" | A regra geral ganhou a exceção do último atendimento; a proposta sai em afirmação, com uma pergunta só (dia e horário) | R20 |
+| 2 | "Sem laço" contra "mande a lista de novo" | A mesma pergunta sai no máximo duas vezes, inclusive em lista; na terceira, oferece a equipe; não sugere uma opção no lugar do cliente | R30, R38 |
+| 3 | Perguntar o horário preferido contra "chame a ferramenta e mande as opções" | A única pergunta antes da busca é a do horário preferido; vale também para o toque em "Remarcar" | R19, R33 |
+| 4 | `meus_agendamentos`: chamar sempre contra "uma vez por pedido" | Com os agendamentos já listados no contexto, usa o id e não chama de novo | sem roteiro |
+| 5 | Cancelar com mais de um agendamento | Com um só, vai direto à fase 1; com mais de um e sem dizer qual, manda a lista deles antes | R33 |
+| 6 | Recusa de presença: a pergunta "remarcar ou cancelar?" voltava em lista depois de respondida | A fase 1 de `cancelar` não manda a lista de decisão para o agendamento cuja presença foi recusada; pede só a confirmação | R35 |
+| 7 | "Ação já concluída" contra "depois de cancelar, ofereça outro horário" | O "sim" responde à última pergunta feita | R34 |
+| 8 | Atraso contra agendamento existente contra recusa de presença | Atraso é só de quem ainda vai; "não vou conseguir ir" é recusa ou cancelamento | R15, R35 |
+| 9 | Fala própria antes de transferir contra "responda só com o texto da ferramenta" | Só o texto da ferramenta | R15, R17, R24, R28, R30, R36, R39 |
+| 10 | Barbeiro só da equipe: cadastro antes contra "já sou cliente"; remarcar agendamento que já é com ele | Quem diz que já é cliente não é cadastrado de novo; remarcar agendamento com ele transfere; cancelar segue liberado | R21, R39 |
+| 11 | `ja_cliente` contra `outra_pessoa` | Outra pessoa que já é cliente segue a regra "Outra pessoa" | R24, R36 |
+| 12 | Cadastro: a primeira mensagem voltava como pendência depois do cadastro | O trecho da primeira mensagem saiu; depois do cadastro o agente chama `agendar` com o horário escolhido | R21, R26, R32 |
+| 13 | Corrida ("não repita o resumo") contra "peça a confirmação de novo" | A ferramenta do turno manda | sem roteiro |
+| 14 | Informação que o agente não tem: duas perguntas na mesma mensagem | A equipe vira afirmação; a única pergunta é o convite para agendar | R13 |
+| 15 | Busca em vários dias contra "nunca diga que há horários sem a lista" | Para no primeiro dia com horário e manda a lista dele | R37 |
+
+Cobertura: cada roteiro declara em `cobre` os conflitos que exercita, e `tests/test_suite_validacao.py` exige que os 15 tenham roteiro ou justificativa. Sem roteiro, com motivo:
+
+- **4 (`meus_agendamentos` de novo):** o efeito não aparece na conversa; exigiria contar as chamadas de ferramenta por turno, que não são gravadas.
+- **13 (corrida):** depende de duas mensagens chegarem fora de ordem; a regra de código por trás é coberta pelo teste ao vivo da etapa 1.
+- **Parte do 10 (remarcar agendamento que já é com um barbeiro só da equipe):** exigiria um agendamento real com ele, o que a cláusula pétrea proíbe; a barreira de código tem teste unitário.
+
+Outros pontos da etapa:
+
+- **"Sim" com proposta e lembrete abertos (item 11):** o contexto passou a dizer qual das duas perguntas foi a última, pelo relógio (`bvUltimaPergunta`).
+- **Código das ferramentas de outra pessoa:** removido de `shared/graces.js`, da configuração (`terceiro.*`), do `Contexto` e dos testes.
+- **Roteiros novos:** R27 retomada, R28 ida e volta da fila humana, R29 pacote, R30 laço e irritação, R31 "sim" com proposta e lembrete abertos, R32 cadastro em pedaços. Para cobrir os conflitos do prompt: R33 cancelar sem dizer qual, R34 "sim" depois da oferta de outro horário, R35 recusa de presença e cancelamento, R36 outra pessoa que já é cliente, R37 busca em vários dias, R38 laço em lista, R39 cliente do barbeiro só da equipe sem cadastro. A suíte ganhou os passos `equipe`, `fila_humana`, `passar_horas`, `lembrete` e `tocar_texto`, e a conferência das escritas na agenda (`escritas`).
+- **Tamanho do prompt:** o prompt fixo não encolheu (cada conflito resolvido acrescenta a exceção); o contexto do cliente sem cadastro ficou cerca de 20% menor.
+
+O que os roteiros de cobertura acharam (e que os 32 anteriores não pegavam), já corrigido:
+
+| Achado | Correção |
+|---|---|
+| Confirmação do cancelamento saía só "Prontinho!": a frase com o nome do barbeiro de teste (ou do barbeiro só da equipe) era cortada na saída | O resumo do cancelamento e a lista de `meus_agendamentos` não levam mais esses nomes ao modelo; o agendamento com barbeiro da equipe vai marcado como `so_equipe` (fecha o item 21) |
+| Depois de cancelar, o agente não oferecia outro horário, e o "sim" a essa oferta virava "já está cancelado" | A oferta vem na orientação da ferramenta; o contexto da ação concluída cita a pergunta que o agente fez depois dela (`bvContextoFeita`) |
+| Laço em lista: a mesma pergunta saía três vezes, sem oferecer a equipe | Cada oferta nasce com a hora (`opcoes.em`); a lista volta junto na segunda vez (`bvRepetePergunta`) e, na terceira, a resposta é trocada pelo texto fixo que oferece a equipe (`bvTerceiraVez`, `textos.laco`) |
+| No toque em "Remarcar" o agente perguntava "qual opção prefere?": a orientação da ferramenta só existe no turno em que ela é chamada | A decisão do cancelamento leva o significado das opções no contexto enquanto estiver aberta (`bvContextoOferta`) |
+| Quem dizia ser cliente do barbeiro só da equipe, em número sem cadastro, recebia pedido de cadastro | A regra diz que quem já é cliente (da loja ou do barbeiro) não é cadastrado, nem para transferir |
+| Diante de "tanto faz, você que sabe", o agente afirmava qual opção era "a mais procurada" | A regra do laço proíbe escolher pelo cliente e afirmar preferência sem dado |
+| No pedido de cancelamento o texto perguntava só "posso cancelar?" | A orientação manda perguntar no texto "remarcar ou cancelar mesmo?" |
+
+Sobre a suíte: a avaliadora aprovou conversas que descumpriam a expectativa (R33 e R38 em algumas execuções), então as conversas dos roteiros novos foram lidas uma a uma. A transcrição passou a mostrar a lista reenviada no turno, a fala da equipe vale como fonte, e um roteiro pode levar referência própria (`referencia`). Com 39 roteiros julgados por modelo, uma rodada inteira sem variação é difícil: de cinco rodadas completas de 39, duas fecharam 39 de 39 e três fecharam 38, cada uma com um roteiro diferente.
+
+Em aberto, para decisão do owner: o texto da recusa de presença pergunta "remarcar ou cancelar?" em texto livre (`textos.confirmacao_recusada`, enviado pelo `bv-confirmacao`), não em lista.
