@@ -71,7 +71,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// Turno que estourou o tempo sem resposta (PROD, 2026-11-15: a mensagem de um cliente ficou 2h25 parada): o cliente recebe o texto\n// de contingencia e, quando escrever de novo, a mensagem antiga e reprocessada junto. TESTE: so envia para teste.contatos_escrita.\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}' };\nconst dig = (s) => String(s || '').replace(/\\D/g, '');\nconst escrita = {{BV:teste.contatos_escrita}}.map(dig);\nconst texto = \"{{BV:textos.contingencia}}\";\nreturn $input.all().map((x) => x.json).filter((l) => l.contato_id != null).map((l, k) => ({ json: { contato_id: l.contato_id, texto,\n  req: bvMTexto({ texto }, l.telefone, cfg), simulado: '{{BV:ambiente}}' === 'integracao' && !escrita.includes(dig(l.telefone)) }, pairedItem: k }));"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// Turno que estourou o tempo sem resposta (PROD, 2026-11-15: a mensagem de um cliente ficou 2h25 parada): o cliente recebe o texto\n// de contingencia e, quando escrever de novo, a mensagem antiga e reprocessada junto. TESTE: so envia para teste.contatos_escrita.\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}' };\nconst dig = (s) => String(s || '').replace(/\\D/g, '');\nconst escrita = {{BV:teste.contatos_escrita}}.map(dig);\nconst contingencia = \"{{BV:textos.contingencia}}\"; // o encerramento da fila humana traz o proprio texto\nreturn $input.all().map((x) => x.json).filter((l) => l.contato_id != null).map((l, k) => ({ json: { contato_id: l.contato_id, texto: l.texto || contingencia,\n  req: bvMTexto({ texto: l.texto || contingencia }, l.telefone, cfg), simulado: '{{BV:ambiente}}' === 'integracao' && !escrita.includes(dig(l.telefone)) }, pairedItem: k }));"
       },
       "id": "ec4a7ca8-4613-5306-b42d-29861712c1a1",
       "name": "Montar aviso",
@@ -192,7 +192,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT c.id AS contato_id, c.ticket_id FROM contatos c WHERE $1::boolean AND c.fila_id = $2::int AND c.ticket_id IS NOT NULL AND c.fila_interacao_em < now() - make_interval(mins => $3::int) AND (NOT $4::boolean OR c.fila_ultima_de = 'equipe') ORDER BY c.fila_interacao_em LIMIT 20",
+        "query": "SELECT c.id AS contato_id, c.ticket_id, coalesce(c.fila_ultima_de, '') AS ultima_de FROM contatos c WHERE $1::boolean AND c.fila_id = $2::int AND c.ticket_id IS NOT NULL AND c.fila_interacao_em < now() - make_interval(mins => $3::int) AND (NOT $4::boolean OR c.fila_ultima_de = 'equipe') ORDER BY c.fila_interacao_em LIMIT 20",
         "options": {
           "queryReplacement": "={{ ['{{BV:handoff.encerrar_ativo}}' === 'True', {{BV:handoff.setor_id}}, {{BV:handoff.encerrar_apos_min}}, '{{BV:handoff.encerrar_so_respondido}}' === 'True'] }}"
         }
@@ -252,9 +252,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH ok AS (UPDATE contatos SET fila_id = NULL, fila_interacao_em = NULL, fila_ultima_de = NULL, atualizado_em = now() WHERE id = $1::bigint AND $2::int BETWEEN 200 AND 299 RETURNING id), cv AS (UPDATE conversas SET pedido = pedido - 'handoff', atualizado_em = now() FROM ok WHERE conversas.contato_id = ok.id RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'fila_humana|encerrar', 'updateAPI', 'encerrar_falhou', $2::int, $1::bigint WHERE $2::int NOT BETWEEN 200 AND 299 RETURNING 1) SELECT (SELECT count(*) FROM ok) AS encerrado",
+        "query": "WITH ok AS (UPDATE contatos SET fila_id = NULL, fila_interacao_em = NULL, fila_ultima_de = NULL, atualizado_em = now() WHERE id = $1::bigint RETURNING id, telefone), cv AS (UPDATE conversas SET pedido = pedido - 'handoff', atualizado_em = now() FROM ok WHERE conversas.contato_id = ok.id RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'fila_humana|encerrar', 'updateAPI', 'encerrar_falhou', $2::int, $1::bigint WHERE $2::int NOT BETWEEN 200 AND 299 RETURNING 1) SELECT ok.id AS contato_id, ok.telefone, $4::text AS texto FROM ok WHERE $2::int BETWEEN 200 AND 299 AND $3::text = 'cliente'",
         "options": {
-          "queryReplacement": "={{ [$('Filas paradas').item.json.contato_id, Number($json.statusCode || 0)] }}"
+          "queryReplacement": "={{ [$('Filas paradas').item.json.contato_id, Number($json.statusCode || 0), $('Filas paradas').item.json.ultima_de, \"{{BV:textos.fila_sem_resposta}}\"] }}"
         }
       },
       "id": "5f644a7f-84ba-5000-85e6-647d366ad003",
@@ -373,6 +373,17 @@
         [
           {
             "node": "Gravar encerramento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar encerramento": {
+      "main": [
+        [
+          {
+            "node": "Montar aviso",
             "type": "main",
             "index": 0
           }

@@ -4,15 +4,15 @@
 // queueId do evento do Chat Master (numero, texto numerico, 'null' ou ausente) -> inteiro ou null
 function bvFila(b) { return b && /^\d+$/.test(String(b.queueId)) ? Number(b.queueId) : null; }
 
-// Mensagem enviada pela equipe na fila humana (from_internal, fromMe) -> { telefone, fila, id, texto } ou null. O texto de
+// Mensagem enviada pela equipe na fila humana (from_internal, fromMe) -> { telefone, fila, id, texto, ticket } ou null. O texto de
 // encaminhamento do proprio agente chega como eco ja na fila humana: nao conta como resposta da equipe.
-function bvEquipe(b, filaHumana, textoAgente) {
+function bvEquipe(b, filaHumana, textoAgente) { // ticket: chamadoId do evento (e ele que o vigia encerra)
   if (!b || b.acao !== 'from_internal' || b.fromMe !== true || bvFila(b) !== Number(filaHumana)) return null;
   const m = b.mensagem && !Array.isArray(b.mensagem) && typeof b.mensagem === 'object' ? b.mensagem : null;
   if (!m || typeof b.sender !== 'string' || !b.sender || b.isGroup === true) return null;
   const texto = typeof m.body === 'string' && m.body.trim() ? m.body.slice(0, 4000) : null;
   if (texto && textoAgente && texto.includes(String(textoAgente))) return null;
-  return { telefone: b.sender, fila: bvFila(b), id: m.id === undefined || m.id === null ? null : String(m.id), texto };
+  return { telefone: b.sender, fila: bvFila(b), id: m.id === undefined || m.id === null ? null : String(m.id), texto, ticket: /^\d+$/.test(String(b.chamadoId)) ? Number(b.chamadoId) : null };
 }
 
 function bvNormalizar(evento, opcoes) {

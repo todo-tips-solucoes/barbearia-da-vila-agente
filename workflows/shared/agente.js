@@ -87,7 +87,8 @@ function bvSepararOpcoes(texto, oferta) {
 
 const bvConvite = (cfg) => (cfg.textos && cfg.textos.convite_agendar) || 'Quer que eu já veja um horário pra você?';
 
-function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
+// aguardaConfirmacao: o turno criou uma proposta (o texto e o resumo com o pedido de confirmacao).
+function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmacao = false) {
   const { max_mensagens: maxMsg, max_chars_mensagem: maxChars } = cfg.saida;
   const { corpo, bloco } = bvSepararOpcoes(textoModelo, oferta);
   const testeId = cfg.graces && cfg.graces.barbeiro_teste_id;
@@ -108,7 +109,10 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   fecha();
   const todos = oferta && oferta.completa && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
   const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].replace(/^\s*[-*]\s*/, '').trim()).filter(Boolean);
-  const ids = !idsModelo.length && ofertaNova && oferta && Array.isArray(oferta.itens) ? oferta.itens.map((i) => i.id) : idsModelo;
+  // Resumo com pedido de confirmacao nao leva a lista de horarios da busca do mesmo turno: o cliente tocava num horario e recebia
+  // "Posso confirmar?" de novo (16/11, 3 conversas). A resposta ao resumo e texto (sim / nao / outro horario).
+  const semLista = aguardaConfirmacao && !!oferta && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
+  const ids = semLista ? [] : (!idsModelo.length && ofertaNova && oferta && Array.isArray(oferta.itens) ? oferta.itens.map((i) => i.id) : idsModelo);
   const maxIt = cfg.lista.max_itens;
   // Oferta completa de horarios: o modelo so sinaliza que e uma lista; o codigo envia todos os itens, em ordem, em listas de ate max_itens.
   // shortcut: acima de max_mensagens*max_itens (40) corta no fim; upgrade: linha "ver mais" (research Decision 3), nunca observado.
@@ -137,6 +141,8 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false) {
   if (ult && !itens.length && !escrita && !saida.some((m) => m.texto.includes('?')) && saida.some((m) => /R\$\s?\d/.test(m.texto))) {
     ult.texto = `${ult.texto} ${bvConvite(cfg)}`;
   }
+  // o modelo escreve negrito em Markdown (**x**); no WhatsApp o negrito e *x* e os dois asteriscos saiam crus (16/11)
+  for (const m of saida) m.texto = m.texto.replace(/\*\*([^*\n]+)\*\*/g, '*$1*');
   return saida;
 }
 
@@ -262,6 +268,18 @@ function bvSaudar(saida, sessaoNova) {
 
 // Sessao nova se a ultima entrada passou da janela: pedido vira pedido_anterior abandonado e opcoes zera (data-model).
 // A retomada (retomadaMs) conta como atividade: quem responde a ela dentro da janela continua de onde parou (owner, 2026-11-16).
+// Fila humana (owner, 2026-11-16): com o ticket nela o agente nao interage, mesmo em sessao nova; fora dela ele responde.
+// Sem fila no evento, vale a marca da transferencia na sessao. `limpar`: o ticket saiu da fila humana (a equipe devolveu ou
+// encerrou) e a marca ficou para tras: sem apaga-la, toda ferramenta recusava com handoff_ativo (revisao de 17/11).
+// porFila desligado: volta a valer so a marca da transferencia na sessao.
+function bvTransferido({ porFila, filaHumana, fila, sessaoNova, handoff }) {
+  const f = fila === null || fila === undefined || fila === '' ? null : Number(fila);
+  const marca = !sessaoNova && !!handoff;
+  if (!porFila) return { transferido: marca, limpar: false };
+  const naHumana = f === Number(filaHumana);
+  return { transferido: naHumana || (f === null && marca), limpar: f !== null && !naHumana && !!handoff };
+}
+
 function bvRecencia(p) {
   const ult = Math.max(p.ultimaEntradaMs == null ? -Infinity : p.ultimaEntradaMs, p.retomadaMs == null ? -Infinity : p.retomadaMs);
   // Resposta a retomada (16/11: "Fecho" 4 h 30 depois caiu em sessao nova e virou "ate mais"): a janela depois dela e maior
@@ -302,7 +320,7 @@ Busca exata: nunca diga que um barbeiro tem ou não tem horário sem uma consult
 Aja em vez de perguntar o que dá para buscar: "Pedro tem?" chama horarios_livres com o Pedro, para a lista mostrar só os horários dele; "semana que vem", "qualquer dia" ou "qual dia ele tem?" chama horarios_livres para os próximos dias de funcionamento (uma chamada por dia, em sequência, até achar e no máximo 6) e mostra os dias com horário. Cliente sem cadastro: siga as instruções do contexto (dúvidas e horários livres sem cadastro; cadastro só para agendar). Não peça confirmação do que entendeu quando a intenção é clara; só a escrita (agendar, reagendar, cancelar) pede confirmação.
 ${bvRegraBarbeiros(cfg)}Correção não apaga o resto: se o cliente trocar o serviço, o dia ou o período, mantenha o barbeiro e os demais dados já escolhidos e refaça a busca no mesmo turno; horário de outro serviço não vale para o novo. Se o serviço foi suposto de uma pergunta anterior, diga para qual serviço buscou. Horário: com o dia definido, se o cliente ainda não disse período, hora nem "tanto faz", pergunte primeiro, em texto e sem lista, qual horário fica melhor pra ele ("Qual horário fica melhor pra você?"); não busque antes da resposta. Com a resposta, chame horarios_livres: hora aproximada ("umas 14h", "fim da tarde" vira 17:00) vai em hora=HH:mm, e a lista traz só os inícios perto dela; manhã, tarde ou noite vai em periodo; "tanto faz" ou "qualquer horário" busca sem filtro e mostra todos os inícios em que o serviço cabe. Referência já dada ("mais tarde", "depois das 15h") dispensa a pergunta. Nunca diga que encontrou, achou ou que há horários sem mandar a lista deles nesta mesma resposta; se ainda vai perguntar o horário preferido, só pergunte. Se o cliente perguntar quais horários há ("quais horários tem?", "tem horário hoje?", "o que tem disponível?"), mostre a lista em vez de perguntar a preferência. Quem escolhe é o cliente: se o horário, o dia ou o barbeiro que ele pediu não existir, diga isso e mostre as opções; nunca escolha você um horário, um dia ou um serviço que ele não disse e nunca peça confirmação de algo que ele não escolheu (a exceção é quando a busca trouxe um único horário). Se ele aceitar outro barbeiro ou disser que tanto faz, busque com qualquer=true. Se o barbeiro não tiver mais horário no dia pedido, diga isso com todas as letras e pergunte antes de mudar de dia. Não diga que a lista é de um período ou hora que ele não pediu; se a ferramenta avisar que trouxe os mais próximos, diga isso ao cliente. Quando o cliente precisar escolher serviço, barbeiro ou horário, chame a ferramenta e mande as opções em vez de perguntar em texto aberto (ex.: pedido para criança: listar_servicos com "infantil"). Ao listar serviços, você ainda não buscou horários: nunca diga "encontrei" nem cite o dia ou o período nessa mensagem (isso soa como horário achado); pergunte só o serviço ("Qual serviço você quer?") e use o dia e o período na busca de horários, depois. Ao mandar opções, termine o texto com uma pergunta curta (ex.: "Qual fica melhor pra você?"). As opções que uma ferramenta devolve neste turno vão em lista junto com a sua resposta: o texto precisa pedir exatamente essa escolha, numa frase completa (nunca deixe a frase pela metade contando que a lista a termine); se não vai pedir essa escolha agora, não chame a ferramenta que lista. Toda múltipla escolha vai como opções: termine a resposta com um bloco "OPCOES:" e uma linha "<id> | <título>" por opção, usando só ids que a ferramenta ofereceu.
 Dois ou três serviços na mesma visita: chame horarios_livres com id_opcoes_servicos (os ids de serviço oferecidos), sem barbeiro; as opções já são sequências prontas, e agendar com a opção escolhida marca todos. Se vier sem_barbeiro_unico, pergunte com as opções de modo e repasse a resposta em id_opcao. Cancelar vários de uma vez: id_opcoes_agendamentos.
-Outra pessoa (owner, 2026-11-16): este número agenda para quem está no cadastro dele. Se o cadastro deste número for de outra pessoa, ou o agendamento for para outra pessoa que tem cadastro em outro número (marido, amigo, filho com cadastro próprio), chame transferir_atendimento com motivo outra_pessoa: na primeira vez a ferramenta não transfere e devolve o texto que pede o contato pelo número do cadastro de quem vai ser atendido (responda só com ele); se o cliente responder que não é possível, chame de novo com o mesmo motivo e ela transfere. Não use buscar_pessoa nem cadastrar_terceiro. Criança ou dependente sem cadastro próprio, trazido pelo titular deste número: agende no cadastro do titular, com o serviço certo (ex.: infantil). Nunca mostre celular de ninguém.
+Outra pessoa (owner, 2026-11-16): este número agenda para quem está no cadastro dele. Se o cadastro deste número for de outra pessoa, ou o agendamento for para outra pessoa que tem cadastro em outro número (marido, amigo, filho com cadastro próprio), chame transferir_atendimento com motivo outra_pessoa: na primeira vez a ferramenta não transfere e devolve o texto que pede o contato pelo número do cadastro de quem vai ser atendido (responda só com ele); se o cliente responder que não é possível, chame de novo com o mesmo motivo e ela transfere. Criança ou dependente sem cadastro próprio, trazido pelo titular deste número: agende no cadastro do titular, com o serviço certo (ex.: infantil). Nunca mostre celular de ninguém.
 Agendamento que já existe: se o cliente falar de um horário que diz já ter ("manter hoje às 16h", "meu horário de sexta", "muda o meu"), chame meus_agendamentos antes de qualquer outra coisa e trate como esse agendamento; nunca crie outro no mesmo dia sem conferir. Com mais de um agendamento e sem ele dizer qual, pergunte qual deles mandando a lista devolvida pela ferramenta, sem afirmar você qual é o mais próximo; se ele responder sem escolher, mande a lista de novo.
 Sem laço: não faça a mesma pergunta mais de duas vezes. Na segunda vez sem resposta útil, mude o jeito (mande as opções em lista ou sugira a mais provável); se ainda assim não andar, ofereça passar para a equipe. Sinal de irritação (palavrão, "robô", "não entende", "lixo"): peça desculpas em uma frase e, na mesma resposta, ofereça passar para a equipe; se ele aceitar, transferir_atendimento com motivo nao_resolvi.
 Pacote, plano ou combo já pago: você não vê nem abate pacote. Não discuta o valor: diga que o valor mostrado é o avulso e que a equipe confere o pacote. Siga o agendamento normalmente e, depois que o horário estiver confirmado e agendado, chame transferir_atendimento com motivo pacote; nesse caso responda com a confirmação do agendamento seguida do texto da ferramenta. Não transfira antes de agendar.
@@ -357,5 +375,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvDatas, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvDatas, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }
