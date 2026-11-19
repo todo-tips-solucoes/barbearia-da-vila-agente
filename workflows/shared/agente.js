@@ -134,6 +134,16 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
   // shortcut: acima de max_mensagens*max_itens (40) corta no fim; upgrade: linha "ver mais" (research Decision 3), nunca observado.
   const itens = todos && ids.length ? oferta.itens.slice(0, maxMsg * maxIt)
     : ids.map((id) => bvResolverOpcao(id, oferta)).filter((r) => r.ok).map((r) => r.item).slice(0, maxIt);
+  // Rede (19/11): lista de horarios de um dia com texto que so cita OUTRAS datas => frase montada da oferta. A regra de uma busca por
+  // turno (bv-graces) evita o caso conhecido; isto cobre o que ela nao alcanca (data inventada, caminho novo).
+  const dOf = itens.length && oferta.tipo === 'horario' ? String((itens[0].valor || {}).data || '') : '';
+  const citadas = dOf ? [...msgs.join(' ').matchAll(/(?<![\d\/])(\d{1,2})\/(\d{1,2})(?![\d\/])/g)].map((m) => `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}`) : [];
+  // texto que avisa de uma escrita ja feita ("cancelei o de 20/11; para sábado tenho estes") fica: o aviso nao pode sumir
+  // e o texto que fala do dia da lista pelo nome ("na sexta, 27/11, não tem; o primeiro dia é sábado") tambem fica.
+  const [semOf, ddmmOf] = dOf ? bvDiaSemana(dOf).split(', ') : ['', ''];
+  const txtN = bvNormalizarDescricao(msgs.join(' ')).toLowerCase();
+  const falaDoDia = !!dOf && (txtN.includes(bvNormalizarDescricao(semOf).split('-')[0]) || /(?:^|[^a-z])(?:hoje|amanha)(?:$|[^a-z])/.test(txtN));
+  if (citadas.length && !citadas.includes(ddmmOf) && !falaDoDia && !msgs.some((m) => BV_ESCRITA_FEITA.test(bvNormalizarDescricao(m)))) msgs.splice(0, msgs.length, `Para ${semOf}, ${ddmmOf}, os horários são estes.`);
   const nListas = Math.max(1, Math.ceil(itens.length / maxIt));
   const saida = msgs.slice(0, maxMsg - (nListas - 1)).map((texto, i) => ({ n: i + 1, tipo: 'texto', texto }));
   if (saida.length && itens.length) {
@@ -280,6 +290,27 @@ function bvSemRepetir(saida, itens, historico, ofertaNova, janelaMs = 120000) {
 
 // K1 (suite-validacao): 1a resposta da sessao sempre cumprimenta; o modelo as vezes esquece.
 const BV_SAUDACAO = /^\s*(oi|olá|ola|opa|bom dia|boa tarde|boa noite|e aí|eai|fala|hey)(?=[\s,!.?]|$)/i; // sem \b: ele nao fecha palavra depois de á/í
+// A mensagem e so um cumprimento ("Bom dia tudo bem") ou um sinal sem conteudo (".", "?")?
+function bvSoSaudacao(texto) {
+  let t = String(texto || '').trim();
+  if (!t || t.length > 60) return false;
+  if (!/[\p{L}\p{N}\p{Extended_Pictographic}]/u.test(t)) return true;
+  let n = 0;
+  while (BV_SAUDACAO.test(t)) { t = t.replace(BV_SAUDACAO, '').replace(/^[\s,!.?]+/, ''); n += 1; }
+  return n > 0 && !t.replace(/tudo (?:bem|bom)|como vai|[^\p{L}\p{N}\p{Extended_Pictographic}]+/giu, ''); // emoji e conteudo ("Opa 👍" responde)
+}
+// Pergunta em aberto (17/11): com uma pergunta feita ha pouco, o cliente mandou "Bom dia tudo bem" e o agente recomecou do zero
+// ("Como posso ajudar?"). A linha so existe quando a mensagem nova e so cumprimento e a ultima saida do agente e uma pergunta recente.
+// maxMin 30: sem base medida (o caso real foi de segundos); acima disso vale a regra da conversa antiga, que nao e retomada num "Oi".
+function bvPerguntaAberta(historico, textoCliente, agoraMs, maxMin = 30) {
+  if (!bvSoSaudacao(textoCliente)) return '';
+  const ult = (Array.isArray(historico) ? historico : []).filter(Boolean).pop(); // a pergunta tem de ser a ultima coisa da conversa: fala do cliente depois dela ja e resposta
+  if (!ult || ult.direcao !== 'saida' || ult.equipe || !String(ult.conteudo || '').includes('?')) return '';
+  const min = Math.round((agoraMs - Date.parse(ult.criado_em)) / 60000);
+  const q = bvPerguntas(historico).pop();
+  if (!q || !(min >= 0 && min <= maxMin)) return '';
+  return `\nPergunta em aberto (dado): há ${min} min você perguntou "${bvNeutralizar(q)}" e o cliente ainda não respondeu. A mensagem nova é só um cumprimento: responda a ele em poucas palavras e faça essa mesma pergunta de novo; não recomece o atendimento.`;
+}
 function bvSaudar(saida, sessaoNova) {
   if (!saida.length) return saida;
   if (!sessaoNova) { // no meio da conversa, o "Oi, Paulo!" do modelo sai
@@ -405,6 +436,12 @@ function bvContextoOferta(opcoes) {
   const itens = opcoes && Array.isArray(opcoes.itens) ? opcoes.itens : [];
   if (!itens.length) return '';
   let t = '\nÚltima oferta mostrada ao cliente (dado; se a resposta dele corresponder a uma destas, use o id na ferramenta): ' + itens.map((o) => o.id + ' = ' + o.rotulo).join('; ');
+  if (opcoes.tipo === 'decisao_sem_horario') {
+    const o = (itens.find((x) => x.valor && x.valor.acao === 'outros_barbeiros') || {}).valor;
+    t += '. É a decisão depois de uma busca sem horário: "Outro horário no dia" = pergunte qual horário e busque de novo; "Outro dia" = pergunte qual dia e busque com o mesmo barbeiro'
+      + (o ? `; "Ver outros barbeiros" = horarios_livres com qualquer=true e data ${o.data}${o.ag ? ` e id_opcao_agendamento ${o.ag}` : ''}` : '') + '. Não mande esta lista de novo depois da escolha.';
+  }
+  if (opcoes.tipo === 'barbeiro' && itens.some((x) => x.valor && x.valor.qualquer)) t += '. É a pergunta do barbeiro: "tanto faz", "qualquer um" ou "não conheço nenhum" é a resposta "Qualquer barbeiro" (ele escolheu, não você): chame horarios_livres com qualquer=true e não mande esta lista de novo.';
   if (opcoes.tipo === 'decisao_cancelamento') t += '. É a decisão sobre um agendamento: "Remarcar" = pergunte o dia e o horário que ele prefere e só depois busque (horarios_livres com id_opcao_agendamento); "Cancelar mesmo" = é a confirmação do cancelamento, chame cancelar só com o proposta_id da confirmação pendente. Não mande esta lista de novo depois da escolha.';
   return t;
 }
@@ -491,5 +528,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }
