@@ -603,3 +603,43 @@ class FilaHumana(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Etapa5(unittest.TestCase):  # atendimentos de 17/11 e decisao do owner de 18/11
+    def setUp(self):
+        self.nos = {n["name"]: n for n in json.load(open(os.path.join(RAIZ, "workflows", "sub", "bv-confirmacao.json"), encoding="utf-8"))["nodes"]}
+
+    def test_recusa_vai_em_lista_com_proposta_de_cancelar(self):
+        self.assertIn("d.decisao ? bvMListaDecisao({ texto: d.texto }, d.telefone, cfg) : bvMTexto(", self.nos["Compor envio"]["parameters"]["jsCode"])
+        self.assertIn("const decisao = code === 'recusada' ? bvMDecisaoCancelar(row, req && req.idAgenda) : null;", self.nos["Desfecho"]["parameters"]["jsCode"])
+        q = self.nos["Registrar"]["parameters"]["query"]
+        # uma proposta pendente por contato: a de cancelar entra no lugar da pendente, na mesma instrucao
+        self.assertIn("ON CONFLICT (contato_id) WHERE estado = 'pendente' DO UPDATE SET id = EXCLUDED.id, turno_id = EXCLUDED.turno_id, acao = EXCLUDED.acao, dados = EXCLUDED.dados", q)
+        self.assertIn("opcoes = CASE WHEN $18::jsonb IS NULL THEN conversas.opcoes ELSE EXCLUDED.opcoes END", q)
+        self.assertIn("jsonb_build_object('em',", q)  # a oferta nasce com a hora, como as do bv-graces
+        self.assertIn("CASE WHEN $18::jsonb IS NOT NULL THEN 'lista' ELSE 'texto' END", q)
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertTrue(self.nos["Registrar"]["parameters"]["options"]["queryReplacement"].endswith("d.decisao ? JSON.stringify(d.decisao.dados) : null, d.decisao ? JSON.stringify(d.decisao.opcoes) : null]; })() }}"))
+        for a in ("integracao", "producao"):
+            t = json.load(open(os.path.join(RAIZ, "config", "ambientes", a + ".json"), encoding="utf-8"))["textos"]
+            self.assertEqual(t["confirmacao_recusada"], "Tudo bem, avisei a equipe. Você prefere remarcar ou cancelar mesmo?")
+            self.assertIn("{lista}", t["confirmacao_desatualizada_atual"])
+            self.assertTrue(t["confirmacao_desatualizada_sem"])
+
+    def test_desfecho_recusada_e_desatualizada_renderizados(self):
+        ent = {"ok": True, "contato_id": "1", "origem": "id", "confirmado": False, "mensagem_id": "7"}
+        row = {"id": 9, "inicio": "2026-11-19T15:00:00", "dados": {"servico": "corte adulto", "barbeiro": "Ze"}, "telefone": "+5500000000500", "graces_cliente_id": "c1", "graces_agendamento_id": "ag-1"}
+        base = {"Resolver claim": [{"ent": ent, "row": row, "req": {"idAgenda": "ag-1", "confirmado": False}}], "Normalizar": [ent]}
+        d = rodar("workflows/sub/bv-confirmacao.json", "Desfecho", [{"code": "recusada", "status": 200}], base)[0]
+        self.assertEqual(d["texto"], "Tudo bem, avisei a equipe. Você prefere remarcar ou cancelar mesmo?")
+        self.assertEqual(d["decisao"]["dados"]["idAgenda"], "ag-1")
+        self.assertEqual(d["decisao"]["opcoes"]["tipo"], "decisao_cancelamento")
+        e = rodar("workflows/sub/bv-confirmacao.json", "Compor envio", [{}], {"Desfecho": [dict(d, telefone="+5511999998888")]})[0]
+        self.assertEqual(e["path"], "/api/messages/whatsmeow/sendListPRO")
+        self.assertEqual([x["title"] for x in e["body"]["body"]["List"]], ["Remarcar", "Cancelar mesmo"])
+        atual = [{"servico": "corte com maquina", "inicio": "2026-11-17T20:40:00"}]
+        d2 = rodar("workflows/sub/bv-confirmacao.json", "Desfecho", [{"code": "desatualizada", "status": 200, "atual": atual}], base)[0]
+        self.assertIn("corte com maquina, terça-feira (17/11) às 20:40", d2["texto"])
+        self.assertIsNone(d2["decisao"])
+        e2 = rodar("workflows/sub/bv-confirmacao.json", "Compor envio", [{}], {"Desfecho": [dict(d2, telefone="+5511999998888")]})[0]
+        self.assertEqual(e2["path"], "/api/messages/send")

@@ -397,3 +397,41 @@ console.log('mensagens.test.js retomada ok');
   assert.deepEqual([b.acao, b.req.body.body], ['criar', 'Oi, Paulo! Seu barba design com Kiel amanhã, às 14:00.']);
 }
 console.log('mensagens.test.js lembrete unico por grupo ok');
+
+{ // Etapa 5 (atendimentos de 17/11 e decisao do owner de 18/11)
+  const m = require('../workflows/shared/mensagens.js');
+  // recusa de presenca: a decisao vai em lista e deixa a proposta de cancelar e a oferta prontas
+  const row = { id: 9, inicio: '2026-11-19T15:00:00', dados: { servico: 'corte adulto', barbeiro: 'Pedro', recorrente: true }, telefone: '+5511999998888' };
+  const d = m.bvMDecisaoCancelar(row, 'ag-1');
+  assert.deepEqual(d.dados, { idAgenda: 'ag-1', horaInicio: '2026-11-19T15:00:00', recorrente: true, servico: 'corte adulto', resumo: 'Cancelar corte adulto em quinta-feira (19/11) às 15:00' });
+  assert.deepEqual(d.opcoes, { tipo: 'decisao_cancelamento', itens: [{ id: '1', rotulo: 'Remarcar', valor: 'remarcar' }, { id: '2', rotulo: 'Cancelar mesmo', valor: 'cancelar' }] });
+  assert.ok(!JSON.stringify(d).includes('Pedro')); // o resumo nao leva o barbeiro (pode ser um que o agente nunca mostra)
+  assert.equal(m.bvMDecisaoCancelar(row, null), null);
+  assert.equal(m.bvMDecisaoCancelar({ dados: {} }, 'ag-1'), null);
+  const l = m.bvMListaDecisao({ texto: 'Você prefere remarcar ou cancelar mesmo?' }, '+55 11 99999-8888', { wid: '145', fila: '7', botao: 'Responder', topo: 'Opções' });
+  assert.equal(l.path, '/api/messages/whatsmeow/sendListPRO');
+  assert.deepEqual(l.body.body.List, [{ RowId: '1', title: 'Remarcar', desc: '' }, { RowId: '2', title: 'Cancelar mesmo', desc: '' }]);
+  assert.deepEqual([l.body.number, l.body.whatsappId, l.body.queueId], ['5511999998888', '145', '7']);
+  // lembrete desatualizado: com a leitura do cliente, diz o que esta marcado agora
+  const textos = { confirmacao_desatualizada: 'Esse horário não está mais valendo.', confirmacao_desatualizada_atual: 'Desatualizado. Agora: {lista}.', confirmacao_desatualizada_sem: 'Desatualizado e sem horário marcado.' };
+  const corpo = [{ idAgenda: 'x', horaInicio: '2026-11-17T20:40:00', descricaoServico: 'corte com maquina', idStatusAgenda: 1 }];
+  const c1 = m.bvMConfConferir({ status: 200, body: corpo }, { graces_agendamento_id: 'velho', inicio: '2026-11-17T13:20:00', graces_cliente_id: 'c1' }, true);
+  assert.deepEqual(c1, { code: 'desatualizada', status: 200, atual: [{ servico: 'corte com maquina', inicio: '2026-11-17T20:40:00' }] });
+  assert.equal(m.bvMConfTexto('desatualizada', {}, 'id', textos, 2, c1.atual), 'Desatualizado. Agora: corte com maquina, terça-feira (17/11) às 20:40.');
+  assert.equal(m.bvMConfTexto('desatualizada', {}, 'id', textos, 2, []), 'Desatualizado e sem horário marcado.');
+  assert.equal(m.bvMConfTexto('desatualizada', {}, 'id', textos, 2, null), 'Esse horário não está mais valendo.'); // sem leitura do cliente: texto antigo
+  assert.equal(m.bvMConfTexto('desatualizada', {}, 'id', textos, 2), 'Esse horário não está mais valendo.');
+  // PROD 17/11: a ocorrencia da serie mudou de idAgenda; o agendamento do proprio cliente no mesmo inicio, ja confirmado, vale
+  const outroId = [{ idAgenda: 'novo', horaInicio: '2026-11-17T13:20:00', descricaoServico: 'corte com maquina', idStatusAgenda: 3 }];
+  const linha = { graces_agendamento_id: 'velho', inicio: '2026-11-17T13:20:00', graces_cliente_id: 'c1' };
+  assert.equal(m.bvMConfConferir({ status: 200, body: outroId }, linha, true).code, 'confirmada');
+  assert.equal(m.bvMConfConferir({ status: 200, body: outroId }, linha, false).code, 'desatualizada'); // recusa: so com o id do lembrete
+  assert.equal(m.bvMConfConferir({ status: 200, body: outroId }, { ...linha, graces_cliente_id: null }, true).code, 'desatualizada'); // leitura do dia: pode ser de outro cliente
+  assert.equal(m.bvMConfConferir({ status: 200, body: [{ ...outroId[0], idStatusAgenda: 2 }] }, linha, true).code, 'desatualizada'); // ainda nao confirmado na agenda
+  // leitura do dia inteiro (sem idCliente): nao lista os horarios de outros clientes
+  assert.equal(m.bvMConfConferir({ status: 200, body: corpo }, { graces_agendamento_id: 'velho', inicio: '2026-11-17T13:20:00' }, true).atual, null);
+  // contexto do agente depois da recusa: a decisao ja foi em lista
+  const ctx = m.bvMPromptConfirmacoes({ confirmacoes: [], pedido: { confirmacao_recusada: { idAgenda: 'ag-1', em: new Date().toISOString() } } }, Date.now(), 120, String);
+  assert.match(ctx, /a decisão "remarcar ou cancelar\?" já foi enviada a ele em lista: não a repita/);
+  console.log('mensagens.test.js recusa em lista e lembrete desatualizado ok');
+}

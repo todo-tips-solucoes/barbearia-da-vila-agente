@@ -400,7 +400,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         # horarios de segunda no mesmo turno, e a lista deles tem de sair (suite R8, 18/11)
         self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid AND p.acao NOT LIKE 'cancelar%') AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
         self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova, repete)", self.nos["Compor"]["parameters"]["jsCode"])
-        self.assertIn("bvTerceiraVez(out, histC, antes, ofertaNova) ? [{ n: 1, tipo: 'texto', texto: \"{{BV:textos.laco}}\" }] :", self.nos["Compor"]["parameters"]["jsCode"])
+        self.assertIn("bvTerceiraVez(out, histC, antes, ofertaNova, composta.some((x) => x.tipo === 'lista')) ? [{ n: 1, tipo: 'texto', texto: \"{{BV:textos.laco}}\" }] : composta;", self.nos["Compor"]["parameters"]["jsCode"])
         for amb in ("producao", "integracao"):
             self.assertIn("passe para a equipe", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"]["laco"])
         # etapa 4: a mesma pergunta pela segunda vez leva a lista junto; a terceira nao sai (o contexto manda oferecer a equipe)

@@ -54,6 +54,22 @@ function bvMLista(m, id, contato, cfg) {
       List: [{ RowId: `bvc:${id}:s`, title: cfg.titulo_sim, desc: '' }, { RowId: `bvc:${id}:n`, title: cfg.titulo_nao, desc: '' }] } } };
 }
 
+// Recusa de presenca (owner, 18/11): "remarcar ou cancelar?" vai em lista, com uma confirmacao de cancelamento pendente por tras.
+// O toque volta ao agente como texto ("Remarcar" / "Cancelar mesmo") e os ids sao os da oferta gravada na conversa.
+const BVM_DECISAO = [{ id: '1', rotulo: 'Remarcar', valor: 'remarcar' }, { id: '2', rotulo: 'Cancelar mesmo', valor: 'cancelar' }];
+function bvMListaDecisao(m, contato, cfg) {
+  const number = /@lid$/.test(String(contato)) ? String(contato) : bvMDig(contato);
+  return { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '1', queueId: cfg.fila || '0', whatsappId: cfg.wid,
+    body: { Desc: m.texto, ButtonText: cfg.botao, TopText: cfg.topo, List: BVM_DECISAO.map((o) => ({ RowId: o.id, title: o.rotulo, desc: '' })) } } };
+}
+// Estado que a recusa deixa na conversa: a oferta (decisao) e a proposta de cancelar, no mesmo formato da fase 1 de `cancelar`.
+function bvMDecisaoCancelar(row, idAgenda) {
+  const r = row || {}, d = r.dados || {};
+  if (!idAgenda || !r.inicio) return null;
+  const servico = String(d.servico || 'horário');
+  const resumo = `Cancelar ${servico} em ${bvMDia(r.inicio)} às ${String(r.inicio).slice(11, 16)}`;
+  return { dados: { idAgenda, horaInicio: String(r.inicio), recorrente: !!d.recorrente, servico, resumo }, opcoes: { tipo: 'decisao_cancelamento', itens: BVM_DECISAO } };
+}
 function bvMTexto(m, contato, cfg) {
   const lid = /@lid$/.test(String(contato));
   return { path: lid ? '/api/messages/whatsmeow/sendTextPROLid' : '/api/messages/send',
@@ -403,9 +419,17 @@ function bvMConfConferir(resp, row, confirmado) {
   const s = Number(resp && resp.status) || 0;
   const lista = s >= 200 && s < 300 ? bvMAgendaDe(resp.body) : null;
   if (!lista) return { code: 'falhou', status: s };
-  const ag = bvMOcorrencia(lista, row.graces_agendamento_id, row.inicio);
+  // A ocorrencia de uma serie semanal apareceu com outro idAgenda no dia (PROD, 17/11: o lembrete da vespera levava o id da serie e o
+  // da hora, outro id no mesmo inicio); o cliente confirmou e ouviu que o horario nao valia. Na leitura do proprio cliente, vale o
+  // agendamento dele no mesmo inicio. So para confirmar: a recusa segue com o id do lembrete.
+  const ag = bvMOcorrencia(lista, row.graces_agendamento_id, row.inicio)
+    || (confirmado && row.graces_cliente_id ? lista.find((x) => x && String(x.horaInicio).slice(0, 16) === String(row.inicio).slice(0, 16)) : undefined);
   if (ag && ag.idStatusAgenda === (confirmado ? 3 : 10)) return { code: confirmado ? 'confirmada' : 'recusada', status: s };
-  return { code: 'desatualizada', status: s };
+  // Lembrete desatualizado (17/11: o cliente confirmou presenca, ouviu so "esse horario nao esta mais valendo" e marcou outro):
+  // com a leitura feita pelo cliente (idCliente), a resposta diz o que esta marcado agora. Sem o cliente a leitura e do dia inteiro
+  // (de todos), entao `atual` fica nulo e vale o texto antigo.
+  const atual = row.graces_cliente_id ? lista.filter((a) => a && a.idAgenda && a.horaInicio).slice(0, 5).map((a) => ({ servico: String(a.descricaoServico || a.servico || 'horário'), inicio: String(a.horaInicio) })) : null;
+  return { code: 'desatualizada', status: s, atual };
 }
 
 // Corpo do POST /agenda/confirmacao; `data` so para ocorrencia de serie recorrente (dados.recorrente).
@@ -428,15 +452,19 @@ function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro) {
   if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ');
   const r = ctx && ctx.pedido && ctx.pedido.confirmacao_recusada;
   const em = r ? Date.parse(r.em) : NaN;
-  if (Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado), e a pergunta "remarcar ou cancelar?" já foi feita a ele: não a repita. Respondeu que quer cancelar: chame meus_agendamentos e cancelar (fase 1) desse agendamento e peça só a confirmação. Respondeu que quer remarcar: pergunte o dia e o horário que ele prefere e siga a remarcação.';
+  if (Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado), e a decisão "remarcar ou cancelar?" já foi enviada a ele em lista: não a repita. Se a última oferta ainda for essa decisão, siga o que ela diz; se a confirmação do cancelamento tiver vencido, chame meus_agendamentos e cancelar (fase 1) desse agendamento e peça só a confirmação. Quer remarcar: pergunte o dia e o horário que ele prefere e siga a remarcação.';
   return s;
 }
 
-function bvMConfTexto(code, row, origem, textos, repetidaMax) {
+function bvMConfTexto(code, row, origem, textos, repetidaMax, atual) {
   const r = row || {};
   const v = { dia: bvMDia(r.inicio), hora: String(r.inicio || '').slice(11, 16) };
   if (code === 'confirmada') return bvMTemplate(textos.confirmacao_ok, v);
   if (code === 'recusada') return bvMTemplate(textos.confirmacao_recusada, v);
+  if (code === 'desatualizada' && Array.isArray(atual) && textos.confirmacao_desatualizada_atual) {
+    return atual.length ? bvMTemplate(textos.confirmacao_desatualizada_atual, { lista: atual.map((a) => `${a.servico}, ${bvMDia(a.inicio)} às ${String(a.inicio).slice(11, 16)}`).join('; ') })
+      : textos.confirmacao_desatualizada_sem || textos.confirmacao_desatualizada;
+  }
   if (code === 'desatualizada') return textos.confirmacao_desatualizada;
   if (code === 'falhou') return textos.confirmacao_falhou;
   if (code === 'repetida') return origem === 'titulo' || Number(r.repetidas || 0) >= repetidaMax ? '' : textos.confirmacao_repetida;
@@ -444,5 +472,5 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax) {
   return ''; // fora_do_teste: sem texto
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

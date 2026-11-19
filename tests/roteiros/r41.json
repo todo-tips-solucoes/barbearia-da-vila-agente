@@ -1,0 +1,24 @@
+{
+  "id": "R41",
+  "situacao": "\"Depois das 18h\" (atendimentos de 17/11): a lista traz só os horários dessa hora em diante; o agente não responde que \"perto das 18h não tem\" quando há horário mais tarde",
+  "falas": [
+    "Oi! Tem horário para corte amanhã depois das 18h? Pode ser com qualquer barbeiro"
+  ],
+  "expectativas": [
+    "Mostra em lista só horários a partir das 18h, ou diz que depois das 18h não há horário amanhã e oferece outro horário ou outro dia",
+    "Não diz que não tem horário \"perto das 18h\" quando existe horário mais tarde; não fala em minutos nem em \"início\"",
+    "Não pede confirmação de um horário que o cliente não escolheu"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "escritas": [],
+  "pendentes": 0,
+  "oferta_a_partir": "18:00",
+  "referencia": "A referencia so traz os horarios livres de amanha por barbeiro; os horarios a partir das 18h que o agente mostrar em lista vem da agenda (ferramenta) e sao corretos. Se nao houver nenhum depois das 18h, dizer isso e correto."
+}

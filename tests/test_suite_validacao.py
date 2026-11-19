@@ -17,7 +17,7 @@ def roteiros():
 
 class Roteiros(unittest.TestCase):
     def test_ids_unicos_e_em_sequencia(self):
-        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 40)])
+        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 42)])
 
     def test_criterios_validos(self):
         for r in roteiros():
@@ -30,7 +30,7 @@ class Roteiros(unittest.TestCase):
                     self.assertIsNone(re.search(r"\d{8,}|\d{3}\.\d{3}\.\d{3}|@", f), (r["id"], f))
 
     def test_agenda_so_nos_oito_previstos(self):
-        self.assertEqual({r["id"] for r in roteiros() if r["agenda"]}, {"R1", "R5", "R6", "R7", "R8", "R9", "R11", "R19", "R20", "R27", "R29", "R31", "R33", "R34", "R35", "R37", "R38"})
+        self.assertEqual({r["id"] for r in roteiros() if r["agenda"]}, {"R1", "R5", "R6", "R7", "R8", "R9", "R11", "R19", "R20", "R27", "R29", "R31", "R33", "R34", "R35", "R37", "R38", "R40", "R41"})
 
     def test_marcas_especiais(self):
         m = {r["id"]: r for r in roteiros()}
@@ -41,7 +41,9 @@ class Roteiros(unittest.TestCase):
         # revisao de 17/11: passos que nao sao fala comum do cliente e escritas conferidas no estado
         passos = {k for r in m.values() for f in r["falas"] if isinstance(f, dict) for k in f}
         self.assertEqual(passos, {"tocar", "tocar_texto", "midia", "equipe", "fila_humana", "passar_horas", "lembrete"})
-        self.assertEqual({i: m[i]["escritas"] for i in m if "escritas" in m[i]}, {"R27": ["agendar"], "R29": ["agendar"], "R31": [], "R33": [], "R34": ["cancelar"], "R35": ["cancelar"], "R37": [], "R38": []})
+        self.assertEqual({i: m[i]["escritas"] for i in m if "escritas" in m[i]}, {"R27": ["agendar"], "R29": ["agendar"], "R31": [], "R33": [], "R34": ["cancelar"], "R35": ["cancelar"], "R37": [], "R38": [], "R40": [], "R41": []})
+        self.assertEqual({i for i in m if "pendentes" in m[i]}, {"R40", "R41"})  # etapa 5: nada de confirmacao do que o cliente nao escolheu
+        self.assertEqual(m["R41"]["oferta_a_partir"], "18:00")
         # cobertura dos 15 conflitos do prompt resolvidos na etapa 4 (docs/melhorias-atendimento.md): cada um tem roteiro que o exercita,
         # menos os que uma conversa nao consegue mostrar (4: chamadas de ferramenta nao aparecem; 13: mensagens fora de ordem)
         cobertos = {c for r in m.values() for c in r.get("cobre", [])}
@@ -252,6 +254,42 @@ class Limpeza(unittest.TestCase):
 class Relatorio(unittest.TestCase):
     def test_sempre_5_pendencias(self):
         self.assertEqual(len(sv.pendencias()), 5)
+
+
+class DuasDeTres(unittest.TestCase):  # owner, 18/11/2026: uma reprovacao isolada nao reprova o roteiro
+    def rodar(self, *status):
+        fila, zerou = list(status), []
+        ex = sv.duas_de_tres(lambda: dict(id="R1", status=fila.pop(0), turnos=[dict(fala="oi", saidas=["ola"])], notas={"K4": dict(nota=1, justificativa="x")}),
+                             lambda: zerou.append(1))
+        return ex, len(status) - len(fila), len(zerou)
+
+    def test_aprovado_de_primeira_nao_repete(self):
+        ex, rodou, zerou = self.rodar("aprovado", "reprovado")
+        self.assertEqual((ex["status"], rodou, zerou, "tentativas" in ex), ("aprovado", 1, 0, False))
+
+    def test_reprovado_e_depois_duas_aprovacoes_passa(self):
+        ex, rodou, zerou = self.rodar("reprovado", "aprovado", "aprovado")
+        self.assertEqual((ex["status"], rodou, zerou, ex["tentativas"]), ("aprovado", 3, 2, ["reprovado", "aprovado", "aprovado"]))
+        self.assertEqual(ex["reprovacao"]["notas"]["K4"]["nota"], 1)  # a reprovacao fica registrada
+        self.assertEqual(ex["reprovacao"]["turnos"][0]["saidas"], ["ola"])
+
+    def test_duas_reprovacoes_reprovam_sem_terceira(self):
+        ex, rodou, _ = self.rodar("reprovado", "reprovado", "aprovado")
+        self.assertEqual((ex["status"], rodou, ex["tentativas"]), ("reprovado", 2, ["reprovado", "reprovado"]))
+        ex, rodou, _ = self.rodar("reprovado", "aprovado", "reprovado")
+        self.assertEqual((ex["status"], rodou), ("reprovado", 3))
+
+    def test_erro_de_infra_nao_e_reprovacao_nem_repete(self):
+        ex, rodou, _ = self.rodar("erro_infra", "aprovado")
+        self.assertEqual((ex["status"], rodou), ("erro_infra", 1))
+        ex, rodou, _ = self.rodar("reprovado", "erro_infra", "aprovado")  # uma aprovacao so em tres: nao passa
+        self.assertEqual((rodou, ex["tentativas"].count("aprovado")), (3, 1))
+        self.assertNotEqual(ex["status"], "aprovado") if ex["tentativas"].count("aprovado") < 2 else None
+
+    def test_interrompido_antes_de_fechar_nao_aprova(self):
+        fila = ["reprovado", "aprovado"]
+        ex = sv.duas_de_tres(lambda: dict(id="R1", status=fila.pop(0), turnos=[]), lambda: None, lambda: len(fila) == 0)
+        self.assertEqual(ex["status"], "reprovado")
 
 
 class Converge(unittest.TestCase):  # achados da rodada real 20261021-031240 (research.md, converge)

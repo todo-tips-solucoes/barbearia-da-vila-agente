@@ -219,7 +219,7 @@ console.log('agente.test.js turno com midia ok');
   assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['1', '2']);
   m = a.bvCompor('Temos estas opções de barba:\n1 | barba design — R$ 65\n- 2 | corte adulto\n9 | inventada', of, cfg);
   assert.deepEqual(m[m.length - 1].opcoes.map((o) => o.id), ['1', '2']);
-  assert.ok(m[0].texto.includes('9 | inventada')); // id fora da oferta fica no texto, nunca vira opcao
+  assert.ok(m[0].texto.includes('inventada') && !m[0].texto.includes('9 |')); // id fora da oferta fica no texto (sem o "9 |"), nunca vira opcao
   assert.ok(!m[0].texto.includes('2 | corte'));
   // preco na linha de opcao fica no texto, na ordem, sem id (suite R2); sem preco, so na lista
   m = a.bvCompor('Temos estas opções de corte:\n1 | corte adulto — R$ 85\n2 | barba design — R$ 65\nQuer agendar?', of, cfg);
@@ -607,6 +607,9 @@ console.log('agente.test.js retomada longa ok');
   assert.equal(a.bvTerceiraVez(q, h1, of, false), false); // segunda vez: a lista volta
   assert.equal(a.bvTerceiraVez(q, h2, of, false), true);
   assert.equal(a.bvTerceiraVez(q, h2, of, true), false); // oferta nova: e outra lista
+  assert.equal(a.bvTerceiraVez('Desculpa 😅 Você tem estes horários agendados. Qual deles quer mudar?', h2, of, false, true), true); // pergunta reescrita, mesma lista (R38, 19/11)
+  assert.equal(a.bvTerceiraVez('Desculpa 😅 Você tem estes horários agendados. Qual deles quer mudar?', h1, of, false, true), false); // segunda vez
+  assert.equal(a.bvTerceiraVez('Desculpa 😅 Você tem estes horários agendados. Qual deles quer mudar?', h2, of, true, true), false); // oferta nova
   assert.equal(a.bvTerceiraVez('Desculpa! Quer que eu passe para a equipe te ajudar?', h2, of, false), false); // o modelo ja ofereceu a equipe
   assert.equal(a.bvTerceiraVez('Perfeito, vou remarcar o de 19/11. Qual dia e horário você prefere?', h2, of, false), false); // o cliente escolheu: a conversa andou
   console.log('agente.test.js terceira vez ok');
@@ -622,4 +625,54 @@ console.log('agente.test.js retomada longa ok');
   // pergunta antiga, de antes da ultima mensagem do agente, nao conta
   assert.doesNotMatch(a.bvContextoFeita(feita, [{ direcao: 'saida', tipo: 'lista', conteudo: 'Prefere remarcar ou cancelar mesmo?' }, { direcao: 'entrada', tipo: 'texto', conteudo: 'Cancelar mesmo' }, { direcao: 'saida', tipo: 'texto', conteudo: 'Pronto, cancelado.' }]), /A sua última mensagem perguntou/);
   console.log('agente.test.js acao concluida ok');
+}
+
+{ // R40 em 19/11: tirado o bloco OPCOES do meio, a frase nao termina no verbo
+  const cfgO = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+  const of = { tipo: 'horario', completa: true, itens: [{ id: '1', rotulo: '10:40 Pedro Henrique' }] };
+  const t = 'Oi! Às 06:00 não tem horário com o Pedro Henrique amanhã; o mais próximo disponível é:\n\nOPCOES:\n1 | 10:40 Pedro Henrique\n\nQual fica melhor pra você?';
+  const s = a.bvCompor(t, of, cfgO, true);
+  assert.equal(s.map((m) => m.texto).join(' '), 'Oi! Às 06:00 não tem horário com o Pedro Henrique amanhã; o mais próximo disponível é este. Qual fica melhor pra você?');
+  assert.equal(s[s.length - 1].tipo, 'lista');
+  assert.match(a.bvCompor('O horário mais próximo é às 10:40. Sabe como é. Quer que eu marque?', of, cfgO, true).map((m) => m.texto).join(' '), /Sabe como é\./); // sem corte, nada muda
+}
+{ // R18 em 19/11: "é:" seguido de texto (os barbeiros, por extenso) nao vira "é este."
+  const cfgO = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+  const of = { tipo: 'horario', completa: true, itens: [{ id: '1', rotulo: '10:00 Kiel' }] };
+  const t = 'Amanhã, sexta-feira (20/11), quem tem horário é:\nKiel a partir de 10:00; Black a partir de 10:00.\nQuer escolher um horário da lista?\n\nOPCOES:\n1 | 10:00 Kiel';
+  const txt = a.bvCompor(t, of, cfgO, true).map((m) => m.texto).join(' ');
+  assert.doesNotMatch(txt, /é este/);
+  assert.match(txt, /quem tem horário é: Kiel a partir de 10:00/);
+}
+{ // R40 em 19/11: linhas de opcao que nao sao da oferta guardada nao saem com "1 |"
+  const cfgO = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+  const t = 'Às 6h amanhã não tem horário com o Pedro Henrique. Os horários mais próximos são com outros barbeiros:\n1 | 10:00 — Kiel\n2 | 10:40 — Kiel\nTambém há horários com Black e Rodrigo a partir das 10h. Algum desses horários serve?';
+  const s = a.bvCompor(t, { tipo: 'horario', completa: true, itens: [] }, cfgO, true);
+  const txt = s.map((m) => m.texto).join(' ');
+  assert.doesNotMatch(txt, /\d \| /);
+  assert.match(txt, /outros barbeiros: 10:00 — Kiel 10:40 — Kiel Também há/);
+  assert.ok(s.every((m) => m.tipo === 'texto')); // sem oferta, nao ha lista
+}
+{ // Etapa 5 (atendimentos de 17/11): opcoes escritas no meio da frase nao saem cruas
+  const cfgO = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+  const of = { tipo: 'horario', completa: true, itens: [{ id: '1', rotulo: '16:00 Kiel' }, { id: '2', rotulo: '16:40 Kiel' }, { id: '3', rotulo: '19:20 Kiel' }] };
+  const t1 = 'Não tem início disponível perto das 18h hoje. Os horários mais próximos são: 1 | 16:00 — Kiel 2 | 16:40 — Kiel 3 | 19:20 — Kiel O Pedro Henrique tem às 20:00; o Rodrigo tem horários a partir de 12:40. Qual opção fica melhor?';
+  const s1 = a.bvCompor(t1, of, cfgO, true);
+  const txt1 = s1.map((m) => m.texto).join(' ');
+  assert.doesNotMatch(txt1, /\d \| /);
+  assert.match(txt1, /Os horários mais próximos são estes\./); // a frase não termina no verbo
+  assert.match(txt1, /Qual opção fica melhor\?/);
+  assert.equal(s1[s1.length - 1].tipo, 'lista'); // a lista de verdade segue junto
+  const t2 = 'Arthur, achei estes horários para repetir o corte com máquina com o Rodrigo: - 1 | 12:40 - 2 | 20:00 - 3 | 20:40 - 1 | 11:20 - 2 | 12:00 Qual dia e horário você prefere?';
+  const txt2 = a.bvCompor(t2, of, cfgO, true).map((m) => m.texto).join(' ');
+  assert.doesNotMatch(txt2, /\d \| /);
+  assert.match(txt2, /^Arthur, achei estes horários para repetir o corte com máquina com o Rodrigo\./);
+  // uma barra so, ou texto comum com numero, nao e lista
+  assert.equal(a.bvCompor('O corte custa R$ 90 e a barba R$ 70. Quer que eu veja um horário?', null, cfgO)[0].texto, 'O corte custa R$ 90 e a barba R$ 70. Quer que eu veja um horário?');
+  assert.match(a.bvCompor('Temos 2 | 3 barbeiros hoje. Qual prefere?', null, cfgO)[0].texto, /2 \| 3 barbeiros/);
+  // prompt: "depois das 18h" tem parametro proprio, e a excecao do unico horario ficou estreita
+  const pr = a.bvPrompt({ saida: { max_mensagens: 3 }, loja: {}, graces: {} });
+  assert.doesNotMatch(pr, /a_partir/); // a hora minima e decidida no codigo (bvgDepoisDas): o campo na ferramenta travava a chamada ao modelo
+  assert.match(pr, /Um horário diferente do pedido, ou de outro barbeiro, vai na lista de horários para o cliente escolher, sem resumo/);
+  console.log('agente.test.js opcoes soltas ok');
 }

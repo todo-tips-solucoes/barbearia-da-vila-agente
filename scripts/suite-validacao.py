@@ -48,7 +48,7 @@ CRITERIOS = {
     "K5": "Conducao comercial: toda duvida respondida termina com convite leve para agendar, sem insistir depois de um nao. Perguntar qual servico, barbeiro ou horario o cliente quer, para seguir com o agendamento, tambem conta como convite.",
     "K6": "O barbeiro de teste nunca aparece para o cliente.",
 }
-SEGREDOS = ("CHATMASTER_TOKEN_TESTE", "OPENAI_API_KEY", "GRACES_API_KEY", "N8N_API_KEY")
+SEGREDOS = ("CHATMASTER_TOKEN_TESTE", "OPENAI_API_KEY", "OPENAI_API_KEY_TESTE", "GRACES_API_KEY", "N8N_API_KEY")
 # smoke-mensagens usa os contatos 505-509: sem agendamento aloca-se 510-519 e, passando de 10 roteiros, 490-499
 # (dec: evita colisao e limpeza cruzada entre os dois smokes; >= 520 e o telefone do cliente de teste)
 CONTATOS_LIVRES = [*range(510, 520), *range(490, 500), *range(480, 490)]
@@ -164,7 +164,7 @@ def esquema(criterios):
 
 def http_openai(corpo, timeout=120):
     req = urllib.request.Request(URL_AVALIADORA, data=json.dumps(corpo).encode(), method="POST",
-                                 headers={"Content-Type": "application/json", "Authorization": "Bearer " + os.environ["OPENAI_API_KEY"]})
+                                 headers={"Content-Type": "application/json", "Authorization": "Bearer " + (os.environ.get("OPENAI_API_KEY_TESTE") or os.environ["OPENAI_API_KEY"])})  # chave propria do TESTE, se houver
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
@@ -499,6 +499,14 @@ def executar(r, n, orc, parar, referencia=""):
         feitas = sorted(p["acao"] for p in sa.propostas(n) if p["estado"] == "executada") if sa.cid(n) else []
         if "escritas" in r and feitas != sorted(r["escritas"]):  # o que foi escrito na agenda e conferido no estado, nao no texto
             ex["deterministicas"].append(f"K4: escritas na agenda {feitas or 'nenhuma'}; o roteiro espera {sorted(r['escritas']) or 'nenhuma'}")
+        if "pendentes" in r and sa.cid(n):  # confirmacao de algo que o cliente nao escolheu deixa uma proposta pendente
+            np_ = len(sa.propostas(n, "pendente"))
+            if np_ != r["pendentes"]:
+                ex["deterministicas"].append(f"K4: {np_} proposta(s) pendente(s) no fim; o roteiro espera {r['pendentes']}")
+        if r.get("oferta_a_partir"):  # "depois das 18h": nenhum horario oferecido antes disso
+            cedo = sorted({m.group(1) for t in ex["turnos"] for x in t.get("oferta", []) for m in [re.match(r"(\d\d:\d\d)", str(x))] if m and m.group(1) < r["oferta_a_partir"]})
+            if cedo:
+                ex["deterministicas"].append(f"K4: horarios oferecidos antes das {r['oferta_a_partir']}: {', '.join(cedo)}")
         if "handoff" in r and bool(ped.get("handoff")) != r["handoff"]:  # transferencia para a equipe: conferida no estado, nao no texto
             ex["deterministicas"].append("K1: a conversa " + ("deveria ter sido transferida para a equipe" if r["handoff"] else "nao deveria ter sido transferida para a equipe"))
         for t in ex["turnos"]:  # relatorio sem telefone, nome do cliente de teste ou segredo
@@ -546,6 +554,33 @@ def executar(r, n, orc, parar, referencia=""):
 
 
 # ---------------------------------------------------------------- orquestracao da rodada
+def zerar_contato(r, n):
+    """Antes de repetir um roteiro: o contato simulado some (historico, propostas e sessao vao junto); os roteiros com agenda ja
+    refazem o contato no preparo."""
+    if n is not None and not r.get("agenda") and not r.get("delegado"):
+        sa.sql(f"DELETE FROM contatos WHERE telefone='{sa.tel(n)}';")
+
+
+def duas_de_tres(executar_uma, antes_de_repetir=lambda: None, parar=lambda: False):
+    """Regra do owner (18/11/2026): com dezenas de roteiros julgados por modelo, uma execucao reprovada isolada nao reprova o
+    roteiro. Reprovado na primeira, ele roda de novo ate fechar duas aprovacoes ou duas reprovacoes (no maximo 3 execucoes).
+    Vale a ultima execucao, com o historico em `tentativas` e a primeira reprovacao guardada em `reprovacao`."""
+    ex = executar_uma()
+    if ex.get("status") != "reprovado":
+        return ex
+    tentativas, primeira = [ex["status"]], ex
+    while len(tentativas) < 3 and tentativas.count("aprovado") < 2 and tentativas.count("reprovado") < 2 and not parar():
+        antes_de_repetir()
+        ex = executar_uma()
+        tentativas.append(ex.get("status"))
+    if tentativas.count("aprovado") < 2 and ex.get("status") == "aprovado":  # nao fechou duas aprovacoes (interrompido ou erro de infra no meio)
+        ex = dict(ex, status="reprovado", motivo=f"aprovado em {tentativas.count('aprovado')} de {len(tentativas)} execucoes; precisa de duas")
+    ex["tentativas"] = tentativas
+    ex["reprovacao"] = {k: primeira.get(k) for k in ("notas", "deterministicas", "motivo") if primeira.get(k)}
+    ex["reprovacao"]["turnos"] = [dict(fala=t.get("fala"), saidas=t.get("saidas"), quem=t.get("quem", "cliente")) for t in primeira.get("turnos", [])]
+    return ex
+
+
 def rodar(roteiros, aloc, concorrencia, orc, parar, referencia="", executar_fn=executar):
     """Sem agendamento: pool de `concorrencia` threads; fila serial (agenda/delegado) numa unica thread. Teto: nao inicia roteiro novo ao estourar."""
     resultados = {}
@@ -554,7 +589,8 @@ def rodar(roteiros, aloc, concorrencia, orc, parar, referencia="", executar_fn=e
         if orc.estourou() or parar.is_set():
             return dict(id=r["id"], situacao=r["situacao"], status="pendente", motivo="teto de tokens atingido" if orc.estourou() else "interrompido",
                         turnos=[], deterministicas=[], notas=None, tokens={"agente": NAO_MEDIDO, "avaliadora": 0})
-        return executar_fn(r, aloc.get(r["id"]), orc, parar, referencia)
+        return duas_de_tres(lambda: executar_fn(r, aloc.get(r["id"]), orc, parar, referencia), lambda: zerar_contato(r, aloc.get(r["id"])),
+                            lambda: orc.estourou() or parar.is_set())
 
     def serie(rs):
         for r in rs:
@@ -668,6 +704,16 @@ def gravar_relatorio(rel, pasta=None):
         md.append(f"### {e['id']} - {e['status']}: {e['situacao']}")
         if e.get("motivo"):
             md.append(f"- motivo: {e['motivo']}")
+        if e.get("tentativas"):  # duas de tres: o que reprovou na primeira execucao fica registrado
+            md.append(f"- execuções: {', '.join(map(str, e['tentativas']))} (vale duas de três)")
+            rp = e.get("reprovacao") or {}
+            for k, v in (rp.get("notas") or {}).items():
+                if v.get("nota", 5) < NOTA_MIN:
+                    md.append(f"  - na execução reprovada, {k}: {v['nota']} - {v['justificativa']}")
+            for d in rp.get("deterministicas") or []:
+                md.append(f"  - na execução reprovada, falha determinística: {d}")
+            for t in rp.get("turnos") or []:
+                md.append(f"    - ({str(t.get('quem', 'cliente')).lower()}) {t.get('fala')} => {' / '.join(map(str, t.get('saidas') or []))}")
         for k, v in (e.get("notas") or {}).items():
             md.append(f"- {k}: {v['nota']} - {v['justificativa']}")
         for d in e.get("deterministicas") or []:
