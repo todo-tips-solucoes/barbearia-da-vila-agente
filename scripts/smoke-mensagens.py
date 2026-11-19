@@ -152,6 +152,9 @@ def m3():
     checar("recusada gravada (espera do id + chamada)", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='recusada'", M["espera_texto_s"] + 60) == "1", estado_linha(i))
     checar("Graces registrou recusa (status 10)", (st := status_graces_em(ag, 10)) == 10, str(st))
     checar("conversas.pedido.confirmacao_recusada gravado para o agente", sa.sql(f"SELECT count(*) FROM conversas WHERE contato_id={cid} AND pedido ? 'confirmacao_recusada';") == "1")
+    # owner, 18/11/2026: a decisao remarcar/cancelar vai em lista, com a oferta e a proposta de cancelar gravadas na conversa
+    checar("recusa deixa a decisao em lista e a proposta de cancelar", sa.sql(f"SELECT (c.opcoes->>'tipo') || '|' || (SELECT count(*) FROM propostas p WHERE p.contato_id = c.contato_id AND p.estado = 'pendente' AND p.acao = 'cancelar') FROM conversas c WHERE c.contato_id={cid};") == "decisao_cancelamento|1")
+    checar("a pergunta da recusa foi gravada como lista", sa.sql(f"SELECT tipo FROM mensagens WHERE contato_id={cid} AND mensagem_id_canal LIKE 'conf-recusada-%' ORDER BY id DESC LIMIT 1;") == "lista")
     checar("o titulo nao virou turno do agente", sa.sql(f"SELECT count(*) FROM mensagens WHERE contato_id={cid} AND direcao='entrada';") == "0")
 
 

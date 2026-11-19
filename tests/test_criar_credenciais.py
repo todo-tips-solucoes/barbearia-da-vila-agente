@@ -56,6 +56,24 @@ class T(unittest.TestCase):
             self.assertNotIn(s, out + err)
         self.assertIn("Barbearia Vila Postgres TESTE -> id1", out)
 
+    def test_chave_propria_do_teste_cria_credencial_separada(self):  # owner, 18/11/2026: TESTE e PROD dividiam o saldo
+        h, out, err = Http(), io.StringIO(), io.StringIO()
+        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
+            f.write("N8N_API_URL=http://x\nN8N_API_KEY=k\n")
+        os.environ["BV_ENV_N8N"] = f.name
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                rc = cc.main(["--alvo", "teste"], h, lambda alvo: (SEGREDO_PG, SEGREDO_RD, SEGREDO_TK), lambda: (SEGREDO_OA, SEGREDO_GR, SEGREDO_CM, "oaTESTE9"))
+        finally:
+            os.unlink(f.name)
+            os.environ.pop("BV_ENV_N8N", None)
+        self.assertEqual(rc, 0)
+        nova = [p for p in h.posts if p["name"] == "Barbearia Vila OpenAI TESTE"]
+        self.assertEqual([(p["type"], p["data"]["apiKey"]) for p in nova], [("openAiApi", "oaTESTE9")])
+        self.assertEqual(len(h.posts), 7)
+        self.assertNotIn("oaTESTE9", out.getvalue() + err.getvalue())
+        self.assertIn("Barbearia Vila OpenAI TESTE -> id7", out.getvalue())
+
     def test_nome_existente_pulado(self):
         h = Http(["Barbearia Vila Postgres TESTE"])
         rc, out, _ = rodar(["--alvo", "teste"], h)

@@ -1,22 +1,24 @@
 {
   "id": "R35",
-  "situacao": "Recusa de presença e cancelamento (conflitos 6 e 8): quem avisa que não vai conseguir ir recusou a presença; depois de responder que prefere cancelar, o agente pede só a confirmação, sem repetir a pergunta em lista",
+  "situacao": "Recusa de presença e cancelamento (conflitos 6 e 8; owner, 18/11): quem avisa que não vai conseguir ir recusou a presença; a decisão \"remarcar ou cancelar\" vai em lista e o toque em Cancelar mesmo já cancela",
   "falas": [
     {
       "lembrete": true
     },
     "Não vou conseguir ir",
-    "Prefiro cancelar",
-    "Sim"
+    {
+      "tocar_texto": "Cancelar mesmo"
+    }
   ],
   "expectativas": [
-    "\"Não vou conseguir ir\" é tratado como recusa de presença, não como atraso: o agente responde com o texto padrão da recusa (que diz que avisou a equipe: a recusa fica registrada na agenda, o que é correto) e pergunta se o cliente quer remarcar ou cancelar; a conversa não é transferida",
-    "Depois de \"Prefiro cancelar\", pede só a confirmação do cancelamento, em uma frase, sem oferecer remarcar de novo e sem lista de opções",
-    "Com o sim, cancela e confirma o cancelamento"
+    "\"Não vou conseguir ir\" é tratado como recusa de presença, não como atraso: o agente responde com o texto padrão da recusa (que diz que avisou a equipe: a recusa fica registrada na agenda, o que é correto) e pergunta, com as opções em lista, se o cliente prefere remarcar ou cancelar; a conversa não é transferida",
+    "No toque em Cancelar mesmo, cancela direto, sem pedir outra confirmação (o toque é a confirmação), e confirma o cancelamento com o serviço, o dia e o horário",
+    "Depois de cancelar, oferece marcar outro horário"
   ],
   "criterios": [
     "K1",
     "K2",
+    "K3",
     "K4",
     "K6"
   ],
