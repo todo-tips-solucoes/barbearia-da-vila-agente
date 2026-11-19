@@ -67,6 +67,12 @@
               "name": "hora"
             },
             {
+              "name": "a_partir"
+            },
+            {
+              "name": "texto_cliente"
+            },
+            {
               "name": "nascimento"
             },
             {

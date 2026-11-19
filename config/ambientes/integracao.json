@@ -17,7 +17,7 @@
   "credenciais": {
     "redis": "635v0i1zcY8h3jDM",
     "verificacao": "VVbK8DkOhfW3nRg2",
-    "openai": "tVRedGvpa2XF0gX1",
+    "openai": "zm8LmmbPm1BzU4ym",
     "graces": "lSsJYIq9jbpkmYlr",
     "chatmaster": "Gt9C67GDkOEnB4BZ"
   },
@@ -187,7 +187,7 @@
     "lembrete": "Oi! Só lembrando que hoje, às {hora}, tem {servico} com {barbeiro} aqui na Barbearia da Vila. Te esperamos!",
     "pos": "Oi! Obrigado por ter vindo hoje. Espero que tenha gostado do {servico} com {barbeiro}. Se quiser marcar o próximo ou deixar um recado, é só me chamar por aqui.",
     "confirmacao_ok": "Fechado, presença confirmada! Te esperamos {dia} às {hora}.",
-    "confirmacao_recusada": "Tudo bem, avisei a equipe. Quer que eu remarque pra outro dia ou horário, ou prefere cancelar?",
+    "confirmacao_recusada": "Tudo bem, avisei a equipe. Você prefere remarcar ou cancelar mesmo?",
     "confirmacao_repetida": "Esse horário já está respondido, tá? Se quiser mudar alguma coisa é só me falar.",
     "confirmacao_desatualizada": "Esse horário não está mais valendo. Se quiser, me fala e eu vejo outro pra você.",
     "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho?",
@@ -197,7 +197,9 @@
     "retomada_confirmar": "Oi, {nome}! Ficou faltando só confirmar {resumo}. Ainda quer esse horário?",
     "retomada_continuar": "Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?",
     "fila_sem_resposta": "A equipe não conseguiu te responder por aqui agora. Se eu puder ajudar em mais alguma coisa, é só me chamar.",
-    "laco": "Desculpa, acho que não estou conseguindo te entender. Quer que eu passe para a equipe te ajudar por aqui?"
+    "laco": "Desculpa, acho que não estou conseguindo te entender. Quer que eu passe para a equipe te ajudar por aqui?",
+    "confirmacao_desatualizada_atual": "Esse lembrete ficou desatualizado. O que está marcado no seu cadastro agora: {lista}. Se quiser mudar alguma coisa, é só me falar.",
+    "confirmacao_desatualizada_sem": "Esse lembrete ficou desatualizado e não encontrei horário marcado no seu cadastro. Quer que eu veja um horário pra você?"
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",

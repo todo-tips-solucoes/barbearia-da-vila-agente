@@ -200,3 +200,34 @@ O que os roteiros de cobertura acharam (e que os 32 anteriores não pegavam), j�
 Sobre a suíte: a avaliadora aprovou conversas que descumpriam a expectativa (R33 e R38 em algumas execuções), então as conversas dos roteiros novos foram lidas uma a uma. A transcrição passou a mostrar a lista reenviada no turno, a fala da equipe vale como fonte, e um roteiro pode levar referência própria (`referencia`). Com 39 roteiros julgados por modelo, uma rodada inteira sem variação é difícil: de cinco rodadas completas de 39, duas fecharam 39 de 39 e três fecharam 38, cada uma com um roteiro diferente.
 
 Em aberto, para decisão do owner: o texto da recusa de presença pergunta "remarcar ou cancelar?" em texto livre (`textos.confirmacao_recusada`, enviado pelo `bv-confirmacao`), não em lista.
+
+## Leitura dos atendimentos de 17/11 (etapa 5)
+
+As 313 mensagens da manhã de 17/11 (33 contatos, todas anteriores à etapa 1) foram lidas em 19/11. Parte do que confundiu os clientes as etapas 1 a 4 já corrigiam (lista junto do pedido de confirmação, negrito cru, segundo agendamento para quem já tinha horário, horários de vários dias em texto). O que nenhuma etapa tratava:
+
+| O que aconteceu | Correção |
+|---|---|
+| O cliente pediu um barbeiro às 9h e recebeu "corte com outro barbeiro às 8h, posso confirmar?" | A exceção do "único horário" ficou estreita: só vai direto ao resumo o horário que é exatamente o pedido (mesmo barbeiro, sem hora marcada). Horário de outro barbeiro ou de outra hora é mostrado e o cliente escolhe (`pedido.busca.hora` e `outros`) |
+| "Depois das 18h" era lido como "perto das 18h": havia horário às 20h e o agente respondeu que não tinha | A lista traz os horários dessa hora em diante. O modelo continua mandando só `hora`; o código lê o texto do cliente no turno e, se ele diz "depois das" ou "a partir das" a mesma hora, trata a hora como mínima (`bvgDepoisDas`). Um campo novo na ferramenta fazia a chamada ao modelo travar (ver abaixo) |
+| "Não tem início até 60 minutos das 18h" saía igual para o cliente | O aviso da ferramenta não fala mais em minutos nem em "início" |
+| Opções escritas no meio da frase ("1 \| 16:00 — Kiel 2 \| 16:40 — Kiel") saíam cruas | A frase é cortada na primeira opção (`bvCompor`); a lista de verdade segue junto |
+| O cliente confirmou presença num lembrete desatualizado, ouviu só "esse horário não está mais valendo" e marcou outro | A resposta diz o que está marcado no cadastro dele agora (`textos.confirmacao_desatualizada_atual`), a partir da leitura que a conferência já fazia |
+
+Decisões do owner em 18/11:
+
+- **Recusa de presença em lista:** "remarcar ou cancelar?" deixou de ser pergunta em texto. O `bv-confirmacao` manda a lista (Remarcar / Cancelar mesmo) e deixa na conversa a oferta e a proposta de cancelar; o toque em "Cancelar mesmo" já cancela.
+- **Duas de três na suíte:** roteiro reprovado roda de novo; com duas aprovações em três execuções vale aprovado, e a reprovação fica no relatório.
+- **Aviso de duplicidade, texto do laço, 30 mensagens por minuto e 140/150 s do turno:** mantidos como estavam.
+- **Chave da OpenAI própria do TESTE** (19/11): credencial `Barbearia Vila OpenAI TESTE`; a suíte deixou de gastar o saldo de produção.
+
+O que a agenda tinha no caso do lembrete desatualizado (leitura do owner em 19/11): o cliente tem uma série semanal, e a ocorrência do dia apareceu com outro `idAgenda` (o lembrete da véspera levava o id da série; o da hora, outro id no mesmo início). O horário valia; a conferência procurava só pelo id do lembrete e respondeu que não. Agora, na leitura do próprio cliente, vale o agendamento dele no mesmo início, se já estiver confirmado na agenda (`bvMConfConferir`). Por que o id muda não foi medido (hipótese: a confirmação de uma ocorrência destaca a ocorrência da série).
+
+Vistos na leitura das conversas da rodada 41/41 de 19/11 (a avaliadora aprovou os dois) e corrigidos:
+
+- **Terceira lista com a pergunta reescrita (R38):** "Qual deles quer mudar?" escapava da comparação de texto e a mesma lista saía pela terceira vez. Agora basta a resposta levar a mesma lista de novo: sai o texto fixo que oferece a equipe.
+- **Linha de opção que sobra no texto (R40):** quando a oferta guardada não tem o id que o modelo escreveu, a linha "1 | 10:00 — Kiel" saía crua. Agora sai sem o número e a barra. A causa de fundo fica aberta: com duas buscas de horário no mesmo turno, a lista guardada é a da última busca, e o texto pode falar da outra (visto também no R37, que citou um dia e mandou a lista de outro).
+- **Campo novo na ferramenta travava a chamada ao modelo (R18):** a primeira versão desta etapa deu à ferramenta `horarios_livres` um campo `a_partir`. Na conversa do R18 (corte infantil, depois "O Pedro tem?"), a chamada ao modelo passou a estourar os 45 s ou a ser recusada pela OpenAI ("prompt sinalizado por possível violação da política de uso"): 4 de 12 conversas com o campo, 0 de 6 sem ele, 0 de 7 na etapa 4 e 0 de 12 na versão final. A suíte mostrava isso como `erro_infra` ("turno sem fim em 60 s"). O mecanismo não foi entendido; a medição foi por versão, com as execuções salvas. O campo saiu e a hora mínima passou a ser decidida no código. A frase do prompt "você mostra e pergunta se serve" também foi reescrita: com ela, as recusas apareciam mais. **Para a próxima mudança de ferramenta ou de prompt:** `erro_infra` repetido no mesmo roteiro é para investigar, e vale medir a conversa do R18 antes e depois.
+- **Frase que termina no verbo (R40):** tirada a lista do meio do texto, sobrava "o mais próximo disponível é.". A frase passa a apontar para a lista ("é este.", "são estes.").
+
+Ainda abertos, vistos na leitura: "Obrigado" depois do resumo foi entendido como confirmação; um cumprimento no meio da conversa zera a pergunta em aberto; quem não sabe o nome de nenhum barbeiro recebe a lista de novo em vez de "qualquer um"; áudio da equipe entra no histórico como nome de arquivo; duas respostas quando o cliente manda duas mensagens com mais de 8 s de intervalo.
+

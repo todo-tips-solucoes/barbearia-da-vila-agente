@@ -18,6 +18,9 @@ NOMES = {"teste": "Barbearia Vila Postgres TESTE", "producao": "Barbearia Vila P
 NOME_REDIS = "Barbearia Vila Redis"
 NOME_VERIF = "Barbearia Vila Verificacao"  # so TESTE (webhook bv-verificacao); token nasce e fica em infra.env na VPS
 NOME_OPENAI, NOME_GRACES, NOME_CHAT = "Barbearia Vila OpenAI", "Barbearia Vila Graces", "Barbearia Vila Chat Master"
+# Chave propria do TESTE (owner, 18/11/2026): TESTE e PROD dividiam o saldo, e a suite ja derrubou o agente de PROD (16/11).
+# Opcional em .env.smoke (OPENAI_API_KEY_TESTE); com ela nasce a credencial abaixo, e o id vai para credenciais.openai do TESTE.
+NOME_OPENAI_TESTE, CHAVE_OPENAI_TESTE = "Barbearia Vila OpenAI TESTE", "OPENAI_API_KEY_TESTE"
 # Chaves do agente em .env.smoke (fora do git); so o TESTE as recebe (a Graces so existe em prod, a chave serve ao teste).
 CHAVES_APP = ("OPENAI_API_KEY", "GRACES_API_KEY", "CHATMASTER_TOKEN_TESTE")
 # Host/porta dentro da rede docker da stack n8n (documentado em docs/infra.md).
@@ -56,7 +59,7 @@ def segredos_vps(alvo):
 def segredos_app():
     """(openai, graces, chatmaster) de $BV_ENV_SMOKE (default .env.smoke)."""
     env = ler_env(os.environ.get("BV_ENV_SMOKE", os.path.join(RAIZ, ".env.smoke")))
-    return tuple(env[k] for k in CHAVES_APP)
+    return tuple(env[k] for k in CHAVES_APP) + (env.get(CHAVE_OPENAI_TESTE, ""),)
 
 
 def montar(alvo, cfg, pg_pw, redis_pw, token="", app=None):
@@ -73,7 +76,8 @@ def montar(alvo, cfg, pg_pw, redis_pw, token="", app=None):
         {"name": NOME_OPENAI, "type": "openAiApi", "data": {"apiKey": app[0]}},
         {"name": NOME_GRACES, "type": "httpHeaderAuth", "data": {"name": "X-Api-Key", "value": app[1]}},
         {"name": NOME_CHAT, "type": "httpHeaderAuth", "data": {"name": "Authorization", "value": "Bearer " + app[2]}},
-    ] if alvo == "teste" and app else [])
+    ] if alvo == "teste" and app else []) + ([{"name": NOME_OPENAI_TESTE, "type": "openAiApi", "data": {"apiKey": app[3]}}]
+                                              if alvo == "teste" and app and len(app) > 3 and app[3] else [])
 
 
 def criar(env, creds, http=api):

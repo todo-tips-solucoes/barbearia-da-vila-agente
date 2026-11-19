@@ -1,0 +1,23 @@
+{
+  "id": "R40",
+  "situacao": "Hora pedida que não existe (atendimentos de 17/11): o agente diz que não tem, mostra os horários mais próximos e pergunta; não pede confirmação de horário que o cliente não escolheu",
+  "falas": [
+    "Oi! O Pedro tem horário amanhã às 6 da manhã?"
+  ],
+  "expectativas": [
+    "Diz com naturalidade que às 6h não tem horário (sem falar em minutos nem em \"início\")",
+    "Mostra os horários mais próximos em lista e pergunta qual fica melhor",
+    "Não manda resumo nem pede confirmação de um horário, de um dia ou de um barbeiro que o cliente não escolheu"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "escritas": [],
+  "pendentes": 0,
+  "referencia": "Este roteiro pede uma hora antes de a loja abrir. Os horarios que o agente mostrar em lista vem da agenda (ferramenta) e sao corretos; dizer que as 6h nao tem horario e correto."
+}

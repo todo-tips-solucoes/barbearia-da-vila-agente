@@ -149,7 +149,7 @@ assert.equal(r.resultado.total, 3);
 assert.ok(!/mais próximos/.test(r.resultado.orientacao || ''));
 r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['08:00', '08:40', '09:20', '17:20', '18:00', '18:40'] }), ok({ minutos: 40, horarios: [] })], cfg).final;
 assert.deepEqual(r.resultado.opcoes.map((o) => o.hora), ['08:40', '09:20', '17:20', '18:00']);
-assert.match(r.resultado.orientacao, /até 60 min das 14:00.*mais próximos.*quem_tem_horario/);
+assert.match(r.resultado.orientacao, /não há horário perto das 14:00.*mais próximos.*quem_tem_horario/);
 assert.match(g.bvGPasso(p.st, [ok({ horarios: [] }), ok({ horarios: [] })], cfg).final.resultado.orientacao, /lotado/);
 p = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20', periodo: 'tarde', hora: '12:30' }), ctxH, cfg);
 r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['11:20', '12:00', '13:20', '14:00'] }), ok({ horarios: [] })], cfg).final;
@@ -799,6 +799,21 @@ console.log('graces.test.js nome normal ok');
   assert.deepEqual(r.resultado.opcoes.map((o) => [o.hora, o.barbeiro]), [['09:20', 'Kiel'], ['10:00', 'Kiel']]);
   assert.match(r.resultado.orientacao, /^Black, o barbeiro do último atendimento, não tem horário de manha nesse dia: diga isso ao cliente e que os horários da lista são de outros barbeiros/);
   assert.equal(r.efeitos.pedido.barbeiro, undefined); // nao vira escolha do cliente
+  // 17/11: pediu o barbeiro de sempre as 9h; ele nao tem e outro barbeiro tem as 9h. O horario pedido NAO vai direto ao resumo:
+  // a lista e de outro barbeiro, e o cliente tem de aceitar (antes saia "corte com outro barbeiro, posso confirmar?")
+  {
+    const T9 = '99999999-9999-4999-8999-999999999999';
+    const p9 = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-27', hora: '09:00', turno_id: T9 }), { opcoes: {}, pedido: pedU }, cfg);
+    let s9 = g.bvGPasso(p9.st, [ok({ minutos: 40, horarios: [] }), resp(500, {})], cfg); // o barbeiro de sempre nao tem nada no dia
+    s9 = g.bvGPasso(s9.st, [ok([{ idProfissional: 'bk', apelido: 'Black' }, { idProfissional: 'b2', apelido: 'Kiel' }])], cfg);
+    const r9 = g.bvGPasso(s9.st, [ok({ minutos: 40, horarios: ['09:00'] }), resp(500, {})], cfg).final;
+    assert.deepEqual(r9.resultado.opcoes.map((o) => [o.hora, o.barbeiro]), [['09:00', 'Kiel']]);
+    assert.equal(r9.resultado.horario_pedido_livre, undefined);
+    assert.deepEqual(r9.efeitos.pedido.busca, { turno: T9, n: 1, livre: null, hora: true, outros: true });
+    const ag9 = (turno) => g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', turno_id: turno }), { opcoes: r9.efeitos.opcoes, pedido: { ...pedU, ...r9.efeitos.pedido } }, cfg).final.resultado;
+    assert.equal(ag9(T9).code, 'cliente_nao_escolheu');
+    assert.equal(ag9('88888888-8888-4888-8888-888888888888').aguardando_confirmacao, true); // turno seguinte: ele aceitou
+  }
   // habitual com horario: lista dele e segue como sugestao (nao grava como escolha)
   r = g.bvGPasso(p.st, [ok({ minutos: 40, horarios: ['09:20'] }), resp(500, {})], cfg).final;
   assert.deepEqual([r.resultado.opcoes[0].barbeiro, r.efeitos.pedido.barbeiro], ['Black', undefined]);
@@ -921,7 +936,7 @@ console.log('graces.test.js mais pedidos ok');
   const agendar = (f, turno, id) => g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: id, turno_id: turno }), { opcoes: f.efeitos.opcoes, pedido: { ...ped, ...f.efeitos.pedido } }, cfg).final.resultado;
   // pediu 09:30, so ha 13:20 e 14:00: no turno da busca o agente nao pode propor 13:20
   let f = busca('09:30', ['13:20', '14:00'], T);
-  assert.deepEqual(f.efeitos.pedido.busca, { turno: T, n: 2, livre: null });
+  assert.deepEqual(f.efeitos.pedido.busca, { turno: T, n: 2, livre: null, hora: true, outros: false });
   assert.equal(agendar(f, T, '1').code, 'cliente_nao_escolheu');
   assert.equal(agendar(f, T2, '1').aguardando_confirmacao, true); // turno seguinte: o cliente escolheu
   // pediu 14:00 e esta livre: vai direto ao resumo; so ele
@@ -929,9 +944,43 @@ console.log('graces.test.js mais pedidos ok');
   const livre = f.resultado.horario_pedido_livre;
   assert.equal(agendar(f, T, livre).aguardando_confirmacao, true);
   assert.equal(agendar(f, T, livre === '1' ? '2' : '1').code, 'cliente_nao_escolheu');
-  // um unico horario na lista: pode propor
+  // um unico horario na lista, sem hora pedida: pode propor (e exatamente o que o cliente pediu)
   f = busca(null, ['16:00'], T);
   assert.equal(agendar(f, T, '1').aguardando_confirmacao, true);
+  // unico horario que NAO e a hora pedida: espera a escolha (17/11: pediu 9h, recebeu "as 8h com outro barbeiro, posso confirmar?")
+  f = busca('09:00', ['08:00'], T);
+  assert.equal(f.resultado.horario_pedido_livre, undefined);
+  assert.equal(agendar(f, T, '1').code, 'cliente_nao_escolheu');
+  assert.equal(agendar(f, T2, '1').aguardando_confirmacao, true);
+  // "depois das 18h" (a_partir): so os inicios dessa hora em diante, sem o aviso de "perto"; sem nenhum, diz que nao ha a partir dela
+  const aPartir = (hora, hs) => {
+    const p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_barbeiro: '1', data: '2026-10-27', a_partir: hora, turno_id: T }), { opcoes: { tipo: 'barbeiro', itens: [{ id: '1', valor: b }] }, pedido: ped }, cfg);
+    return g.bvGPasso(p.st, [ok({ minutos: 40, horarios: hs }), resp(500, {})], cfg).final;
+  };
+  f = aPartir('18:00', ['14:40', '16:00', '20:00', '20:40']);
+  assert.deepEqual(f.resultado.opcoes.map((o) => o.hora), ['20:00', '20:40']);
+  assert.equal(f.resultado.orientacao, undefined);
+  assert.equal(f.efeitos.pedido.busca.hora, true);
+  f = aPartir('18:00', ['14:40', '16:00']);
+  assert.equal(f.resultado.total, 0);
+  assert.match(f.resultado.orientacao, /Kiel não tem horário a partir das 18:00 nesse dia/);
+  assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-27', a_partir: '18h' }, cfg).resultado.code, 'entrada_invalida');
+  // a hora minima vem do texto do cliente no turno (o modelo so manda hora): "depois das", "a partir das", "apos as" a mesma hora
+  const norm = (hora, texto, op = 'horarios_livres') => g.bvGNormalizar({ ...base, operacao: op, data: '2026-10-27', hora, texto_cliente: texto }, cfg);
+  for (const t of ['Tem horário amanhã depois das 18h?', 'a partir das 18', 'após as 18:00 pode ser', 'DEPOIS DAS 6 da tarde', '[áudio transcrito] só consigo depois das 18 horas']) {
+    const n = norm('18:00', t);
+    assert.equal(n.ok, true, t);
+    assert.deepEqual([n.in.a_partir, n.in.hora, n.in.texto_cliente], ['18:00', undefined, undefined], t);
+  }
+  for (const t of ['umas 18h', 'depois das 16h não posso, tem às 18h?', '', undefined, 'depois do almoço']) {
+    const n = norm('18:00', t);
+    assert.deepEqual([n.in.a_partir, n.in.hora, n.in.texto_cliente], [undefined, '18:00', undefined], String(t));
+  }
+  assert.equal(norm(undefined, 'depois das 18h').in.a_partir, undefined); // sem hora do modelo, nada muda
+  // aviso de hora sem resultado: sem o texto de maquina
+  f = busca('18:00', ['14:40', '20:00'], T);
+  assert.match(f.resultado.orientacao, /^não há horário perto das 18:00; a lista traz os mais próximos/);
+  assert.doesNotMatch(f.resultado.orientacao, /60 min/);
   // sem cadastro: a fase 1 manda cadastrar e chamar de novo com a mesma opcao
   const sem = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', turno_id: T2 }), { opcoes: f.efeitos.opcoes, pedido: { ...ped, idCliente: null, cliente_sem_cadastro: true } }, cfg).final.resultado;
   assert.equal(sem.code, 'cadastre_primeiro');
