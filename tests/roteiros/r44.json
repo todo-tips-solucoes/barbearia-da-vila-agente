@@ -1,0 +1,22 @@
+{
+  "id": "R44",
+  "situacao": "Cumprimento com pergunta em aberto (atendimentos de 17/11; etapa 6): um \"Boa tarde\" logo depois de uma pergunta do agente não faz o atendimento recomeçar",
+  "falas": [
+    "Quero cortar o cabelo amanhã à tarde",
+    "corte adulto",
+    "Boa tarde, tudo bem?"
+  ],
+  "expectativas": [
+    "Escolhido o corte adulto, pergunta o barbeiro de preferência por lista",
+    "Com o cumprimento, responde a ele em poucas palavras e repete a pergunta do barbeiro, com a lista junto",
+    "Não recomeça o atendimento: não pergunta \"como posso ajudar?\" nem pede o serviço de novo"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": false
+}

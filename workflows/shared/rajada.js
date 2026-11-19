@@ -10,7 +10,14 @@ function bvEquipe(b, filaHumana, textoAgente) { // ticket: chamadoId do evento (
   if (!b || b.acao !== 'from_internal' || b.fromMe !== true || bvFila(b) !== Number(filaHumana)) return null;
   const m = b.mensagem && !Array.isArray(b.mensagem) && typeof b.mensagem === 'object' ? b.mensagem : null;
   if (!m || typeof b.sender !== 'string' || !b.sender || b.isGroup === true) return null;
-  const texto = typeof m.body === 'string' && m.body.trim() ? m.body.slice(0, 4000) : null;
+  let texto = typeof m.body === 'string' && m.body.trim() ? m.body.slice(0, 4000) : null;
+  // Midia da equipe: o body traz o nome do arquivo ("<uuid>_<n>.mp3"), que entrava no historico como se fosse a fala (17/11).
+  // Fica a marca do que foi enviado; legenda de verdade (body que nao e nome de arquivo) e mantida. O agente nao ouve o audio.
+  if (m.mediaUrl) {
+    const mt = String(m.mediaType || '');
+    const marca = /audio|ptt/i.test(mt) ? '[áudio]' : /image|sticker/i.test(mt) ? '[imagem]' : /video/i.test(mt) ? '[vídeo]' : '[arquivo]';
+    texto = texto && !/\.(?:mp3|ogg|oga|opus|m4a|aac|wav|mp4|mov|webm|jpe?g|png|webp|gif|pdf|docx?|xlsx?|csv|txt|zip)$/i.test(texto.trim()) ? `${marca} ${texto}` : marca;
+  }
   if (texto && textoAgente && texto.includes(String(textoAgente))) return null;
   return { telefone: b.sender, fila: bvFila(b), id: m.id === undefined || m.id === null ? null : String(m.id), texto, ticket: /^\d+$/.test(String(b.chamadoId)) ? Number(b.chamadoId) : null };
 }

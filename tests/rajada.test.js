@@ -68,6 +68,17 @@ console.log('rajada.test.js ok');
   const ev = (o) => ({ acao: 'from_internal', fromMe: true, queueId: 106, sender: '5511999990000', mensagem: { id: 77, body: 'Oi, aqui é da equipe' }, ...o });
   assert.deepEqual(r.bvEquipe(ev(), 106, 'Vou passar você para a equipe'), { telefone: '5511999990000', fila: 106, id: '77', texto: 'Oi, aqui é da equipe', ticket: null });
   assert.equal(r.bvEquipe(ev({ chamadoId: 4321 }), 106, 'x').ticket, 4321); // o vigia encerra o ticket do evento da equipe
+  // midia da equipe: o nome do arquivo nao entra no historico como fala (17/11); legenda de verdade fica
+  const midia = (mediaType, body) => r.bvEquipe(ev({ mensagem: { id: 9, body, mediaType, mediaUrl: 'https://x/arquivo' } }), 106, 'x').texto;
+  assert.equal(midia('audio', '0f3a9c2d-9981-4b11-89da-1a2b3c4d5e6f_1763391497.mp3'), '[áudio]');
+  assert.equal(midia('image', 'foto_123.jpeg'), '[imagem]');
+  assert.equal(midia('image', 'Olha o modelo que ele pediu'), '[imagem] Olha o modelo que ele pediu');
+  assert.equal(midia('video', undefined), '[vídeo]');
+  assert.equal(midia('application/pdf', 'tabela.pdf'), '[arquivo]');
+  assert.equal(midia('image', 'WhatsApp Image 2026-11-17 at 10.30.12.jpeg'), '[imagem]'); // nome de arquivo com espaco
+  assert.equal(midia('application/pdf', 'Tabela de preços 2026.pdf'), '[arquivo]');
+  assert.equal(midia('image', 'www.barbearia.com.br'), '[imagem] www.barbearia.com.br'); // legenda com ponto nao e nome de arquivo
+  assert.equal(r.bvEquipe(ev({ mensagem: { id: 9, body: 'Pode vir às 15h.', mediaType: 'conversation' } }), 106, 'x').texto, 'Pode vir às 15h.'); // texto: como antes
   assert.equal(r.bvEquipe(ev({ queueId: 107 }), 106, 'x'), null); // fila do agente: eco das mensagens dele
   assert.equal(r.bvEquipe(ev({ fromMe: false }), 106, 'x'), null); // mensagem do cliente
   assert.equal(r.bvEquipe(ev({ acao: 'start' }), 106, 'x'), null);

@@ -1,0 +1,22 @@
+{
+  "id": "R45",
+  "situacao": "Cliente que não conhece nenhum barbeiro (atendimentos de 17/11; etapa 6): \"não conheço nenhum\" vale como qualquer barbeiro; a lista de barbeiros não volta",
+  "falas": [
+    "Quero cortar o cabelo amanhã à tarde",
+    "corte adulto",
+    "Não conheço nenhum, pode ser qualquer um"
+  ],
+  "expectativas": [
+    "A lista de barbeiros traz a opção \"Qualquer barbeiro\" e não tem o Jayme",
+    "Com \"não conheço nenhum, pode ser qualquer um\", mostra por lista os horários de amanhã à tarde com o nome do barbeiro em cada um (ou diz que não há horário à tarde e oferece as alternativas em lista)",
+    "Não manda a lista de barbeiros de novo e não diz que escolheu um barbeiro pelo cliente"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": false
+}
