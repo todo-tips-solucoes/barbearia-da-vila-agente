@@ -1,0 +1,24 @@
+{
+  "id": "R39",
+  "situacao": "Cliente do barbeiro que só a equipe agenda, em número sem cadastro (conflito 10): quem diz que já é cliente não é cadastrado de novo",
+  "falas": [
+    "Oi, sou cliente do Jayme faz tempo, quero marcar com ele amanhã",
+    "Não tenho mais aquele número"
+  ],
+  "expectativas": [
+    "Não oferece horários nem mostra o Jayme em lista, e não pede cadastro: como ele diz que já é cliente, explica que o cadastro deve estar com outro número e pergunta se ele consegue chamar por aquele número",
+    "Quando ele diz que não tem mais o número, transfere para a equipe com o texto de encaminhamento"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K4",
+    "K6"
+  ],
+  "agenda": false,
+  "handoff": true,
+  "cobre": [
+    9,
+    10
+  ]
+}

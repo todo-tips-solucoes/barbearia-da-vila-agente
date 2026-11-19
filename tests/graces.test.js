@@ -67,7 +67,7 @@ assert.equal(g.bvGPlano(entrada({ operacao: 'escolher_cliente', id_opcao: '9' })
 
 // cadastrar_cliente (owner, 2026-11-14): nome e sobrenome separados, celular do contato, genero M, nascimento opcional.
 assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo Cliente' }), ctxOp({}, { cliente_sem_cadastro: true }), cfg).final.resultado.code, 'cadastro_desabilitado');
-const aberto = { ...cfg, cadastroLiberado: true, terceiroLiberado: true };
+const aberto = { ...cfg, cadastroLiberado: true };
 const prodCad = { ...aberto, redirecionar: false };
 assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Novo Cliente' }), ctxOp({}, {}), prodCad).final.resultado.code, 'identifique_primeiro');
 for (const nome of ['Novo', 'joão da', '  Ana  ']) assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome }), ctxOp({}, { cliente_sem_cadastro: true }), prodCad).final.resultado.code, 'nome_incompleto', nome);
@@ -320,7 +320,7 @@ assert.equal(r.efeitos.proposta_upd.estado, 'executada');
   // cancelar: sai da lista de futuros e devolve o texto final
   const pc = f2({ operacao: 'cancelar' }, { pedido: { idCliente: 'c1', futuros: [{ idAgenda: dadosCanc.idAgenda, horaInicio: dadosCanc.horaInicio, servico: 'corte adulto' }, { idAgenda: 'fica', horaInicio: '2027-01-04T09:00:00', servico: 'barba' }] }, proposta: { id: PID, acao: 'cancelar', dados: dadosCanc } });
   const rc = g.bvGPasso(pc.st, [ok({ sucesso: true })], cfg).final;
-  assert.match(rc.resultado.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00 com ZZ TESTE$/);
+  assert.match(rc.resultado.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00$/); // o barbeiro de teste nao entra no resumo
   assert.deepEqual(rc.efeitos.pedido.futuros.map((x) => x.idAgenda), ['fica']);
   // meus_agendamentos atualiza os futuros
   assert.deepEqual(g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg).st, [ok(agBruto)], cfg).final.efeitos.pedido.futuros, [{ idAgenda: 'a1', idServico: 's1', horaInicio: '2026-10-20T14:00:00', servico: 'corte adulto' }]);
@@ -551,68 +551,9 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 18);
   assert.equal(g.bvGPasso(pc2.st, [ok({ sucesso: true })], cfg).final.efeitos.proposta_upd.estado, 'executada');
 }
 
-// ---- FASE 3: terceiros (u17-u24) ----
+// Cadastro do cliente: homonimo com outro celular (as ferramentas de outra pessoa sairam na revisao de 17/11).
 {
-  const lista = [{ idCliente: 'p1', nomeCliente: 'Paulo', sobrenomeCliente: 'Souza', celular: '11999998888', email: 'a@b.c', documento: '123' },
-    { idCliente: 'p2', nomeCliente: 'Paula', sobrenomeCliente: 'Lima', celular: '11977776666' }];
-  // u17: rotulos so com nome e sobrenome; escolher no mesmo turno recusado
-  assert.equal(g.bvGPlano(entrada({ operacao: 'buscar_pessoa', nome: 'Paulo' }), ctxOp({}), cfg).final.resultado.code, 'nome_incompleto');
-  const pb = g.bvGPlano(entrada({ operacao: 'buscar_pessoa', nome: 'Paulo Souza' }), ctxOp({}), cfg);
-  assert.deepEqual(pb.reqs[0].qs, { busca: 'Paulo Souza' });
-  const rb = g.bvGPasso(pb.st, [ok(lista)], cfg).final;
-  assert.deepEqual(rb.resultado.pessoas.map((x) => x.nome), ['Paulo Souza', 'Paula Lima']);
-  assert.ok(!/999998888|977776666|a@b|123|p1/.test(JSON.stringify(rb.resultado))); // 3.4.5
-  assert.ok(!JSON.stringify(rb.efeitos).includes('999998888'));
-  assert.equal(rb.efeitos.pedido.busca_pessoa_turno, T2);
-  const ctxP = ctxOp(rb.efeitos.opcoes, { idCliente: 'c1', ...rb.efeitos.pedido });
-  assert.equal(g.bvGPlano(entrada({ operacao: 'escolher_pessoa', id_opcao: '1' }), ctxP, cfg).final.resultado.code, 'confirmacao_no_mesmo_turno');
-  // tetos
-  assert.equal(g.bvGPlano(entrada({ operacao: 'buscar_pessoa', nome: 'Paulo Souza' }), ctxOp({}, { buscas_pessoa: 3 }), cfg).final.resultado.code, 'limite_buscas');
-  assert.equal(g.bvGPlano(entrada({ operacao: 'buscar_pessoa', nome: 'Paulo Souza' }), ctxOp({}, {}, { dia: { buscas: 5 } }), cfg).final.resultado.code, 'limite_buscas');
-  // u22: mesmo celular do remetente (+5511999998888) -> ok, idCliente do terceiro
-  const T3 = '44444444-4444-4444-8444-444444444444';
-  const posterior = { ...ctxP, pedido: { ...ctxP.pedido, busca_pessoa_turno: T3 } };
-  let rp = g.bvGPlano(entrada({ operacao: 'escolher_pessoa', id_opcao: '1' }), posterior, cfg).final;
-  assert.equal(rp.resultado.ok, true);
-  assert.equal(rp.efeitos.pedido.idCliente, 'p1');
-  assert.equal(rp.efeitos.pedido.para_terceiro, true);
-  assert.equal(rp.efeitos.pedido.idCliente_remetente, 'c1');
-  // u21: celular diferente -> encaminhar_equipe, idCliente intocado, falha sem nome/celular, handoff
-  rp = g.bvGPlano(entrada({ operacao: 'escolher_pessoa', id_opcao: '2' }), posterior, cfg).final;
-  assert.equal(rp.resultado.code, 'encaminhar_equipe');
-  assert.equal(rp.resultado.motivo, 'terceiro_outro_celular');
-  assert.equal(rp.efeitos.pedido.idCliente, undefined);
-  assert.equal(rp.efeitos.pedido.para_terceiro, undefined);
-  assert.equal(rp.efeitos.pedido.handoff, true);
-  assert.equal(rp.efeitos.handoff.queueId, 78);
-  assert.equal(rp.efeitos.falha.motivo, 'encaminhar_equipe|terceiro_outro_celular');
-  assert.ok(!/Paula|Lima|977776666/.test(JSON.stringify(rp.efeitos)));
-  // sem celular no cadastro tambem encaminha (fail-closed)
-  const sem = g.bvGPasso(pb.st, [ok([{ idCliente: 'p3', nomeCliente: 'Ana', sobrenomeCliente: 'Reis' }])], cfg).final;
-  rp = g.bvGPlano(entrada({ operacao: 'escolher_pessoa', id_opcao: '1' }), { opcoes: sem.efeitos.opcoes, pedido: { idCliente: 'c1' } }, cfg).final;
-  assert.equal(rp.resultado.motivo, 'terceiro_outro_celular');
-  // conversa transferida: nenhuma ferramenta age
-  assert.equal(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1', handoff: true }), cfg).final.resultado.code, 'handoff_ativo');
-  // sem resultado: guarda o nome buscado
-  const vz = g.bvGPasso(pb.st, [ok([])], cfg).final;
-  assert.equal(vz.efeitos.pedido.terceiro_sem_cadastro, 'Paulo Souza');
-  // u18: cadastrar_terceiro com cadastroLiberado falso -> nenhuma chamada
-  const ped = { idCliente: 'c1', terceiro_sem_cadastro: 'Paulo Souza' };
-  let pt = g.bvGPlano(entrada({ operacao: 'cadastrar_terceiro', nome: 'Paulo Souza' }), ctxOp({}, ped), cfg);
-  assert.equal(pt.final.resultado.code, 'cadastro_desabilitado');
-  assert.equal(pt.reqs, undefined);
-  assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_terceiro', proposta_id: PID }), { pedido: ped, proposta: { id: PID, acao: 'cadastrar_terceiro', dados: { nome: 'Paulo Souza', celular: '11999998888' } } }, cfg).final.resultado.code, 'cadastro_desabilitado');
-  // u19: liberado (mock), sem celular -> fase 1 so propoe; fase 2 POST com o celular do remetente
-  pt = g.bvGPlano(entrada({ operacao: 'cadastrar_terceiro', nome: 'Paulo Souza' }), ctxOp({}, ped), aberto).final;
-  assert.match(pt.resultado.resumo, /com o seu celular/);
-  assert.equal(pt.efeitos.proposta_nova.dados.celular, '11999998888');
-  assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_terceiro', nome: 'Outro Nome' }), ctxOp({}, ped), aberto).final.resultado.code, 'busque_primeiro');
-  assert.equal(g.bvGPlano(entrada({ operacao: 'cadastrar_terceiro', nome: 'Paulo Souza' }), ctxOp({}, ped, { dia: { cadastros: 1 } }), aberto).final.resultado.code, 'limite_cadastros');
-  const f2t = g.bvGPlano(entrada({ operacao: 'cadastrar_terceiro', proposta_id: PID }), { pedido: ped, proposta: { id: PID, acao: 'cadastrar_terceiro', dados: pt.efeitos.proposta_nova.dados } }, aberto);
-  assert.deepEqual(f2t.reqs[0].body, { nomeCliente: 'Paulo Souza', ddiCelular: '55', celular: '11999998888' });
-  r = g.bvGPasso(f2t.st, [ok({ sucesso: true, idCliente: 'nv' })], aberto).final;
-  assert.equal(r.efeitos.pedido.idCliente, 'nv');
-  assert.equal(r.efeitos.pedido.cadastro_terceiro_feito, true);
+  let rp;
   // u23: primeiro contato, mesmo nome completo com outro celular -> encaminha, sem POST
   const pcad = g.bvGPlano(entrada({ operacao: 'cadastrar_cliente', nome: 'Paulo  SOUZA' }), ctxOp({}, { cliente_sem_cadastro: true }), prodCad);
   assert.equal(pcad.reqs[0].m, 'GET');
@@ -643,17 +584,6 @@ assert.deepEqual(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '
 assert.deepEqual(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', id_opcoes_servicos: '["1","2"]' }, cfg).in.id_opcoes_servicos, ['1', '2']);
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', qualquer: true, id_opcoes_servicos: [] }, cfg).in.id_opcoes_servicos, undefined);
 assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026-10-20', id_opcoes_servicos: '1' }, cfg).resultado.code, 'entrada_invalida');
-
-// SC-011: cadastrar_terceiro usa a trava propria (terceiroLiberado), independente de cadastroLiberado; limites diarios vem de ctx.dia.
-{
-  const ped = { idCliente: 'c1', terceiro_sem_cadastro: 'Paulo Souza' };
-  const e = { operacao: 'cadastrar_terceiro', nome: 'Paulo Souza' };
-  const so = { ...cfg, cadastroLiberado: true };
-  assert.equal(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped }, so).final.resultado.code, 'cadastro_desabilitado');
-  const so2 = { ...cfg, terceiroLiberado: true };
-  assert.ok(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped }, so2).final.efeitos.proposta_nova);
-  assert.equal(g.bvGPlano(entrada(e), { opcoes: {}, pedido: ped, dia: { cadastros: 1 } }, so2).final.resultado.code, 'limite_cadastros');
-}
 
 // ---- mensagens-agendadas: efeito `mensagens` e parametros $15..$17 ----
 {
@@ -706,8 +636,6 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-10-20' }), { opcoes: {}, pedido: comLista }, cfg).reqs[0].path, '/agenda/horarios-livres');
   // outro barbeiro: listar_barbeiros aceita o id 'ult'
   assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'ult' }), { opcoes: {}, pedido: pedU }, cfg).reqs[0].qs, { idServico: S });
-  // remetente agendando para terceiro: o ultimo atendimento dele nao vira padrao
-  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-10-20' }), { opcoes: {}, pedido: { ...pedU, para_terceiro: true } }, cfg).final.resultado.code, 'servico_nao_escolhido');
   // remarcacao com a hora pedida livre: orienta reagendar, nunca agendar
   const agd = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-23T10:00:00', idServico: S, servico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro' };
   let pr = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: '1', data: '2026-10-26', hora: '15:00' }), { opcoes: {}, pedido: { ...pedU, agendamentos: [agd] } }, cfg);
@@ -1038,4 +966,59 @@ console.log('graces.test.js segunda analise ok');
   const canc = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), { ...ctxE(opcoesAg), dia: { agendados: 5 } }, teto).final;
   assert.equal(canc.resultado.aguardando_confirmacao, true);
   console.log('graces.test.js teto de agendamentos ok');
+}
+
+{ // Revisao de 17/11, etapa 4: as ferramentas de outra pessoa nao existem mais, nem no codigo
+  for (const operacao of ['buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro']) {
+    assert.equal(g.bvGNormalizar({ ...base, operacao, nome: 'Paulo Souza', id_opcao: '1' }, cfg).resultado.code, 'entrada_invalida');
+  }
+  assert.equal(g.bvGNormalizar({ ...base, operacao: 'cadastrar_cliente', nome: 'Paulo Souza', celular: '11999998888' }, cfg).resultado.code, 'campo_desconhecido'); // o celular e sempre o do contato
+  assert.equal(g.BVG_ACOES.cadastrar_terceiro, undefined);
+  console.log('graces.test.js sem ferramentas de outra pessoa ok');
+}
+
+{ // Etapa 4: cancelar depois da recusa de presenca nao volta a pergunta "remarcar ou cancelar?" (ja feita no texto da recusa)
+  const ag = { opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-20T14:00:00', idServico: 's1', servico: 'corte adulto', idProfissional: TESTE, profissional: 'ZZ TESTE', recorrente: false };
+  const canc = (pedido) => g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), { opcoes: {}, pedido: { idCliente: 'c1', agendamentos: [ag], ...pedido } }, cfg).final;
+  const comum = canc({});
+  assert.deepEqual(comum.efeitos.opcoes.itens.map((x) => x.valor), ['remarcar', 'cancelar']); // fluxo normal: sugere remarcar em lista
+  assert.match(comum.resultado.orientacao, /Remarcar: pergunte o dia e o horário que ele prefere e só então horarios_livres/);
+  const recusou = canc({ confirmacao_recusada: { idAgenda: 'a1', em: '2026-10-19T12:00:00Z' } });
+  assert.equal(recusou.resultado.aguardando_confirmacao, true);
+  assert.equal(recusou.resultado.opcoes, undefined);
+  assert.deepEqual(recusou.efeitos.opcoes, {}); // sem lista de decisao
+  assert.equal(recusou.efeitos.proposta_nova.acao, 'cancelar');
+  assert.match(recusou.resultado.orientacao, /peça só a confirmação do cancelamento/);
+  // recusa de OUTRO agendamento: segue o fluxo normal
+  assert.deepEqual(canc({ confirmacao_recusada: { idAgenda: 'outro', em: '2026-10-19T12:00:00Z' } }).efeitos.opcoes.itens.map((x) => x.valor), ['remarcar', 'cancelar']);
+  assert.match(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '9' }), { opcoes: {}, pedido: { idCliente: 'c1' } }, cfg).final.resultado.orientacao, /mande a lista de novo \(no máximo duas vezes/);
+  console.log('graces.test.js cancelar depois da recusa ok');
+}
+
+{ // Etapa 4 (suite R34/R35): resumo do cancelamento sem o nome de barbeiro que o agente nunca mostra, e oferta de outro horario
+  const ag = (prof, id) => ({ opcao_id: '1', idAgenda: 'a1', horaInicio: '2026-10-20T14:00:00', idServico: 's1', servico: 'corte adulto', idProfissional: id, profissional: prof, recorrente: false });
+  const c = { ...cfg, ambiente: 'producao', escritaLiberada: true, redirecionar: false, humanos: [{ id: 'jay', nome: 'Jayme' }] };
+  const res = (a1) => g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: '1' }), { opcoes: {}, pedido: { idCliente: 'c1', agendamentos: [a1] } }, c).final;
+  assert.match(res(ag('Pedro', 'b1')).resultado.resumo, /às 14:00 com Pedro$/);
+  assert.match(res(ag('ZZ TESTE INTEGRACAO - NAO AGENDAR', TESTE)).resultado.resumo, /às 14:00$/);
+  assert.match(res(ag('Jayme', 'jay')).resultado.resumo, /às 14:00$/); // clausula petrea: o nome nao aparece
+  const dados = res(ag('Pedro', 'b1')).efeitos.proposta_nova.dados;
+  const f2 = g.bvGPlano(entrada({ operacao: 'cancelar', proposta_id: '33333333-3333-4333-8333-333333333333' }), { pedido: { idCliente: 'c1' }, proposta: { id: '33333333-3333-4333-8333-333333333333', acao: 'cancelar', dados } }, c);
+  const fim = g.bvGPasso(f2.st, [ok({ sucesso: true })], c).final.resultado;
+  assert.match(fim.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00 com Pedro$/);
+  assert.match(fim.orientacao, /depois, numa pergunta só, ofereça marcar outro horário$/);
+  console.log('graces.test.js resumo do cancelamento ok');
+}
+
+{ // Etapa 4: meus_agendamentos nao leva ao modelo o nome de barbeiro que o agente nunca mostra
+  const c = { ...cfg, ambiente: 'producao', escritaLiberada: true, redirecionar: false, testeLiberado: true, humanos: [{ id: 'jay', nome: 'Jayme' }] };
+  const p = g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), { opcoes: {}, pedido: { idCliente: 'c1' } }, c);
+  const ag = (id, prof, idProf) => ({ idAgenda: id, horaInicio: '2026-10-20T14:00:00', idServico: 's1', descricaoServico: 'corte adulto', idProfissional: idProf, profissional: prof });
+  const r = g.bvGPasso(p.st, [ok([ag('a1', 'Pedro', 'b1'), ag('a2', 'Jayme', 'jay'), ag('a3', 'ZZ TESTE INTEGRACAO - NAO AGENDAR', TESTE)])], c).final.resultado;
+  assert.deepEqual(r.agendamentos.map((x) => [x.barbeiro, x.so_equipe]), [['Pedro', undefined], [undefined, true], [undefined, undefined]]);
+  assert.ok(!JSON.stringify(r).includes('Jayme') && !JSON.stringify(r).includes('ZZ TESTE'));
+  assert.match(r.orientacao, /para remarcar esse, chame transferir_atendimento; cancelar segue o fluxo normal/);
+  const so = g.bvGPasso(p.st, [ok([ag('a1', 'Pedro', 'b1')])], c).final.resultado;
+  assert.equal(so.orientacao, undefined);
+  console.log('graces.test.js meus_agendamentos sem nome oculto ok');
 }

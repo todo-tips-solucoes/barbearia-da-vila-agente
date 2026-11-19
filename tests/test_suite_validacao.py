@@ -8,13 +8,16 @@ _sp.loader.exec_module(sv)
 ROT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "roteiros")
 
 
+SEM_ROTEIRO = {4, 13}  # conflitos do prompt sem roteiro, com o motivo no teste de marcas e na documentacao
+
+
 def roteiros():
     return [json.load(open(p, encoding="utf-8")) for p in sorted(glob.glob(os.path.join(ROT, "r*.json")))]
 
 
 class Roteiros(unittest.TestCase):
     def test_ids_unicos_e_em_sequencia(self):
-        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 27)])
+        self.assertEqual([r["id"] for r in roteiros()], [f"R{i}" for i in range(1, 40)])
 
     def test_criterios_validos(self):
         for r in roteiros():
@@ -27,14 +30,24 @@ class Roteiros(unittest.TestCase):
                     self.assertIsNone(re.search(r"\d{8,}|\d{3}\.\d{3}\.\d{3}|@", f), (r["id"], f))
 
     def test_agenda_so_nos_oito_previstos(self):
-        self.assertEqual({r["id"] for r in roteiros() if r["agenda"]}, {"R1", "R5", "R6", "R7", "R8", "R9", "R11", "R19", "R20"})
+        self.assertEqual({r["id"] for r in roteiros() if r["agenda"]}, {"R1", "R5", "R6", "R7", "R8", "R9", "R11", "R19", "R20", "R27", "R29", "R31", "R33", "R34", "R35", "R37", "R38"})
 
     def test_marcas_especiais(self):
         m = {r["id"]: r for r in roteiros()}
-        self.assertEqual([m[i].get("preparo") for i in ("R7", "R8", "R9", "R10")], ["agendamento_previo"] * 3 + ["coleta_abandonada"])
+        self.assertEqual([m[i].get("preparo") for i in ("R7", "R8", "R9", "R10", "R31", "R33", "R34", "R35", "R38")], ["agendamento_previo"] * 3 + ["coleta_abandonada"] + ["agendamento_previo"] * 5)
         self.assertEqual(m["R16"]["delegado"], "smoke-mensagens:m2,m3,m7,m8")
-        self.assertEqual({r["id"] for r in m.values() if r.get("handoff")}, {"R15", "R17", "R24"})  # transferencia conferida no estado
-        self.assertEqual({r["id"] for r in m.values() if r.get("handoff") is False}, {"R3", "R13", "R25", "R26"})
+        self.assertEqual({r["id"] for r in m.values() if r.get("handoff")}, {"R15", "R17", "R24", "R29", "R30", "R36", "R39"})  # transferencia conferida no estado
+        self.assertEqual({r["id"] for r in m.values() if r.get("handoff") is False}, {"R3", "R13", "R25", "R26", "R28", "R32", "R35"})
+        # revisao de 17/11: passos que nao sao fala comum do cliente e escritas conferidas no estado
+        passos = {k for r in m.values() for f in r["falas"] if isinstance(f, dict) for k in f}
+        self.assertEqual(passos, {"tocar", "tocar_texto", "midia", "equipe", "fila_humana", "passar_horas", "lembrete"})
+        self.assertEqual({i: m[i]["escritas"] for i in m if "escritas" in m[i]}, {"R27": ["agendar"], "R29": ["agendar"], "R31": [], "R33": [], "R34": ["cancelar"], "R35": ["cancelar"], "R37": [], "R38": []})
+        # cobertura dos 15 conflitos do prompt resolvidos na etapa 4 (docs/melhorias-atendimento.md): cada um tem roteiro que o exercita,
+        # menos os que uma conversa nao consegue mostrar (4: chamadas de ferramenta nao aparecem; 13: mensagens fora de ordem)
+        cobertos = {c for r in m.values() for c in r.get("cobre", [])}
+        self.assertEqual(cobertos | SEM_ROTEIRO, set(range(1, 16)))
+        self.assertFalse(cobertos & SEM_ROTEIRO)
+        self.assertLessEqual(len([r for r in m.values() if not r["agenda"] and not r.get("delegado")]), len(sv.CONTATOS_LIVRES))  # um contato simulado por roteiro
         self.assertTrue(any("20%" in e for e in m["R2"]["expectativas"]))
 
 

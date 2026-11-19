@@ -1,0 +1,28 @@
+{
+  "id": "R29",
+  "situacao": "Pacote já pago (item 12): agenda normalmente, não discute o valor e só passa para a equipe depois de agendar",
+  "falas": [
+    "Oi! Tenho um pacote de cortes aí com vocês e quero marcar o próximo para amanhã à tarde, com qualquer barbeiro",
+    {
+      "tocar": 1
+    },
+    "Pode confirmar"
+  ],
+  "expectativas": [
+    "Não discute o valor nem diz que vai abater o pacote: diz que o valor mostrado é o avulso e que a equipe confere o pacote",
+    "Segue o agendamento normalmente (horários em lista, resumo, confirmação) e não transfere antes de agendar",
+    "Depois do sim, confirma o agendamento e avisa que a equipe confere o pacote por esta conversa"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "handoff": true,
+  "escritas": [
+    "agendar"
+  ]
+}

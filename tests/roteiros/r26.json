@@ -21,5 +21,8 @@
     "K6"
   ],
   "agenda": false,
-  "handoff": false
+  "handoff": false,
+  "cobre": [
+    12
+  ]
 }

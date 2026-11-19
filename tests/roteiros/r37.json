@@ -1,0 +1,24 @@
+{
+  "id": "R37",
+  "situacao": "Busca em vários dias (conflito 15): para no primeiro dia com horário e manda a lista dele",
+  "falas": [
+    "Oi! Qual dia da semana que vem o Kiel tem horário para corte adulto?"
+  ],
+  "expectativas": [
+    "Diz qual é o primeiro dia com horário do Kiel e manda a lista de horários desse dia na mesma resposta",
+    "Não cita vários dias com horário sem a lista deles, nem diz que há horários sem mostrar"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "escritas": [],
+  "cobre": [
+    15
+  ],
+  "referencia": "Este roteiro pergunta de dias da semana que vem. A referencia so traz os horarios livres de amanha: o dia e os horarios da semana que vem que o agente mostrar em lista vem da agenda (ferramenta) e sao corretos, nao invencao."
+}

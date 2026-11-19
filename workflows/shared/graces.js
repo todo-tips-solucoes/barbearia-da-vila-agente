@@ -7,9 +7,9 @@ if (typeof module !== 'undefined' && typeof bvMProgramar === 'undefined') Object
 
 const BVG_CAMPOS = ['operacao', 'contato_id', 'telefone', 'turno_id', 'ambiente', 'texto', 'id_opcao', 'id_opcao_servico',
   'id_opcao_barbeiro', 'qualquer', 'data', 'id_opcao_horario', 'id_opcao_agendamento', 'substitui_id_opcao_agendamento',
-  'proposta_id', 'nome', 'celular', 'id_opcoes_servicos', 'id_opcoes_agendamentos', 'periodo', 'hora', 'nascimento', 'como_conheceu', 'motivo'];
+  'proposta_id', 'nome', 'id_opcoes_servicos', 'id_opcoes_agendamentos', 'periodo', 'hora', 'nascimento', 'como_conheceu', 'motivo'];
 const BVG_OPS = ['identificar_cliente', 'cadastrar_cliente', 'escolher_cliente', 'listar_servicos', 'listar_barbeiros',
-  'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'buscar_pessoa', 'escolher_pessoa', 'cadastrar_terceiro', 'funcionamento', 'transferir_atendimento'];
+  'horarios_livres', 'meus_agendamentos', 'agendar', 'reagendar', 'cancelar', 'funcionamento', 'transferir_atendimento'];
 // Motivos de transferir_atendimento (owner, 2026-11-16): a equipe atende nesta mesma conversa, entao em vez de mandar o cliente
 // para e-mail ou Instagram o agente transfere. Valor desconhecido vira nao_resolvi; ausente vale barbeiro_equipe (clausula do Jayme).
 // O valor e a frase que abre o texto de encaminhamento (texto pronto: o modelo so repete).
@@ -24,7 +24,7 @@ const BVG_MOTIVOS = {
 };
 const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BVG_OPC = /^[A-Za-z0-9_-]{1,12}$/;
-const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto', cadastrar_terceiro: 'cadastrar_terceiro' };
+const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto' };
 
 // Periodo pedido pelo cliente (suite R1: pediu tarde e recebeu o dia inteiro a partir das 08:00): [inicio, fim) em HH:MM.
 const BVG_PERIODOS = { manha: ['00:00', '12:00'], tarde: ['12:00', '18:00'], noite: ['18:00', '24:00'] };
@@ -41,7 +41,7 @@ function bvgPertoDaHora(itens, hora, cfg, h = (x) => x.hora) { // itens em ordem
 }
 const bvgRecusa = (code, orientacao) => ({ ok: false, code, orientacao });
 const bvgFim = (resultado, efeitos = {}) => ({ final: { resultado, efeitos } });
-const bvgOpcaoInvalida = () => bvgRecusa('opcao_desconhecida', 'opção não oferecida, pergunte de novo');
+const bvgOpcaoInvalida = () => bvgRecusa('opcao_desconhecida', 'opção não oferecida: mande a lista de novo (no máximo duas vezes; depois ofereça passar para a equipe)');
 
 // Entrada: recusa campo desconhecido e valida formato (bordo de confianca). Devolve {ok:true, in} ou {ok:false, resultado}.
 function bvGNormalizar(raw, cfg) {
@@ -81,7 +81,6 @@ function bvGNormalizar(raw, cfg) {
   if (v.como_conheceu !== undefined && String(v.como_conheceu).length > 80) return ruim('como_conheceu');
   if (v.nascimento !== undefined && !bvgNascimentoOk(v.nascimento)) return ruim('nascimento');
   if (v.nome !== undefined && (String(v.nome).length < 2 || String(v.nome).length > 80)) return ruim('nome');
-  if (v.celular !== undefined && !/^\d{10,11}$/.test(String(v.celular))) return ruim('celular');
   for (const k of ['id_opcoes_servicos', 'id_opcoes_agendamentos']) { // o modelo pode mandar "1,2" ou '["1","2"]': aceita e converte; lista vazia = ausente
     if (typeof v[k] === 'string') { try { const j = JSON.parse(v[k]); v[k] = Array.isArray(j) ? j : v[k]; } catch (e) { /* nao e JSON */ } }
     if (typeof v[k] === 'string') v[k] = v[k].split(/[\s,;]+/).filter(Boolean);
@@ -95,9 +94,6 @@ function bvGNormalizar(raw, cfg) {
     escolher_cliente: !v.id_opcao,
     horarios_livres: !v.data, // sem barbeiro: usa o escolhido no pedido (bvgPlano)
     cadastrar_cliente: !v.nome,
-    buscar_pessoa: !v.nome || v.nome.length < 3,
-    escolher_pessoa: !v.id_opcao,
-    cadastrar_terceiro: !(v.proposta_id || v.nome),
     agendar: !(v.id_opcao_horario || v.proposta_id),
     reagendar: !(v.proposta_id || (v.id_opcao_agendamento && v.id_opcao_horario)),
     cancelar: !(v.proposta_id || v.id_opcao_agendamento || v.id_opcoes_agendamentos),
@@ -153,7 +149,7 @@ function bvgEscritaPermitida(cfg) {
 // Cancelar fase 1 (R7): remarcar ou cancelar vai como opcoes; o agendamento escolhido segue no pedido (bvgResolver).
 const bvgDecisaoCanc = (resultado, efeitos, cfg) => {
   const of = bvMontarOferta('decisao_cancelamento', [{ rotulo: 'Remarcar', valor: 'remarcar' }, { rotulo: 'Cancelar mesmo', valor: 'cancelar' }], cfg);
-  return bvgFim({ ...resultado, opcoes: of.itens.map((x) => ({ id: x.id, rotulo: x.rotulo })), orientacao: 'ofereça remarcar ou cancelar como opções; Remarcar: horarios_livres com o agendamento; Cancelar mesmo: cancelar com o proposta_id' }, { ...efeitos, opcoes: of });
+  return bvgFim({ ...resultado, opcoes: of.itens.map((x) => ({ id: x.id, rotulo: x.rotulo })), orientacao: 'diga qual é o agendamento e pergunte, no texto, se ele prefere remarcar ou cancelar mesmo (as duas opções vão em lista junto; nunca pergunte só se pode cancelar); Remarcar: pergunte o dia e o horário que ele prefere e só então horarios_livres com id_opcao_agendamento; Cancelar mesmo: o toque é a confirmação, chame cancelar só com o proposta_id' }, { ...efeitos, opcoes: of });
 };
 const bvgDia = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 const bvgDiaSem = (d) => bvDiaSemana(String(d)); // "sexta-feira, 20/11": o resumo leva o dia da semana pronto
@@ -177,17 +173,18 @@ function bvgJaTem(ped, itens) {
   const fs = Array.isArray(ped.futuros) ? ped.futuros : [];
   const a = fs.find((f) => itens.some((x) => String(f.horaInicio).slice(0, 10) === x.data)) || fs.find((f) => f.idServico && itens.some((x) => f.idServico === x.idServico));
   // pergunta de sim ou nao (suite, 18/11): "e mais um ou e para trocar?" deixava o "pode confirmar" do cliente sem resposta possivel
-  return a ? { ja_tem: `${a.servico || 'agendamento'} em ${bvgDiaSem(a.horaInicio)} às ${String(a.horaInicio).slice(11, 16)}`, orientacao: 'o cliente já tem esse agendamento: mande o resumo normalmente, avise em uma frase que ele já tem esse horário e pergunte só se pode confirmar mais este (o sim dele confirma); se ele disser que é para trocar aquele, use meus_agendamentos e reagendar' } : {};
+  return a ? { ja_tem: `${a.servico || 'agendamento'} em ${bvgDiaSem(a.horaInicio)} às ${String(a.horaInicio).slice(11, 16)}`, orientacao: 'o cliente já tem esse agendamento: mande o resumo normalmente, avise em uma frase que ele já tem esse horário e pergunte só se pode confirmar mais este (o sim dele confirma; não fale em confirmar os dois: o outro já está marcado); se ele disser que é para trocar aquele, use meus_agendamentos e reagendar' } : {};
 }
 // Texto final da escrita (revisao de 17/11): o modelo montava a confirmacao de memoria e trocava o dia ou o horario.
 function bvgFeito(p) {
   const r = String((p.dados || {}).resumo || '').replace(/^(Trocar serviço: |Remarcar |Cancelar )/, '');
   const v = { agendar: 'Agendado', agendar_conjunto: 'Agendado', trocar_servico: 'Serviço trocado', reagendar: 'Remarcado', cancelar: 'Cancelado', cancelar_conjunto: 'Cancelado' }[p.acao];
-  return r && v ? { feito: `${v}: ${r}`, orientacao: 'diga ao cliente que está feito, com o seu jeito caloroso de falar e exatamente estes dados (serviço, barbeiro, dia da semana, data e horário); não copie esta linha seca, e não mude nem recalcule nada' } : {};
+  const outro = /^cancelar/.test(p.acao) ? '; depois, numa pergunta só, ofereça marcar outro horário' : '';
+  return r && v ? { feito: `${v}: ${r}`, orientacao: `diga ao cliente que está feito, com o seu jeito caloroso de falar e exatamente estes dados (serviço, barbeiro, dia da semana, data e horário); não copie esta linha seca, e não mude nem recalcule nada${outro}` } : {};
 }
 const bvgReais = (v) => (v == null ? '' : ` (R$ ${Number(v).toFixed(2).replace('.', ',')})`);
 const bvgSoDigitos = (t) => String(t).replace(/\D/g, '');
-// Celular so em digitos, sem DDI 55 (comparacao de terceiro, FR-006/block-003).
+// Celular so em digitos, sem DDI 55 (cadastro do cliente e comparacao de homonimo).
 const bvgCelular = (t) => { const d = bvgSoDigitos(t == null ? '' : t); return d.length > 11 && d.startsWith('55') ? d.slice(2) : d; };
 const bvgNomeNorm = (t) => bvNormalizarDescricao(t).toLowerCase().replace(/\s+/g, ' ').trim();
 // Cadastro proprio (owner, 2026-11-14): a loja pesquisa pelo sobrenome no portal, entao nome = 1a palavra e sobrenome = o resto,
@@ -240,7 +237,6 @@ function bvGPlano(i, ctx0, cfg) {
   const chamar = (reqs, meta = {}) => ({ reqs, st: { ...st, meta: { ...st.meta, ...meta } } });
   const idCliente = ctx.pedido.idCliente;
   if (ctx.pedido.handoff) return bvgFim(bvgRecusa('handoff_ativo', 'conversa transferida para a equipe; não responda mais'));
-  const ter = cfg.terceiro || {};
   switch (i.operacao) {
     case 'identificar_cliente':
       return chamar([{ m: 'GET', path: '/agenda/clientes', qs: { celular: bvgSoDigitos(i.telefone) } }]);
@@ -257,28 +253,6 @@ function bvGPlano(i, ctx0, cfg) {
       // Antes do POST, busca o mesmo nome completo com outro celular (nunca cadastra duplicado/mescla).
       return chamar([{ m: 'GET', path: '/agenda/clientes', qs: { busca: `${ns.nome} ${ns.sobrenome}` } }], { etapa: 'busca_nome', post: { m: 'POST', path: '/agenda/clientes', body }, cad });
     }
-    case 'buscar_pessoa': {
-      if (bvgNomeNorm(i.nome).split(' ').length < 2) return bvgFim(bvgRecusa('nome_incompleto', 'peça o nome e o sobrenome da pessoa'));
-      if ((ctx.pedido.buscas_pessoa || 0) >= (ter.buscas_max_sessao ?? 3) || (ctx.dia.buscas || 0) >= (ter.buscas_max_dia ?? 5)) return bvgFim(bvgRecusa('limite_buscas', 'limite de buscas atingido; ofereça chamar a equipe da loja'));
-      return chamar([{ m: 'GET', path: '/agenda/clientes', qs: { busca: i.nome } }], { nome: i.nome });
-    }
-    case 'escolher_pessoa': {
-      const c = bvgResolver(i.id_opcao, 'pessoa', ctx);
-      if (!c) return bvgFim(bvgOpcaoInvalida());
-      if (ctx.pedido.busca_pessoa_turno === i.turno_id) return bvgFim(bvgRecusa('confirmacao_no_mesmo_turno', 'pergunte ao cliente se é essa pessoa e só escolha depois que ele responder'));
-      if (!c.mesmo_celular) return bvgEncaminhar('terceiro_outro_celular', 'escolher_pessoa', cfg); // fail-closed: celular ausente conta como diferente; idCliente nao e gravado
-      return bvgFim({ ok: true, nome: c.nome }, { pedido: { idCliente_remetente: ctx.pedido.idCliente_remetente || ctx.pedido.idCliente, idCliente: c.idCliente, para_terceiro: true } });
-    }
-    case 'cadastrar_terceiro': {
-      if (i.proposta_id) return bvgFase2(i, ctx, cfg, chamar);
-      if (!cfg.terceiroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'));
-      if (!idCliente) return bvgFim(bvgRecusa('cliente_nao_identificado', 'identifique o cliente primeiro'));
-      if (ctx.pedido.cadastro_terceiro_feito || (ctx.dia.cadastros || 0) >= (ter.cadastros_max_dia ?? 1)) return bvgFim(bvgRecusa('limite_cadastros', 'limite de cadastros atingido; chame a equipe da loja'));
-      if (!ctx.pedido.terceiro_sem_cadastro || bvgNomeNorm(ctx.pedido.terceiro_sem_cadastro) !== bvgNomeNorm(i.nome)) return bvgFim(bvgRecusa('busque_primeiro', 'busque a pessoa pelo nome (buscar_pessoa) antes de cadastrar'));
-      const cel = i.celular || bvgCelular(i.telefone);
-      const resumo = `Cadastrar ${i.nome} com o ${i.celular ? 'celular informado' : 'seu celular'}`;
-      return bvgFim({ ok: true, aguardando_confirmacao: true, resumo }, { proposta_nova: { acao: 'cadastrar_terceiro', dados: { nome: i.nome, celular: cel, celular_do_remetente: !i.celular }, resumo } });
-    }
     case 'escolher_cliente': {
       const c = bvgResolver(i.id_opcao, 'cliente', ctx);
       if (!c) return bvgFim(bvgOpcaoInvalida());
@@ -291,7 +265,7 @@ function bvGPlano(i, ctx0, cfg) {
       return chamar(bvgTermosServico(t).map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: bvgSoCabelo(t) });
     }
     case 'listar_barbeiros': {
-      const s = bvgServicoDe(i, ctx, !ctx.pedido.para_terceiro && ctx.pedido.ultimo);
+      const s = bvgServicoDe(i, ctx, ctx.pedido.ultimo);
       if (!s) return bvgFim(i.id_opcao_servico || i.servico_nome ? bvgOpcaoInvalida() : bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
       return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { servico: s, escolhido: ctx.pedido.barbeiro || null });
     }
@@ -312,7 +286,7 @@ function bvGPlano(i, ctx0, cfg) {
         return chamar(ss.map((s) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } })), { enc: true, etapa: 'enc_prof', servicos: ss, data: i.data, hora: i.hora });
       }
       const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
-      const ult = (!ctx.pedido.para_terceiro && ctx.pedido.ultimo) || {}; // ultimo atendimento do remetente: padrao so para ele mesmo
+      const ult = ctx.pedido.ultimo || {};
       const s = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : bvgServicoDe(i, ctx, ult);
       if (!s) return bvgFim(i.id_opcao_servico || i.servico_nome ? bvgOpcaoInvalida() : bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
       // Remarcar mantem o barbeiro (atendimentos de 2026-11-15): a busca ia a todos os barbeiros e a proposta trocava o barbeiro em
@@ -446,7 +420,16 @@ function bvgFase1(i, ctx, cfg) {
     const resumo = `Remarcar ${ag.servico} de ${bvgDia(ag.horaInicio)} ${ag.horaInicio.slice(11, 16)} para ${bvgDiaSem(h.data)} às ${h.hora} com ${h.apelido}`;
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo }, { proposta_nova: { acao: 'reagendar', dados: { ...dados, resumo }, resumo } });
   }
-  const resumo = `Cancelar ${ag.servico} em ${bvgDiaSem(ag.horaInicio)} às ${ag.horaInicio.slice(11, 16)} com ${ag.profissional}`;
+  // barbeiro de teste e barbeiro so da equipe nunca aparecem ao cliente: com o nome no resumo, a frase inteira da confirmacao era
+  // cortada na saida e sobrava so "Prontinho!" (suite R34/R35, 18/11)
+  const oculto = ag.idProfissional === cfg.testeId || !!bvBarbeiroHumano({ idProfissional: ag.idProfissional, apelido: ag.profissional }, cfg.humanos);
+  const resumo = `Cancelar ${ag.servico} em ${bvgDiaSem(ag.horaInicio)} às ${ag.horaInicio.slice(11, 16)}${oculto ? '' : ` com ${ag.profissional}`}`;
+  // Recusou a presenca deste agendamento (item 19): a pergunta "remarcar ou cancelar?" ja foi feita no texto da recusa; a lista
+  // de decisao voltava a mesma pergunta. So a confirmacao do cancelamento.
+  if (ctx.pedido.confirmacao_recusada && String(ctx.pedido.confirmacao_recusada.idAgenda) === String(ag.idAgenda)) {
+    return bvgFim({ ok: true, aguardando_confirmacao: true, resumo, orientacao: 'ele já ouviu a oferta de remarcar: peça só a confirmação do cancelamento, em uma frase; com o sim, chame cancelar só com o proposta_id' },
+      { opcoes: {}, proposta_nova: { acao: 'cancelar', dados: { ...agAnt, servico: ag.servico, barbeiro: ag.profissional, resumo }, resumo } });
+  }
   return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar', dados: { ...agAnt, servico: ag.servico, barbeiro: ag.profissional, resumo }, resumo } }, cfg);
 }
 
@@ -475,12 +458,8 @@ function bvgFase2(i, ctx, cfg, chamar) {
   }
   const redir = !!cfg.redirecionar || (cfg.ambiente === 'producao' && !real);
   const prof = redir ? cfg.testeId : d.idProfissional; // research Decision 10: toda escrita vai ao barbeiro de teste
-  // nome do cliente nos lembretes (owner, 2026-11-15); para outra pessoa o lembrete vai ao remetente, entao sem nome
-  const meta = { fase2: true, proposta: p, prof, redir, nome: ctx.pedido.para_terceiro ? '' : String(ctx.pedido.cliente_nome || '') };
-  if (p.acao === 'cadastrar_terceiro') {
-    if (!cfg.terceiroLiberado) return bvgFim(bvgRecusa('cadastro_desabilitado', 'não consigo cadastrar agora; chame a equipe da loja'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'cadastro_desabilitado' } } });
-    return chamar([{ m: 'POST', path: '/agenda/clientes', body: { nomeCliente: d.nome, ddiCelular: '55', celular: d.celular } }], { ...meta, etapa: 'cadastro' });
-  }
+  // nome do cliente nos lembretes (owner, 2026-11-15)
+  const meta = { fase2: true, proposta: p, prof, redir, nome: String(ctx.pedido.cliente_nome || '') };
   if (p.acao === 'agendar_conjunto') {
     if ((d.itens || []).some((x) => bvSegundaVez(x.servico))) return bvgFim(bvgNaoOferecido(), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'servico_nao_oferecido' } } });
     return chamar(bvgReqsLivre(d.itens.map((x) => ({ idServico: x.idServico, idProfissional: bvgProfDe(x, meta), data: x.data }))), { ...meta, etapa: 'reval_c', res: [] });
@@ -559,10 +538,10 @@ function bvGPasso(st, resps0, cfg) {
   return r.reqs ? { ...r, st: { ...r.st, estagio: n } } : r;
 }
 
-const BVG_ORIENT_CADASTRO = 'cliente sem cadastro neste número: responda dúvidas e mostre horários livres sem cadastro; para agendar, peça o nome completo, a data de nascimento e como conheceu a barbearia, chame cadastrar_cliente e depois siga com o agendamento';
+const BVG_ORIENT_CADASTRO = 'cliente sem cadastro neste número: responda dúvidas e siga o agendamento (serviço, barbeiro, horários) sem cadastro; só quando ele escolher o horário peça, numa mensagem só, o nome completo, a data de nascimento e como conheceu a barbearia, chame cadastrar_cliente e então agendar com o horário escolhido';
 // Cadastro feito (POST ou, no TESTE, o cliente de teste): o pedido passa a ter o cliente; como_conheceu vai para contatos.
 const bvgCadastrado = (cad, idCliente) => bvgFim(
-  { ok: true, cadastrado: true, nome: cad.ns.nome, orientacao: 'cadastro feito: agradeça em poucas palavras e, nesta mesma resposta, retome o que ficou pendente antes do cadastro (o pedido que ainda não foi respondido; se ele já tinha aceitado agendar, siga para o agendamento), chamando as ferramentas que precisar; não pergunte como pode ajudar' },
+  { ok: true, cadastrado: true, nome: cad.ns.nome, orientacao: 'cadastro feito: agradeça em poucas palavras e, nesta mesma resposta, chame agendar com o horário que ele já tinha escolhido e mande o resumo (se o cadastro foi para transferir, chame transferir_atendimento; sem horário escolhido, continue de onde o agendamento parou); não pergunte como pode ajudar' },
   { pedido: { idCliente, cliente_sem_cadastro: false, cliente_nome: cad.ns.nome, identificado: true }, ...(cad.como ? { contato: { como_conheceu: cad.como } } : {}) });
 
 // Ultimo atendimento (owner, 2026-11-14): agendar "pelo ultimo corte dele". Estagio hist: GET /agenda/historico (mais recente
@@ -627,17 +606,6 @@ function bvgPassoUm(st, resps0, cfg) {
         return homonimo ? bvgEncaminhar('nome_outro_celular', 'cadastrar_cliente', cfg) : { reqs: [meta.post], st: { ...st, meta: { ...meta, etapa: 'post' } } };
       }
       return r0.body && r0.body.idCliente ? bvgCadastrado(meta.cad, r0.body.idCliente) : falha(op, { status: 500 });
-    }
-    case 'buscar_pessoa': {
-      // Rotulo so com nome e sobrenome; o celular da resposta so vira o booleano mesmo_celular (nunca chega ao modelo).
-      const meu = bvgCelular(i.telefone);
-      const ps = lista.filter((c) => c && c.idCliente).map((c) => ({ idCliente: c.idCliente, nome: `${c.nomeCliente || ''} ${c.sobrenomeCliente || ''}`.trim(), mesmo_celular: !!meu && bvgCelular(c.celular) === meu }));
-      const reg = { motivo: 'busca_pessoa', operacao: 'buscar_pessoa', code: 'OK', status: 200, trace: null }; // contador diario (buscas_max_dia)
-      const pedido = { buscas_pessoa: (ctx.pedido.buscas_pessoa || 0) + 1, busca_pessoa_turno: i.turno_id };
-      if (!ps.length) return bvgFim({ ok: true, pessoas: [], orientacao: 'não achei; proponha cadastrar (cadastrar_terceiro)' }, { pedido: { ...pedido, terceiro_sem_cadastro: i.nome }, falha: reg });
-      if (ps.length > cfg.lista.max_itens) return bvgFim({ ok: true, pessoas: [], orientacao: 'muitos resultados; peça o nome completo' }, { pedido, falha: reg });
-      const of = bvMontarOferta('pessoa', ps.map((x) => ({ rotulo: x.nome, valor: x })), cfg);
-      return bvgFim({ ok: true, pessoas: of.itens.map((x) => ({ id: x.id, nome: x.rotulo })), orientacao: 'pergunte se é essa pessoa; só use escolher_pessoa depois da resposta do cliente' }, { opcoes: of, pedido, falha: reg });
     }
     case 'listar_servicos': {
       const vistos = new Set(); // uma busca por termo: junta sem repetir
@@ -743,7 +711,12 @@ function bvgPassoUm(st, resps0, cfg) {
         valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico, idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
       })), cfg);
       const ident = meta.ident ? { nome: meta.ident.cliente_nome } : {};
-      return bvgFim({ ok: true, ...ident, agendamentos: of.itens.map((x) => ({ id: x.id, servico: x.valor.servico, barbeiro: x.valor.profissional, inicio: x.valor.horaInicio })), orientacao: of.itens.length ? undefined : 'nenhum agendamento futuro' }, { opcoes: of, pedido: { ...(meta.ident || {}), futuros: ags.slice(0, 10).map(bvgFut), agendamentos: of.itens.map((x) => ({ opcao_id: x.id, ...x.valor })), ...(['horario', 'sequencia'].includes((ctx.opcoes || {}).tipo) ? { horarios_oferta: ctx.opcoes } : {}) } });
+      // barbeiro de teste e barbeiro so da equipe: o nome nao vai ao modelo (item 21; no TESTE a frase com o nome era cortada na saida e a
+      // resposta ficava sem dizer qual era o agendamento). so_equipe diz ao modelo o que fazer sem dizer quem e.
+      const hum = (v) => !!bvBarbeiroHumano({ idProfissional: v.idProfissional, apelido: v.profissional }, cfg.humanos);
+      const lst = of.itens.map((x) => ({ id: x.id, servico: x.valor.servico, ...(x.valor.idProfissional === cfg.testeId || hum(x.valor) ? {} : { barbeiro: x.valor.profissional }), inicio: x.valor.horaInicio, ...(hum(x.valor) ? { so_equipe: true } : {}) }));
+      const orient = !of.itens.length ? 'nenhum agendamento futuro' : lst.some((x) => x.so_equipe) ? 'agendamento com so_equipe é com um barbeiro que só a equipe agenda: não diga o nome dele; para remarcar esse, chame transferir_atendimento; cancelar segue o fluxo normal' : undefined;
+      return bvgFim({ ok: true, ...ident, agendamentos: lst, orientacao: orient }, { opcoes: of, pedido: { ...(meta.ident || {}), futuros: ags.slice(0, 10).map(bvgFut), agendamentos: of.itens.map((x) => ({ opcao_id: x.id, ...x.valor })), ...(['horario', 'sequencia'].includes((ctx.opcoes || {}).tipo) ? { horarios_oferta: ctx.opcoes } : {}) } });
     }
     default:
       return falha(op, { status: 500 });
@@ -880,14 +853,6 @@ function bvgPassoEscrita(st, resps, cfg) {
   const termina = (estado, resultado, extra = {}) => bvgFim(resultado, { ...extra, proposta_upd: { id: p.id, estado, resultado: { ok: !!resultado.ok, code: resultado.code } } });
   const err = (op, r) => { const e = bvGErro(r, op); return { e, f: e.falha }; };
   const prox = (etapa, reqs, extra = {}) => ({ reqs, st: { ...st, meta: { ...meta, etapa, ...extra } } });
-  if (meta.etapa === 'cadastro') {
-    if (ok && r0.body && r0.body.idCliente) {
-      const ped = (st.ctx && st.ctx.pedido) || {};
-      return termina('executada', { ok: true, cadastrado: true }, { pedido: { idCliente: r0.body.idCliente, idCliente_remetente: ped.idCliente_remetente || ped.idCliente, para_terceiro: true, terceiro_sem_cadastro: null, cadastro_terceiro_feito: true } });
-    }
-    const { e, f } = err('cadastrar_terceiro', ok ? { status: 500 } : r0);
-    return termina(e.incerto ? 'incerta' : 'falhou', { ok: false, code: e.incerto ? 'incerta' : e.code, orientacao: e.orientacao }, { falha: f });
-  }
   if (meta.etapa === 'reval_c') {
     const itens = p.dados.itens;
     const ruim = resps.slice(0, itens.length).findIndex((r) => r.status !== 200); // ocupacoes com falha so tiram o encaixe (bvgLivre)

@@ -737,35 +737,6 @@ def r5():
     checar("agendar variante '2a vez' recusado (servico_nao_oferecido), sem proposta", r.get("code") == "servico_nao_oferecido" and not propostas(534), str(r)[:160])
 
 
-def r6():
-    print("r6 terceiro existente (SC-004): busca pelo nome do proprio cliente de teste -> mesmo celular -> agendado no idCliente achado")
-    paulo = next(x for x in graces_get(f"/agenda/clientes?celular={PAULO_TEL[1:]}") if x["idCliente"] == PAULO)
-    nome = f"{paulo['nomeCliente']} {paulo.get('sobrenomeCliente') or ''}".strip()
-    s0 = servico("corte")
-    dia = dia_util(s0["idServico"])
-    c = ini(535)
-    d, api = _api_deploy()
-    with chamador(api) as chamar:
-        b = G(chamar, c, 535, operacao="buscar_pessoa", nome=nome)
-        it = next((i for i in estado(535)["opcoes"].get("itens", []) if PAULO in json.dumps(i["valor"])), None)
-        checar("nenhum celular na resposta ao modelo", PAULO_TEL[3:] not in json.dumps(b))
-        if not it:  # a Graces de PROD devolve [] para QUALQUER `busca=` (verificado 2026-10-19: Paulo, Ana, Silva...): semeia a oferta no formato que buscar_pessoa grava
-            _info.append("r6: GET /agenda/clientes?busca= devolve [] na Graces de PROD (totalItemCount 0, qualquer termo); a oferta 'pessoa' foi semeada com o formato de buscar_pessoa (mesmo_celular calculado do celular real do cadastro)")
-            checar("busca sem resultado orienta cadastrar, sem gravar idCliente", b.get("pessoas") == [] and "cadastrar" in str(b.get("orientacao")), str(b)[:160])
-            mesmo = "".join(ch for ch in str(paulo["celular"]) if ch.isdigit())[-9:] == PAULO_TEL[-9:]
-            semear(535, {"idCliente": PAULO, "cliente_nome": "Paulo"}, {"tipo": "pessoa", "itens": [{"id": "1", "rotulo": nome[:24], "valor": {"idCliente": PAULO, "nome": nome, "mesmo_celular": mesmo}}]})
-            it = estado(535)["opcoes"]["itens"][0]
-        e = G(chamar, c, 535, operacao="escolher_pessoa", id_opcao=it["id"])
-        checar("escolher_pessoa ok (mesmo celular)", e.get("ok") is True and estado(535)["pedido"].get("idCliente") == PAULO, str(e)[:160])
-        r, itens = ofertar(chamar, c, 535, s0["idServico"], "corte", dia)
-        h = _horario_do_teste(s0["idServico"], dia, itens)
-        f1, f2 = propor_e_confirmar(chamar, c, 535, operacao="agendar", id_opcao_horario=h["id"]) if h else ({}, None)
-    ps = [p for p in propostas(535) if p["acao"] == "agendar"]
-    checar("agendado no idCliente da pessoa escolhida", bool(f2) and f2.get("ok") is True and bool(ps) and ps[-1]["dados"].get("idCliente") == PAULO, str(f2)[:160])
-    checar("nenhum cadastro de terceiro (POST /agenda/clientes)", not any(p["acao"] == "cadastrar_terceiro" for p in propostas(535)))
-    limpar_paulo()
-
-
 def _dois_servicos():
     a = servico("corte")
     return a, servico("barba", {a["idServico"]})
@@ -867,7 +838,7 @@ def r10():
     checar("0 agendamentos futuros do Paulo no barbeiro de teste", not _agendas_paulo())
 
 
-ROTEIROS = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+ROTEIROS = ["r1", "r2", "r3", "r4", "r5", "r7", "r8", "r9", "r10"]  # r6 (outra pessoa) saiu com as ferramentas (revisao de 17/11)
 
 
 # ---------------------------------------------------------------- limpeza e SC-010
@@ -1102,7 +1073,7 @@ def verificar_implantado():
 
 CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13,
                 m1=m1, m2=m2, m3=m3, m4=m4, m5=m5, m6=m6, m7=m7, m8=m8, m9=m9, m10=m10,
-                r1=r1, r2=r2, r3=r3, r4=r4, r5=r5, r6=r6, r7=r7, r8=r8, r9=r9, r10=r10)
+                r1=r1, r2=r2, r3=r3, r4=r4, r5=r5, r7=r7, r8=r8, r9=r9, r10=r10)
 
 if __name__ == "__main__":
     _env(".env.smoke", ".env.n8n")
