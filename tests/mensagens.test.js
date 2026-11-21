@@ -214,6 +214,12 @@ console.log('mensagens.test.js (decisao) ok');
   assert.match(P(ctx, agora, 120, id), /não vai poder comparecer ao agendamento A/);
   assert.doesNotMatch(P(ctx, agora + 3 * 3600000, 120, id), /não vai poder/); // recusa antiga some
   assert.equal(P({}, agora, 120, id), '');
+  // lembrete de 1 hora que acabou de sair: o "sim" solto responde a ele; com confirmacao aberta vale a confirmacao
+  const lh = { servico: 'Corte', inicio: '2026-10-21T19:30:00' };
+  assert.match(P({ lembrete_hora: lh }, agora, 120, id, true), /Lembrete enviado pela barbearia há pouco \(dado\): Corte, hoje às 19:30\. O lembrete não pede resposta/);
+  assert.match(P({ lembrete_hora: { inicio: lh.inicio } }, agora, 120, id, true), /\(dado\): horário, hoje às 19:30/);
+  assert.doesNotMatch(P({ ...ctx, lembrete_hora: lh }, agora, 120, id, true), /Lembrete enviado/);
+  assert.equal(P({ lembrete_hora: lh }, agora, 120, id), ''); // conversa em andamento: o "sim" e da ultima pergunta do agente
 }
 console.log('mensagens.test.js (confirmacao) ok');
 
