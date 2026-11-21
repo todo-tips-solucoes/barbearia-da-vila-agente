@@ -58,12 +58,11 @@ function bvgDepoisDas(texto, hora) {
 const BVG_SIM = /(?:^|[^a-z])(?:s|ss+|si+m+|isso|pode|podemos|confirm[a-z]*|fech[a-z]*|ok+|okay|blz|beleza|claro|certo|certinho|perfeito|otimo|show|top|bora|vamos|vamo|manda|marc[a-z]*|agend[a-z]*|remarc[a-z]*|quero|combinado|uhum|aham|ta|exat[a-z]*|corret[a-z]*|positivo|feito|demorou|yes|aceito|joia|por favor|com certeza|esta bom|tudo bem|tudo certo|de acordo|esse mesmo|essa mesma|isso mesmo|mais um)(?:$|[^a-z])/;
 // Negacao ou espera ao lado do sim ("não quero mais", "espera, não marca ainda", "tá caro, deixa") tambem nao confirma (revisao de
 // seguranca, 19/11): a barreira nao pode devolver ao modelo, sozinho, justamente a recusa.
-const BVG_NAO = /(?:^|[^a-z])(?:nao|n|nem|nunca|espera|pera|calma|deixa|desist[a-z]*)(?:$|[^a-z])/;
 const BVG_EMOJI_SIM = /[👍👌✅🤝]/u;
 function bvgConfirmou(texto, operacao) {
   const cru = String(texto || '').slice(0, 600).replace(/\[[^\]]*\]/g, ' '); // sem as marcas "[áudio transcrito]"; teto: a regex e quadratica em "[[[["
   const t = bvNormalizarDescricao(cru).toLowerCase();
-  const sim = !BVG_NAO.test(t) && (BVG_SIM.test(t) || BVG_EMOJI_SIM.test(cru));
+  const sim = !bvNegou(t) && (BVG_SIM.test(t) || BVG_EMOJI_SIM.test(cru));
   if (operacao !== 'cancelar') return sim;
   // Cancelar: "cancela"/"desmarca" dito vale mesmo ao lado de "não quero remarcar" (a pergunta e "remarcar ou cancelar?", e ha quem
   // digite em vez de tocar); cancelamento negado ("não cancela", "cancela não") ou desistencia nao vale; so "remarcar" nao cancela.
@@ -326,13 +325,22 @@ function bvGPlano(i, ctx0, cfg) {
         const modo = bvgResolver(i.id_opcao, 'modo_encadeamento', ctx);
         const ss = ctx.pedido.servicos;
         if (!modo || !Array.isArray(ss) || !ss.length) return bvgFim(bvgOpcaoInvalida());
+        // "Outro dia": sem data nova, pergunta o dia; com a data, busca a mesma sequencia nesse dia (os servicos estao no pedido: a oferta
+        // guardada ja nao e a de servicos, e id_opcoes_servicos nao resolveria)
+        if (modo === 'outro_dia') {
+          if (!i.data || i.data === ctx.pedido.seq_dia) return bvgFim({ ok: true, orientacao: 'pergunte qual outro dia ele prefere; com a resposta, chame horarios_livres com este mesmo id_opcao e a data nova' });
+          return chamar(ss.map((x) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: x.idServico } })), { enc: true, etapa: 'enc_prof', servicos: ss, data: i.data, hora: i.hora, aPartir: i.a_partir });
+        }
         if (modo === 'separados') {
           return bvgFim({ ok: true, modo: 'separados', servicos: ss.map((x) => ({ id: x.opcao_id, nome: x.nome })), orientacao: `agende um serviço por vez: comece por ${ss[0].nome} (listar_barbeiros com id_opcao_servico ${ss[0].opcao_id}) e, depois de confirmado, siga para o próximo` }, { opcoes: {}, pedido: { modo_encadeamento: 'separados', servico: ss[0] } });
         }
         return chamar(ss.map((x) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: x.idServico } })), { enc: true, etapa: 'dif_prof', servicos: ss, data: i.data, hora: i.hora, aPartir: i.a_partir });
       }
       if (i.id_opcoes_servicos) {
-        const ss = i.id_opcoes_servicos.map((x) => bvgResolver(x, 'servico', ctx));
+        let ss = i.id_opcoes_servicos.map((x) => bvgResolver(x, 'servico', ctx));
+        // depois de "nenhuma sequência cabe" a oferta guardada e a decisao (Outro dia / Agendar separado) e os ids de servico nao resolvem
+        // mais: a mesma quantidade de servicos, pedida de novo, e a sequencia que esta no pedido
+        if (ss.some((x) => !x) && ctx.opcoes.tipo === 'modo_encadeamento' && Array.isArray(ctx.pedido.servicos) && ctx.pedido.servicos.length === i.id_opcoes_servicos.length) ss = ctx.pedido.servicos;
         if (ss.some((x) => !x)) return bvgFim(bvgOpcaoInvalida());
         if (ss.some((x) => bvSegundaVez(x.nome))) return bvgFim(bvgNaoOferecido());
         return chamar(ss.map((s) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } })), { enc: true, etapa: 'enc_prof', servicos: ss, data: i.data, hora: i.hora, aPartir: i.a_partir });
@@ -747,7 +755,7 @@ function bvgPassoUm(st, resps0, cfg) {
         res.orientacao = `sem horário livre ${meta.aPartir ? `a partir das ${meta.aPartir}` : `de ${meta.periodo}`} nesse dia. Diga isso e pergunte o que ele prefere; as opções vão em lista junto`;
       } else if (!horas.length) res.orientacao = 'dia lotado; sugira outro dia';
       // suite R18 (2026-11-16): o modelo tirava "a partir de que horas" da lista (um barbeiro por horario) e errava o primeiro horario
-      else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário e não serve para dizer quando cada um começa: para dizer quem tem horário e a partir de que horas, use quem_tem_horario como está, sem trocar as horas; para falar de um barbeiro específico, chame horarios_livres com id_opcao_barbeiro dele';
+      else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário e não serve para dizer quando cada um começa: para dizer quem tem horário e a partir de que horas, use quem_tem_horario como está, sem trocar as horas; se o cliente pedir um barbeiro específico na próxima mensagem, chame horarios_livres com id_opcao_barbeiro dele (neste turno a lista já é esta)';
       // suite R8 (2026-11-16): com a lista de qualquer barbeiro numa remarcacao, o modelo dizia que "a troca mantem o barbeiro"
       if (meta.agQualquer && horas.length) res.orientacao = 'os horários da lista são de qualquer barbeiro, não do barbeiro do agendamento: não diga que a remarcação mantém o barbeiro, não diga com quem é o agendamento atual e não cite barbeiro nenhum pelo nome; diga só que há horários nesse dia e pergunte qual fica melhor; ' + (res.orientacao || '');
       if (meta.sem) res.orientacao = `${meta.sem}, o barbeiro do último atendimento, não tem horário ${meta.periodo ? `de ${meta.periodo} ` : ''}nesse dia: diga isso ao cliente${horas.length ? ' e que os horários da lista são de outros barbeiros' : ''}` + (res.orientacao ? '; ' + res.orientacao : '');
@@ -871,7 +879,10 @@ function bvgDifGrade(st, resps, cfg) {
     }
     if (itens.length === meta.servicos.length) seqs.push({ hora: ini, apelidos: [...new Set(itens.map((x) => x.apelido))], valor: { data: meta.data, itens } });
   });
-  if (!seqs.length) return bvgFim({ ok: true, data: meta.data, total: 0, completa: true, opcoes: [], orientacao: 'nenhuma sequência cabe nesse dia, nem com barbeiros diferentes; ofereça outro dia ou agendar cada serviço separado' }, { pedido });
+  if (!seqs.length) { // as alternativas vao em lista (principio X), como as do barbeiro sem horario; a resposta volta por id_opcao
+    const alt = bvMontarOferta('modo_encadeamento', [{ rotulo: 'Outro dia', valor: 'outro_dia' }, { rotulo: 'Agendar separado', valor: 'separados' }], cfg);
+    return bvgFim({ ok: true, data: meta.data, total: 0, completa: true, opcoes: alt.itens.map((x) => ({ id: x.id, rotulo: x.rotulo })), orientacao: 'nenhuma sequência cabe nesse dia, nem com barbeiros diferentes. Diga isso e pergunte o que ele prefere; as opções vão em lista junto' }, { opcoes: alt, pedido: { ...pedido, seq_dia: meta.data } });
+  }
   const perto = bvgPertoDaHora(seqs.filter((q) => !meta.aPartir || q.hora >= meta.aPartir), meta.hora, cfg);
   const of = bvMontarOferta('sequencia', perto.itens.map((q) => ({ rotulo: `${q.hora} ${q.apelidos.join(' e ')}`, valor: q.valor })), cfg, true);
   return bvgFim({ ok: true, data: meta.data, total: perto.itens.length, completa: true, barbeiros_diferentes: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.itens[0].hora, barbeiros: x.valor.itens.map((i) => i.apelido) })), orientacao: perto.aproximada ? bvgAvisoPerto(meta.hora) : undefined },

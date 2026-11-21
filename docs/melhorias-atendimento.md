@@ -266,3 +266,30 @@ Limitações conhecidas, deixadas como estão:
 Números sem base medida, para rever com atendimentos reais: os 30 min da pergunta em aberto (o caso real foi de segundos) e a lista de palavras de "sim" da barreira (um sim fora dela custa uma pergunta a mais; se aparecer, o próximo passo é mandar a confirmação como lista Sim/Não).
 
 Fica aberto: alerta de WhatsApp fora do ar, os 94 "sem contato" da conciliação de lembretes, duas respostas para mensagens com mais de 8 s de intervalo, e a orientação "outro dia ou agendar cada serviço separado" das sequências, que ainda vai em texto.
+
+## Etapa 7: barreiras para o agente cumprir o combinado
+
+Não muda a forma de atender: são conferências em código sobre a resposta do modelo e sobre o resultado das ferramentas. A topologia do `entregar-rajada` é a mesma da etapa 6.
+
+| O que acontecia | Barreira |
+|---|---|
+| **Promessa sem entrega:** o modelo encerrava com "Vou consultar os horários... Só um momento." sem chamar a ferramenta (1 em 16 na frase do R37) | `bvPrometeu`, só quando a resposta **inteira** é a promessa (tiradas as frases que só prometem, sobra no máximo uma interjeição como "Oi, Paulo!"): com lista, a lista segue; sem lista, sai `textos.sem_entrega` ("Não consegui consultar agora. Pode me mandar de novo o que você precisa?"). Resposta com conteúdo (preço, horário, pedido de dado, aviso de escrita feita) fica como veio |
+| **Texto truncado antes da lista de decisão:** "…às 15:00 pode ser. Qual fica melhor pra você?" | A cauda "pode ser:" que introduzia as opções sai, e a pergunta que fecha uma lista de decisão passa a ser "O que você prefere?" (`bvPerguntaDecisao`) |
+| **Sequência de serviços que não cabe no dia:** "outro dia ou agendar separado?" em texto | Lista `modo_encadeamento` com Outro dia / Agendar separado; a resposta volta por `id_opcao`. "Outro dia" com a data nova busca a mesma sequência (os serviços estão em `pedido.servicos`; o dia que não coube, em `pedido.seq_dia`), e o `bvContextoOferta` explica as duas opções no turno seguinte |
+| **Orientação que contradizia a regra de uma lista por turno** ("para falar de um barbeiro específico, chame horarios_livres…") | O texto passou a dizer que isso vale para a próxima mensagem do cliente |
+
+A negação na fala do cliente (`bvNegou`) passou a ser uma função em `agente.js`, usada pela barreira da fase 2.
+
+Resposta que avisa de algo já feito na agenda ("agendado", "cancelei", "remarquei") nunca é tratada como promessa, mesmo com "aguarde o lembrete": o aviso não pode sumir.
+
+**Horários repetidos no texto, tentado e retirado.** A regra que tirava a frase com quatro ou mais horários da lista apagava junto o aviso de cancelamento, o dia da lista e o "quem tem horário a partir de". A repetição no texto é só estética; ficou como o modelo escreve.
+
+**Pedido de confirmação anexado pelo código, tentado e retirado.** A primeira versão acrescentava "Posso confirmar o horário?" quando havia um resumo pendente e a resposta não perguntava nada (o caso "Obrigado" → "De nada!"). A revisão de segurança mostrou que a pergunta não diz a que se refere: um "sim" a ela poderia executar uma proposta em que o cliente não estava pensando, e ela voltaria depois de uma recusa dita com outras palavras ("mudei de ideia"). Como mexe no consentimento, saiu. O que garante o resultado continua sendo a barreira da fase 2 (nada é agendado sem um sim), e a retomada automática já traz o pedido de volta.
+
+**Segunda passada do agente, tentada e abandonada (21/11).** A primeira versão refazia o turno quando o modelo prometia e não entregava, com um laço `Agente → Conferir entrega → IF → Agente`. O turno funcionou, mas ler a execução salva pela API (`GET /executions/{id}?includeData=true`) deixou o processo do n8n em 100% de CPU, sem responder, por cerca de 20 minutos. Como TESTE e PROD rodam no mesmo processo, os workflows de PROD pararam nesse intervalo; voltou com o restart do serviço, autorizado pelo owner. A causa dentro do n8n não foi investigada. Regra que fica: nada de ciclo nem de topologia nova em torno do nó `Agente` nesta instância sem combinar antes.
+
+Medido no TESTE com o código final (21/11): rodada completa 45/45; a conversa do R18 doze vezes, sem recusa da OpenAI nem estouro de tempo; testes ao vivo sem modelo das etapas 5 e 6; `healthz` do n8n conferido entre cada passo. A promessa sem entrega não apareceu nessas rodadas (é de cerca de 1 em 16 na frase do R37), então a barreira dela só tem teste unitário. O ramo "Outro dia" das sequências também: não há como montar no TESTE um dia em que a sequência não caiba.
+
+Desenho conferido por duas revisões independentes do diff (segurança; correção, performance e escala), em leitura. Delas saíram a retirada das duas regras acima, o estreitamento da promessa e o conserto do "Outro dia".
+
+Continua aberto: duas respostas para mensagens com mais de 8 s de intervalo (é o tempo de espera da rajada; aumentar atrasa toda resposta); "Simm" sem confirmação aberta (falta ler o lembrete do contato em PROD); alerta de WhatsApp fora do ar e os 94 "sem contato" da conciliação de lembretes.

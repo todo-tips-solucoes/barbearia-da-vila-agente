@@ -644,6 +644,55 @@ console.log('agente.test.js retomada longa ok');
   assert.doesNotMatch(txt, /é este/);
   assert.match(txt, /quem tem horário é: Kiel a partir de 10:00/);
 }
+{ // Etapa 7: barreiras para o agente cumprir o combinado
+  // promessa sem entrega: so quando promete verificar e nao pergunta nada
+  for (const t of ['Oi! Vou consultar os horários do Kiel para *corte adulto* na semana que vem. Só um momento.', 'Vou verificar os dias da próxima semana em que o Kiel tem horário. Primeiro, vou selecionar o serviço correto.', 'Um momento, já volto.', 'Deixa eu ver aqui.', 'Aguarde, por favor.']) assert.equal(a.bvPrometeu(t), true, t);
+  for (const t of ['Vou marcar corte adulto com Kiel na sexta, 20/11 às 10:00. Posso confirmar?', 'Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?', 'O Kiel tem horário na segunda. Qual fica melhor pra você?', 'Prontinho, está agendado para sexta às 10:00.', 'Vou considerar corte adulto com o Pedro. Qual horário fica melhor?', 'De nada! 😊', '',
+    // revisao de seguranca (21/11): aviso de escrita feita nao e promessa, e "um segundo horário" / "aguarde o lembrete" nao sao espera
+    'Prontinho, seu corte foi agendado para amanhã às 10:00 com o Kiel, aguarde o lembrete por aqui.', 'Agendado: corte amanhã às 10:00 com o Kiel e um segundo horário, da barba, às 10:40.',
+    'Seu horário foi cancelado, vou verificar se a equipe consegue te encaixar outro dia.', 'Remarquei seu corte para sexta às 15:00 com o Kiel; só um momento que já te mando o endereço.',
+    'Tenho um segundo horário às 10:40 com o Black.', 'Aguarde o lembrete um dia antes.']) assert.equal(a.bvPrometeu(t), false, t);
+  for (const t of ['Só um momento que já te digo.', 'Aguarde um instante.', 'Um minutinho, por favor.']) assert.equal(a.bvPrometeu(t), true, t);
+  { // no bvCompor a promessa sai: com lista, fica a lista e a pergunta; sem nada, resposta vazia (o Compor manda o pedido de repetir)
+    const cfgP = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+    const serv = { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte adulto', valor: {} }, { id: '2', rotulo: 'corte com maquina', valor: {} }] };
+    const p1 = a.bvCompor('Oi! Vou consultar os horários do Kiel para *corte adulto* na semana que vem. Só um momento.', serv, cfgP, true);
+    assert.deepEqual(p1.map((m) => [m.tipo, m.texto]), [['lista', 'Oi! Qual fica melhor pra você?']]);
+    assert.deepEqual(a.bvCompor('Oi! Vou verificar os dias da próxima semana em que o Kiel tem horário. Primeiro, vou selecionar o serviço correto.', null, cfgP, false), []);
+    assert.deepEqual(a.bvCompor('Um momento.', serv, cfgP, true).map((m) => [m.tipo, m.texto]), [['lista', 'Certo. Qual fica melhor pra você?']]);
+    const p3 = a.bvCompor('O corte adulto custa R$ 90. Vou verificar os horários, um momento.', null, cfgP, false);
+    assert.deepEqual(p3.map((m) => m.texto), ['O corte adulto custa R$ 90. Vou verificar os horários, um momento. Quer que eu já veja um horário pra você?']); // resposta com conteudo fica como veio
+    // revisao de correcao (21/11): interjeicao na frente nao salva a promessa; frase com conteudo nao e promessa
+    for (const t of ['Oi, Paulo! Vou consultar os horários do Kiel para a semana que vem. Só um momento.', 'Claro! Vou verificar os horários do Kiel. Só um momento.', 'Perfeito, Paulo! Já vou conferir a agenda.']) assert.deepEqual(a.bvCompor(t, null, cfgP, false), [], t);
+    for (const t of ['Vou conferir aqui: o corte adulto custa R$ 60 e leva 40 minutos.', 'Só um minuto: antes de marcar eu preciso do seu nome completo.', 'Tem sim, o estacionamento fica a um minuto da barbearia.', 'Pronto, cancelei o seu horário de sexta; se quiser, vou ver outro dia pra você.']) {
+      assert.equal(a.bvCompor(t, null, cfgP, false).map((m) => m.texto).join(' ').startsWith(t.slice(0, 30)), true, t);
+    }
+    assert.match(a.bvCompor('Vou verificar com o barbeiro. Você prefere manhã ou tarde?', null, cfgP, false)[0].texto, /^Vou verificar com o barbeiro/); // com pergunta, nada muda
+    const feito = 'Seu horário foi cancelado, vou verificar se a equipe consegue te encaixar outro dia.';
+    assert.deepEqual(a.bvCompor(feito, null, cfgP, false).map((m) => m.texto), [feito]); // escrita feita: a resposta sai inteira
+    const t0 = Date.now(); a.bvCompor('Seu horário pode ser' + ' '.repeat(16000) + 'x', null, cfgP, false); assert.ok(Date.now() - t0 < 2500); // sem termo quadratico novo
+    const enc = { tipo: 'modo_encadeamento', itens: [{ id: '1', rotulo: 'Outro dia', valor: 'outro_dia' }, { id: '2', rotulo: 'Agendar separado', valor: 'separados' }] };
+    assert.match(a.bvContextoOferta(enc), /"Outro dia" = pergunte qual dia e chame horarios_livres com o id deste item em id_opcao e a data nova/);
+    assert.doesNotMatch(a.bvContextoOferta({ tipo: 'modo_encadeamento', itens: [{ id: '1', rotulo: 'Barbeiros diferentes', valor: 'barbeiros_diferentes' }, enc.itens[1]] }), /sequência que não coube/);
+  }
+  assert.deepEqual(['não quero mais', 'espera', 'tá caro, deixa', 'sim', 'Obrigado'].map(a.bvNegou), [true, true, true, false, false]);
+  // texto antes da lista de decisao (R7): a cauda "pode ser" sai e a pergunta e a da decisao
+  const cfgO = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
+  const dc = { tipo: 'decisao_cancelamento', itens: [{ id: '1', rotulo: 'Remarcar', valor: 'remarcar' }, { id: '2', rotulo: 'Cancelar mesmo', valor: 'cancelar' }] };
+  const r7 = a.bvCompor('Oi! Seu horário de *corte adulto na quarta-feira, 25/11, às 15:00* pode ser:\n\nOPCOES:\n1 | Remarcar\n2 | Cancelar mesmo', dc, cfgO, true);
+  assert.deepEqual(r7.map((m) => [m.tipo, m.texto]), [['lista', 'Oi! Seu horário de *corte adulto na quarta-feira, 25/11, às 15:00*. O que você prefere?']]);
+  const ds = { tipo: 'decisao_sem_horario', itens: [{ id: '1', rotulo: 'Outro dia com ele', valor: { acao: 'outro_dia' } }, { id: '2', rotulo: 'Ver outros barbeiros', valor: { acao: 'outros_barbeiros', data: '2026-11-20', ag: null } }] };
+  assert.equal(a.bvCompor('O Pedro Henrique não tem horário amanhã.', ds, cfgO, true)[0].texto, 'O Pedro Henrique não tem horário amanhã. O que você prefere?');
+  // revisao de correcao (21/11): os horarios escritos no texto ficam como vieram (a regra que os tirava apagava aviso de cancelamento e "quem tem horario")
+  const hs = ['10:00', '10:40', '11:20', '12:00', '12:40', '13:20'];
+  const oh = { tipo: 'horario', completa: true, itens: hs.map((h, k) => ({ id: String(k + 1), rotulo: `${h} Kiel`, valor: { data: '2026-11-27', hora: h } })) };
+  const e1 = a.bvCompor('Cancelei o seu horário de quinta, 26/11, e para sexta, 27/11, tenho 10:00, 10:40, 11:20 e 12:00. Qual fica melhor pra você?', oh, cfgO, true);
+  assert.match(e1[0].texto, /^Cancelei o seu horário de quinta, 26\/11, e para sexta, 27\/11, tenho 10:00, 10:40, 11:20 e 12:00\./);
+  assert.equal(e1[e1.length - 1].opcoes.length, 6);
+  // "pode ser" que nao introduz opcoes fica
+  assert.match(a.bvCompor('Na sexta tenho estes horários com o Kiel. Se preferir o Black, também pode ser.\nOPCOES:\n1 | 10:00 Kiel\n2 | 10:40 Kiel', oh, cfgO, true)[0].texto, /Se preferir o Black, também pode ser\. Qual fica melhor pra você\?$/);
+  assert.match(a.bvCompor('Sábado também pode ser. Qual fica melhor pra você?\nOPCOES:\n1 | 10:00 Kiel', oh, cfgO, true)[0].texto, /^Sábado também pode ser\./);
+}
 { // Etapa 6: decisao sem horario em lista e "Qualquer barbeiro" como opcao; o contexto do turno seguinte explica as opcoes
   const cfgO = { saida: { max_mensagens: 4, max_chars_mensagem: 500 }, lista: { max_itens: 10, max_titulo: 24 }, digitando: {} };
   const dec = { tipo: 'decisao_sem_horario', itens: [{ id: '1', rotulo: 'Outro dia com ele', valor: { acao: 'outro_dia' } }, { id: '2', rotulo: 'Ver outros barbeiros', valor: { acao: 'outros_barbeiros', data: '2026-11-20', ag: null } }] };

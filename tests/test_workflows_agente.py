@@ -465,6 +465,24 @@ class Etapa6(unittest.TestCase):  # pendencias da leitura de 17/11: decisao no c
                 self.assertNotIn("texto_cliente", vis)
                 self.assertNotIn("a_partir", vis)
 
+    def test_promessa_sem_entrega_e_tratada_no_codigo_sem_laco(self):  # etapa 7; o laco de volta ao agente travou o n8n em 21/11
+        w = json.loads(ler("workflows/sub/entregar-rajada.json"))
+        c = w["connections"]
+        self.assertEqual([x["node"] for x in c["Agente"]["main"][0]], ["Reler opcoes"])
+        self.assertEqual([x["node"] for x in c["Agente"]["main"][1]], ["Registrar falha agente"])
+        self.assertEqual(self.nos["Agente"]["parameters"]["text"], "={{ $('Preparar').first().json.texto }}")
+        chega_no_agente = {k for k, v in c.items() for s in v.get("main", []) for x in s if x["node"] == "Agente"}
+        self.assertEqual(chega_no_agente, {"Cliente"})  # nenhum caminho volta para o agente
+        self.assertIn('texto: bvPrometeu(out) ? "{{BV:textos.sem_entrega}}" : "{{BV:textos.reformular}}"', self.nos["Compor"]["parameters"]["jsCode"])
+        for amb in ("integracao", "producao"):
+            self.assertEqual(json.loads(ler(f"config/ambientes/{amb}.json"))["textos"]["sem_entrega"], "Não consegui consultar agora. Pode me mandar de novo o que você precisa?")
+
+    def test_nao_ha_pedido_de_confirmacao_anexado_pelo_codigo(self):  # tentado e retirado na revisao de seguranca: pergunta sem referente
+        self.assertNotIn("pendente_antiga", self.nos["Reler opcoes"]["parameters"]["query"])
+        self.assertNotIn("confirmar_de_novo", self.nos["Compor"]["parameters"]["jsCode"])
+        for amb in ("integracao", "producao"):
+            self.assertNotIn("confirmar_de_novo", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"])
+
     def test_pergunta_em_aberto_so_quando_nao_ha_laco(self):
         p = self.nos["Preparar"]["parameters"]["jsCode"]
         self.assertIn("+ (bvLaco(hist, rec.opcoes) || (bvCorrida(itens, hist) ? '' : bvPerguntaAberta(hist, fala, Date.now())))", p)
