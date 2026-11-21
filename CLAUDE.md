@@ -33,9 +33,13 @@ A lista completa, e as pendências, estão em **`docs/decisoes-pre-00c.md`**. O 
   - oferecer todos os inícios em que o serviço cabe;
   - não retomar uma coleta antiga num "Oi";
   - não mostrar o barbeiro de teste.
-- `docs/melhorias-atendimento.md`: análise dos atendimentos reais de PROD, com o que já foi corrigido (itens 1 a 11), as pendências da segunda análise (itens 12 a 26) e a revisão de 17/11 (etapas 1 a 4, feitas). Consulte antes de mexer no atendimento.
+- `docs/melhorias-atendimento.md`: análise dos atendimentos reais de PROD, com o que já foi corrigido (itens 1 a 11), as pendências da segunda análise (itens 12 a 26) e a revisão de 17/11 (etapas 1 a 4), a leitura dos atendimentos de 17/11 (etapa 5) as pendências dela (etapa 6) e as barreiras em código (etapa 7), todas feitas. Consulte antes de mexer no atendimento.
 - `informacaoes_barbearia.txt`: endereço, contatos, CNPJ e preços de referência humana (o horário de funcionamento já foi alinhado à Graces).
 - Versão anterior (Python/FastAPI, abandonada): repositório `todo-tips-solucoes/agente-barbearia-da-vila`, que só contém briefing e mapas de API. Serve como histórico de decisões, não como base de código.
+
+## Armadilha do n8n já verificada
+
+- **TESTE e PROD rodam no mesmo processo do n8n** (`bv_n8n`). Em 2026-11-21 um laço de volta ao nó `Agente`, publicado só no TESTE, travou o processo inteiro quando a execução salva foi lida pela API. Não publique ciclo nem topologia nova em torno do `Agente` sem combinar com o owner; prefira decidir no código de `workflows/shared/`.
 
 ## Armadilhas da Graces já verificadas
 
