@@ -292,4 +292,12 @@ Medido no TESTE com o código final (21/11): rodada completa 45/45; a conversa d
 
 Desenho conferido por duas revisões independentes do diff (segurança; correção, performance e escala), em leitura. Delas saíram a retirada das duas regras acima, o estreitamento da promessa e o conserto do "Outro dia".
 
-Continua aberto: duas respostas para mensagens com mais de 8 s de intervalo (é o tempo de espera da rajada; aumentar atrasa toda resposta); "Simm" sem confirmação aberta (falta ler o lembrete do contato em PROD); alerta de WhatsApp fora do ar e os 94 "sem contato" da conciliação de lembretes.
+Continua aberto: duas respostas para mensagens com mais de 8 s de intervalo (é o tempo de espera da rajada; aumentar atrasa toda resposta); alerta de WhatsApp fora do ar e os 94 "sem contato" da conciliação de lembretes.
+
+## Etapa 8: resposta ao lembrete de 1 hora
+
+Leitura do contato em PROD (21/11): o "Simm" de 17/11 chegou junto com o lembrete de 1 hora ("Seu corte é daqui a 1 hora. Te esperamos!"). Não havia confirmação aberta: o horário tinha sido remarcado pela equipe na véspera, depois da hora da confirmação. O lembrete sai pelo módulo de Agendamentos do Chat Master e não entra no histórico; a conversa da véspera já tinha passado da janela. O agente recebeu só "Simm" e respondeu "Como posso ajudar?".
+
+Correção: o `Ler contexto` lê o lembrete de 1 hora do contato (enviado, ou criado no Chat Master e prestes a sair em 2 minutos, pela própria `bv_respondivel`, sem copiar a regra; vale até a hora marcada) e `bvMPromptConfirmacoes` acrescenta uma linha de dado ao contexto. Com confirmação de presença aberta a linha não entra: o "sim" confirma a presença. No meio de uma conversa também não entra: ali o "sim" responde à última pergunta do agente (um resumo, por exemplo). A linha não leva o nome do barbeiro. Sem lembrete, o contexto fica byte a byte igual ao da etapa 7.
+
+Observado na mesma leitura e ainda aberto: as respostas da equipe a esse contato em 16/11 não ficaram gravadas (o cliente respondia a alguém entre 16:05 e 16:24 e não há nenhuma mensagem `equipe-` no período). Só entra a mensagem enviada pelo Chat Master com o chamado na fila humana; resposta pelo aparelho da loja, ou com o chamado em outra fila, é descartada. Falta medir em PROD com que frequência isso acontece.

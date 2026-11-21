@@ -314,6 +314,11 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertIn("m.resposta IS NULL", self.nos["Ler contexto"]["parameters"]["query"])
         self.assertIn("bvMPromptConfirmacoes(ctx, Date.now()", self.nos["Preparar"]["parameters"]["jsCode"])  # confirmacoes e recusa (mensagens.js)
         self.assertIn("m.motivo IS NULL", self.nos["Ler contexto"]["parameters"]["query"])  # confirmacao encerrada (cancelar/remarcar) nao entra
+        # lembrete de 1 hora no contexto (17/11): enviado ou prestes a sair (a regra unica de bv_respondivel, com o tipo fixo: a funcao
+        # so da a folga de 2 min ao lembrete do Chat Master), ate a hora marcada; cancelado (motivo) nao entra
+        self.assertIn("m.tipo = 'lembrete_hora' AND bv_respondivel(m.situacao, 'lembrete_dia', m.agendamento_canal_id, m.previsto_para) AND m.motivo IS NULL AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo') ORDER BY m.inicio LIMIT 1) AS lembrete_hora", self.nos["Ler contexto"]["parameters"]["query"])
+        self.assertIn("ctx.lembrete_hora", ler("workflows/shared/mensagens.js"))
+        self.assertIn("bvNeutralizar, hist.length === 0)", self.nos["Preparar"]["parameters"]["jsCode"])  # so sem conversa em andamento
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
             "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",

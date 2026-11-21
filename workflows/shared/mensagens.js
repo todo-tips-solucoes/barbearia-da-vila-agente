@@ -445,11 +445,16 @@ function bvMTituloRota(e) {
 }
 
 // Linhas do prompt do agente sobre confirmacoes (independem de sessao nova: a confirmacao chega quando o cliente nao fala ha dias).
-// A recusa vale por janelaMin a partir de `em` (propria, nao a da conversa). neutro = bvNeutralizar.
-function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro) {
+// A recusa vale por janelaMin a partir de `em` (propria, nao a da conversa). neutro = bvNeutralizar. semConversa: turno sem historico.
+function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro, semConversa) {
   let s = '';
   const cs = Array.isArray(ctx && ctx.confirmacoes) ? ctx.confirmacoes : [];
   if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ');
+  // Lembrete de 1 hora (17/11): sai pelo Chat Master e nao entra no historico; o "Simm" de resposta chegava ao agente sem contexto
+  // e virava "Como posso ajudar?". Com confirmacao aberta vale a linha de cima (o sim confirma a presenca). Sem o nome do barbeiro.
+  // semConversa: so quando nao ha conversa em andamento; no meio dela o "sim" responde a ultima pergunta do agente (um resumo, p. ex.).
+  const l = ctx && ctx.lembrete_hora;
+  if (l && !cs.length && semConversa) s += '\nLembrete enviado pela barbearia há pouco (dado): ' + neutro(l.servico || 'horário') + ', hoje às ' + String(l.inicio).slice(11, 16) + '. O lembrete não pede resposta: se a mensagem nova for só um "sim", "ok" ou agradecimento, o cliente está respondendo a ele; responda em uma frase curta, no tom de "combinado, até já", sem perguntar como pode ajudar.';
   const r = ctx && ctx.pedido && ctx.pedido.confirmacao_recusada;
   const em = r ? Date.parse(r.em) : NaN;
   if (Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado), e a decisão "remarcar ou cancelar?" já foi enviada a ele em lista: não a repita. Se a última oferta ainda for essa decisão, siga o que ela diz; se a confirmação do cancelamento tiver vencido, chame meus_agendamentos e cancelar (fase 1) desse agendamento e peça só a confirmação. Quer remarcar: pergunte o dia e o horário que ele prefere e siga a remarcação.';
