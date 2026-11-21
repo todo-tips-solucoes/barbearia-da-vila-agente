@@ -501,6 +501,25 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 18);
   assert.equal(dg.reqs.length, 4); // b1 p/ corte, b2 p/ barba (sem o de teste), grade + ocupacoes
   const dr = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00', '11:00'] }), ok({ minutos: 30, horarios: ['10:40'] })], cfg).final;
   assert.deepEqual(dr.resultado.opcoes.map((o) => `${o.hora} ${o.barbeiros.join('+')}`), ['10:00 B1+B2']);
+  { // etapa 7: nenhuma sequencia cabe nem com barbeiros diferentes => as alternativas vao em lista (principio X), e a resposta volta por id_opcao
+    const semSeq = g.bvGPasso(dg.st, [ok({ minutos: 40, horarios: ['10:00'] }), ok({ minutos: 30, horarios: ['15:00'] })], cfg).final;
+    assert.deepEqual([semSeq.resultado.total, semSeq.resultado.opcoes], [0, [{ id: '1', rotulo: 'Outro dia' }, { id: '2', rotulo: 'Agendar separado' }]]);
+    assert.match(semSeq.resultado.orientacao, /^nenhuma sequência cabe nesse dia, nem com barbeiros diferentes\. Diga isso e pergunte o que ele prefere; as opções vão em lista junto$/);
+    assert.equal(semSeq.efeitos.opcoes.tipo, 'modo_encadeamento');
+    const ctxA = ctxOp(semSeq.efeitos.opcoes, { ...n1.efeitos.pedido, ...semSeq.efeitos.pedido });
+    assert.equal(semSeq.efeitos.pedido.seq_dia, '2026-10-20');
+    const od = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: '1', data: '2026-10-20' }), ctxA, cfg).final; // o toque, ainda sem o dia novo
+    assert.match(od.resultado.orientacao, /^pergunte qual outro dia ele prefere; com a resposta, chame horarios_livres com este mesmo id_opcao e a data nova$/);
+    assert.equal(od.efeitos.opcoes, undefined);
+    const od2 = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: '1', data: '2026-10-21' }), ctxA, cfg); // com o dia novo: busca a mesma sequencia
+    assert.deepEqual(od2.reqs.map((q) => [q.path, q.qs.idServico]), [['/servicos/profissionais', 's1'], ['/servicos/profissionais', 's2']]);
+    assert.deepEqual([od2.st.meta.etapa, od2.st.meta.data, od2.st.meta.servicos.length], ['enc_prof', '2026-10-21', 2]);
+    // o modelo tambem pode pedir os mesmos servicos de novo: vale a sequencia do pedido; com outra quantidade, a opcao nao existe
+    const od3 = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: '2026-10-21' }), ctxA, cfg);
+    assert.deepEqual(od3.reqs.map((q) => q.qs.idServico), ['s1', 's2']);
+    assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2', '3'], data: '2026-10-21' }), ctxA, cfg).final.resultado.code, 'opcao_desconhecida');
+    assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: '2', data: '2026-10-20' }), ctxA, cfg).final.resultado.modo, 'separados');
+  }
   // hora aproximada tambem filtra as sequencias (mesmo barbeiro e barbeiros diferentes)
   const plH = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: '2026-10-20', hora: '10:30' }), ctxOp(ofS), cfg);
   const eH = g.bvGPasso(plH.st, [profs(['b1']), profs(['b1'])], cfg);

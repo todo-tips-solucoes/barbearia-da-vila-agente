@@ -87,6 +87,8 @@ function bvSepararOpcoes(texto, oferta) {
 
 const bvConvite = (cfg) => (cfg.textos && cfg.textos.convite_agendar) || 'Quer que eu já veja um horário pra você?';
 
+// Pergunta que fecha a lista quando o texto do modelo nao pergunta: lista de decisao pede a decisao, nao "qual fica melhor".
+const bvPerguntaDecisao = (tipo) => (/^(?:decisao_|modo_encadeamento$)/.test(String(tipo)) ? 'O que você prefere?' : '');
 // aguardaConfirmacao: o turno criou uma proposta (o texto e o resumo com o pedido de confirmacao).
 function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmacao = false, repetePergunta = false) {
   const { max_mensagens: maxMsg, max_chars_mensagem: maxChars } = cfg.saida;
@@ -106,11 +108,23 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
   // Sem as opcoes a frase terminava no verbo ("...amanhã; o mais próximo disponível é.", R40 em 19/11): aponta para a lista que segue.
   // shortcut: sempre no masculino ("é este"), o item quase sempre é "horário"; rever se aparecer "a opção mais próxima é".
   // So quando o que vem depois e a pergunta (ou nada): "quem tem horário é:" seguido dos barbeiros no texto fica como veio (R18, 19/11).
-  const completar = (f, cortou, prox) => ((bloco || cortou) && (!prox || prox.includes('?')) ? f.replace(/(^|\s)(é|são)\s*[.:]?\s*$/i, (m, a, v) => `${a}${v} ${v.toLowerCase() === 'é' ? 'este' : 'estes'}.`) : f);
+  // "...às 15:00 pode ser:" antes da lista de decisao (R7, 19/11) perde a cauda (so com os dois pontos: "sábado também pode ser." fica),
+  // e a pergunta que fecha a lista e a de decisao.
+  const completar = (f, cortou, prox) => ((bloco || cortou) && (!prox || prox.includes('?')) ? f.replace(/(^|\s)(é|são)\s*[.:]?\s*$/i, (m, a, v) => `${a}${v} ${v.toLowerCase() === 'é' ? 'este' : 'estes'}.`).trimEnd().replace(/\spodem? ser ?:$/i, '.') : f);
   // Linha "1 | 10:00 — Kiel" que sobrou no texto (a oferta guardada nao tem esse id: duas buscas no mesmo turno, R40 em 19/11) sai sem
   // o numero e a barra: o cliente le o horario, nao o formato da lista.
   const semId = (f) => f.replace(/^[-•*]?\s*\d{1,2}\s*\|\s*(?=\S)/, '');
-  const frases = bvFrases(corpo).map((f, i, todas) => { const g = semSoltas(f); return completar(semId(g), g !== f, todas[i + 1]); }).filter((f) => f && !(testeId && f.includes(testeId)) && (liberado || !BV_NOME_TESTE.test(f)) && !solta(f));
+  const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].replace(/^\s*[-*]\s*/, '').trim()).filter(Boolean);
+  // Resumo com pedido de confirmacao nao leva a lista de horarios da busca do mesmo turno: o cliente tocava num horario e recebia
+  // "Posso confirmar?" de novo (16/11, 3 conversas). A resposta ao resumo e texto (sim / nao / outro horario).
+  const semLista = aguardaConfirmacao && !!oferta && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
+  const frases0 = bvFrases(corpo).map((f, i, todas) => { const g = semSoltas(f); return completar(semId(g), g !== f, todas[i + 1]); }).filter((f) => f && !(testeId && f.includes(testeId)) && (liberado || !BV_NOME_TESTE.test(f)) && !solta(f));
+  // Promessa sem entrega: so quando a resposta INTEIRA e a promessa ("Oi, Paulo! Vou consultar os horários... Só um momento."): tiradas as
+  // frases que so prometem, sobra no maximo uma interjeicao. Resposta com conteudo (preco, horario, pedido de dado) fica como veio.
+  const soPromete = (f) => bvPromete(f) && !/\d/.test(f);
+  const resto = frases0.filter((f) => !soPromete(f));
+  const promessa = bvPrometeu(corpo) && resto.every((f) => !/\d/.test(f) && f.trim().split(/\s+/).length <= 4);
+  const frases = promessa ? resto : frases0;
   const msgs = [];
   let atual = '';
   const fecha = () => { if (atual) msgs.push(atual); atual = ''; };
@@ -123,10 +137,6 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
   }
   fecha();
   const todos = oferta && oferta.completa && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
-  const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].replace(/^\s*[-*]\s*/, '').trim()).filter(Boolean);
-  // Resumo com pedido de confirmacao nao leva a lista de horarios da busca do mesmo turno: o cliente tocava num horario e recebia
-  // "Posso confirmar?" de novo (16/11, 3 conversas). A resposta ao resumo e texto (sim / nao / outro horario).
-  const semLista = aguardaConfirmacao && !!oferta && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
   // repetePergunta: o modelo repetiu a ultima pergunta sem mandar a lista dela; a lista volta junto ("mande a lista de novo uma vez")
   const ids = semLista ? [] : (!idsModelo.length && (ofertaNova || repetePergunta) && oferta && Array.isArray(oferta.itens) ? oferta.itens.map((i) => i.id) : idsModelo);
   const maxIt = cfg.lista.max_itens;
@@ -144,6 +154,9 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
   const txtN = bvNormalizarDescricao(msgs.join(' ')).toLowerCase();
   const falaDoDia = !!dOf && (txtN.includes(bvNormalizarDescricao(semOf).split('-')[0]) || /(?:^|[^a-z])(?:hoje|amanha)(?:$|[^a-z])/.test(txtN));
   if (citadas.length && !citadas.includes(ddmmOf) && !falaDoDia && !msgs.some((m) => BV_ESCRITA_FEITA.test(bvNormalizarDescricao(m)))) msgs.splice(0, msgs.length, `Para ${semOf}, ${ddmmOf}, os horários são estes.`);
+  // promessa sem lista: resposta vazia, e quem chama manda o pedido de repetir (textos.sem_entrega); com lista, a lista segue
+  if (promessa && !itens.length) return [];
+  if (promessa && !msgs.length) msgs.push('Certo.');
   const nListas = Math.max(1, Math.ceil(itens.length / maxIt));
   const saida = msgs.slice(0, maxMsg - (nListas - 1)).map((texto, i) => ({ n: i + 1, tipo: 'texto', texto }));
   if (saida.length && itens.length) {
@@ -153,7 +166,7 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
     // lista de precos (R2) fecha no convite para agendar; as demais, na pergunta de escolha
     // so lista de servicos: lista de horarios com preco no texto pede a escolha, nao "quer que eu veja um horario?" (teste do owner, 2026-10-22)
     const preco = oferta.tipo === 'servico' && (itens.some((i) => /R\$\s?\d/.test(i.rotulo)) || saida.some((m) => /R\$\s?\d/.test(m.texto)));
-    if (!ult.texto.includes('?')) ult.texto = `${ult.texto.replace(/\s+são\s*:\s*$/i, ' são estes:').replace(/:\s*$/, '.')} ${preco ? bvConvite(cfg) : ((cfg.textos && cfg.textos.pergunta_lista) || 'Qual fica melhor pra você?')}`;
+    if (!ult.texto.includes('?')) ult.texto = `${ult.texto.replace(/\s+são\s*:\s*$/i, ' são estes:').replace(/:\s*$/, '.')} ${preco ? bvConvite(cfg) : (bvPerguntaDecisao(oferta.tipo) || (cfg.textos && cfg.textos.pergunta_lista) || 'Qual fica melhor pra você?')}`;
     Object.assign(ult, { tipo: 'lista', opcoes: lista(itens.slice(0, maxIt)) });
     for (let k = 1; k < nListas; k++) {
       saida.push({ n: saida.length + 1, tipo: 'lista', texto: (cfg.textos && cfg.textos.lista_continua) || 'Seguem mais opções:', opcoes: lista(itens.slice(k * maxIt, (k + 1) * maxIt)) });
@@ -290,6 +303,20 @@ function bvSemRepetir(saida, itens, historico, ofertaNova, janelaMs = 120000) {
 
 // K1 (suite-validacao): 1a resposta da sessao sempre cumprimenta; o modelo as vezes esquece.
 const BV_SAUDACAO = /^\s*(oi|olá|ola|opa|bom dia|boa tarde|boa noite|e aí|eai|fala|hey)(?=[\s,!.?]|$)/i; // sem \b: ele nao fecha palavra depois de á/í
+// Negacao ou espera na fala do cliente ("não quero mais", "espera", "tá caro, deixa"): nao confirma nada e nao pede confirmacao de novo.
+const BV_NAO = /(?:^|[^a-z])(?:nao|n|nem|nunca|espera|pera|calma|deixa|desist[a-z]*)(?:$|[^a-z])/;
+const bvNegou = (texto) => BV_NAO.test(bvNormalizarDescricao(String(texto || '')).toLowerCase());
+// Promessa sem entrega (R37, 19/11: 1 em 16): o modelo encerra o turno com "Vou consultar os horários... Só um momento." sem chamar a
+// ferramenta, e o cliente fica esperando. Quando a resposta promete verificar e nao pergunta nada, o bvCompor tira a promessa: fica o
+// que ela tiver de util e a lista que existir; sem nada, sai o pedido para o cliente repetir (textos.sem_entrega). Uma segunda passada
+// do agente foi tentada com um laco no workflow e abandonada: ler a execucao salva travou o n8n (21/11).
+const BV_PROMESSA = /(?:^| )(?:vou|irei|deixa eu|deixe me|ja vou) (?:so )?(?:verificar|consultar|conferir|checar|olhar|buscar|procurar|pesquisar|selecionar|ver)(?: |$)|(?:^| )(?:um|1) (?:momento|instante|minutinho|minuto|segundo)(?: por favor| que | enquanto |$)|(?:^| )aguarde(?: um | so | por favor|$)|(?:^| )ja (?:volto|retorno|te (?:digo|falo|retorno|aviso))(?: |$)/;
+const bvPromete = (t) => BV_PROMESSA.test(bvNormalizarDescricao(String(t || '')).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
+// Resposta que avisa de algo ja feito na agenda nao e promessa, mesmo com "aguarde o lembrete" ou "vou verificar se a equipe encaixa":
+// o aviso nao pode sumir (revisao de seguranca, 21/11: o cliente pediria de novo e duplicaria o agendamento).
+const BV_FIZ = /(?:^|[^a-z])(?:agendei|marquei|remarquei|cancelei|desmarquei|confirmei|reservei)(?:$|[^a-z])/;
+const bvAvisaEscrita = (t) => { const n = bvNormalizarDescricao(String(t || '')).toLowerCase(); return BV_ESCRITA_FEITA.test(n) || BV_FIZ.test(n); };
+const bvPrometeu = (textoModelo) => !String(textoModelo || '').includes('?') && !bvAvisaEscrita(textoModelo) && bvPromete(textoModelo);
 // A mensagem e so um cumprimento ("Bom dia tudo bem") ou um sinal sem conteudo (".", "?")?
 function bvSoSaudacao(texto) {
   let t = String(texto || '').trim();
@@ -441,6 +468,7 @@ function bvContextoOferta(opcoes) {
     t += '. É a decisão depois de uma busca sem horário: "Outro horário no dia" = pergunte qual horário e busque de novo; "Outro dia" = pergunte qual dia e busque com o mesmo barbeiro'
       + (o ? `; "Ver outros barbeiros" = horarios_livres com qualquer=true e data ${o.data}${o.ag ? ` e id_opcao_agendamento ${o.ag}` : ''}` : '') + '. Não mande esta lista de novo depois da escolha.';
   }
+  if (opcoes.tipo === 'modo_encadeamento' && itens.some((x) => x.valor === 'outro_dia')) t += '. É a decisão depois de uma sequência que não coube no dia: "Outro dia" = pergunte qual dia e chame horarios_livres com o id deste item em id_opcao e a data nova; "Agendar separado" = horarios_livres com o id deste item em id_opcao. Não mande esta lista de novo depois da escolha.';
   if (opcoes.tipo === 'barbeiro' && itens.some((x) => x.valor && x.valor.qualquer)) t += '. É a pergunta do barbeiro: "tanto faz", "qualquer um" ou "não conheço nenhum" é a resposta "Qualquer barbeiro" (ele escolheu, não você): chame horarios_livres com qualquer=true e não mande esta lista de novo.';
   if (opcoes.tipo === 'decisao_cancelamento') t += '. É a decisão sobre um agendamento: "Remarcar" = pergunte o dia e o horário que ele prefere e só depois busque (horarios_livres com id_opcao_agendamento); "Cancelar mesmo" = é a confirmação do cancelamento, chame cancelar só com o proposta_id da confirmação pendente. Não mande esta lista de novo depois da escolha.';
   return t;
@@ -528,5 +556,5 @@ function bvMontarTurno(itens, resultados) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvNegou, bvPrometeu, bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }
