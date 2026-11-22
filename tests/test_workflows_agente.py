@@ -33,6 +33,10 @@ class BvGraces(unittest.TestCase):
         self.assertIn("queueId", h["parameters"]["jsonBody"])
         self.assertNotIn("changequeue", self.texto)
         self.assertIn("handoff_falhou", self.nos["Registrar handoff"]["parameters"]["query"])
+        # item 26: toda transferencia grava o inicio em handoffs (uma aberta por contato), com o motivo so em letras
+        rh = self.nos["Registrar handoff"]["parameters"]
+        self.assertIn("INSERT INTO handoffs (contato_id, motivo) VALUES ($1::bigint, COALESCE(NULLIF(left(regexp_replace($3::text, '[^a-z_]', '', 'g'), 60), ''), 'nao_informado')) ON CONFLICT (contato_id) WHERE situacao = 'aberto' DO NOTHING", rh["query"])
+        self.assertTrue(rh["options"]["queryReplacement"].endswith("String(($('Efeitos').first().json.resultado || {}).motivo || '')] }}"))
         self.assertIn("ticket_id", self.nos["Contexto"]["parameters"]["query"])  # ticketId vem do estado, nunca do modelo
 
     def test_gatilho_so_aceita_campos_do_contrato(self):
@@ -243,7 +247,9 @@ class EntregarRajadaAgente(unittest.TestCase):
         q = self.nos["Sessao"]["parameters"]["query"]
         self.assertIn("COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())", q)
         self.assertNotIn("THEN now()", q)
-        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff)] }}"))
+        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff), String(!!$json.transferido)] }}"))
+        # item 26: quando o agente volta a atender o contato, a transferencia aberta e encerrada (com o agente em silencio, nao)
+        self.assertTrue(q.startswith("WITH hf AS (UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'retorno' WHERE contato_id = $1::bigint AND situacao = 'aberto' AND NOT $6::boolean RETURNING 1) INSERT INTO conversas"))
         # ticket fora da fila humana: a marca da transferencia sai, senao toda ferramenta recusava com handoff_ativo (17/11)
         self.assertIn("WHEN $5::boolean THEN conversas.pedido - 'handoff' ELSE conversas.pedido END", q)
 
@@ -346,7 +352,8 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertNotIn("conteudo", self.nos["Registrar falha agente"]["parameters"]["query"])  # sem PII
         self.assertIn("{{BV:agente.turnos_max_contato_hora}}", self.nos["Preparar"]["parameters"]["jsCode"])
         self.assertIn("{{BV:textos.humano}}", self.nos["Compor humano"]["parameters"]["jsCode"])
-        self.assertNotIn("handoffs", self.texto)
+        # o fluxo do agente so toca em handoffs para encerrar a transferencia no retorno (no Sessao); o inicio e do bv-graces
+        self.assertEqual(self.texto.count("handoffs"), 1)
 
     def test_concluir_turno_e_resposta(self):  # 5.1.4
         q = self.nos["Concluir turno"]["parameters"]["query"]
@@ -356,8 +363,12 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertIn("ok: false", self.nos["Responder falha"]["parameters"]["jsCode"])
 
     def test_envio_por_posicao(self):  # 5.2.1 / 5.2.3
+        self.assertIn("const lista = m.tipo === 'lista' ? JSON.stringify((m.opcoes || []).map((o) => ({ id: o.id, rotulo: o.rotulo }))) : null;", self.nos["Saidas"]["parameters"]["jsCode"])
         for n in range(1, 5):
             self.assertIn("ON CONFLICT (mensagem_id_canal) DO NOTHING", self.nos[f"Gravar saida {n}"]["parameters"]["query"])
+            # item 26: os itens da lista enviada ficam em mensagens.lista
+            self.assertIn("tipo, conteudo, lista) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text, $5::jsonb)", self.nos[f"Gravar saida {n}"]["parameters"]["query"])
+            self.assertTrue(self.nos[f"Gravar saida {n}"]["parameters"]["options"]["queryReplacement"].endswith(f"$('Saidas').first().json.reqs[{n - 1}].lista] }}}}"))
             ordem = [f"Gravar saida {n}", f"Gravada {n}?", f"Simulado {n}?", f"Digitando {n}", f"Espera {n}", f"Enviar {n}", f"Enviado {n}?"]
             for a, b in zip(ordem, ordem[1:]):
                 self.assertIn(b, self._destinos(a)[0], (a, b))

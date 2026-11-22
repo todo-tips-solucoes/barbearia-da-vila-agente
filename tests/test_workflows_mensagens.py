@@ -281,6 +281,11 @@ class BvMensagens(Base, unittest.TestCase):
         q = self.nos["Reservar"]["parameters"]["query"]
         for t in ("FOR UPDATE SKIP LOCKED", "make_interval(secs => $1::int)", "'incerto'", "'ja_passou'", "clock_timestamp()", "handoffs h", "'mensagem|envio_incerto'"):
             self.assertIn(t, q)
+        # item 26: handoffs passou a ter linhas; segurar o lembrete durante a transferencia continua desligado, por chave propria
+        self.assertIn("($5::boolean AND EXISTS (SELECT 1 FROM handoffs h WHERE h.contato_id = r.contato_id AND h.situacao = 'aberto')) AS handoff_aberto", q)
+        self.assertTrue(self.nos["Reservar"]["parameters"]["options"]["queryReplacement"].endswith("'{{BV:handoff.segurar_lembretes}}' === 'True'] }}"))
+        for amb in ("producao", "integracao"):
+            self.assertIs(json.load(open(f"config/ambientes/{amb}.json", encoding="utf-8"))["handoff"]["segurar_lembretes"], False)
         g = self.nos["Gravar resultado"]["parameters"]["query"]
         self.assertIn("situacao = 'pendente' AND extract(epoch from reservada_em)::text = $2::text", g)  # so o dono da reserva grava
         self.assertIn("'agendada-' || id", g)
@@ -353,6 +358,8 @@ class BvConfirmacao(Base, unittest.TestCase):
 
     def test_respostas_registro_e_recusa(self):  # 4.1.4
         r = self.nos["Registrar"]["parameters"]["query"]
+        # item 26: a lista de decisao da recusa grava os itens enviados
+        self.assertIn("(SELECT jsonb_agg(jsonb_build_object('id', i->>'id', 'rotulo', i->>'rotulo')) FROM jsonb_array_elements($18::jsonb->'itens') i) WHERE $11::boolean", json.dumps(json.load(open("workflows/sub/bv-confirmacao.json", encoding="utf-8")), ensure_ascii=False))
         for t in ("'confirmacao_recusada'", "'saida'", "'conf-' ||", "mensagem_id_canal", "falhas_agente", "resposta = NULL", "'divergente'",
                   "tipo IN ('lembrete', 'pos_atendimento', 'lembrete_hora')", "motivo = 'recusada'"):  # item 11 (owner): recusa cancela lembrete e pos
             self.assertIn(t, r) if t != "mensagem_id_canal" else None
@@ -560,6 +567,8 @@ class FilaHumana(unittest.TestCase):
         self.assertIn("WHERE $2::int BETWEEN 200 AND 299 AND $3::text = 'cliente'", g["query"])
         self.assertIn("WHERE id = $1::bigint RETURNING id, telefone", g["query"])  # o estado local sai mesmo se o Chat Master recusar: nao repete a cada varredura
         self.assertIn("{{BV:textos.fila_sem_resposta}}", g["options"]["queryReplacement"])
+        # item 26: o encerramento pelo vigia fecha a transferencia aberta
+        self.assertIn("UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'vigia' FROM ok WHERE handoffs.contato_id = ok.id AND handoffs.situacao = 'aberto'", g["query"])
         self.assertIn("texto: l.texto || contingencia", nos["Montar aviso"]["parameters"]["jsCode"])
         self.assertIn("'{{BV:handoff.encerrar_ativo}}' === 'True'", p["options"]["queryReplacement"])
         self.assertEqual(nos["Encerrar atendimento"]["parameters"]["url"], "https://api.chatmasterveloz.com/api/tickets/updateAPI")

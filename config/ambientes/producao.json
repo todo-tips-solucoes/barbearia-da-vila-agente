@@ -201,7 +201,8 @@
     "encerrar_ativo": true,
     "encerrar_apos_min": 30,
     "encerrar_so_respondido": false,
-    "silencio_por_fila": true
+    "silencio_por_fila": true,
+    "segurar_lembretes": false
   },
   "mensagens": {
     "ativo": true,
