@@ -113,6 +113,22 @@ class Alerta(unittest.TestCase):  # 3.6
         self.assertEqual(nos["Checar banco"]["onError"], "continueRegularOutput")  # banco fora vira alerta, nao erro mudo
         self.assertIn("number: '5511967296849'", nos["Enviar alerta"]["parameters"]["jsonBody"])
         self.assertIn("function bvAlertaDecidir", nos["Decidir"]["parameters"]["jsCode"])
+        # WhatsApp da loja fora do ar (2026-11-21): status pela API do Chat Master; com a conexao fora, o alerta sai pela conexao reserva
+        chk = nos["Checar WhatsApp"]
+        self.assertEqual((chk["parameters"]["url"], chk["onError"], chk["credentials"]["httpHeaderAuth"]["id"]), ("https://api.chatmasterveloz.com/api/whatsapp-status", "continueRegularOutput", cfg("producao")["credenciais"]["chatmaster"]))
+        self.assertIn("bvAlertaConexao($input.first().json, '159')", nos["Decidir"]["parameters"]["jsCode"])
+        res = nos["Enviar pela reserva"]
+        self.assertIn("number: '5511967296849', openTicket: '0', queueId: '0', whatsappId: '145'", res["parameters"]["jsonBody"])
+        self.assertEqual(res["credentials"]["httpHeaderAuth"]["id"], cfg("producao")["credenciais"]["chatmaster_reserva"])
+        self.assertNotEqual(cfg("producao")["credenciais"]["chatmaster_reserva"], cfg("producao")["credenciais"]["chatmaster"])  # outra empresa: nao cai junto
+        self.assertIn("whatsappId: '159'", nos["Enviar alerta"]["parameters"]["jsonBody"])
+        con = w["connections"]
+        self.assertEqual([[d["node"] for d in s] for s in con["Pela reserva?"]["main"]], [["Enviar pela reserva"], ["Enviar alerta"]])
+        self.assertEqual([con[a]["main"][0][0]["node"] for a in ("A cada janela", "Checar banco", "Checar WhatsApp", "Decidir")], ["Checar banco", "Checar WhatsApp", "Decidir", "Pela reserva?"])
+        self.assertEqual(len(w["nodes"]), 7)
+        # a resposta do status traz dados de todas as conexoes: nenhum no de rede derruba a execucao, para ela nunca ser salva com a resposta
+        self.assertEqual({n["name"] for n in w["nodes"] if n.get("onError") == "continueRegularOutput"}, {"Checar banco", "Checar WhatsApp", "Enviar pela reserva", "Enviar alerta"})
+        self.assertEqual(w["settings"]["saveDataSuccessExecution"], "none")
         self.assertIn("bv-alerta", cfg("producao")["workflows"])
         self.assertNotIn("bv-alerta", cfg("integracao")["workflows"])  # TESTE dispara falhas de proposito (smokes)
 

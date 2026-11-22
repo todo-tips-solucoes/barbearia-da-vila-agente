@@ -45,7 +45,7 @@ Banco criado por `preparar-bancos.py --alvo producao` e preenchido pelo dump fin
 | `bv-verificacao` | `FQ8W178X7MUx1JDK` |
 | `bv-recepcao` | `CgCUXOfOxc6GWDJR` |
 | `bv-vigia` | `uAPtIcqw4wyorff5` |
-| `bv-alerta` | `N62lndxe74YZqZwm` |
+| `bv-alerta` (7 nos desde 2026-11-21: tambem alerta o WhatsApp da loja fora do ar, pela conexao reserva; ver `docs/melhorias-atendimento.md`) | `N62lndxe74YZqZwm` |
 | `bv_graces` | `co2i51aDgVHHHYF8` |
 | `interpretar_midia` | `jzov64mQwqxBmyy9` |
 | `bv_confirmacao` | `Hc8MjSFbzYJXEQOJ` |
