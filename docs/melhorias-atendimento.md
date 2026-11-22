@@ -304,7 +304,7 @@ Observado na mesma leitura e ainda aberto: as respostas da equipe a esse contato
 
 ## Operacional: alerta de WhatsApp fora do ar (21/11)
 
-O `bv-alerta` (só PROD, a cada 10 minutos) passa a consultar o estado da conexão da loja no Chat Master (`POST /api/whatsapp-status`, que devolve `{ whatsapps: [{ id, status }] }`; conferido com o token do TESTE). Estado diferente de `CONNECTED`, ou a conexão ausente da lista, vira o alerta "o WhatsApp da loja está fora do ar", no máximo um por hora. Consulta que falha não alerta.
+O `bv-alerta` (só PROD, a cada 10 minutos) passa a consultar o estado da conexão da loja no Chat Master (`POST /api/whatsapp-status`, que devolve `{ whatsapps: [{ id, status }] }`; conferido com o token do TESTE). Estado diferente de `CONNECTED`, ou a conexão ausente da lista, vira o alerta "o WhatsApp da loja está fora do ar", um por queda: ele só se repete depois de a conexão ser vista no ar de novo (desde 22/11; antes era um por hora, e o owner havia desconectado a loja por decisão dele em 17/11). Consulta que falha não alerta.
 
 A conexão da loja não consegue avisar a própria queda: com ela fora, todo alerta da rodada sai pela conexão reserva (`alerta.reserva` e `credenciais.chatmaster_reserva`: a conexão de teste, que é de outra empresa no Chat Master e por isso não cai junto). Com a conexão no ar, os alertas seguem pela conexão da loja, como antes.
 

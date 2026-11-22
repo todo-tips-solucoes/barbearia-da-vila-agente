@@ -74,7 +74,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/alerta.js}}\nconst cfg = { rotulo: '{{BV:rotulo}}', limiar: {{BV:alerta.falhas_agente_limiar}}, janela_min: {{BV:alerta.janela_min}}, repetir_min: {{BV:alerta.repetir_min}} };\nconst banco = $('Checar banco').first().json;\nconst falhas = banco.error ? null : banco.falhas;\n// a resposta do status traz dados de todas as conexoes da empresa: daqui so sai o estado da conexao da loja\nconst conexao = bvAlertaConexao($input.first().json, '{{BV:chatmaster.whatsapp_id}}');\nreturn bvAlertaFiltrar(bvAlertaDecidir(falhas, cfg, conexao), $getWorkflowStaticData('global'), Date.now(), cfg).map((a) => ({ json: a }));"
+        "jsCode": "{{BV:INCLUDE:shared/alerta.js}}\nconst cfg = { rotulo: '{{BV:rotulo}}', limiar: {{BV:alerta.falhas_agente_limiar}}, janela_min: {{BV:alerta.janela_min}}, repetir_min: {{BV:alerta.repetir_min}} };\nconst banco = $('Checar banco').first().json;\nconst falhas = banco.error ? null : banco.falhas;\n// a resposta do status traz dados de todas as conexoes da empresa: daqui so sai o estado da conexao da loja\nconst conexao = bvAlertaConexao($input.first().json, '{{BV:chatmaster.whatsapp_id}}');\nreturn bvAlertaFiltrar(bvAlertaDecidir(falhas, cfg, conexao), $getWorkflowStaticData('global'), Date.now(), cfg, conexao).map((a) => ({ json: a }));"
       },
       "id": "a1e7a000-0000-4000-8000-000000000003",
       "name": "Decidir",
