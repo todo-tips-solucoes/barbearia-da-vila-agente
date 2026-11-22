@@ -124,9 +124,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO conversas (contato_id, sessao_iniciada_em) VALUES ($1::bigint, COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())) ON CONFLICT (contato_id) DO UPDATE SET sessao_iniciada_em = CASE WHEN $2::boolean THEN EXCLUDED.sessao_iniciada_em ELSE conversas.sessao_iniciada_em END, pedido = CASE WHEN $2::boolean THEN (CASE WHEN NULLIF($3::text, '') IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('pedido_anterior', NULLIF($3::text, '')::jsonb) END) WHEN $5::boolean THEN conversas.pedido - 'handoff' ELSE conversas.pedido END, opcoes = CASE WHEN $2::boolean THEN '{}'::jsonb ELSE conversas.opcoes END, atualizado_em = now()",
+        "query": "WITH hf AS (UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'retorno' WHERE contato_id = $1::bigint AND situacao = 'aberto' AND NOT $6::boolean RETURNING 1) INSERT INTO conversas (contato_id, sessao_iniciada_em) VALUES ($1::bigint, COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())) ON CONFLICT (contato_id) DO UPDATE SET sessao_iniciada_em = CASE WHEN $2::boolean THEN EXCLUDED.sessao_iniciada_em ELSE conversas.sessao_iniciada_em END, pedido = CASE WHEN $2::boolean THEN (CASE WHEN NULLIF($3::text, '') IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('pedido_anterior', NULLIF($3::text, '')::jsonb) END) WHEN $5::boolean THEN conversas.pedido - 'handoff' ELSE conversas.pedido END, opcoes = CASE WHEN $2::boolean THEN '{}'::jsonb ELSE conversas.opcoes END, atualizado_em = now()",
         "options": {
-          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, String($json.sessao_nova), $json.pedido_anterior, $('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff)] }}"
+          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, String($json.sessao_nova), $json.pedido_anterior, $('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff), String(!!$json.transferido)] }}"
         }
       },
       "id": "caa3b83d-6b11-5e99-a9f4-9dcf10e58603",
@@ -1446,7 +1446,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/config.js}}\nconst cfg = { saida: { max_mensagens: {{BV:saida.max_mensagens}}, max_chars_mensagem: {{BV:saida.max_chars_mensagem}} },\n  lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} },\n  graces: { barbeiro_teste_id: '{{BV:graces.barbeiro_teste_id}}', teste_liberado: {{BV:graces.teste_contatos}}.includes(String(($('Gatilho').first().json || {}).telefone || '').replace(/\\D/g, '')) },\n  digitando: { ms_por_char: {{BV:digitando.ms_por_char}}, min_ms: {{BV:digitando.min_ms}}, max_ms: {{BV:digitando.max_ms}} } };\nconst g = $('Gatilho').first().json;\nconst j = $input.first().json;\nconst dig = (s) => String(s || '').replace(/\\D/g, '');\nconst simulado = bvSimulado(g.telefone); // trava so no TESTE (shared/config.js)\nconst wid = '{{BV:chatmaster.whatsapp_id}}';\nconst reqs = (j.saida || []).slice(0, 4).map((m) => {\n  // contato no formato LID (\"<id>@lid\") vai pelo endpoint de LID, com o valor intacto\n  const lid = /@lid$/.test(String(g.telefone));\n  const number = lid ? String(g.telefone) : dig(g.telefone);\n  const digitando = { number, body: 'composing', caption: '', whatsappId: wid };\n  const envio = m.tipo === 'lista'\n    ? { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '1', queueId: '{{BV:chatmaster.queue_id}}', whatsappId: wid, body: { Desc: m.texto, ButtonText: \"{{BV:textos.lista_botao}}\", TopText: \"{{BV:textos.lista_topo}}\", List: (m.opcoes || []).map((o) => ({ RowId: o.id, title: o.rotulo, desc: '' })) } } }\n    : { path: lid ? '/api/messages/whatsmeow/sendTextPROLid' : '/api/messages/send', body: { number, openTicket: '0', queueId: '{{BV:chatmaster.queue_id}}', whatsappId: wid, body: m.texto } };\n  return { n: m.n, tipo: m.tipo, texto: m.texto, digitando, envio, espera_s: Math.ceil(bvDigitacaoMs(m.texto, cfg) / 1000) };\n});\nreturn [{ json: { simulado, reqs, total: reqs.length } }];"
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/config.js}}\nconst cfg = { saida: { max_mensagens: {{BV:saida.max_mensagens}}, max_chars_mensagem: {{BV:saida.max_chars_mensagem}} },\n  lista: { max_itens: {{BV:lista.max_itens}}, max_titulo: {{BV:lista.max_titulo}} },\n  graces: { barbeiro_teste_id: '{{BV:graces.barbeiro_teste_id}}', teste_liberado: {{BV:graces.teste_contatos}}.includes(String(($('Gatilho').first().json || {}).telefone || '').replace(/\\D/g, '')) },\n  digitando: { ms_por_char: {{BV:digitando.ms_por_char}}, min_ms: {{BV:digitando.min_ms}}, max_ms: {{BV:digitando.max_ms}} } };\nconst g = $('Gatilho').first().json;\nconst j = $input.first().json;\nconst dig = (s) => String(s || '').replace(/\\D/g, '');\nconst simulado = bvSimulado(g.telefone); // trava so no TESTE (shared/config.js)\nconst wid = '{{BV:chatmaster.whatsapp_id}}';\nconst reqs = (j.saida || []).slice(0, 4).map((m) => {\n  // contato no formato LID (\"<id>@lid\") vai pelo endpoint de LID, com o valor intacto\n  const lid = /@lid$/.test(String(g.telefone));\n  const number = lid ? String(g.telefone) : dig(g.telefone);\n  const digitando = { number, body: 'composing', caption: '', whatsappId: wid };\n  const envio = m.tipo === 'lista'\n    ? { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '1', queueId: '{{BV:chatmaster.queue_id}}', whatsappId: wid, body: { Desc: m.texto, ButtonText: \"{{BV:textos.lista_botao}}\", TopText: \"{{BV:textos.lista_topo}}\", List: (m.opcoes || []).map((o) => ({ RowId: o.id, title: o.rotulo, desc: '' })) } } }\n    : { path: lid ? '/api/messages/whatsmeow/sendTextPROLid' : '/api/messages/send', body: { number, openTicket: '0', queueId: '{{BV:chatmaster.queue_id}}', whatsappId: wid, body: m.texto } };\n  // lista: os itens enviados, para auditoria (coluna mensagens.lista)\n  const lista = m.tipo === 'lista' ? JSON.stringify((m.opcoes || []).map((o) => ({ id: o.id, rotulo: o.rotulo }))) : null;\n  return { n: m.n, tipo: m.tipo, texto: m.texto, lista, digitando, envio, espera_s: Math.ceil(bvDigitacaoMs(m.texto, cfg) / 1000) };\n});\nreturn [{ json: { simulado, reqs, total: reqs.length } }];"
       },
       "id": "10602d23-fd04-5828-97c1-f20edc1225ac",
       "name": "Saidas",
@@ -1567,9 +1567,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
+        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, lista) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text, $5::jsonb) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
         "options": {
-          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-1', $('Saidas').first().json.reqs[0].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[0].texto] }}"
+          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-1', $('Saidas').first().json.reqs[0].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[0].texto, $('Saidas').first().json.reqs[0].lista] }}"
         }
       },
       "id": "f6666c6a-b992-5827-8965-e2f30796a1bf",
@@ -1836,9 +1836,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
+        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, lista) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text, $5::jsonb) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
         "options": {
-          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-2', $('Saidas').first().json.reqs[1].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[1].texto] }}"
+          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-2', $('Saidas').first().json.reqs[1].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[1].texto, $('Saidas').first().json.reqs[1].lista] }}"
         }
       },
       "id": "0822512f-8679-5010-a4e7-11777f847da1",
@@ -2105,9 +2105,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
+        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, lista) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text, $5::jsonb) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
         "options": {
-          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-3', $('Saidas').first().json.reqs[2].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[2].texto] }}"
+          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-3', $('Saidas').first().json.reqs[2].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[2].texto, $('Saidas').first().json.reqs[2].lista] }}"
         }
       },
       "id": "352b65dd-b767-59f1-82d2-78a5492bcc06",
@@ -2374,9 +2374,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
+        "query": "INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, lista) VALUES ($1::bigint, $2::text, 'saida', $3::text, $4::text, $5::jsonb) ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING id",
         "options": {
-          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-4', $('Saidas').first().json.reqs[3].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[3].texto] }}"
+          "queryReplacement": "={{ [$('Gatilho').first().json.contato_id, 'out-' + $('Gatilho').first().json.turno_id + '-4', $('Saidas').first().json.reqs[3].tipo === 'lista' ? 'lista' : 'texto', $('Saidas').first().json.reqs[3].texto, $('Saidas').first().json.reqs[3].lista] }}"
         }
       },
       "id": "c4bb311a-f035-5dd7-a1be-40fde197a917",

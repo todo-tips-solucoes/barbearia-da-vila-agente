@@ -527,9 +527,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'handoff_falhou', 'updateAPI', 'handoff_falhou', $2::int, $1::bigint WHERE $2::int IS NULL OR $2::int NOT BETWEEN 200 AND 299",
+        "query": "WITH hf AS (INSERT INTO handoffs (contato_id, motivo) VALUES ($1::bigint, COALESCE(NULLIF(left(regexp_replace($3::text, '[^a-z_]', '', 'g'), 60), ''), 'nao_informado')) ON CONFLICT (contato_id) WHERE situacao = 'aberto' DO NOTHING RETURNING 1) INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'handoff_falhou', 'updateAPI', 'handoff_falhou', $2::int, $1::bigint WHERE $2::int IS NULL OR $2::int NOT BETWEEN 200 AND 299",
         "options": {
-          "queryReplacement": "={{ [$('Efeitos').first().json.params[0], $json.statusCode || null] }}"
+          "queryReplacement": "={{ [$('Efeitos').first().json.params[0], $json.statusCode || null, String(($('Efeitos').first().json.resultado || {}).motivo || '')] }}"
         }
       },
       "id": "076616bf-a2ab-5c1f-8e1a-b5f0232b3fcd",
