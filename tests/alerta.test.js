@@ -33,5 +33,19 @@ assert.doesNotMatch(JSON.stringify(fora), /segredo/);
 assert.deepEqual(bvAlertaDecidir(null, cfg, 'AUSENTE').map((a) => [a.tipo, a.reserva]), [['whatsapp', true], ['postgres', true]]);
 assert.deepEqual(bvAlertaDecidir(5, cfg, 'CONNECTED').map((a) => [a.tipo, a.reserva]), [['agente', false]]);
 assert.equal(bvAlertaFiltrar(fora, est, t0, cfg).length, 1);
-assert.equal(bvAlertaFiltrar(bvAlertaDecidir(0, cfg, 'DISCONNECTED'), est, t0 + 10 * 60000, cfg).length, 0); // uma vez por hora
+// um alerta por queda: nao repete nem depois de uma hora, nem se a consulta do estado falhar no meio; volta a valer quando a conexao e vista no ar
+const rodada = (c, ms) => bvAlertaFiltrar(bvAlertaDecidir(0, cfg, c), est, ms, cfg, c).length;
+assert.equal(rodada('DISCONNECTED', t0 + 10 * 60000), 0);
+assert.equal(rodada('DISCONNECTED', t0 + 5 * 3600000), 0);
+assert.equal(rodada(null, t0 + 6 * 3600000), 0);
+assert.equal(rodada('DISCONNECTED', t0 + 7 * 3600000), 0);
+assert.equal(rodada('CONNECTED', t0 + 8 * 3600000), 0);
+assert.equal(rodada('DISCONNECTED', t0 + 8 * 3600000 + 600000), 1);
+// conexao que cai e volta em seguida: dentro da hora nao repete
+assert.equal(rodada('CONNECTED', t0 + 8 * 3600000 + 1200000), 0);
+assert.equal(rodada('DISCONNECTED', t0 + 8 * 3600000 + 1800000), 0);
+// estado guardado pela versao anterior (so o horario do ultimo alerta, queda em curso): nao alerta de novo depois do deploy
+assert.equal(bvAlertaFiltrar(fora, { ultimo: { whatsapp: t0 } }, t0 + 2 * 3600000, cfg, 'DISCONNECTED').length, 0);
+// os outros tipos seguem de hora em hora
+assert.equal(bvAlertaFiltrar(bvAlertaDecidir(null, cfg), est, t0 + 20 * 3600000, cfg, null).length, 1);
 console.log('alerta.test.js ok');

@@ -21,13 +21,17 @@ function bvAlertaDecidir(falhas, cfg, conexao) {
   return out.map((a) => ({ ...a, reserva: fora }));
 }
 
-// estado: staticData do workflow ({ultimo: {tipo: ms}}). Repete o mesmo tipo so depois de repetir_min.
-function bvAlertaFiltrar(alertas, estado, agoraMs, cfg) {
+// estado: staticData do workflow ({ultimo: {tipo: ms}, whatsappVoltou}). Repete o mesmo tipo so depois de repetir_min.
+// WhatsApp fora do ar: um alerta por queda (owner, 2026-11-22: a conexao pode ficar fora por decisao dele); so volta a
+// alertar depois de a conexao ser vista no ar de novo (conexao: bvAlertaConexao desta rodada).
+function bvAlertaFiltrar(alertas, estado, agoraMs, cfg, conexao) {
   estado.ultimo = estado.ultimo || {};
+  if (conexao === 'CONNECTED') estado.whatsappVoltou = true;
   return alertas.filter((a) => {
     const t = estado.ultimo[a.tipo];
-    if (t && agoraMs - t < cfg.repetir_min * 60000) return false;
+    if (t && (agoraMs - t < cfg.repetir_min * 60000 || (a.tipo === 'whatsapp' && !estado.whatsappVoltou))) return false;
     estado.ultimo[a.tipo] = agoraMs;
+    if (a.tipo === 'whatsapp') estado.whatsappVoltou = false;
     return true;
   });
 }
