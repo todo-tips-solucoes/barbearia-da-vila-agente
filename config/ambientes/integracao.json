@@ -19,7 +19,8 @@
     "verificacao": "VVbK8DkOhfW3nRg2",
     "openai": "zm8LmmbPm1BzU4ym",
     "graces": "lSsJYIq9jbpkmYlr",
-    "chatmaster": "Gt9C67GDkOEnB4BZ"
+    "chatmaster": "Gt9C67GDkOEnB4BZ",
+    "chatmaster_reserva": "Gt9C67GDkOEnB4BZ"
   },
   "workflows": {
     "bv-verificacao": "mAKBRCHQ1Bd78S7R",
@@ -266,7 +267,11 @@
     "contato": "5511967296849",
     "falhas_agente_limiar": 3,
     "janela_min": 10,
-    "repetir_min": 60
+    "repetir_min": 60,
+    "reserva": {
+      "whatsapp_id": "145",
+      "queue_id": "0"
+    }
   },
   "retomada": {
     "ativo": true,
