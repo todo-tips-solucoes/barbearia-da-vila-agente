@@ -1,0 +1,26 @@
+{
+  "id": "R42",
+  "situacao": "Alternativas em lista quando o barbeiro pedido não tem horário (princípio X; etapa 6): a decisão \"outro dia com ele ou outros barbeiros\" não vai mais em texto",
+  "falas": [
+    "Oi! O Black tem horário para corte adulto amanhã depois das 22h?",
+    {
+      "tocar_texto": "Outro dia com ele"
+    }
+  ],
+  "expectativas": [
+    "Diz que o Black não tem horário amanhã depois das 22h (ou nesse dia), sem dizer que o dia está lotado, e pergunta o que o cliente prefere com as alternativas em lista (outro dia com ele, ver outros barbeiros e, se houver, outro horário no dia)",
+    "No toque em \"Outro dia com ele\", pergunta qual dia o cliente prefere, sem mandar a lista de alternativas de novo e sem trocar de barbeiro",
+    "Não manda resumo nem pede confirmação de horário"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "escritas": [],
+  "pendentes": 0,
+  "referencia": "A barbearia fecha antes das 22h: nao ha horario com nenhum barbeiro depois das 22h. A lista de alternativas enviada pelo agente (outro dia com ele, ver outros barbeiros, outro horario no dia) e montada pelo sistema e esta correta."
+}

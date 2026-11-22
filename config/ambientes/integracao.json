@@ -199,7 +199,8 @@
     "fila_sem_resposta": "A equipe não conseguiu te responder por aqui agora. Se eu puder ajudar em mais alguma coisa, é só me chamar.",
     "laco": "Desculpa, acho que não estou conseguindo te entender. Quer que eu passe para a equipe te ajudar por aqui?",
     "confirmacao_desatualizada_atual": "Esse lembrete ficou desatualizado. O que está marcado no seu cadastro agora: {lista}. Se quiser mudar alguma coisa, é só me falar.",
-    "confirmacao_desatualizada_sem": "Esse lembrete ficou desatualizado e não encontrei horário marcado no seu cadastro. Quer que eu veja um horário pra você?"
+    "confirmacao_desatualizada_sem": "Esse lembrete ficou desatualizado e não encontrei horário marcado no seu cadastro. Quer que eu veja um horário pra você?",
+    "sem_entrega": "Não consegui consultar agora. Pode me mandar de novo o que você precisa?"
   },
   "loja": {
     "endereco": "Av. Mascote, 867 - Vila Mascote, São Paulo SP, CEP 04363-000",

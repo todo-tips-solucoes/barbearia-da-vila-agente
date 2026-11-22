@@ -231,3 +231,73 @@ Vistos na leitura das conversas da rodada 41/41 de 19/11 (a avaliadora aprovou o
 
 Ainda abertos, vistos na leitura: "Obrigado" depois do resumo foi entendido como confirmação; um cumprimento no meio da conversa zera a pergunta em aberto; quem não sabe o nome de nenhum barbeiro recebe a lista de novo em vez de "qualquer um"; áudio da equipe entra no histórico como nome de arquivo; duas respostas quando o cliente manda duas mensagens com mais de 8 s de intervalo.
 
+## Etapa 6: pendências da leitura de 17/11 e das rodadas de 19/11
+
+Desenho feito com dois especialistas em leitura (arquitetura do backend e comportamento do agente); implementação, medição e validação no TESTE como nas etapas anteriores. Regra mantida: decisão no código e no estado, sem campo novo visível ao modelo e sem crescer o prompt.
+
+| O que acontecia | Correção |
+|---|---|
+| **Duas ou mais buscas de horário no mesmo turno.** Medido em 19/11: em 2 de 18 execuções do R37 o modelo pediu seis buscas num passo (uma por dia); ficava guardada a lista da última e o texto falava de todos os dias. As chamadas de um passo rodam em série | **Uma lista de horários por turno** (`bvGPlano`, `horarios_livres`): vale a primeira busca do turno que achou horário; outra busca não roda (recusa `lista_ja_definida`, sem ida à agenda) e é contada em `falhas_agente` como `graces\|busca_repetida`. A mesma busca repetida (retentativa do agente) roda de novo (`pedido.busca.chave`). Busca sem horário não trava a seguinte. As ofertas de sequência passaram a gravar `pedido.busca` |
+| Texto de um dia com lista de outro, por qualquer outro caminho | **Rede no `bvCompor`:** lista de horários com texto que só cita outras datas vira frase montada da oferta ("Para sábado, 28/11, os horários são estes.") |
+| Barbeiro sem horário: "outro dia com ele ou os outros barbeiros?" em texto (princípio X pede lista) | Oferta `decisao_sem_horario` (Outro horário no dia / Outro dia com ele / Ver outros barbeiros), no molde da decisão do cancelamento; o `bvContextoOferta` explica as opções no turno seguinte. "Dia lotado" segue sem lista: a pergunta é aberta |
+| "Obrigado" depois do resumo foi entendido como confirmação e o agendamento foi criado | **Barreira da fase 2** (`bvgConfirmou`, no `bvGNormalizar`): com `proposta_id`, a fala do cliente no turno precisa ter um sim (no cancelamento, também "cancelar"; "remarcar" não cancela). É condição necessária: com um sim, quem decide continua sendo o modelo. A proposta fica pendente. O texto do cliente vai do fluxo para as ferramentas (`texto_cliente`), sem passar pelo modelo |
+| Com uma pergunta feita há segundos, "Bom dia tudo bem" fazia o agente recomeçar ("Como posso ajudar?") | Linha de contexto **Pergunta em aberto** (`bvPerguntaAberta`): só quando a mensagem é só cumprimento (ou um sinal como "."), a última saída do agente é pergunta e tem até 30 min. O laço tem precedência. Acima de 30 min nada muda (conversa antiga não é retomada num "Oi") |
+| Quem não conhecia nenhum barbeiro recebia a lista de barbeiros de novo | A lista de barbeiros ganhou o item **Qualquer barbeiro** (com 2 ou mais); escolhê-lo vale `qualquer=true`. O contexto do turno seguinte diz que "tanto faz" e "não conheço nenhum" são essa resposta |
+| Áudio, imagem ou arquivo mandado pela equipe entrava no histórico com o nome do arquivo | `bvEquipe`: fica a marca (`[áudio]`, `[imagem]`, `[vídeo]`, `[arquivo]`) e a legenda, quando há. O agente não ouve o áudio da equipe |
+
+Revisões independentes do diff (segurança; correção, performance e escala), feitas em leitura antes do PR. Nenhuma achou caminho que escreva na agenda sem consentimento nem que leve ao barbeiro de teste ou ao barbeiro só da equipe. Corrigido a partir delas: a barreira não via negação ("não quero mais" passava) nem distinguia descrição de imagem de fala; cancelamento digitado ao lado de "remarcar" era recusado; a rede do `bvCompor` trocava texto correto (aviso de escrita feita, dia da lista citado pelo nome); a trava da lista por turno agia mesmo depois de a oferta deixar de ser de horários; a linha da pergunta em aberto contradizia a das mensagens cruzadas; "Ver outros barbeiros" aparecia para serviço de um barbeiro só; nome de arquivo com espaço passava por legenda.
+
+Medido no TESTE com o código final (19/11): rodada completa 45/45; a conversa do R18 doze vezes, sem recusa da OpenAI nem estouro de tempo; a frase do R37 dezesseis vezes, e na vez em que o modelo pediu as seis buscas num passo a primeira valeu, as outras cinco foram recusadas e a resposta saiu com o texto e a lista do mesmo dia.
+
+Achados lendo as conversas da rodada 45/45 (a avaliadora aprovou os três), que ficam abertos:
+
+- **Promessa sem entrega.** Em 1 de 16 execuções da frase do R37, e uma vez na rodada, o modelo chamou só `listar_servicos` (ou nenhuma ferramenta) e encerrou o turno com "Vou consultar os horários... Só um momento". O cliente fica esperando. Não vem desta etapa: até esse ponto o prompt, as ferramentas e os resultados são iguais aos da etapa 5, onde já tinha aparecido uma vez. Próximo passo sugerido: uma segunda passada do agente quando a resposta promete verificar e o turno não chamou a ferramenta que entrega (laço no workflow, no máximo uma vez).
+- **Frase truncada antes da lista de decisão (R7):** "Seu horário de corte adulto na quarta-feira, 25/11, às 15:00 pode ser. Qual fica melhor pra você?", seguida de Remarcar / Cancelar mesmo. O caminho não mudou nesta etapa.
+- **Depois do "Obrigado" (R43):** nada é agendado e a proposta fica pendente, mas o agente às vezes responde só "De nada!" e não pergunta de novo se pode confirmar.
+
+Limitações conhecidas, deixadas como estão:
+
+- **Segunda busca que a regra recusa mas o prompt ainda sugere.** A orientação da busca com qualquer barbeiro diz "para falar de um barbeiro específico, chame horarios_livres com ele". Se o cliente perguntar dos dois no mesmo turno, a segunda busca é recusada e custa uma rodada do modelo. A contagem `graces|busca_repetida` em `falhas_agente` mede a frequência.
+- **Retentativa do agente:** só a última busca que achou horário roda de novo; as outras voltam como recusa. A lista certa chega ao cliente; o texto é escrito sem os dados da busca recusada.
+- **Vários dias sem horário com o mesmo barbeiro:** a lista de decisão fica com o último dia buscado.
+- **Pergunta em aberto:** a linha repete entre aspas a última pergunta do próprio agente (mesmo padrão do laço).
+- **Chamadas em paralelo:** a regra da lista por turno conta com as chamadas de um passo rodando em série (medido em 19/11). Se o n8n passar a rodar em paralelo, a decisão tem de ir para o `Persistir`.
+
+Números sem base medida, para rever com atendimentos reais: os 30 min da pergunta em aberto (o caso real foi de segundos) e a lista de palavras de "sim" da barreira (um sim fora dela custa uma pergunta a mais; se aparecer, o próximo passo é mandar a confirmação como lista Sim/Não).
+
+Fica aberto: alerta de WhatsApp fora do ar, os 94 "sem contato" da conciliação de lembretes, duas respostas para mensagens com mais de 8 s de intervalo, e a orientação "outro dia ou agendar cada serviço separado" das sequências, que ainda vai em texto.
+
+## Etapa 7: barreiras para o agente cumprir o combinado
+
+Não muda a forma de atender: são conferências em código sobre a resposta do modelo e sobre o resultado das ferramentas. A topologia do `entregar-rajada` é a mesma da etapa 6.
+
+| O que acontecia | Barreira |
+|---|---|
+| **Promessa sem entrega:** o modelo encerrava com "Vou consultar os horários... Só um momento." sem chamar a ferramenta (1 em 16 na frase do R37) | `bvPrometeu`, só quando a resposta **inteira** é a promessa (tiradas as frases que só prometem, sobra no máximo uma interjeição como "Oi, Paulo!"): com lista, a lista segue; sem lista, sai `textos.sem_entrega` ("Não consegui consultar agora. Pode me mandar de novo o que você precisa?"). Resposta com conteúdo (preço, horário, pedido de dado, aviso de escrita feita) fica como veio |
+| **Texto truncado antes da lista de decisão:** "…às 15:00 pode ser. Qual fica melhor pra você?" | A cauda "pode ser:" que introduzia as opções sai, e a pergunta que fecha uma lista de decisão passa a ser "O que você prefere?" (`bvPerguntaDecisao`) |
+| **Sequência de serviços que não cabe no dia:** "outro dia ou agendar separado?" em texto | Lista `modo_encadeamento` com Outro dia / Agendar separado; a resposta volta por `id_opcao`. "Outro dia" com a data nova busca a mesma sequência (os serviços estão em `pedido.servicos`; o dia que não coube, em `pedido.seq_dia`), e o `bvContextoOferta` explica as duas opções no turno seguinte |
+| **Orientação que contradizia a regra de uma lista por turno** ("para falar de um barbeiro específico, chame horarios_livres…") | O texto passou a dizer que isso vale para a próxima mensagem do cliente |
+
+A negação na fala do cliente (`bvNegou`) passou a ser uma função em `agente.js`, usada pela barreira da fase 2.
+
+Resposta que avisa de algo já feito na agenda ("agendado", "cancelei", "remarquei") nunca é tratada como promessa, mesmo com "aguarde o lembrete": o aviso não pode sumir.
+
+**Horários repetidos no texto, tentado e retirado.** A regra que tirava a frase com quatro ou mais horários da lista apagava junto o aviso de cancelamento, o dia da lista e o "quem tem horário a partir de". A repetição no texto é só estética; ficou como o modelo escreve.
+
+**Pedido de confirmação anexado pelo código, tentado e retirado.** A primeira versão acrescentava "Posso confirmar o horário?" quando havia um resumo pendente e a resposta não perguntava nada (o caso "Obrigado" → "De nada!"). A revisão de segurança mostrou que a pergunta não diz a que se refere: um "sim" a ela poderia executar uma proposta em que o cliente não estava pensando, e ela voltaria depois de uma recusa dita com outras palavras ("mudei de ideia"). Como mexe no consentimento, saiu. O que garante o resultado continua sendo a barreira da fase 2 (nada é agendado sem um sim), e a retomada automática já traz o pedido de volta.
+
+**Segunda passada do agente, tentada e abandonada (21/11).** A primeira versão refazia o turno quando o modelo prometia e não entregava, com um laço `Agente → Conferir entrega → IF → Agente`. O turno funcionou, mas ler a execução salva pela API (`GET /executions/{id}?includeData=true`) deixou o processo do n8n em 100% de CPU, sem responder, por cerca de 20 minutos. Como TESTE e PROD rodam no mesmo processo, os workflows de PROD pararam nesse intervalo; voltou com o restart do serviço, autorizado pelo owner. A causa dentro do n8n não foi investigada. Regra que fica: nada de ciclo nem de topologia nova em torno do nó `Agente` nesta instância sem combinar antes.
+
+Medido no TESTE com o código final (21/11): rodada completa 45/45; a conversa do R18 doze vezes, sem recusa da OpenAI nem estouro de tempo; testes ao vivo sem modelo das etapas 5 e 6; `healthz` do n8n conferido entre cada passo. A promessa sem entrega não apareceu nessas rodadas (é de cerca de 1 em 16 na frase do R37), então a barreira dela só tem teste unitário. O ramo "Outro dia" das sequências também: não há como montar no TESTE um dia em que a sequência não caiba.
+
+Desenho conferido por duas revisões independentes do diff (segurança; correção, performance e escala), em leitura. Delas saíram a retirada das duas regras acima, o estreitamento da promessa e o conserto do "Outro dia".
+
+Continua aberto: duas respostas para mensagens com mais de 8 s de intervalo (é o tempo de espera da rajada; aumentar atrasa toda resposta); alerta de WhatsApp fora do ar e os 94 "sem contato" da conciliação de lembretes.
+
+## Etapa 8: resposta ao lembrete de 1 hora
+
+Leitura do contato em PROD (21/11): o "Simm" de 17/11 chegou junto com o lembrete de 1 hora ("Seu corte é daqui a 1 hora. Te esperamos!"). Não havia confirmação aberta: o horário tinha sido remarcado pela equipe na véspera, depois da hora da confirmação. O lembrete sai pelo módulo de Agendamentos do Chat Master e não entra no histórico; a conversa da véspera já tinha passado da janela. O agente recebeu só "Simm" e respondeu "Como posso ajudar?".
+
+Correção: o `Ler contexto` lê o lembrete de 1 hora do contato (enviado, ou criado no Chat Master e prestes a sair em 2 minutos, pela própria `bv_respondivel`, sem copiar a regra; vale até a hora marcada) e `bvMPromptConfirmacoes` acrescenta uma linha de dado ao contexto. Com confirmação de presença aberta a linha não entra: o "sim" confirma a presença. No meio de uma conversa também não entra: ali o "sim" responde à última pergunta do agente (um resumo, por exemplo). A linha não leva o nome do barbeiro. Sem lembrete, o contexto fica byte a byte igual ao da etapa 7.
+
+Observado na mesma leitura e ainda aberto: as respostas da equipe a esse contato em 16/11 não ficaram gravadas (o cliente respondia a alguém entre 16:05 e 16:24 e não há nenhuma mensagem `equipe-` no período). Só entra a mensagem enviada pelo Chat Master com o chamado na fila humana; resposta pelo aparelho da loja, ou com o chamado em outra fila, é descartada. Falta medir em PROD com que frequência isso acontece.

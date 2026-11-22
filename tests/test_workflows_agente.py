@@ -314,6 +314,11 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertIn("m.resposta IS NULL", self.nos["Ler contexto"]["parameters"]["query"])
         self.assertIn("bvMPromptConfirmacoes(ctx, Date.now()", self.nos["Preparar"]["parameters"]["jsCode"])  # confirmacoes e recusa (mensagens.js)
         self.assertIn("m.motivo IS NULL", self.nos["Ler contexto"]["parameters"]["query"])  # confirmacao encerrada (cancelar/remarcar) nao entra
+        # lembrete de 1 hora no contexto (17/11): enviado ou prestes a sair (a regra unica de bv_respondivel, com o tipo fixo: a funcao
+        # so da a folga de 2 min ao lembrete do Chat Master), ate a hora marcada; cancelado (motivo) nao entra
+        self.assertIn("m.tipo = 'lembrete_hora' AND bv_respondivel(m.situacao, 'lembrete_dia', m.agendamento_canal_id, m.previsto_para) AND m.motivo IS NULL AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo') ORDER BY m.inicio LIMIT 1) AS lembrete_hora", self.nos["Ler contexto"]["parameters"]["query"])
+        self.assertIn("ctx.lembrete_hora", ler("workflows/shared/mensagens.js"))
+        self.assertIn("bvNeutralizar, hist.length === 0)", self.nos["Preparar"]["parameters"]["jsCode"])  # so sem conversa em andamento
         self.assertEqual({t["parameters"]["name"] for t in tools}, {
             "identificar_cliente", "cadastrar_cliente", "escolher_cliente", "listar_servicos", "listar_barbeiros",
             "horarios_livres", "meus_agendamentos", "agendar", "reagendar", "cancelar",
@@ -405,7 +410,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
             self.assertIn("passe para a equipe", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"]["laco"])
         # etapa 4: a mesma pergunta pela segunda vez leva a lista junto; a terceira nao sai (o contexto manda oferecer a equipe)
         self.assertIn("const repete = !ofertaNova && bvVezesDaLista(histC, antes) === 1 && bvRepetePergunta(out, histC);", self.nos["Compor"]["parameters"]["jsCode"])
-        self.assertIn("+ bvLaco(hist, rec.opcoes)", self.nos["Preparar"]["parameters"]["jsCode"])
+        self.assertIn("bvLaco(hist, rec.opcoes)", self.nos["Preparar"]["parameters"]["jsCode"])
         # a oferta nasce carimbada com a hora (em): e o que permite contar quantas vezes a lista dela ja foi enviada
         qp = self.graces["Persistir"]["parameters"]["query"]
         self.assertEqual(qp.count("WHEN ($2::jsonb -> 'itens') IS NOT NULL THEN $2::jsonb || jsonb_build_object('em',"), 2)
@@ -447,6 +452,49 @@ class RevisaoEtapa2(unittest.TestCase):  # revisao de 17/11/2026: estado para o 
     def test_agendamentos_futuros_no_contexto_so_os_que_nao_passaram(self):
         self.assertIn("json: { texto, system, agora,", self.nos["Preparar"]["parameters"]["jsCode"])
         self.assertIn("bvContextoCliente(c, bvNeutralizar, p.agora)", self.nos["Cliente"]["parameters"]["jsCode"])
+
+
+class Etapa6(unittest.TestCase):  # pendencias da leitura de 17/11: decisao no codigo, com o texto do cliente no turno
+    @classmethod
+    def setUpClass(cls):
+        cls.nos = {n["name"]: n for n in json.loads(ler("workflows/sub/entregar-rajada.json"))["nodes"]}
+
+    def test_texto_do_cliente_vai_do_fluxo_para_as_ferramentas_sem_passar_pelo_modelo(self):
+        for nome in ("horarios_livres", "agendar", "reagendar", "cancelar"):
+            wi = self.nos["Ferramenta " + nome]["parameters"]["workflowInputs"]
+            self.assertEqual(wi["value"]["texto_cliente"], "={{ $('Preparar').first().json.texto_cliente }}", nome)
+            self.assertIn("texto_cliente", [s["id"] for s in wi["schema"]], nome)
+        for n in self.nos.values():  # nenhum campo novo visivel ao modelo: um campo a mais travava a chamada (R18, 19/11)
+            if n["name"].startswith("Ferramenta "):
+                vis = [k for k, v in n["parameters"]["workflowInputs"]["value"].items() if "$fromAI" in str(v)]
+                self.assertNotIn("texto_cliente", vis)
+                self.assertNotIn("a_partir", vis)
+
+    def test_promessa_sem_entrega_e_tratada_no_codigo_sem_laco(self):  # etapa 7; o laco de volta ao agente travou o n8n em 21/11
+        w = json.loads(ler("workflows/sub/entregar-rajada.json"))
+        c = w["connections"]
+        self.assertEqual([x["node"] for x in c["Agente"]["main"][0]], ["Reler opcoes"])
+        self.assertEqual([x["node"] for x in c["Agente"]["main"][1]], ["Registrar falha agente"])
+        self.assertEqual(self.nos["Agente"]["parameters"]["text"], "={{ $('Preparar').first().json.texto }}")
+        chega_no_agente = {k for k, v in c.items() for s in v.get("main", []) for x in s if x["node"] == "Agente"}
+        self.assertEqual(chega_no_agente, {"Cliente"})  # nenhum caminho volta para o agente
+        self.assertIn('texto: bvPrometeu(out) ? "{{BV:textos.sem_entrega}}" : "{{BV:textos.reformular}}"', self.nos["Compor"]["parameters"]["jsCode"])
+        for amb in ("integracao", "producao"):
+            self.assertEqual(json.loads(ler(f"config/ambientes/{amb}.json"))["textos"]["sem_entrega"], "Não consegui consultar agora. Pode me mandar de novo o que você precisa?")
+
+    def test_nao_ha_pedido_de_confirmacao_anexado_pelo_codigo(self):  # tentado e retirado na revisao de seguranca: pergunta sem referente
+        self.assertNotIn("pendente_antiga", self.nos["Reler opcoes"]["parameters"]["query"])
+        self.assertNotIn("confirmar_de_novo", self.nos["Compor"]["parameters"]["jsCode"])
+        for amb in ("integracao", "producao"):
+            self.assertNotIn("confirmar_de_novo", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"])
+
+    def test_pergunta_em_aberto_so_quando_nao_ha_laco(self):
+        p = self.nos["Preparar"]["parameters"]["jsCode"]
+        self.assertIn("+ (bvLaco(hist, rec.opcoes) || (bvCorrida(itens, hist) ? '' : bvPerguntaAberta(hist, fala, Date.now())))", p)
+        # a fala do turno: descricao de imagem nao e fala, e turno sem fala manda a marca (nao confirma nada na fase 2)
+        self.assertIn("const fala = tm.linhas.filter((l) => !String(l).startsWith('[imagem descrita]')).join(' ').slice(0, 600);", p)
+        self.assertIn("texto_cliente: fala || '(sem texto)',", p)
+        self.assertLess(p.index("const fala = "), p.index("bvPerguntaAberta(hist, fala"))
 
 
 class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, banco e limites

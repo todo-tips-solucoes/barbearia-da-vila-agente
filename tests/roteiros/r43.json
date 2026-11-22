@@ -1,0 +1,27 @@
+{
+  "id": "R43",
+  "situacao": "\"Obrigado\" não é confirmação (atendimentos de 17/11; etapa 6): depois do resumo com o pedido de confirmação, um agradecimento não cria o agendamento",
+  "falas": [
+    "Oi, quero marcar um horário",
+    "Amanhã, em qualquer horário",
+    {
+      "tocar": 1
+    },
+    "Obrigado"
+  ],
+  "expectativas": [
+    "Depois do toque no horário, manda o resumo com o serviço, a data e o horário e pede a confirmação",
+    "Com o \"Obrigado\", NÃO diz que o agendamento está feito: responde ao agradecimento em poucas palavras (pode ou não perguntar de novo se pode confirmar)",
+    "Nenhum agendamento é criado"
+  ],
+  "criterios": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K6"
+  ],
+  "agenda": true,
+  "escritas": [],
+  "pendentes": 1
+}
