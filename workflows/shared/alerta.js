@@ -1,13 +1,24 @@
 // Alerta fora de banda (feature producao, FR-016): Postgres fora ou falhas do agente em serie (proxy de cota/gasto da
-// OpenAI, sem chave de admin para ler o custo). Sem rede: o workflow bv-alerta chama e envia pelo Chat Master.
+// OpenAI, sem chave de admin para ler o custo) e WhatsApp da loja fora do ar. Sem rede: o workflow bv-alerta chama e envia pelo Chat Master.
 
-// falhas: contagem da janela (null = consulta ao Postgres falhou). -> [{tipo, texto}] (0 ou 1 item)
-function bvAlertaDecidir(falhas, cfg) {
-  if (falhas === null) return [{ tipo: 'postgres', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: o Postgres não respondeu. O atendimento pode estar parado.` }];
-  if (Number(falhas) >= cfg.limiar) {
-    return [{ tipo: 'agente', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: ${falhas} falhas do agente nos últimos ${cfg.janela_min} min. Pode ser cota ou gasto da OpenAI.` }];
-  }
-  return [];
+// Estado da conexao de WhatsApp, da resposta de POST /api/whatsapp-status ({ whatsapps: [{ id, status }] }, conferida em 2026-11-21).
+// null = nao deu para saber (consulta falhou ou resposta fora do formato): nao alerta. Conexao que sumiu da lista conta como fora.
+function bvAlertaConexao(resp, whatsappId) {
+  const l = resp && Array.isArray(resp.whatsapps) ? resp.whatsapps : null;
+  if (!l) return null;
+  const c = l.find((x) => x && String(x.id) === String(whatsappId));
+  return c ? String(c.status || '').replace(/[^A-Za-z_]/g, '').slice(0, 30) || 'SEM_STATUS' : 'AUSENTE';
+}
+
+// falhas: contagem da janela (null = consulta ao Postgres falhou); conexao: bvAlertaConexao (ausente/null = nao avaliada).
+// -> [{tipo, texto, reserva}]. reserva: a conexao da loja esta fora, entao TODO alerta desta rodada sai pela conexao reserva.
+function bvAlertaDecidir(falhas, cfg, conexao) {
+  const fora = conexao != null && conexao !== 'CONNECTED';
+  const out = [];
+  if (fora) out.push({ tipo: 'whatsapp', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: o WhatsApp da loja está fora do ar no Chat Master (estado: ${conexao}). Os clientes ficam sem resposta até reconectar.` });
+  if (falhas === null) out.push({ tipo: 'postgres', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: o Postgres não respondeu. O atendimento pode estar parado.` });
+  else if (Number(falhas) >= cfg.limiar) out.push({ tipo: 'agente', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: ${falhas} falhas do agente nos últimos ${cfg.janela_min} min. Pode ser cota ou gasto da OpenAI.` });
+  return out.map((a) => ({ ...a, reserva: fora }));
 }
 
 // estado: staticData do workflow ({ultimo: {tipo: ms}}). Repete o mesmo tipo so depois de repetir_min.
@@ -21,4 +32,4 @@ function bvAlertaFiltrar(alertas, estado, agoraMs, cfg) {
   });
 }
 
-if (typeof module !== 'undefined') module.exports = { bvAlertaDecidir, bvAlertaFiltrar };
+if (typeof module !== 'undefined') module.exports = { bvAlertaConexao, bvAlertaDecidir, bvAlertaFiltrar };
