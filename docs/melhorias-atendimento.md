@@ -340,3 +340,27 @@ Não há um degrau: os intervalos se espalham até 60 s. Subir a janela para 12 
 **"Sem contato" da conciliação de lembretes: nada a corrigir.** De 449 registros, 194 ganharam lembrete depois. Os 103 dos últimos 5 dias que nunca ganharam foram cruzados com a agenda da Graces: 53 sem celular válido no cadastro, 28 com início em até uma hora (não havia lembrete a mandar) e 22 que não estavam mais na agenda lida (cancelados, ou fora da página de 200 agendamentos). Nenhum caso em que o lembrete cabia e não saiu. Esses registros não contam para o alerta de falhas, que só conta `agente_falhou`.
 
 **Respostas da equipe: aberto.** O agente passou 22 contatos para a equipe; dos 13 que escreveram duas vezes ou mais nas 3 horas seguintes, 11 não têm nenhuma resposta da equipe gravada. O banco não separa "respondeu pelo aparelho da loja" (evento `start` com `fromMe`, descartado em `bvNormalizar`) de "não respondeu". O silêncio do agente não depende disso (vale a fila do chamado); o que se perde é o histórico quando o cliente volta ao agente. Próximo passo: ver no TESTE como chega o evento de uma mensagem digitada no aparelho da conexão e, se for identificável, gravá-la como mensagem da equipe.
+
+## Item 26: registro para auditar (22/11)
+
+Não muda o atendimento: são gravações a mais em consultas que já existiam, sem nó novo em nenhum workflow.
+
+| O que faltava | Como ficou |
+|---|---|
+| Itens das listas enviadas | Coluna `mensagens.lista` (migração 0019), com `[{id, rotulo}]`: toda lista do agente (`Saidas` e `Gravar saida 1` a `4` do `entregar-rajada`) e a lista de decisão da recusa de presença (`bv-confirmacao`). Mensagem de texto fica com a coluna nula. A confirmação de presença do lembrete (Sim / Não) não grava: os dois títulos são fixos no config |
+| Início de cada transferência | Uma linha em `handoffs`, com o motivo, gravada no `Registrar handoff` do `bv-graces`. Todo encaminhamento passa por ele: a ferramenta `transferir_atendimento`, o limite de turnos, o teto de agendamentos e o barbeiro só da equipe. Uma transferência aberta por contato |
+| Fim de cada transferência | `encerrado_em` e `encerrado_por` (migração 0019): `vigia`, quando a fila humana fica 30 minutos sem interação (`Gravar encerramento` do `bv-vigia`), ou `retorno`, no primeiro turno em que o agente volta a atender o contato (`Sessao` do `entregar-rajada`). No `retorno` a hora é a da volta do cliente ao agente, não a de quando a equipe terminou |
+
+**Lembrete durante a transferência: segue saindo.** O `bv-mensagens` tinha, desde o plano original, a regra de adiar o lembrete de quem está com transferência aberta em `handoffs`; ela nunca agiu porque a tabela ficava vazia. Com a tabela preenchida ela passaria a agir, então ficou atrás da chave `handoff.segurar_lembretes`, desligada nos dois ambientes. Ligar é decisão do owner. Risco conhecido de ligar: transferência sem chamado conhecido no Chat Master só fecha quando o cliente volta a escrever, e o lembrete ficaria retido até lá.
+
+Limites:
+
+- Chamado que a equipe encerra sem o cliente voltar a escrever: a linha fica `aberto` até o vigia agir (PROD) ou até a próxima mensagem do cliente. No TESTE o vigia não encerra.
+- As mensagens da equipe digitadas no aparelho da loja continuam fora do banco (ver "Medições em PROD (22/11)").
+- Transferências e listas anteriores à publicação não são reconstruídas.
+
+Ordem de publicação: a migração 0019 vem antes do deploy (os workflows gravam nas colunas novas).
+
+Consulta de exemplo, transferências por dia, motivo e desfecho: `SELECT (iniciado_em AT TIME ZONE 'America/Sao_Paulo')::date, motivo, coalesce(encerrado_por, 'aberto'), count(*), round(avg(extract(epoch from encerrado_em - iniciado_em)) / 60) AS minutos FROM handoffs GROUP BY 1, 2, 3 ORDER BY 1;`
+
+Testado no TESTE (22/11), com a migração aplicada: teste ao vivo com 20 conferências (itens gravados iguais aos da oferta da conversa; transferência aberta com o motivo; segunda chamada sem linha nova; agente calado na fila humana com a linha aberta; encerrada por `retorno` quando o agente volta; encerrada por `vigia` rodando a consulta do `Gravar encerramento`); as seis consultas alteradas conferidas no banco com `PREPARE`; R1, R2, R15, R28, R30 e R35 da suíte, 6 de 6, com as conversas do R28 e do R35 lidas. Não exercitado: o vigia encerrando de verdade (desligado no TESTE) e a gravação da lista de decisão pelo `bv-confirmacao` conferida no banco (o R35 passa por ela; a expressão foi testada isolada).

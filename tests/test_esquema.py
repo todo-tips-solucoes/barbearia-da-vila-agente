@@ -29,6 +29,11 @@ class Esquema(unittest.TestCase):
             self.assertIn(trecho, SQL)
         self.assertEqual(SQL.count("REFERENCES contatos(id) ON DELETE CASCADE"), 3)
 
+    def test_auditoria_0019(self):  # item 26: fim da transferencia e itens das listas
+        m = open("db/migrations/0019_auditoria.sql").read()
+        self.assertIn("ALTER TABLE handoffs ADD COLUMN IF NOT EXISTS encerrado_por text CHECK (encerrado_por IN ('vigia','retorno'));", m)
+        self.assertIn("ALTER TABLE mensagens ADD COLUMN IF NOT EXISTS lista jsonb;", m)
+
     def test_indices(self):
         for trecho in ("mensagens (contato_id, criado_em)", "mensagens_agendadas (situacao, previsto_para)",
                        "UNIQUE INDEX IF NOT EXISTS handoffs_aberto_unico_idx ON handoffs (contato_id) WHERE situacao = 'aberto'"):
