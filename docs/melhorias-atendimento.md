@@ -300,7 +300,7 @@ Leitura do contato em PROD (21/11): o "Simm" de 17/11 chegou junto com o lembret
 
 Correção: o `Ler contexto` lê o lembrete de 1 hora do contato (enviado, ou criado no Chat Master e prestes a sair em 2 minutos, pela própria `bv_respondivel`, sem copiar a regra; vale até a hora marcada) e `bvMPromptConfirmacoes` acrescenta uma linha de dado ao contexto. Com confirmação de presença aberta a linha não entra: o "sim" confirma a presença. No meio de uma conversa também não entra: ali o "sim" responde à última pergunta do agente (um resumo, por exemplo). A linha não leva o nome do barbeiro. Sem lembrete, o contexto fica byte a byte igual ao da etapa 7.
 
-Observado na mesma leitura e ainda aberto: as respostas da equipe a esse contato em 16/11 não ficaram gravadas (o cliente respondia a alguém entre 16:05 e 16:24 e não há nenhuma mensagem `equipe-` no período). Só entra a mensagem enviada pelo Chat Master com o chamado na fila humana; resposta pelo aparelho da loja, ou com o chamado em outra fila, é descartada. Falta medir em PROD com que frequência isso acontece.
+Observado na mesma leitura e ainda aberto: as respostas da equipe a esse contato em 16/11 não ficaram gravadas (o cliente respondia a alguém entre 16:05 e 16:24 e não há nenhuma mensagem `equipe-` no período). Só entra a mensagem enviada pelo Chat Master com o chamado na fila humana; resposta pelo aparelho da loja, ou com o chamado em outra fila, é descartada. Medido em 22/11: ver "Medições em PROD (22/11)".
 
 ## Operacional: alerta de WhatsApp fora do ar (21/11)
 
@@ -311,3 +311,32 @@ A conexão da loja não consegue avisar a própria queda: com ela fora, todo ale
 A resposta do status traz dados de todas as conexões da empresa. O `Decidir` só repassa tipo, texto e a marca da reserva, e nenhum nó de rede derruba a execução, para ela não ser salva com a resposta. Efeito: envio de alerta que falha deixa de aparecer como execução com erro. Se uma execução do `bv-alerta` aparecer com erro, apague-a depois de ler.
 
 Testado no TESTE com uma cópia temporária do workflow, com os envios trocados por nós sem efeito: conexão no ar, nenhum alerta; conexão inexistente, um alerta pela reserva. O envio de verdade pela reserva e os estados que o Chat Master usa para a conexão caída não foram exercitados.
+
+## Medições em PROD (22/11)
+
+Feitas pelo owner com um script só de leitura (contagens, sem nome, telefone nem texto de cliente).
+
+**O atendimento de verdade parou em 17/11 às 12:57.** É a hora da última mensagem recebida, da última enviada e do último turno em PROD; em 22/11 a conexão da loja estava `DISCONNECTED` no Chat Master. Recebidas por dia: 125 em 15/11, 373 em 16/11 e 160 em 17/11. Efeitos:
+
+- toda medição abaixo "dos últimos 7 ou 14 dias" cobre, na prática, de 15/11 a 17/11 ao meio-dia;
+- as etapas 5 a 8 foram publicadas depois disso e ainda não atenderam nenhum cliente;
+- os lembretes saem pelo agendamento do Chat Master na mesma conexão. Não foi verificado se saíram nesses dias: o banco marca `enviada` na hora prevista, não na hora do envio.
+
+Não está registrado se a desconexão foi decidida ou foi queda. A conexão por QR Code é um aparelho vinculado: com ela fora, o celular da loja continua funcionando e só o agente para.
+
+**Rajada (janela de 8 s): recomendação de manter.** Pares de mensagens seguidas do mesmo cliente com até 60 s de intervalo:
+
+| Intervalo (s) | Pares | Em turnos diferentes |
+|---|---|---|
+| 0 a 8 | 75 | 0 |
+| 8 a 12 | 35 | 31 |
+| 12 a 16 | 31 | 31 |
+| 16 a 20 | 22 | 22 |
+| 20 a 30 | 67 | 67 |
+| 30 a 60 | 155 | 155 |
+
+Não há um degrau: os intervalos se espalham até 60 s. Subir a janela para 12 s juntaria 35 pares e atrasaria todos os turnos (617 no período, resposta com mediana de 9,8 s e p90 de 14,8 s).
+
+**"Sem contato" da conciliação de lembretes: nada a corrigir.** De 449 registros, 194 ganharam lembrete depois. Os 103 dos últimos 5 dias que nunca ganharam foram cruzados com a agenda da Graces: 53 sem celular válido no cadastro, 28 com início em até uma hora (não havia lembrete a mandar) e 22 que não estavam mais na agenda lida (cancelados, ou fora da página de 200 agendamentos). Nenhum caso em que o lembrete cabia e não saiu. Esses registros não contam para o alerta de falhas, que só conta `agente_falhou`.
+
+**Respostas da equipe: aberto.** O agente passou 22 contatos para a equipe; dos 13 que escreveram duas vezes ou mais nas 3 horas seguintes, 11 não têm nenhuma resposta da equipe gravada. O banco não separa "respondeu pelo aparelho da loja" (evento `start` com `fromMe`, descartado em `bvNormalizar`) de "não respondeu". O silêncio do agente não depende disso (vale a fila do chamado); o que se perde é o histórico quando o cliente volta ao agente. Próximo passo: ver no TESTE como chega o evento de uma mensagem digitada no aparelho da conexão e, se for identificável, gravá-la como mensagem da equipe.
