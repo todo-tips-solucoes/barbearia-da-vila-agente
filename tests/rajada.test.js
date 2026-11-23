@@ -85,5 +85,13 @@ console.log('rajada.test.js ok');
   assert.equal(r.bvEquipe(ev({ isGroup: true }), 106, 'x'), null);
   // o texto de encaminhamento do proprio agente chega como eco ja na fila humana: nao e resposta da equipe
   assert.equal(r.bvEquipe(ev({ mensagem: { id: 1, body: 'Entendi! Vou passar você para a equipe, tá?' } }), 106, 'Vou passar você para a equipe'), null);
+  // mensagem digitada no aparelho da conexao (captura real na 145, 2026-11-23): o aviso `start` com fromMe e descartado e o
+  // eco from_internal, com o chamado na fila humana, entra como mensagem da equipe
+  const cel = fx('26'), aviso = fx('27');
+  assert.deepEqual(bvNormalizar(aviso, {}), { status: 'descartada', motivo: 'enviada_pela_loja' });
+  const eq = r.bvEquipe(cel.body, 78, 'texto do agente'); // o texto anonimizado da fixture e so 'x'
+  assert.deepEqual([eq.fila, eq.id, eq.ticket, eq.telefone === cel.body.sender, !!eq.texto, cel.body.mensagem.fromApp, aviso.body.fromApp],
+    [78, String(cel.body.mensagem.id), cel.body.chamadoId, true, true, true, true]);
+  assert.equal(r.bvEquipe(cel.body, 106, 'texto do agente'), null); // chamado fora da fila humana: nao grava
 }
 console.log('rajada.test.js fila humana ok');
