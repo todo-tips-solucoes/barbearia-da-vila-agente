@@ -92,7 +92,7 @@ Depois da publicação das correções, o owner relatou atendimentos ainda confu
 
 ### Decisões do owner (17/11)
 
-- **Fila humana sem interação há 30 minutos:** encerra também quando o cliente falou por último; nesse caso o cliente recebe um aviso (`textos.fila_sem_resposta`). Consequência assumida: o pedido sai da fila da equipe.
+- **Fila humana sem interação há 30 minutos:** encerra também quando o cliente falou por último; nesse caso o cliente recebe um aviso (`textos.fila_sem_resposta`). Consequência assumida: o pedido sai da fila da equipe. Desde 23/11 o aviso não sai quando a equipe respondeu e o cliente só agradeceu depois (ver "Leitura dos atendimentos de 23/11").
 - **Teto de agendamentos por contato por dia:** 3; acima disso, transfere para a equipe (etapa 3).
 - **Item 21 (Jayme):** manter os lembretes e as confirmações dos agendamentos dele.
 - **OpenAI:** chave separada para o TESTE, com orçamento próprio (depende de o owner criar a chave e a credencial no n8n).
@@ -455,3 +455,36 @@ Medido no webhook, com a `evento-24` e variações dela:
 | `start` (mensagem) sem token | não medido | 401 | 401 |
 
 Não medido: o corpo do aviso de PROD que gerou a nota (as execuções não ficam salvas; a causa vem da captura e do 401 reproduzido no TESTE); quem encerrou o chamado (o envio do agente ou o painel); se o Chat Master reenvia o aviso ou desliga o webhook depois de falhas repetidas; se a nota no chamado é novidade da plataforma; e um chamado da loja encerrado depois do deploy sem a nota, que é a prova final. Se a nota voltar, o aviso de PROD tem formato diferente do capturado e vale capturar um.
+
+## Leitura dos atendimentos de 23/11
+
+Primeiras 2 h 30 de atendimento depois da volta da conexão (12:42 às 15:00), lidas pelo owner com o script só de leitura: 213 mensagens de 21 contatos, 94 turnos, resposta com mediana de 10,8 s e p95 de 22,7 s. O básico funcionou: 8 agendamentos fechados sem ajuda, os 3 pedidos pelo barbeiro que só a equipe agenda foram para a equipe, 2 confirmações de presença reconhecidas, horário de funcionamento igual ao da Graces.
+
+| # | Ponto | Conversas | Situação |
+|---|---|---|---|
+| 1 | Aviso "a equipe não conseguiu te responder" depois de a equipe ter respondido e o cliente só agradecer | 2 de 3 avisos | **Corrigido** (abaixo) |
+| 2 | Cliente pediu cabelo e barba ("raspar na navalha e barba", serviço que a Graces não tem) e saiu só com barba, com outro barbeiro; ao pedir para incluir cabelo, a lista voltou três vezes (turnos de 87 s e 37 s) e "incluir" virou troca de barbeiro | 1 | Aberto |
+| 3 | Duas respostas, às vezes contraditórias, quando a segunda mensagem chega de 11 a 13 s depois da primeira | 5 | **Corrigido**: janela da rajada em 15 s (ver "Rajada", em "Medições em PROD (22/11)") |
+| 4 | Lista que não corresponde à pergunta do texto (pergunta a idade e lista horários; pergunta se passa para a equipe e lista barbeiros) | 2 | Aberto |
+| 5 | Duas pessoas no mesmo horário com barbeiros diferentes: 5 minutos de tentativa antes de transferir, e o cliente repetiu tudo para a equipe | 1 | Aberto |
+| 6 | Pergunta o barbeiro que o cliente já disse; depois de "qualquer barbeiro", pergunta o horário em texto em vez de listar | 2 | Aberto |
+| 7 | Cliente avisou que ficaria preso em reunião e o agente não conferiu se havia agendamento para oferecer remarcar | 1 | Aberto |
+| 8 | Pedido de desculpas e oferta da equipe sem motivo, em resposta a "Com certeza" | 1 | Aberto |
+| 9 | Texto cita três barbeiros com horário e a lista só traz os de um | 1 | Aberto |
+| 10 | Tabela de preços num parágrafo só; três serviços têm nome maior que os 24 caracteres do item de lista | 2 | Aberto |
+| 11 | Áudio transcrito com frase que o cliente não disse ("Se inscreve no canal...") | 1 | Aberto |
+
+As causas dos pontos 2, 4 e 8 são hipóteses: as conversas foram lidas, não a execução de cada turno.
+
+**Ponto 1, corrigido.** O vigia encerra o chamado parado há 30 minutos no setor humano e avisava o cliente sempre que a última mensagem era dele. Em dois casos a equipe já tinha agendado e o cliente só respondeu "Obrigado". Agora o aviso não sai quando as três condições valem: a equipe escreveu nas últimas 24 horas; a última mensagem dela não é pergunta nem promessa de retorno ("vou ver", "já te falo", "um momento", "aguarde"); e, depois dela, todas as mensagens do cliente são só agradecimento ou despedida (`bvMSoAgradeceu`, em `workflows/shared/mensagens.js`). O chamado é encerrado do mesmo jeito, calado. Na dúvida, o aviso sai, como antes.
+
+- Conta como agradecimento: "ok", "obrigado", "valeu", "beleza", "combinado", um emoji sozinho e parecidos, por lista de palavras (sem regex com repetição sobre texto de cliente).
+- Não conta, e o aviso continua saindo: pergunta, pedido, cumprimento sozinho ("boa tarde"), "sim" ou "isso mesmo" sozinhos, mensagem com número ou horário ("ok 14:30" é escolha), emoji que não é de fecho, texto em outro alfabeto, mídia, mensagem com mais de 80 caracteres, mais de 6 mensagens depois da equipe, e equipe que nunca respondeu.
+- A consulta `Filas paradas` devolve, por chamado, se a equipe respondeu e as mensagens do cliente depois dela (no máximo 7; texto longo, pergunta, mídia e mensagem com número ou "@" viram "?", para dado do cliente não trafegar pela execução, que fica salva quando dá erro). A decisão é do `Montar aviso`; não há nó novo.
+- Testado no TESTE com uma cópia temporária do `bv-vigia` (só o ramo da fila humana, encerramento no Chat Master trocado por nó sem efeito, 9 contatos simulados). Calado: equipe resolveu e o cliente agradeceu; dois agradecimentos seguidos; equipe fechou com "te aguardamos" e o cliente agradeceu; equipe por último, como antes. Aviso: equipe nunca respondeu; ficou pergunta do cliente; equipe prometeu retorno e sumiu; equipe fez pergunta e sumiu; cliente escolheu um horário e ficou sem resposta.
+- Duas revisões independentes do diff, em leitura (segurança; correção, performance, escala e duplicação), sem achado crítico. Delas saíram: a pergunta e a promessa de retorno da equipe, o número e o horário na mensagem do cliente, a lista de emojis de fecho, a retirada de palavras de apoio que deixavam passar pergunta sem "?" ("ok, e amanhã") e o corte de número e "@" no que trafega pela execução.
+
+Limites conhecidos: promessa de retorno escrita de um jeito fora da lista ("deixa comigo") seguida de agradecimento encerra calado; a janela de 24 horas olha a última mensagem da equipe, não a da transferência em aberto (uma mensagem do cliente ao agente que não seja agradecimento já faz avisar); um envio do próprio agente gravado por engano como mensagem da equipe contaria como resposta (não conferido em PROD).
+
+Não medido: o encerramento de verdade no Chat Master com a regra nova (no TESTE o vigia não encerra); a lista de palavras e a de promessas contra um volume maior de conversas reais.
+

@@ -570,6 +570,16 @@ class FilaHumana(unittest.TestCase):
         # item 26: o encerramento pelo vigia fecha a transferencia aberta
         self.assertIn("UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'vigia' FROM ok WHERE handoffs.contato_id = ok.id AND handoffs.situacao = 'aberto'", g["query"])
         self.assertIn("texto: l.texto || contingencia", nos["Montar aviso"]["parameters"]["jsCode"])
+        # 23/11: a equipe respondeu e o cliente so agradeceu depois -> encerra calado (decisao em shared/mensagens.js, nao no SQL)
+        self.assertIn("(e.em IS NOT NULL AND NOT e.pendente) AS equipe_respondeu", p["query"])  # pergunta ou promessa de retorno da equipe nao e resposta
+        self.assertIn("~ '[?]|(vou|vamos) (ver|verificar|conferir|checar|olhar|confirmar|consultar)|j[aá] te |te retorn|te aviso|um moment|um instant|um minut|aguarde|j[aá] volto' AS pendente", p["query"])
+        self.assertIn("m.mensagem_id_canal LIKE 'equipe-%' AND m.criado_em > now() - interval '24 hours' ORDER BY m.criado_em DESC LIMIT 1) e ON true", p["query"])
+        self.assertIn("m.direcao = 'entrada' AND m.criado_em > e.em ORDER BY m.criado_em DESC LIMIT 7", p["query"])
+        self.assertIn("length(coalesce(m.conteudo, '')) <= 80 AND coalesce(m.conteudo, '') !~ '[?0-9@]'", p["query"])  # texto longo, pergunta, numero, e-mail e midia viram "?": nao viajam pela execucao
+        self.assertIn("$5::boolean AS equipe_respondeu, $6::text AS depois", g["query"])
+        self.assertIn("$('Filas paradas').item.json.equipe_respondeu === true, $('Filas paradas').item.json.depois || '[]'", g["options"]["queryReplacement"])
+        self.assertIn(".filter((l) => l.contato_id != null && bvMAvisaFila(l))", nos["Montar aviso"]["parameters"]["jsCode"])
+        self.assertIn("{{BV:INCLUDE:shared/mensagens.js}}", nos["Montar aviso"]["parameters"]["jsCode"])
         self.assertIn("'{{BV:handoff.encerrar_ativo}}' === 'True'", p["options"]["queryReplacement"])
         self.assertEqual(nos["Encerrar atendimento"]["parameters"]["url"], "https://api.chatmasterveloz.com/api/tickets/updateAPI")
         self.assertIn("status: 'closed'", nos["Encerrar atendimento"]["parameters"]["jsonBody"])
