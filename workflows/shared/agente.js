@@ -100,7 +100,7 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
   // Opcoes escritas no meio da frase ("os mais proximos sao: 1 | 16:00 — Kiel 2 | 16:40 — Kiel ..."): o bloco OPCOES so e tirado quando
   // vem uma opcao por linha, e a sequencia saia crua na mensagem (17/11, dois atendimentos). A frase e cortada na primeira opcao.
   const semSoltas = (f) => {
-    const ms = [...f.matchAll(/(?:^|\s)[-•*]?\s*\d{1,2}\s*\|\s*\S/g)];
+    const ms = [...f.matchAll(/(?:^|\s)[-•*]?\s*s?\d{1,2}\s*\|\s*\S/g)]; // "s3 |": id de servico
     if (ms.length < 2) return f;
     const ini = f.slice(0, ms[0].index).replace(/[:\s]+$/, '').trim();
     return ini ? `${ini}.` : '';
@@ -113,7 +113,7 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
   const completar = (f, cortou, prox) => ((bloco || cortou) && (!prox || prox.includes('?')) ? f.replace(/(^|\s)(é|são)\s*[.:]?\s*$/i, (m, a, v) => `${a}${v} ${v.toLowerCase() === 'é' ? 'este' : 'estes'}.`).trimEnd().replace(/\spodem? ser ?:$/i, '.') : f);
   // Linha "1 | 10:00 — Kiel" que sobrou no texto (a oferta guardada nao tem esse id: duas buscas no mesmo turno, R40 em 19/11) sai sem
   // o numero e a barra: o cliente le o horario, nao o formato da lista.
-  const semId = (f) => f.replace(/^[-•*]?\s*\d{1,2}\s*\|\s*(?=\S)/, '');
+  const semId = (f) => f.replace(/^[-•*]?\s*s?\d{1,2}\s*\|\s*(?=\S)/, '');
   const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].replace(/^\s*[-*]\s*/, '').trim()).filter(Boolean);
   // Resumo com pedido de confirmacao nao leva a lista de horarios da busca do mesmo turno: o cliente tocava num horario e recebia
   // "Posso confirmar?" de novo (16/11, 3 conversas). A resposta ao resumo e texto (sim / nao / outro horario).
@@ -384,7 +384,7 @@ function bvRecencia(p) {
   const velha = p.ultimaEntradaMs == null || (!aposRetomada && (p.agoraMs - ult) > p.janelaMin * 60000);
   if (!velha) return { sessaoNova: false, pedido: p.pedido, opcoes: p.opcoes };
   const tem = p.pedido && Object.keys(p.pedido).length > 0;
-  return { sessaoNova: true, pedido: {}, opcoes: null, pedido_anterior: tem ? { ...p.pedido, abandonado: true } : null };
+  return { sessaoNova: true, pedido: {}, opcoes: null, pedido_anterior: tem ? (({ servicos_vistos, pedido_anterior, ...r }) => ({ ...r, abandonado: true }))(p.pedido) : null };
 }
 
 function bvDigitacaoMs(texto, cfg) {
@@ -555,6 +555,29 @@ function bvMontarTurno(itens, resultados) {
   };
 }
 
+// Pedido de falar com uma pessoa (PROD, 23/11: o cliente escreveu "Atendente" e recebeu "Claro! Como posso ajudar?"). Decidido no
+// codigo, antes do modelo: o turno segue pelo ramo que ja transfere sem o agente (o do limite de turnos), com o motivo pediu_pessoa.
+// So quando a mensagem INTEIRA e o pedido (mais cumprimento ou "por favor"): "vou falar com a equipe do meu trabalho", "pode
+// confirmar, depois falo com o gerente", "isso e robo ou pessoa real?" e qualquer duvida continuam com o modelo. Cada frase e
+// comparada por inteiro, com repeticoes limitadas (texto do cliente).
+const BV_PESSOA = '(?:atendentes?|humanos?|ser humano|pessoa|alguem|recepcao|recepcionista|responsavel|gerente|equipe)';
+const BV_QUER = '(?:(?:eu )?(?:quero|queria|gostaria de|preciso|precisava|posso|poderia|pode|podem|prefiro|tem como|da pra|da para|como faco pra|como faco para)(?: eu| a gente)? )?';
+const BV_FIM = '(?: (?:por favor|pfv|pf|humano|de verdade|real|ai|agora|da barbearia|da loja))?';
+const BV_PEDIDOS_PESSOA = [
+  new RegExp(`^${BV_QUER}(?:(?:um|uma|o|a|com|de) ){0,2}(?:atendente|atendente humano|atendimento humano|humano|pessoa real|pessoa de verdade)${BV_FIM}$`),
+  new RegExp(`^${BV_QUER}(?:falar|conversar|tratar)(?: \\w+)? com (?:um |uma |o |a |algum |alguma )?${BV_PESSOA}${BV_FIM}$`),
+  new RegExp(`^${BV_QUER}ser atendid[oa] por (?:um |uma )?(?:atendente|humano|pessoa)${BV_FIM}$`),
+  new RegExp(`^${BV_QUER}(?:me |nos )?(?:passa|passe|passar|transfere|transfira|transferir|encaminha|encaminhe|encaminhar|chama|chame|chamar)(?: me)? (?:para |pra |p |a |o |um |uma ){0,2}${BV_PESSOA}${BV_FIM}$`),
+  /^nao quero falar com (?:um |o |a )?(?:robo|bot|ia|maquina|assistente)(?: virtual)?$/,
+];
+const BV_ENCHIMENTO = /^(?:oi+|ola|opa|e ai|bom dia|boa tarde|boa noite|tudo bem|por favor|pfv|pf|sim|nao|ok|obrigad[oa])$/;
+function bvPediuPessoa(texto) {
+  const frases = bvNormalizarDescricao(String(texto || '').slice(0, 300)).toLowerCase().replace(/\[[^\]]*\]/g, ' ')
+    .split(/[.,;:!?\n]+/).map((f) => f.replace(/[^a-z0-9]+/g, ' ').trim().replace(/^(?:oi+|ola|opa|bom dia|boa tarde|boa noite) (?=\S)/, '')) // cumprimento colado: "oi atendente"
+    .filter((f) => f && !BV_ENCHIMENTO.test(f));
+  return frases.length > 0 && frases.length <= 3 && frases.every((f) => BV_PEDIDOS_PESSOA.some((re) => re.test(f)));
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { bvNegou, bvPrometeu, bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvPediuPessoa, bvNegou, bvPrometeu, bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }

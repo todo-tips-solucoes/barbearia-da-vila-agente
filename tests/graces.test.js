@@ -115,7 +115,7 @@ p = g.bvGPlano(entrada({ operacao: 'listar_servicos' }), null, cfg);
 r = g.bvGPasso(p.st, [ok([{ idServico: 's1', descricaoAgenda: 'corte adulto', tempoPadrao: 40, valorPadrao: 85, ativo: true }, { idServico: 's2', descricaoAgenda: 'corte 2ª vez', valorPadrao: 50 }, { idServico: 's3', descricaoAgenda: 'barba', ativo: false }])], cfg).final;
 assert.deepEqual(r.resultado.servicos.map((s) => s.nome), ['corte adulto']);
 const opcoesServ = r.efeitos.opcoes;
-p = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: '1' }), ctxOp(opcoesServ), cfg);
+p = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 's1' }), ctxOp(opcoesServ), cfg);
 assert.deepEqual(p.reqs[0].qs, { idServico: 's1' });
 r = g.bvGPasso(p.st, [ok([{ idProfissional: 'b1', apelido: 'Rodrigo ' }, { idProfissional: TESTE, apelido: 'Zé' }, { idProfissional: 'b3', apelido: 'X', nomeCompleto: 'ZZ TESTE INTEGRACAO - NAO AGENDAR' }, { idProfissional: 'b2', apelido: 'Kiel' }])], cfg).final;
 assert.deepEqual(r.resultado.barbeiros.map((b) => b.nome), ['Rodrigo', 'Kiel', 'Qualquer barbeiro']); // com 2 ou mais, a lista traz a opcao de qualquer um
@@ -1174,4 +1174,63 @@ console.log('graces.test.js segunda analise ok');
   const so = g.bvGPasso(p.st, [ok([ag('a1', 'Pedro', 'b1')])], c).final.resultado;
   assert.equal(so.orientacao, undefined);
   console.log('graces.test.js meus_agendamentos sem nome oculto ok');
+}
+
+{ // Ids de servico valem para a conversa inteira (PROD, 23/11: com duas listas, corte + duas depilacoes virou tres depilacoes, agendadas)
+  const sv = (id, nome, preco) => ({ idServico: id, descricaoAgenda: nome, tempoPadrao: 40, valorPadrao: preco, ativo: true });
+  const lista = (texto, ped, itens) => { const p0 = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto }), { opcoes: {}, pedido: ped }, cfg); return g.bvGPasso(p0.st, p0.reqs.map(() => ok(itens)), cfg).final; };
+  const l1 = lista('corte', {}, [sv('c1', 'corte adulto', 90), sv('c2', 'corte com maquina', 70)]);
+  assert.deepEqual(l1.efeitos.opcoes.itens.map((x) => x.id), ['s1', 's2']); // "s" na frente: o id nao e a posicao
+  const ped1 = { idCliente: 'c1', ...l1.efeitos.pedido };
+  const l2 = lista('depila', ped1, [sv('d0', 'Depilação', 25), sv('d1', 'DEPILAÇÃO DE NARIZ', 25), sv('c1', 'corte adulto', 95)]);
+  assert.deepEqual(l2.efeitos.opcoes.itens.map((x) => [x.id, x.valor.nome]), [['s3', 'Depilação'], ['s4', 'DEPILAÇÃO DE NARIZ'], ['s1', 'corte adulto']]); // novo ganha o seguinte; o ja visto guarda o id
+  assert.deepEqual(l2.resultado.servicos.map((x) => x.id), ['s3', 's4', 's1']); // o modelo ve os mesmos ids da lista enviada
+  const ped2 = { ...ped1, ...l2.efeitos.pedido };
+  assert.equal(ped2.servicos_vistos.find((x) => x.id === 's1').preco, 95); // o registro acompanha a ultima leitura
+  assert.equal(ped2.servicos_vistos.length, 4);
+  // a lista corrente e a de depilacoes; o corte com maquina ("s2") so esta na anterior e continua resolvendo, pelo servico certo
+  const pe = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['s2', 's4'], data: '2026-12-01' }), { opcoes: l2.efeitos.opcoes, pedido: ped2 }, cfg);
+  assert.deepEqual(pe.reqs.map((q) => q.qs.idServico), ['c2', 'd1']);
+  assert.deepEqual(pe.st.meta.servicos.map((x) => x.nome), ['corte com maquina', 'DEPILAÇÃO DE NARIZ']);
+  assert.ok(pe.st.meta.servicos.every((x) => x.id === undefined)); // o id da opcao nao vai para dentro do servico
+  // id nunca ofertado continua recusado; servico de lista anterior tambem vale sozinho
+  assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['s2', 's9'], data: '2026-12-01' }), { opcoes: l2.efeitos.opcoes, pedido: ped2 }, cfg).final.resultado.code, 'opcao_desconhecida');
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 's2' }), { opcoes: l2.efeitos.opcoes, pedido: ped2 }, cfg).reqs[0].qs, { idServico: 'c2' });
+  // "2" digitado pelo cliente (o segundo da lista) nunca resolve como servico: o modelo tem de usar o id da lista
+  for (const id of ['1', '2', '3']) assert.equal(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: id }), { opcoes: l2.efeitos.opcoes, pedido: ped2 }, cfg).final.resultado.code, 'opcao_desconhecida');
+  // pedido de conversa antiga com ids numericos guardados: sao ignorados na numeracao nova, sem colidir
+  assert.deepEqual(lista('corte', { servicos_vistos: [{ id: '1', idServico: 'zz', nome: 'x' }, { id: 's7', idServico: 'c2', nome: 'corte com maquina' }] }, [sv('c1', 'corte adulto', 90), sv('c2', 'corte com maquina', 70)]).efeitos.opcoes.itens.map((x) => x.id), ['s8', 's7']);
+  // conversa que comecou antes desta versao (sem servicos_vistos): a lista corrente resolve como sempre
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 's2' }), { opcoes: l1.efeitos.opcoes, pedido: { idCliente: 'c1' } }, cfg).reqs[0].qs, { idServico: 'c2' });
+  // o titulo cortado do item ("CORTE MAQUINA SIMPLES (1"), que e o que volta quando o cliente toca, vale como o nome do servico
+  const l3 = lista('maquina', {}, [sv('m1', 'CORTE MAQUINA SIMPLES (1 PENTE)', 55), sv('c2', 'corte com maquina', 70)]);
+  assert.equal(l3.efeitos.opcoes.itens[0].rotulo, 'CORTE MAQUINA SIMPLES (1');
+  const pm = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'CORTE MAQUINA SIMPLES (1' }), { opcoes: l3.efeitos.opcoes, pedido: { idCliente: 'c1', ...l3.efeitos.pedido } }, cfg);
+  assert.deepEqual(pm.reqs[0].qs, { idServico: 'm1' });
+  assert.equal(pm.st.meta.servico.rotulo, undefined); // o rotulo nao entra no servico guardado
+  assert.equal(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'corte que nao existe' }), { opcoes: l3.efeitos.opcoes, pedido: { idCliente: 'c1' } }, cfg).final.resultado.code, 'opcao_desconhecida');
+  // dois servicos com o mesmo titulo cortado: o texto nao escolhe um deles em silencio (a lista volta); o nome completo continua valendo
+  const l4 = lista('infantil', {}, [sv('i1', 'Corte Infantil ate 11 anos + barba', 120), sv('i2', 'Corte Infantil ate 11 anos', 70)]);
+  assert.deepEqual(l4.efeitos.opcoes.itens.map((x) => x.rotulo), ['Corte Infantil ate 11 an', 'Corte Infantil ate 11 an']);
+  const ctx4 = { opcoes: l4.efeitos.opcoes, pedido: { idCliente: 'c1', ...l4.efeitos.pedido } };
+  assert.equal(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'Corte Infantil ate 11 an' }), ctx4, cfg).final.resultado.code, 'opcao_desconhecida');
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'Corte Infantil ate 11 anos' }), ctx4, cfg).reqs[0].qs, { idServico: 'i2' });
+  // "agendar separado" devolve ao modelo os ids da sequencia: tem de ser o id pelo qual cada servico foi pedido, e todos resolvem depois
+  const profsDe = (ids) => ok(ids.map((id) => ({ idProfissional: id, apelido: id.toUpperCase() })));
+  const plS = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['s2', 's4'], data: '2026-12-01' }), { opcoes: l2.efeitos.opcoes, pedido: ped2 }, cfg);
+  const semUnico = g.bvGPasso(plS.st, [profsDe(['b1']), profsDe(['b2'])], cfg).final; // nenhum barbeiro faz os dois
+  assert.equal(semUnico.resultado.sem_barbeiro_unico, true);
+  assert.deepEqual(semUnico.efeitos.pedido.servicos.map((x) => [x.opcao_id, x.nome]), [['s2', 'corte com maquina'], ['s4', 'DEPILAÇÃO DE NARIZ']]);
+  const ctxS = { opcoes: semUnico.efeitos.opcoes, pedido: { ...ped2, ...semUnico.efeitos.pedido } };
+  const sepS = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: semUnico.efeitos.opcoes.itens.find((x) => x.valor === 'separados').id, data: '2026-12-01' }), ctxS, cfg).final;
+  assert.deepEqual(sepS.resultado.servicos, [{ id: 's2', nome: 'corte com maquina' }, { id: 's4', nome: 'DEPILAÇÃO DE NARIZ' }]);
+  const ctxSep = { opcoes: {}, pedido: { ...ctxS.pedido, ...sepS.efeitos.pedido } }; // a oferta foi limpa: o segundo servico resolve pela lista da conversa
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 's4' }), ctxSep, cfg).reqs[0].qs, { idServico: 'd1' });
+  // titulo de uma palavra ("Pezinho") tem cara de id: nao resolvendo como id, vale como nome; se tambem nao e nome, e recusado (nunca vira o servico ja escolhido)
+  const l5 = lista('pez', {}, [sv('p1', 'Pezinho', 30), sv('c1', 'corte adulto', 90)]);
+  const ctx5 = { opcoes: l5.efeitos.opcoes, pedido: { idCliente: 'c1', servico: { idServico: 'c1', nome: 'corte adulto', opcao_id: 's2' }, ...l5.efeitos.pedido } };
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'Pezinho' }), ctx5, cfg).reqs[0].qs, { idServico: 'p1' });
+  assert.equal(g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: 'Selagem' }), ctx5, cfg).final.resultado.code, 'opcao_desconhecida');
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros' }), ctx5, cfg).reqs[0].qs, { idServico: 'c1' }); // sem id nem nome: o servico ja escolhido, como antes
+  console.log('graces.test.js ids de servico da conversa ok');
 }

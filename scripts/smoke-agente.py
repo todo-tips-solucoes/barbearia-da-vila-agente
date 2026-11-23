@@ -838,7 +838,29 @@ def r10():
     checar("0 agendamentos futuros do Paulo no barbeiro de teste", not _agendas_paulo())
 
 
-ROTEIROS = ["r1", "r2", "r3", "r4", "r5", "r7", "r8", "r9", "r10"]  # r6 (outra pessoa) saiu com as ferramentas (revisao de 17/11)
+def r12():
+    print("r12 servicos de duas listas (PROD, 23/11): os ids nao se repetem entre listas e a sequencia leva os servicos pedidos")
+    c = ini(541)
+    d, api = _api_deploy()
+    with chamador(api) as chamar:
+        G(chamar, c, 541, operacao="listar_servicos", texto="corte")
+        l1 = estado(541)["opcoes"].get("itens", [])
+        corte = next((i for i in l1 if i["valor"]["nome"].strip().lower() == "corte adulto"), None)
+        G(chamar, c, 541, operacao="listar_servicos", texto="depila")
+        l2 = estado(541)["opcoes"].get("itens", [])
+        deps = [i for i in l2 if any(k in i["valor"]["nome"].lower() for k in ("nariz", "orelha"))][:2]
+        if not corte or len(deps) < 2:
+            checar("achou corte adulto e duas depilacoes nas listas", False, f"{[i['rotulo'] for i in l1]} {[i['rotulo'] for i in l2]}")
+            return
+        checar("ids de servico nao se repetem entre as duas listas", not ({i["id"] for i in l1} & {i["id"] for i in l2}), f"{[i['id'] for i in l1]} x {[i['id'] for i in l2]}")
+        r = G(chamar, c, 541, operacao="horarios_livres", id_opcoes_servicos=[corte["id"]] + [x["id"] for x in deps], data=dia_util(corte["valor"]["idServico"]))
+        ped = estado(541)["pedido"]
+    quer = [corte["valor"]["nome"]] + [x["valor"]["nome"] for x in deps]
+    veio = [x.get("nome") for x in ped.get("servicos") or []]
+    checar("a sequencia leva o corte e as duas depilacoes, nao outro servico", veio == quer, f"pedido={veio} esperado={quer} {str(r)[:140]}")
+
+
+ROTEIROS = ["r1", "r2", "r3", "r4", "r5", "r7", "r8", "r9", "r10", "r12"]  # r6 (outra pessoa) saiu com as ferramentas (revisao de 17/11)
 
 
 # ---------------------------------------------------------------- limpeza e SC-010
@@ -1073,7 +1095,7 @@ def verificar_implantado():
 
 CENARIOS = dict(p2=p2, c6=c6, c7=c7, c1=c1, c4=c4, c2=c2, c3=c3, c5=c5, c9=c9, c10=c10, c11=c11, c14=c14, c15=c15, c12=c12, c13=c13,
                 m1=m1, m2=m2, m3=m3, m4=m4, m5=m5, m6=m6, m7=m7, m8=m8, m9=m9, m10=m10,
-                r1=r1, r2=r2, r3=r3, r4=r4, r5=r5, r7=r7, r8=r8, r9=r9, r10=r10)
+                r1=r1, r2=r2, r3=r3, r4=r4, r5=r5, r7=r7, r8=r8, r9=r9, r10=r10, r12=r12)
 
 if __name__ == "__main__":
     _env(".env.smoke", ".env.n8n")
