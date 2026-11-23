@@ -440,7 +440,7 @@ Não medido: se o Chat Master enviaria os lembretes vencidos ao religar; se os 6
 
 O owner viu no painel do Chat Master, em 23/11 às 13:55, a nota vermelha "HTTP 401 em POST …/webhook/bv-recepcao-…" num chamado da loja, um minuto depois de o agente responder a uma confirmação de presença. O chamado já estava encerrado.
 
-**Causa.** O Chat Master avisa o encerramento do chamado (`acao: "closed"`) sem o campo `token_origin` (captura `tests/fixtures/chatmaster/evento-24.json`). A recepção autentica pelo SHA-256 desse campo e respondia 401; o painel grava a falha do aviso como nota no chamado. Acontecia em todo encerramento desde a criação da recepção: a Decision 10 de `docs/specs/mensagens-agendadas/research.md` diz que o `closed` é descartado, mas a checagem do token vem antes da normalização.
+**Causa.** O Chat Master avisa o encerramento do chamado (`acao: "closed"`) sem o campo `token_origin` (captura `tests/fixtures/chatmaster/evento-24.json`). A recepção autentica pelo SHA-256 desse campo e respondia 401; o painel grava a falha do aviso como nota no chamado. Pelo código, acontece em todo encerramento desde que a recepção autentica pelo token (não medido em PROD): a Decision 10 de `docs/specs/mensagens-agendadas/research.md` diz que o `closed` é descartado, mas a checagem do token vem antes da normalização.
 
 **Impacto.** Nenhuma mensagem se perdeu: a confirmação do cliente foi aceita e respondida, e o aviso de encerramento não é mensagem. O dano era a nota à vista da equipe.
 
