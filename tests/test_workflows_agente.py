@@ -434,7 +434,12 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         p = self.nos["Transferir por limite"]["parameters"]
         self.assertEqual(p["workflowId"]["value"], "{{BV:workflows_sub.bv_graces}}")
         v = p["workflowInputs"]["value"]
-        self.assertEqual([v["operacao"], v["motivo"]], ["transferir_atendimento", "nao_resolvi"])
+        # 23/11: o pedido claro de falar com uma pessoa usa o mesmo ramo, com o motivo proprio; o motivo sai do Preparar, nunca do modelo
+        self.assertEqual([v["operacao"], v["motivo"]], ["transferir_atendimento", "={{ $('Preparar').first().json.motivo_limite }}"])
+        prep = self.nos["Preparar"]["parameters"]["jsCode"]
+        self.assertIn("const estourou = Number(reg.turnos_hora) >= {{BV:agente.turnos_max_contato_hora}};", prep)
+        self.assertIn("limite: estourou || bvPediuPessoa(fala), motivo_limite: estourou ? 'nao_resolvi' : 'pediu_pessoa',", prep)  # o estouro guarda o motivo dele
+        self.assertIn("{{BV:INCLUDE:shared/agente.js}}", prep)
         self.assertNotIn("$fromAI", json.dumps(v))  # contato, telefone e turno vem do Gatilho, nunca do modelo
         self.assertIn("($input.first().json || {}).texto", self.nos["Compor humano"]["parameters"]["jsCode"])
 
