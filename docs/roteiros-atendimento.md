@@ -80,8 +80,8 @@ critério com a transcrição.
 ## Parâmetros da suíte (recomendação do agente; o owner delegou a decisão)
 
 - **Latência**, da última mensagem do cliente até a primeira resposta:
-  - p50 ≤ 15 s e p95 ≤ 25 s, contando a espera da rajada (`buffer.janela_s` 8 s);
-  - acima de 25 s o roteiro falha.
+  - p50 ≤ 22 s e p95 ≤ 32 s, contando a espera da rajada (`buffer.janela_s`, 15 s desde 23/11; com a espera de 8 s eram 15 s e 25 s);
+  - acima de 32 s o roteiro falha.
   - Base medida: a resposta da confirmação levou de 2 a 9 s, com a Graces incluída (E2E de 20/10), e o turno com mídia
     teve p95 de 8,7 s mais a rajada (audio-imagem, SC-005).
 - **Custo:**
