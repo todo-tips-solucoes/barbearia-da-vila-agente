@@ -418,3 +418,20 @@ A conversa parou na pergunta de confirmação: nada foi agendado. Não foram exe
 - Com o chamado na fila 78 o agente do TESTE fica calado (regra da fila humana), e no TESTE o vigia não encerra: para o agente responder, o chamado tem de ser encerrado ou devolvido no painel.
 
 Para repetir: `python3 -I scripts/capturar-webhook.py trocar` (captura) e `restaurar` (volta ao vazio). Apontar a 145 para a recepção do TESTE não tem comando no script: foi feito com a mesma chamada (`POST /api/whatsapp/update`) e a URL da recepção do `integracao.json`.
+
+## Volta da conexão da loja (23/11)
+
+A conexão da loja voltou em 23/11 às 12:41, depois de parada desde 17/11 às 12:57. Medido pelo owner 36 minutos depois, com script só de leitura (contagens, sem nome, telefone nem texto de cliente):
+
+- conexão `CONNECTED` e webhook apontando para a recepção de PROD;
+- 23 mensagens recebidas, 17 turnos concluídos, resposta em 11,1 s na mediana, nenhum turno com falha. São os primeiros atendimentos reais das etapas 5 a 8 e do item 26;
+- sem pico na volta (1 a 2 contatos a cada 10 minutos): as mensagens dos dias parados não foram entregues ao agente. A recepção não tem filtro de idade da mensagem; se o Chat Master entregasse essa fila, o agente responderia todas;
+- falhas registradas: 17 `sem_contato` da conciliação de lembretes (pendência conhecida), 2 `busca_repetida` e 2 `encaminhar_equipe`, uma delas pelo barbeiro que só a equipe agenda; 2 transferências.
+
+**Lembretes vencidos durante a parada.** 238 lembretes (88 do dia anterior e 150 da hora) venceram com a conexão fora e estavam agendados no Chat Master; o banco os marcou `enviada` na hora prevista. Regra do owner (23/11): lembrete de agendamento que já passou não é enviado, e nada sai em lote, para não bloquear o número. Os 232 cujo agendamento já havia passado foram apagados do Chat Master pelo owner (`POST /api/schedules/delete`, um por um): 231 responderam `200` e, na segunda rodada, `404`; o que ficou sem resposta respondeu `200` na segunda. Ou seja, o Chat Master ainda guardava os registros. Os 6 de agendamentos que ainda iam acontecer ficaram.
+
+O sincronizador só apaga agendamento futuro: lembrete vencido com a conexão fora continua no Chat Master. Numa próxima parada, a limpeza precisa ser repetida antes ou logo depois de religar (critério: `agendamento_canal_id` preenchido, `previsto_para` dentro da parada e `inicio` já passado).
+
+Lembretes futuros na volta: 148, em 106 minutos diferentes, no máximo 3 no mesmo minuto. Cada um sai na hora do próprio agendamento.
+
+Não medido: se o Chat Master enviaria os lembretes vencidos ao religar; se os 6 que ficaram saíram; se o alerta de WhatsApp fora do ar parou de se repetir (só aparece no WhatsApp do owner).
