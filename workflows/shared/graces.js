@@ -606,7 +606,8 @@ function bvgMsgs(p, meta, novoId) {
   return null;
 }
 
-const bvgResp = (r) => ({ status: Number((r && r.status) || 0), body: r && r.body });
+// lista de agendamentos: o feito por pacote ganha os campos de servico do avulso (bvMComServico, shared/mensagens.js)
+const bvgResp = (r) => ({ status: Number((r && r.status) || 0), body: r && Array.isArray(r.body) ? r.body.map(bvMComServico) : r && r.body });
 
 // FR-009: reacao decidida SO pelo `code` (research Decision 9); `detail` nunca e lido. Status so separa "sem resposta".
 const BVG_PARAM = ['parametro_invalido', 'data fora das regras da loja ou opção inválida; ofereça alternativas'];
@@ -833,7 +834,7 @@ function bvgPassoUm(st, resps0, cfg) {
       const ags = bvgAgsVisiveis(lista, cfg);
       const of = bvMontarOferta('agendamento', ags.map((a) => ({
         rotulo: `${bvgDia(String(a.horaInicio))} ${String(a.horaInicio).slice(11, 16)} ${a.descricaoServico || ''}`.trim(),
-        valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico, idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
+        valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico || 'agendamento' /* nunca "undefined" no resumo */, idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
       })), cfg);
       const ident = meta.ident ? { nome: meta.ident.cliente_nome } : {};
       // barbeiro de teste e barbeiro so da equipe: o nome nao vai ao modelo (item 21; no TESTE a frase com o nome era cortada na saida e a

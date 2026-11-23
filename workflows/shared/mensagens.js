@@ -330,13 +330,20 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
   }
 }
 
+// Agendamento feito por pacote: em /agenda/agendamentos a Graces devolve o servico dentro de servicoPacote ({ idServico,
+// descricaoServico }), sem os campos de cima (medido em 23/11 com clientes de PROD: o agente listava o agendamento sem o nome do
+// servico, dizia "Cancelar undefined" e nao conseguia remarcar). Sobe os dois campos para o formato do agendamento avulso e marca
+// `pacote`; quem ja tem idServico fica como veio. Um lugar so, usado pelo agente (bvgResp) e pelos lembretes (bvMAgendaDe).
+const bvMComServico = (a) => (a && typeof a === 'object' && a.servicoPacote && typeof a.servicoPacote === 'object' && a.servicoPacote.idServico && !a.idServico
+  ? { ...a, idServico: a.servicoPacote.idServico, descricaoServico: a.descricaoServico || a.servicoPacote.descricaoServico, pacote: true } : a);
+
 // /agenda/completa ([{idProfissional, apelido, agendamentos:[...]}]) -> lista plana; /agenda/agendamentos (ja plana) passa igual.
 function bvMAgendaDe(body) {
   if (!Array.isArray(body)) return null;
   const out = [];
   for (const x of body) {
-    if (x && Array.isArray(x.agendamentos)) for (const a of x.agendamentos) out.push({ ...a, idProfissional: x.idProfissional, profissional: String(x.apelido || '').trim() });
-    else if (x) out.push(x);
+    if (x && Array.isArray(x.agendamentos)) for (const a of x.agendamentos) out.push(bvMComServico({ ...a, idProfissional: x.idProfissional, profissional: String(x.apelido || '').trim() }));
+    else if (x) out.push(bvMComServico(x));
   }
   return out;
 }
@@ -517,5 +524,5 @@ function bvMAvisaFila(l) {
   return !bvMSoAgradeceu(d);
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

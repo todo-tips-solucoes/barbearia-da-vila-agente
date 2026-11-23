@@ -478,3 +478,19 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.equal(A({ contato_id: 1, telefone: '+55' }), true); // turno que estourou o tempo (sem os campos): sempre avisa
   console.log('mensagens.test.js aviso do vigia ok');
 }
+
+{ // Agendamento por pacote: o servico vem em servicoPacote; sobe para o formato do avulso num lugar so (agente e lembretes)
+  const { bvMComServico, bvMAgendaDe } = require('../workflows/shared/mensagens.js');
+  const p = { idAgenda: 'a7', horaInicio: '2026-12-01T10:00:00', servicoPacote: { idServico: 'sp', descricaoServico: 'corte adulto' } };
+  assert.deepEqual(bvMComServico(p), { ...p, idServico: 'sp', descricaoServico: 'corte adulto', pacote: true });
+  const av = { idAgenda: 'a8', idServico: 's2', descricaoServico: 'barba', servicoPacote: null };
+  assert.equal(bvMComServico(av), av); // avulso (servicoPacote nulo ou ausente) fica como veio
+  const jaTem = { idAgenda: 'a9', idServico: 's3', servicoPacote: { idServico: 'outro', descricaoServico: 'x' } };
+  assert.equal(bvMComServico(jaTem), jaTem); // quem ja traz idServico nao e tocado
+  for (const x of [null, undefined, 'x', 7, { servicoPacote: 'texto' }, { idAgenda: 'a', servicoPacote: {} }, { idAgenda: 'a', servicoPacote: [] }]) assert.equal(bvMComServico(x), x); // sem idServico dentro, nao ha o que subir
+  assert.deepEqual(bvMAgendaDe([p, av]).map((a) => [a.idServico, a.descricaoServico, !!a.pacote]), [['sp', 'corte adulto', true], ['s2', 'barba', false]]);
+  // /agenda/completa: o item por pacote ja vem com nomeServico e sem servicoPacote; segue igual, com o barbeiro do grupo
+  assert.deepEqual(bvMAgendaDe([{ idProfissional: 'b1', apelido: 'Kiel ', agendamentos: [{ idAgenda: 'a1', nomeServico: 'corte adulto' }] }]), [{ idAgenda: 'a1', nomeServico: 'corte adulto', idProfissional: 'b1', profissional: 'Kiel' }]);
+  console.log('mensagens.test.js agendamento por pacote ok');
+}
+
