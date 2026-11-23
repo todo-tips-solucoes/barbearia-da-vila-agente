@@ -435,3 +435,23 @@ O sincronizador só apaga agendamento futuro: lembrete vencido com a conexão fo
 Lembretes futuros na volta: 148, em 106 minutos diferentes, no máximo 3 no mesmo minuto. Cada um sai na hora do próprio agendamento.
 
 Não medido: se o Chat Master enviaria os lembretes vencidos ao religar; se os 6 que ficaram saíram; se o alerta de WhatsApp fora do ar parou de se repetir (só aparece no WhatsApp do owner).
+
+## Operacional: nota "HTTP 401" no chamado encerrado (23/11)
+
+O owner viu no painel do Chat Master, em 23/11 às 13:55, a nota vermelha "HTTP 401 em POST …/webhook/bv-recepcao-…" num chamado da loja, um minuto depois de o agente responder a uma confirmação de presença. O chamado já estava encerrado.
+
+**Causa.** O Chat Master avisa o encerramento do chamado (`acao: "closed"`) sem o campo `token_origin` (captura `tests/fixtures/chatmaster/evento-24.json`). A recepção autentica pelo SHA-256 desse campo e respondia 401; o painel grava a falha do aviso como nota no chamado. Acontecia em todo encerramento desde a criação da recepção: a Decision 10 de `docs/specs/mensagens-agendadas/research.md` diz que o `closed` é descartado, mas a checagem do token vem antes da normalização.
+
+**Impacto.** Nenhuma mensagem se perdeu: a confirmação do cliente foi aceita e respondida, e o aviso de encerramento não é mensagem. O dano era a nota à vista da equipe.
+
+**Correção** (PR #178, promoção #180, em PROD desde 23/11 às 14:33). `bvEncerradoSemToken` (`workflows/shared/rajada.js`) reconhece só o `closed` sem `token_origin`; no nó `Normalizar` do `bv-recepcao` esse aviso sai como `descartada` (`nao_mensagem`), que responde 200 e não processa nada. O token continua obrigatório para todo o resto. Efeito na autenticação: quem conhece o caminho do webhook recebe 200 em vez de 401 para um corpo `{"acao":"closed"}`, sem ler, gravar nem devolver dado.
+
+Medido no webhook, com a `evento-24` e variações dela:
+
+| Evento enviado | TESTE antes | TESTE depois | PROD depois |
+|---|---|---|---|
+| `closed` sem token | 401 | 200 | 200 |
+| `closed` com token errado | não medido | 401 | 401 |
+| `start` (mensagem) sem token | não medido | 401 | 401 |
+
+Não medido: o corpo do aviso de PROD que gerou a nota (as execuções não ficam salvas; a causa vem da captura e do 401 reproduzido no TESTE); quem encerrou o chamado (o envio do agente ou o painel); se o Chat Master reenvia o aviso ou desliga o webhook depois de falhas repetidas; se a nota no chamado é novidade da plataforma; e um chamado da loja encerrado depois do deploy sem a nota, que é a prova final. Se a nota voltar, o aviso de PROD tem formato diferente do capturado e vale capturar um.
