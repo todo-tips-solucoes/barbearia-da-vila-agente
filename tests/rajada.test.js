@@ -95,3 +95,14 @@ console.log('rajada.test.js ok');
   assert.equal(r.bvEquipe(cel.body, 106, 'texto do agente'), null); // chamado fora da fila humana: nao grava
 }
 console.log('rajada.test.js fila humana ok');
+
+// Aviso de chamado encerrado sem token (fixture 24): 200 sem processar, em vez de 401. So ele: o resto segue exigindo token
+{
+  const { bvEncerradoSemToken } = require('../workflows/shared/rajada.js');
+  assert.equal(bvEncerradoSemToken(fx('24').body), true);
+  assert.equal(bvNormalizar(fx('24')).motivo, 'nao_mensagem');
+  assert.equal(bvEncerradoSemToken({ ...fx('24').body, token_origin: 'errado' }), false); // token presente e errado: 401
+  const semToken = fx('02').body; delete semToken.token_origin;
+  for (const b of [semToken, fx('02').body, { acao: 'start' }, {}, null, 'closed']) assert.equal(bvEncerradoSemToken(b), false);
+}
+console.log('rajada.test.js encerrado sem token ok');
