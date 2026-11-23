@@ -75,8 +75,8 @@ Sem mudança de comportamento: os smokes e a suíte A precisam dar o mesmo resul
 
 | Duplicação | Onde | Destino |
 |---|---|---|
-| Payload de envio do Chat Master (`sendListPRO`, `sendTextPROLid`, `/api/messages/send`) | nó `Saidas` do `entregar-rajada` e `bvMLista`/`bvMTexto` (`shared/mensagens.js`) | um módulo `shared/canal.js` incluído pelos dois |
-| Normalização de dígitos | `bvMDig`, `bvgSoDigitos`, `dig` inline do `Saidas` | uma função em `shared/canal.js` |
+| ~~Payload de envio do Chat Master (`sendListPRO`, `sendTextPROLid`, `/api/messages/send`)~~ | ~~nó `Saidas` do `entregar-rajada` e `bvMLista`/`bvMTexto` (`shared/mensagens.js`)~~ | **Feito em 23/11:** o `Saidas` usa `bvMListaDe`, `bvMTexto` e `bvMCfgEnvio`; a lista tem um montador só |
+| Normalização de dígitos | `bvMDig`, `bvgSoDigitos` (o `dig` inline do `Saidas` saiu em 23/11) | uma função em `shared/canal.js` |
 | Trava de TESTE (`contatos_escrita` + barbeiro de teste) | `Saidas`, `bvMDecidir`, `bvMConfEscolher`, `bvgEscritaPermitida`, `bv-graces` | uma função `bvTesteEscrita(cfg, telefone, profissional)` |
 | Cadeia de saída repetida 4× (`Gravar saida`, `Digitando`, `Espera`, `Enviar` e `Falha envio` 1..4) | `entregar-rajada` | um laço só, mantendo a ordem e a cadência; medir que a latência não piora |
 | SQL idêntica (`Fim`, `Fim Redis indisponivel`, `Fim sem posse`; `Registrar falha *`) | `bv-recepcao` | um nó por SQL, com convergência das saídas |

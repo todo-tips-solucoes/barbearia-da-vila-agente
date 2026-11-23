@@ -382,10 +382,15 @@ class EntregarRajadaAgente(unittest.TestCase):
             # contato simulado nunca chega ao HTTP: so a saida "real" (0) de Simulado vai ao digitando
             self.assertNotIn(f"Enviar {n}", self._destinos(f"Simulado {n}?")[1])
         js = self.nos["Saidas"]["parameters"]["jsCode"]
-        self.assertIn("{{BV:chatmaster.whatsapp_id}}", js)
-        self.assertEqual(js.count("whatsappId: wid"), 3)  # digitando, texto e lista
+        # texto e lista saem dos montadores de shared/mensagens.js (um lugar so decide endpoint, numero e ticket); aqui so o "digitando"
+        self.assertEqual(js.count("whatsappId: cm.wid"), 1)
+        self.assertIn("{{BV:INCLUDE:shared/mensagens.js}}", js)
+        self.assertIn("{{BV:INCLUDE:shared/config.js}}", js)
+        self.assertIn("const cm = bvMCfgEnvio();", js)  # conexao, setor e textos da lista: a mesma configuracao de envio do bv-mensagens
+        self.assertNotIn("{{BV:chatmaster.", js)
+        self.assertIn("const envio = m.tipo === 'lista' ? bvMListaDe(m.texto, m.opcoes, g.telefone, cm) : bvMTexto({ texto: m.texto }, g.telefone, cm);", js)
+        self.assertNotIn("openTicket", js)  # a decisao sobre o ticket mora no montador
         self.assertIn("const simulado = bvSimulado(g.telefone);", js)  # so contato de escrita recebe de verdade (shared/config.js)
-        self.assertIn("sendListPRO", js)
         self.assertNotIn("1.", self.nos["Compor"]["parameters"]["jsCode"].split("OPCOES")[0])  # sem lista numerada em texto
 
     def test_node_syntax_dos_code_nodes(self):

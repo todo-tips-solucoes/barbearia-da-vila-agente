@@ -30,8 +30,20 @@ assert.throws(() => prog('lixo', null, new Date()));
 
 // envio
 const l = bvMLista({ texto: 'Oi' }, 42, '5511999998888', cfg);
-assert.equal(l.body.openTicket, '1');
+assert.equal(l.body.openTicket, '0'); // como o texto: com '1' a lista tirava do setor humano um chamado em atendimento (medido no TESTE, 23/11)
 assert.deepEqual(l.body.body.List.map((x) => x.RowId), ['bvc:42:s', 'bvc:42:n']);
+{ // montador unico de lista (23/11): agente, confirmacao e decisao saem daqui, sempre sem mexer no chamado (openTicket '0', como o texto)
+  const { bvMListaDe, bvMListaDecisao } = require('../workflows/shared/mensagens.js');
+  const cl = { wid: '159', fila: '107', botao: 'Ver opções', topo: 'Opções' };
+  assert.deepEqual(bvMListaDe('Qual horário?', [{ id: 's3', rotulo: '14:00 Kiel', valor: { x: 1 } }, { id: '2', rotulo: '15:00' }], '+55 (11) 99999-8888', cl),
+    { path: '/api/messages/whatsmeow/sendListPRO', body: { number: '5511999998888', openTicket: '0', queueId: '107', whatsappId: '159',
+      body: { Desc: 'Qual horário?', ButtonText: 'Ver opções', TopText: 'Opções', List: [{ RowId: 's3', title: '14:00 Kiel', desc: '' }, { RowId: '2', title: '15:00', desc: '' }] } } });
+  assert.equal(bvMListaDe('x', undefined, '123@lid', cl).body.number, '123@lid'); // LID intacto; sem itens nao quebra
+  assert.deepEqual(bvMListaDe('x', undefined, '55', cl).body.body.List, []);
+  const dec = bvMListaDecisao({ texto: 'Remarcar ou cancelar?' }, '5511999998888', cl);
+  assert.deepEqual([dec.body.openTicket, dec.body.queueId, dec.body.body.List.map((x) => x.title)], ['0', '107', ['Remarcar', 'Cancelar mesmo']]);
+  assert.equal(bvMListaDe('x', [], '55', { wid: '145' }).body.queueId, '0'); // sem setor configurado (TESTE)
+}
 assert.equal(bvMTexto({ texto: 'x' }, '123@lid', cfg).path, '/api/messages/whatsmeow/sendTextPROLid');
 assert.equal(bvMTexto({ texto: 'x' }, '+55 (11) 9', cfg).body.number, '55119');
 assert.equal(bvMTexto({ texto: 'x' }, '55', cfg).body.openTicket, '0');

@@ -416,7 +416,14 @@ function bvGPlano(i, ctx0, cfg) {
       // cliente novo e cadastrado antes, para a equipe ja recebe-lo pronto (o modelo as vezes pulava: suite R21, 2026-11-16)
       // (so para o barbeiro da equipe: quem ja e cliente, pediu uma pessoa ou avisou atraso vai direto)
       const mot = i.motivo || 'barbeiro_equipe';
-      if (mot === 'barbeiro_equipe' && ctx.pedido.cliente_sem_cadastro && cfg.cadastroLiberado) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente novo: faça antes o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e só então transfira'));
+      // O cadastro so segura a transferencia no turno em que o cliente foi visto sem cadastro (PROD, 23/11: cliente antigo do barbeiro,
+      // escrevendo de um numero sem cadastro, recebeu o pedido de cadastro duas vezes e ficou sem atendimento). O agente pede os dados
+      // nesse turno, pela ferramenta ou por conta propria; se num turno seguinte ele ainda nao esta cadastrado, a transferencia sai.
+      const desde = ctx.pedido.sem_cadastro_desde;
+      if (mot === 'barbeiro_equipe' && ctx.pedido.cliente_sem_cadastro && cfg.cadastroLiberado && (!desde || desde === i.turno_id)) {
+        return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente novo: faça antes o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e só então transfira; se ele responder sem os dados, chame esta ferramenta de novo na próxima mensagem, que então ela transfere'),
+          { pedido: { sem_cadastro_desde: desde || i.turno_id } }); // conversa sem a marca (anterior a esta versao): passa a contar daqui
+      }
       // Cadastro em outro numero (owner, 2026-11-16): antes de transferir, pedir o contato pelo numero do cadastro; a transferencia
       // so vale num turno seguinte, depois da resposta do cliente (o modelo as vezes transferia direto: suite R24)
       if ((mot === 'ja_cliente' || mot === 'outra_pessoa') && (!ctx.pedido.pediu_numero || ctx.pedido.pediu_numero === i.turno_id)) {
@@ -686,7 +693,9 @@ function bvgPassoUm(st, resps0, cfg) {
   switch (op) {
     case 'identificar_cliente': {
       const cs = lista.filter((c) => c && c.idCliente).map((c) => ({ idCliente: c.idCliente, nome: bvMNomeProprio(`${c.nomeCliente || ''} ${c.sobrenomeCliente || ''}`), primeiroNome: bvMNomeProprio(String(c.nomeCliente || '').trim().split(/\s+/)[0]) }));
-      if (cs.length === 0) return bvgFim({ ok: true, encontrado: false, cadastro_necessario: true, orientacao: BVG_ORIENT_CADASTRO }, { pedido: { idCliente: null, cliente_sem_cadastro: true, identificado: true } });
+      if (cs.length === 0) return bvgFim({ ok: true, encontrado: false, cadastro_necessario: true, orientacao: BVG_ORIENT_CADASTRO }, { pedido: { idCliente: null, cliente_sem_cadastro: true, identificado: true,
+        // o turno em que o cadastro pode ser pedido; identificar de novo na mesma sessao nao recomeca a contagem
+        sem_cadastro_desde: (ctx.pedido.cliente_sem_cadastro && ctx.pedido.sem_cadastro_desde) || i.turno_id } });
       if (cs.length === 1) {
         const ped = { idCliente: cs[0].idCliente, cliente_sem_cadastro: false, cliente_nome: cs[0].primeiroNome, identificado: true };
         if (meta.sem_historico) return bvgFim({ ok: true, encontrado: true, nome: ped.cliente_nome }, { pedido: ped });

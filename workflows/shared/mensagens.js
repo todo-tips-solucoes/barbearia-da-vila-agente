@@ -46,21 +46,26 @@ function bvMProgramar(ag, agora, cfg) {
 
 const bvMDig = (s) => String(s || '').replace(/\D/g, '');
 
-// m: { texto }; contato: telefone (digitos ou "<id>@lid"); cfg: { wid, botao, topo, titulo_sim, titulo_nao }; id = mensagens_agendadas.id
-function bvMLista(m, id, contato, cfg) {
+// Lista da conexao Pro, montada num lugar so (agente, confirmacao de presenca e decisao). contato: telefone (digitos ou "<id>@lid");
+// itens: [{ id, rotulo }]; cfg: { wid, fila, botao, topo }. openTicket '0', como o texto: com '1' e o setor do agente, a lista tirava
+// do setor humano um chamado em atendimento e o punha em "Aguardando" no setor do agente (medido no TESTE em 23/11); com '0' o
+// chamado fica como esta e a mensagem e entregue e registrada do mesmo jeito.
+function bvMListaDe(texto, itens, contato, cfg) {
   const number = /@lid$/.test(String(contato)) ? String(contato) : bvMDig(contato);
-  return { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '1', queueId: cfg.fila || '0', whatsappId: cfg.wid,
-    body: { Desc: m.texto, ButtonText: cfg.botao, TopText: cfg.topo,
-      List: [{ RowId: `bvc:${id}:s`, title: cfg.titulo_sim, desc: '' }, { RowId: `bvc:${id}:n`, title: cfg.titulo_nao, desc: '' }] } } };
+  return { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '0', queueId: cfg.fila || '0', whatsappId: cfg.wid,
+    body: { Desc: texto, ButtonText: cfg.botao, TopText: cfg.topo, List: (itens || []).map((o) => ({ RowId: o.id, title: o.rotulo, desc: '' })) } } };
+}
+
+// Confirmacao de presenca: cfg tambem traz { titulo_sim, titulo_nao }; id = mensagens_agendadas.id
+function bvMLista(m, id, contato, cfg) {
+  return bvMListaDe(m.texto, [{ id: `bvc:${id}:s`, rotulo: cfg.titulo_sim }, { id: `bvc:${id}:n`, rotulo: cfg.titulo_nao }], contato, cfg);
 }
 
 // Recusa de presenca (owner, 18/11): "remarcar ou cancelar?" vai em lista, com uma confirmacao de cancelamento pendente por tras.
 // O toque volta ao agente como texto ("Remarcar" / "Cancelar mesmo") e os ids sao os da oferta gravada na conversa.
 const BVM_DECISAO = [{ id: '1', rotulo: 'Remarcar', valor: 'remarcar' }, { id: '2', rotulo: 'Cancelar mesmo', valor: 'cancelar' }];
 function bvMListaDecisao(m, contato, cfg) {
-  const number = /@lid$/.test(String(contato)) ? String(contato) : bvMDig(contato);
-  return { path: '/api/messages/whatsmeow/sendListPRO', body: { number, openTicket: '1', queueId: cfg.fila || '0', whatsappId: cfg.wid,
-    body: { Desc: m.texto, ButtonText: cfg.botao, TopText: cfg.topo, List: BVM_DECISAO.map((o) => ({ RowId: o.id, title: o.rotulo, desc: '' })) } } };
+  return bvMListaDe(m.texto, BVM_DECISAO, contato, cfg);
 }
 // Estado que a recusa deixa na conversa: a oferta (decisao) e a proposta de cancelar, no mesmo formato da fase 1 de `cancelar`.
 function bvMDecisaoCancelar(row, idAgenda) {
@@ -512,5 +517,5 @@ function bvMAvisaFila(l) {
   return !bvMSoAgradeceu(d);
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };
