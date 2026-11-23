@@ -480,6 +480,8 @@ Primeiras 2 h 30 de atendimento depois da volta da conexão (12:42 às 15:00), l
 | 14 | Serviço que ninguém pediu: a "repetir o último" propôs depilação de orelha a quem perguntou só por um horário (hipótese: o último atendimento tinha mais de um serviço e vale o primeiro item do histórico) | 1 | Aberto |
 | 15 | Vendedores e divulgação: o agente convidou um a mandar o material; outro foi para a fila da equipe | 4 | Aberto |
 | 16 | Despedida repetida: a mesma frase em resposta a cada "obrigado" e emoji | 1 | Aberto |
+| 17 | Cliente antigo do barbeiro que só a equipe agenda, escrevendo de um número sem cadastro: o pedido de cadastro saiu duas vezes e ele não foi transferido | 1 | **Corrigido** (abaixo) |
+| 18 | "Sim" ao lembrete num celular com dois cadastros: o agente perguntou "qual deles é você?" em vez de confirmar a presença | 1 | Aberto |
 
 As causas dos pontos 4, 8 e 14 são hipóteses: as conversas foram lidas, não a execução de cada turno. A do ponto 2 (serviço trocado) foi reproduzida no TESTE.
 
@@ -508,10 +510,43 @@ Não medido: o encerramento de verdade no Chat Master com a regra nova (no TESTE
 
 **Revisão contra a documentação do Chat Master (23/11).** Feita por um especialista com as skills da plataforma, em leitura. Ficam abertos, por ordem de conferência:
 
-1. A lista é enviada com `openTicket` 1 e o setor do agente. O artigo atual diz que isso põe a conversa em "Aguardando" mesmo em atendimento; um lembrete em lista enviado com o chamado no setor humano pode trazê-lo de volta ao setor do agente (inferência; conferir primeiro).
+1. A lista era enviada com `openTicket` 1 e o setor do agente. O artigo atual diz que isso põe a conversa em "Aguardando" mesmo em atendimento. **Medido e corrigido** (ver "Lista e chamado no setor humano", abaixo).
 2. Cada item de lista aceita uma descrição (`desc`), que o projeto manda vazia: nome completo e preço cabem ali, com o título curto. Resolve o ponto 10 sem mudar o que volta no toque (o que volta é o título). Limites de título, descrição e quantidade não estão documentados.
 3. As quebras de linha do texto do agente se perdem na composição das mensagens (as frases são rejuntadas com espaço), e por isso a tabela de preços sai num parágrafo só.
 4. A transferência manda só chamado e setor (`updateAPI`); `status` e atendente ficam como estavam. O encerramento do vigia não informa `retornoAoAtendente`, então vale a opção do setor no painel.
 5. `Transferir ticket` e `Encerrar atendimento` não informam `whatsappId`, que o artigo do Token da Empresa dá como obrigatório (hoje respondem 200).
 6. Campos novos que o projeto não usa: `assinaturaIa` (marca a mensagem como enviada pela IA no painel) e `eventoId`/`sequencia` nos avisos (descartar repetido e perceber aviso perdido).
+
+**Terceira leitura, das 17:55 às 20:00** (depois do deploy das correções 1 e 3): 30 mensagens de 9 contatos. Nenhuma resposta em dobro; cada resposta levou de 18 a 23 s (mediana de 21 s). O vigia encerrou 4 chamados: 2 calados pela regra nova (o cliente só escreveu "Blz, obrigado" e "Ok" depois da equipe), 1 calado como antes (equipe por último) e 1 com aviso (o cliente tinha respondido "pode ser às 16h então" e ninguém confirmou por escrito). A retomada das 19:30 virou agendamento (3 de 3 no dia). Trouxe os pontos 17 e 18 e repetiu o ponto 4.
+
+**Ponto 17, corrigido: cadastro pedido uma vez só.** Cliente sem cadastro que pede o barbeiro que só a equipe agenda continua sendo convidado a se cadastrar antes da transferência (roteiro R21), mas a ferramenta só segura a transferência no turno em que ele foi visto sem cadastro (`pedido.sem_cadastro_desde`, gravado na identificação). Num turno seguinte, ainda sem cadastro, a transferência sai. No TESTE, o caso de PROD foi reproduzido com contato simulado (o agente pede o cadastro por conta própria na primeira mensagem, sem passar pela ferramenta; por isso a marca nasce na identificação e não na recusa) e, com a correção, a segunda mensagem transfere.
+
+**Lista e chamado no setor humano, medido e corrigido.** Medição na conexão de teste, com o chamado do contato de teste posto em cada estado pela API antes do envio:
+
+| Estado do chamado antes | Texto, `openTicket` '0' | Lista, `openTicket` '0' | Lista, `openTicket` '1' e setor '0' | Lista, `openTicket` '1' e um setor que não é o humano |
+|---|---|---|---|---|
+| Em atendimento no setor humano (`open`, com atendente) | igual | igual | igual | **foi para "Aguardando" no setor informado** |
+| Aguardando no setor do agente, sem atendente | não medido | igual | igual | não medido (já está lá) |
+| Encerrado | não medido | continua encerrado | continua encerrado | abre de novo, "Aguardando" no setor informado |
+
+A última coluna é o que PROD enviava. As listas passam a ir com `openTicket` '0', como o texto: em nenhum estado o chamado mudou, e a lista foi entregue e registrada no chamado. A cópia antiga do artigo da plataforma dizia que '0' encerraria o chamado; a medição não confirmou. A montagem da lista, que estava em três lugares (`Saidas` do `entregar-rajada`, `bvMLista` e `bvMListaDecisao`), ficou num só (`bvMListaDe`, em `workflows/shared/mensagens.js`), e o `Saidas` passou a usar os mesmos montadores do resto do projeto para texto e lista. O histórico explica o valor antigo: a lista nasceu com `openTicket` 1 e setor 0, que mantém o status; quando PROD ganhou o setor do agente (107), a mesma chamada passou a mover o chamado.
+
+O que muda de comportamento: (a) uma lista enviada com o chamado no setor humano não o tira mais de lá, e a resposta do cliente a essa lista fica com a equipe (o agente cala no setor humano); o caso prático é a lista "remarcar ou cancelar" do `bv-confirmacao`; (b) uma lista enviada a um chamado encerrado não o reabre; o chamado reabre quando o cliente responde, como já acontece com o texto.
+
+Não medido: onde cai a resposta do cliente a uma lista enviada com o chamado encerrado; o efeito em PROD.
+
+Limite do ponto 17: a ferramenta só exige o cadastro no turno em que o cliente foi visto sem cadastro, que é o primeiro da sessão. Quem diz "oi" e só na mensagem seguinte pede o barbeiro é transferido sem a ferramenta exigir o cadastro (o agente ainda pode pedi-lo por conta própria). Quando o cliente manda os dados, o cadastro continua sendo feito antes da transferência (3 de 3 no TESTE).
+
+**O que pode sair do código e ir para a configuração do Chat Master** (levantamento do especialista na documentação da plataforma, 23/11; decisão do owner: o que der para resolver por configuração é melhor). Nada disto foi ligado; são opções do painel, que só o owner altera.
+
+| Prioridade | Recurso da plataforma | Onde fica | O que cobre |
+|---|---|---|---|
+| Ligar já | Notificar Operador no WhatsApp | Setores & Chatbot › setor humano › aba Geral | Avisa os atendentes quando uma conversa chega em "Aguardando" no setor humano |
+| Ligar já | Mensagem de despedida do setor e Mensagem de Ausência | Setor › aba Mensagens; perfil do atendente | Textos de encerramento e de ausência no atendimento humano |
+| Medir antes | Retornar ao mesmo atendente, com prazo e setor de transbordo | Setor humano › aba Geral | Cliente que responde depois do encerramento volta para quem o atendeu |
+| Medir antes | Inatividade e Mensagem por Inatividade | Conexões › editar › Setores & Tempos e Mensagens | Encerra chamado em atendimento parado; vale para a conexão inteira e não encerra se a última mensagem foi do cliente |
+| Medir antes | Webhook do Setor do agente | Setores & Chatbot › setor › URL do Webhook | O n8n receberia só os avisos do setor do agente; os nomes dos avisos mudam e saem de cena o encerramento e as respostas da equipe |
+| Medir antes | `assinaturaIa` nos envios | campo da API | Marca no painel as mensagens enviadas pela IA |
+
+Continuam em código, segundo o mesmo levantamento: o silêncio do agente pelo setor do chamado (os envios que o agente inicia não passam por aviso), o encerramento de chamado em "Aguardando" ou com a última mensagem do cliente (a inatividade nativa não cobre), a transferência por intenção (palavra-chave e menu de setores falam antes do agente e não agem no meio da conversa), a junção de mensagens seguidas do cliente e pular lembrete em atendimento humano (o módulo de Agendamentos não tem essa opção).
 
