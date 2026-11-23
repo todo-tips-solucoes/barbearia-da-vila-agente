@@ -142,7 +142,8 @@ def rajada():
         tr = list(a.values())[0]
         checar("ordem de chegada", [l["id"] for l in tr] == sorted(l["id"] for l in tr))
         lat = latencia(tr)
-        checar("entrega entre 8 e 10 s apos a 3a", 8 <= lat <= 10.5, f"{lat:.1f}s")
+        jan = CFG["buffer"]["janela_s"]
+        checar(f"entrega entre {jan} e {jan + 2.5} s apos a 3a", jan <= lat <= jan + 2.5, f"{lat:.1f}s")
     checar("outro contato com turno proprio", len(b) == 1 and not set(a) & set(b))
 
 
@@ -179,8 +180,9 @@ def concorrencia():
         lats += [latencia(v) for v in t]
     checar("nunca dois turnos sobrepostos por contato", over == 0, f"sobreposicoes={over}")
     if lats:
-        dentro = sum(8 <= x <= 10.5 for x in lats) / len(lats)
-        print(f"  latencia por turno: min {min(lats):.1f}s max {max(lats):.1f}s; {dentro:.0%} entre 8 e 10,5 s ({len(lats)} turnos)")
+        jan = CFG["buffer"]["janela_s"]
+        dentro = sum(jan <= x <= jan + 2.5 for x in lats) / len(lats)
+        print(f"  latencia por turno: min {min(lats):.1f}s max {max(lats):.1f}s; {dentro:.0%} entre {jan} e {jan + 2.5} s ({len(lats)} turnos)")
 
 
 def falhas_de(telefone):
@@ -346,7 +348,7 @@ def ttl():
     post(evento_texto(60, "__lento__ b"))
     esperar(lambda x: len({l["turno"] for l in x if l["tel"] == tel(60) and l["turno"]}) == 1
             and len([l for l in x if l["tel"] == tel(60) and l["turno"]]) == 2, 40)
-    time.sleep(max(0, t0 + ttl_s + 15 + 8 + 20 + 25 + 10 - time.time()))  # A volta do stub (~ttl+25 apos sua entrega)
+    time.sleep(max(0, t0 + ttl_s + 15 + CFG["buffer"]["janela_s"] + 20 + 25 + 10 - time.time()))  # A volta do stub (~ttl+25 apos sua entrega)
     checar("posse do turno B sobrevive ao retorno do turno A", posse_existe(tel(60)))
     ls = esperar(lambda x: all(l["proc"] for l in x if l["tel"] == tel(60)) and len([l for l in x if l["tel"] == tel(60)]) == 2, 200, 5)
     mine = [l for l in ls if l["tel"] == tel(60)]

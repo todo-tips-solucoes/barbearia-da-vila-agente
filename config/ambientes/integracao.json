@@ -47,7 +47,7 @@
     }
   },
   "buffer": {
-    "janela_s": 8,
+    "janela_s": 15,
     "teto_s": 60
   },
   "lock": {
@@ -114,7 +114,7 @@
     "entregar_rajada": "N25Ka2Lp6x6TNQKU"
   },
   "execucao": {
-    "timeout_s": 300,
+    "timeout_s": 320,
     "turno_timeout_s": 140
   },
   "agente": {

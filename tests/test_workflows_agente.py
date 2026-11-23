@@ -569,3 +569,5 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
             self.assertGreaterEqual(lk["espera_s"] * lk["tentativas"], lk["ttl_s"])
             # quem esperou a posse inteira e rodou um turno inteiro ainda cabe na execucao da recepcao
             self.assertLessEqual(c["buffer"]["janela_s"] + lk["espera_s"] * lk["tentativas"] + ex["turno_timeout_s"], ex["timeout_s"])
+            # a marca da ultima mensagem tem de durar a rajada inteira (teto) mais uma janela
+            self.assertGreaterEqual(c["redis"]["ttl"]["ultima_s"], c["buffer"]["teto_s"] + c["buffer"]["janela_s"])

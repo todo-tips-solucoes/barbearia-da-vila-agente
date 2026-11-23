@@ -35,9 +35,9 @@ _s.loader.exec_module(sa)  # reusa turno/evento/semear/novo_paulo/encerrar/verif
 MODELO = "gpt-5.6-luna"
 URL_AVALIADORA = "https://api.openai.com/v1/responses"  # https://platform.openai.com/docs/api-reference/responses/create
 NOTA_MIN = 4
-LAT_TURNO_MAX = 25.0  # s: acima disso o roteiro falha
-LAT_P50, LAT_P95 = 15.0, 25.0
-SEM_SAIDA_S = 60  # turno sem saida nesse prazo = erro_infra (CHK023); o timeout de 300 s segue "nao medido"
+LAT_TURNO_MAX = 32.0  # s: acima disso o roteiro falha (era 25 com a espera da rajada de 8 s)
+LAT_P50, LAT_P95 = 22.0, 32.0  # contam a espera da rajada (buffer.janela_s, 15 s desde 23/11; eram 15 e 25 com a espera de 8 s)
+SEM_SAIDA_S = 67  # turno sem saida nesse prazo = erro_infra (CHK023); conta a espera da rajada (era 60 com a de 8 s); o timeout da execucao segue "nao medido"
 TETO_PADRAO = 3_000_000
 NAO_MEDIDO = "não medido"
 CRITERIOS = {
@@ -134,7 +134,7 @@ def deterministicas(turnos, nome=None):
 
 
 def veredito(ex):
-    """aprovado | reprovado | erro_infra, pela regra do data-model: o K7 por turno (> 25 s) reprova o roteiro; p50/p95 so decidem a rodada."""
+    """aprovado | reprovado | erro_infra, pela regra do data-model: o K7 por turno (> LAT_TURNO_MAX) reprova o roteiro; p50/p95 so decidem a rodada."""
     if ex.get("erro_infra_turno"):
         return "erro_infra"
     if ex.get("deterministicas") or any(t["latencia_s"] > LAT_TURNO_MAX for t in ex["turnos"] if t.get("latencia_s") is not None):
@@ -150,7 +150,7 @@ def percentil(valores, p):
 
 
 def k7_rodada(latencias):
-    """K7 da rodada: p50 <= 15 s e p95 <= 25 s (limites exatos aprovam). Reprova a rodada, nunca um roteiro isolado."""
+    """K7 da rodada: p50 <= LAT_P50 e p95 <= LAT_P95 (limites exatos aprovam). Reprova a rodada, nunca um roteiro isolado."""
     p50, p95 = percentil(latencias, 50), percentil(latencias, 95)
     return dict(p50=p50, p95=p95, ok=bool(latencias) and p50 <= LAT_P50 and p95 <= LAT_P95)
 
@@ -671,7 +671,7 @@ def pendencias(medir=True):
     return out + [dict(item=i, estado=NAO_MEDIDO, motivo=m) for i, m in (
         ("cadastrar_cliente real", "exigiria criar cliente real sem exclusão conhecida"),
         ("contato_falhou ao vivo", "exigiria forçar falha de infraestrutura"),
-        ("timeout de 300 s", "exigiria forçar falha de infraestrutura"))]
+        ("timeout da execução", "exigiria forçar falha de infraestrutura"))]
 
 
 def montar_relatorio(execs, orc, teto, limpeza, parcial_por_teto, completo_flag=None, pend=None):

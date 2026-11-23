@@ -324,7 +324,7 @@ Feitas pelo owner com um script só de leitura (contagens, sem nome, telefone ne
 
 Não está registrado se a desconexão foi decidida ou foi queda. A conexão por QR Code é um aparelho vinculado: com ela fora, o celular da loja continua funcionando e só o agente para.
 
-**Rajada (janela de 8 s): recomendação de manter.** Pares de mensagens seguidas do mesmo cliente com até 60 s de intervalo:
+**Rajada (janela de 8 s): recomendação de manter, revista em 23/11 para 15 s** (ver o fim deste trecho). Pares de mensagens seguidas do mesmo cliente com até 60 s de intervalo:
 
 | Intervalo (s) | Pares | Em turnos diferentes |
 |---|---|---|
@@ -336,6 +336,8 @@ Não está registrado se a desconexão foi decidida ou foi queda. A conexão por
 | 30 a 60 | 155 | 155 |
 
 Não há um degrau: os intervalos se espalham até 60 s. Subir a janela para 12 s juntaria 35 pares e atrasaria todos os turnos (617 no período, resposta com mediana de 9,8 s e p90 de 14,8 s).
+
+**Revisão em 23/11: a janela passa a 15 s** (`buffer.janela_s`, decisão do owner). Na leitura dos atendimentos de 23/11, 5 de 21 conversas tiveram resposta em dobro porque a segunda mensagem do cliente chegou de 11 a 13 s depois da primeira; numa delas saiu uma lista de horários e, 12 s depois, um texto dizendo que a lista não servia. Pela tabela acima, 15 s juntam os pares de 8 a 12 s e a maior parte dos de 12 a 16 s, perto de 1 em cada 10 turnos. Custo assumido: toda resposta fica 7 s mais lenta (mediana de 10,8 s para perto de 18 s em PROD). Junto com a janela: `execucao.timeout_s` vai de 300 para 320 s, para a execução da recepção continuar cobrindo janela + espera pela posse + um turno inteiro com folga (pior caso perto de 308 s), e os limites de latência da suíte sobem os mesmos 7 s (p50 22 s, p95 e turno 32 s). Pares com mais de 15 s de intervalo continuam em turnos separados. Testado no TESTE com contato simulado: duas mensagens a 12 s de intervalo viraram um turno e uma resposta, 22 s depois da segunda; a 20 s, dois turnos. Suíte (R1, R27 e R29) aprovada com p50 de 20,0 s e p95 de 22,5 s. Duas revisões independentes do diff, em leitura, sem achado crítico; delas saíram a folga do tempo limite (320 s em vez de 310), o prazo sem saída da suíte (67 s) e o smoke da recepção, que tinha os 8 s fixos. Fica como está: a segunda mensagem que chega depois dos 15 s com o turno ainda rodando gera outra resposta; fechar isso pede mudança de topologia em torno do agente.
 
 **"Sem contato" da conciliação de lembretes: nada a corrigir.** De 449 registros, 194 ganharam lembrete depois. Os 103 dos últimos 5 dias que nunca ganharam foram cruzados com a agenda da Graces: 53 sem celular válido no cadastro, 28 com início em até uma hora (não havia lembrete a mandar) e 22 que não estavam mais na agenda lida (cancelados, ou fora da página de 200 agendamentos). Nenhum caso em que o lembrete cabia e não saiu. Esses registros não contam para o alerta de falhas, que só conta `agente_falhou`.
 
