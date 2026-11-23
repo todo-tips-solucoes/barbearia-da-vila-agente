@@ -143,10 +143,33 @@ function bvgResolver(id, tipo, ctx) {
   const p = ctx.pedido;
   if (tipo === 'servico' && p.servico && String(p.servico.opcao_id) === String(id)) return p.servico;
   if (tipo === 'servico' && p.ultimo && p.ultimo.servico && String(p.ultimo.servico.opcao_id) === String(id)) return p.ultimo.servico; // 'ult': ultimo atendimento
+  if (tipo === 'servico') { // de uma lista anterior da conversa (sem o id da opcao dentro do servico)
+    const v = (Array.isArray(p.servicos_vistos) ? p.servicos_vistos : []).find((x) => x && String(x.id) === String(id));
+    if (!v) return null;
+    const { id: _id, ...sv } = v;
+    return sv;
+  }
   if (tipo === 'barbeiro') return (p.barbeiros || []).find((b) => String(b.opcao_id) === String(id)) || (p.qualquer_opcao && String(p.qualquer_opcao) === String(id) ? { qualquer: true } : null); // o item "Qualquer barbeiro" segue valendo depois que a oferta muda
   if (tipo === 'agendamento') return (p.agendamentos || []).find((a) => String(a.opcao_id) === String(id)) || null; // horarios_livres troca a oferta: a escolha do agendamento fica no pedido
   if (p.horarios_oferta && p.horarios_oferta.tipo === tipo) { const r = bvResolverOpcao(id, p.horarios_oferta); if (r.ok) return r.item.valor; } // meus_agendamentos troca a oferta: os horarios mostrados ficam no pedido (C7, 2026-10-25)
   return null;
+}
+
+// Ids de servico valem para a conversa inteira (PROD, 23/11: com duas listas de servicos, o "1" da de cortes era tambem o "1" da de
+// depilacoes; o agente pediu corte + duas depilacoes pelos ids e a sequencia saiu com tres depilacoes, agendada). O servico ja
+// ofertado guarda o id; o novo ganha o seguinte. Fica em pedido.servicos_vistos (zera na sessao nova, com o pedido). O id leva "s"
+// na frente ("s1", "s2"): nao e a posicao na lista, e um "2" digitado pelo cliente nunca resolve como servico. Depende de as
+// ferramentas de um turno rodarem em serie (medido em 19/11): duas listagens ao mesmo tempo repetiriam ids.
+function bvgIdsDeServico(vistos, itens) {
+  const lista = (Array.isArray(vistos) ? vistos : []).filter((x) => x && /^s\d+$/.test(String(x.id)) && x.idServico);
+  let prox = lista.reduce((m, x) => Math.max(m, Number(String(x.id).slice(1))), 0);
+  const novos = itens.map((it) => {
+    const k = lista.findIndex((x) => x.idServico === it.valor.idServico);
+    const id = k >= 0 ? String(lista[k].id) : `s${++prox}`;
+    if (k >= 0) lista[k] = { id, ...it.valor }; else lista.push({ id, ...it.valor }); // preco e duracao do registro acompanham a ultima leitura
+    return { ...it, id };
+  });
+  return { itens: novos, lista };
 }
 
 // Busca de servico (atendimentos de 2026-11-15): a Graces filtra por trecho do nome, e "cabelo" so achava os combos com barba
@@ -162,12 +185,21 @@ function bvgTermosServico(t) {
 // Servico da chamada: pelo id ofertado; pelo nome (so entre o ofertado, o escolhido e o do ultimo atendimento); ou o ja escolhido.
 // Devolve null quando o id ou o nome nao casam com nada (nunca troca de servico em silencio).
 function bvgServicoDe(i, ctx, ult) {
-  if (i.id_opcao_servico) { const s = bvgResolver(i.id_opcao_servico, 'servico', ctx); return s ? { ...s, opcao_id: s.opcao_id || i.id_opcao_servico } : null; }
+  if (i.id_opcao_servico) { const s = bvgResolver(i.id_opcao_servico, 'servico', ctx); if (s) return { ...s, opcao_id: s.opcao_id || i.id_opcao_servico }; }
   const u = ult && ult.servico;
-  if (!i.servico_nome) return ctx.pedido.servico || u || null;
-  const of = ctx.opcoes && ctx.opcoes.tipo === 'servico' && Array.isArray(ctx.opcoes.itens) ? ctx.opcoes.itens.map((x) => ({ ...x.valor, opcao_id: x.id })) : [];
-  const n = bvgNomeNorm(i.servico_nome);
-  return [...of, ctx.pedido.servico, u].filter(Boolean).find((x) => bvgNomeNorm(x.nome) === n) || null;
+  // titulo de uma palavra ("Pezinho", "Selagem") tem cara de id: se nao resolveu como id, vale como nome; nunca cai no servico ja escolhido
+  const dado = i.servico_nome || i.id_opcao_servico;
+  if (!dado) return ctx.pedido.servico || u || null;
+  const of = ctx.opcoes && ctx.opcoes.tipo === 'servico' && Array.isArray(ctx.opcoes.itens) ? ctx.opcoes.itens.map((x) => ({ ...x.valor, opcao_id: x.id, rotulo: x.rotulo })) : [];
+  const n = bvgNomeNorm(dado);
+  const todos = [...of, ctx.pedido.servico, u].filter(Boolean);
+  // o titulo do item da lista e cortado ("CORTE MAQUINA SIMPLES (1") e e esse texto que volta quando o cliente toca: vale como o
+  // nome, mas so sem nome exato e com um unico item da lista com esse titulo (dois nomes com o mesmo comeco: a lista volta)
+  const cortados = of.filter((x) => x.rotulo && bvgNomeNorm(x.rotulo) === n);
+  const achou = todos.find((x) => bvgNomeNorm(x.nome) === n) || (cortados.length === 1 ? cortados[0] : null);
+  if (!achou) return null;
+  const { rotulo, ...sv } = achou;
+  return sv;
 }
 
 const bvgNaoOferecido = () => bvgRecusa('servico_nao_oferecido', 'esse serviço não é oferecido por aqui; ofereça o serviço regular, sem falar em desconto');
@@ -300,7 +332,7 @@ function bvGPlano(i, ctx0, cfg) {
     {
       // FR-005: pedido pelo nome "2a vez" busca o regular, sem desconto.
       const t = i.texto ? i.texto.replace(/\b2\s*[ªaºo°]?\s*vez\b/gi, '').replace(/\s+/g, ' ').trim() : '';
-      return chamar(bvgTermosServico(t).map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: bvgSoCabelo(t) });
+      return chamar(bvgTermosServico(t).map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: bvgSoCabelo(t), vistos: ctx.pedido.servicos_vistos || [] });
     }
     case 'listar_barbeiros': {
       const s = bvgServicoDe(i, ctx, ctx.pedido.ultimo);
@@ -337,7 +369,9 @@ function bvGPlano(i, ctx0, cfg) {
         return chamar(ss.map((x) => ({ m: 'GET', path: '/servicos/profissionais', qs: { idServico: x.idServico } })), { enc: true, etapa: 'dif_prof', servicos: ss, data: i.data, hora: i.hora, aPartir: i.a_partir });
       }
       if (i.id_opcoes_servicos) {
-        let ss = i.id_opcoes_servicos.map((x) => bvgResolver(x, 'servico', ctx));
+        // cada servico da sequencia guarda o id pelo qual foi pedido: "agendar separado" devolve esses ids ao modelo (pela posicao, 1..n,
+        // eles nao resolviam e o fluxo nunca passava do primeiro servico)
+        let ss = i.id_opcoes_servicos.map((x) => { const r = bvgResolver(x, 'servico', ctx); return r && { ...r, opcao_id: r.opcao_id || String(x) }; });
         // depois de "nenhuma sequência cabe" a oferta guardada e a decisao (Outro dia / Agendar separado) e os ids de servico nao resolvem
         // mais: a mesma quantidade de servicos, pedida de novo, e a sequencia que esta no pedido
         if (ss.some((x) => !x) && ctx.opcoes.tipo === 'modo_encadeamento' && Array.isArray(ctx.pedido.servicos) && ctx.pedido.servicos.length === i.id_opcoes_servicos.length) ss = ctx.pedido.servicos;
@@ -680,9 +714,11 @@ function bvgPassoUm(st, resps0, cfg) {
       const ss = bvFiltrarServicos(juntas.filter((s) => s.ativo !== false).map((s) => ({ ...s, nome: String(s.descricaoAgenda || '') })))
         .filter((s) => !meta.soCabelo || !/\bunhas?\b/i.test(s.nome))
         .map((s, k) => [peso(s), k, s]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
-      const of = bvMontarOferta('servico', ss.map((s) => ({ rotulo: s.nome, valor: { idServico: s.idServico, nome: s.nome, preco: s.valorPadrao, minutos: s.tempoPadrao } })), cfg);
+      const of0 = bvMontarOferta('servico', ss.map((s) => ({ rotulo: s.nome, valor: { idServico: s.idServico, nome: s.nome, preco: s.valorPadrao, minutos: s.tempoPadrao } })), cfg);
+      const ids = bvgIdsDeServico(meta.vistos, of0.itens);
+      const of = { ...of0, itens: ids.itens };
       const orientacao = meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'a lista traz os serviços mais pedidos e há outros: se o cliente não achar o que quer, peça um termo para filtrar' : undefined;
-      return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of });
+      return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of, pedido: { servicos_vistos: ids.lista } });
     }
     case 'listar_barbeiros': {
       const bs = bvFiltrarBarbeiros(lista.map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos);
@@ -807,7 +843,7 @@ function bvgPassoUm(st, resps0, cfg) {
 function bvgPassoEnc(st, resps, cfg) {
   const { meta } = st;
   const n = meta.servicos.length;
-  const pedido = { servicos: meta.servicos.map((s, k) => ({ opcao_id: String(k + 1), idServico: s.idServico, nome: s.nome, preco: s.preco })) };
+  const pedido = { servicos: meta.servicos.map((s, k) => ({ opcao_id: s.opcao_id || String(k + 1), idServico: s.idServico, nome: s.nome, preco: s.preco })) };
   const semUnico = () => {
     const of = bvMontarOferta('modo_encadeamento', [{ rotulo: 'Barbeiros diferentes', valor: 'barbeiros_diferentes' }, { rotulo: 'Agendar separado', valor: 'separados' }], cfg);
     return bvgFim({ ok: true, sem_barbeiro_unico: true, opcoes: of.itens.map((x) => ({ id: x.id, rotulo: x.rotulo })), orientacao: 'nenhum barbeiro faz todos os serviços em sequência; pergunte por opção se prefere barbeiros diferentes ou agendar separado' }, { opcoes: of, pedido });
@@ -861,7 +897,7 @@ function bvgDifProf(st, resps, cfg) {
 
 function bvgDifGrade(st, resps, cfg) {
   const { meta } = st;
-  const pedido = { servicos: meta.servicos.map((s, k) => ({ opcao_id: String(k + 1), idServico: s.idServico, nome: s.nome, preco: s.preco })), modo_encadeamento: 'barbeiros_diferentes' };
+  const pedido = { servicos: meta.servicos.map((s, k) => ({ opcao_id: s.opcao_id || String(k + 1), idServico: s.idServico, nome: s.nome, preco: s.preco })), modo_encadeamento: 'barbeiros_diferentes' };
   let o = 0;
   const G = meta.sets.reduce((a, bs) => a + bs.length, 0); // grades primeiro, depois as ocupacoes na mesma ordem
   const grades = meta.sets.map((bs) => bs.map((b) => { const liv = bvgLivre(resps[o].body || {}, resps[G + o]); o++; return { b, ...liv }; }));

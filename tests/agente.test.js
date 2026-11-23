@@ -770,3 +770,32 @@ console.log('agente.test.js retomada longa ok');
   assert.match(pr, /Um horário diferente do pedido, ou de outro barbeiro, vai na lista de horários para o cliente escolher, sem resumo/);
   console.log('agente.test.js opcoes soltas ok');
 }
+
+{ // Pedido de falar com uma pessoa (PROD, 23/11: "Atendente" recebeu "Claro! Como posso ajudar?"): decidido no codigo, antes do modelo
+  for (const t of ['Atendente', 'atendente por favor', 'Quero atendente', 'Humano', 'quero falar com um atendente', 'Posso falar com alguém?', 'me passa pra um atendente', 'Passe para a equipe',
+    'quero falar com uma pessoa', 'atendimento humano', 'não quero falar com robô', '[áudio transcrito] queria falar com a recepção', 'chama o gerente', 'tem como falar com o responsável?',
+    'prefiro ser atendido por uma pessoa', 'Boa tarde! Quero falar com um atendente, por favor', 'Não, quero falar com um atendente', 'falar com atendente', 'Oi, atendente']) assert.equal(a.bvPediuPessoa(t), true, t);
+  // so vale a mensagem que e inteira o pedido: duvida, barbeiro pelo nome, outra pessoa no atendimento, negacao, relato e pedido junto de outro assunto seguem com o modelo
+  for (const t of ['Com quem eu falo!', 'quero falar com o Pedro', 'o atendente me disse que tinha vaga', 'é para outra pessoa', 'para uma pessoa só', 'não precisa passar para atendente', 'Boa tarde',
+    'quem me atendeu foi o Kiel', 'vou falar com minha esposa', 'outra pessoa', 'pode marcar com qualquer barbeiro', 'a equipe é muito boa', 'chama no zap quando puder', '', null, 'atendimento de outra pessoa',
+    'quero agendar um atendimento', 'atendente '.repeat(200),
+    // revisao de seguranca de 23/11: transferiam quem nao pediu
+    'posso ser atendido por alguém hoje?', 'vou conversar com a pessoa que vai comigo e te falo', 'deixa eu falar com o responsável pelo meu filho e já te aviso', 'vou falar com a equipe do meu trabalho e retorno',
+    'acabei de falar com a recepcionista e ela pediu pra eu marcar por aqui', 'vou passar seu contato para uma pessoa do meu trabalho', 'isso é robô ou pessoa real?', 'vcs tem atendimento humano?',
+    'sim, pode confirmar. depois preciso falar com o gerente', 'Confirmo presença! Queria falar com alguém sobre estacionamento', 'quero falar com alguém sobre o estacionamento']) assert.equal(a.bvPediuPessoa(t), false, String(t).slice(0, 50));
+  for (const t of ['preciso de um atendente', 'oi atendente', 'chamar atendente', 'quero falar com um ser humano', 'Boa tarde atendente por favor']) assert.equal(a.bvPediuPessoa(t), true, t);
+  for (const t of ['tem atendente?', 'uma pessoa', 'sim, mas quero falar com atendente', 'fui atendido por uma pessoa muito educada', 'não precisa chamar o gerente', 'prefiro não falar com atendente', 'dá pra resolver sem falar com atendente?']) assert.equal(a.bvPediuPessoa(t), false, t);
+  { // os ids de servico tem "s" na frente: linha "<id> | titulo" que sobra no texto do modelo continua saindo sem o id (duas listas no mesmo turno)
+    const cfgC = { saida: { max_mensagens: 4, max_chars_mensagem: 400 }, lista: { max_itens: 10, max_titulo: 24 }, graces: {} };
+    const ofC = { tipo: 'servico', itens: [{ id: 's3', rotulo: 'DEPILACAO DE NARIZ', valor: {} }, { id: 's4', rotulo: 'DEPILACAO DE ORELHA', valor: {} }] };
+    const txt = (t) => a.bvCompor(t, ofC, cfgC, true).map((m) => m.texto).join(' ');
+    assert.ok(!/s\d\s*\|/.test(txt('Temos estes:\ns1 | Corte adulto\ns2 | Corte com maquina\ns3 | Depilacao de nariz\ns4 | Depilacao de orelha\nQual voce prefere?')));
+    assert.ok(!/s\d\s*\|/.test(txt('Os cortes sao: s1 | Corte adulto s2 | Corte com maquina. Qual voce prefere?')));
+  }
+  const t0 = Date.now();
+  for (const t of ['passa '.repeat(5000) + 'para', 'quero falar com ' + 'a '.repeat(5000), 'a'.repeat(100000)]) a.bvPediuPessoa(t); // so os 300 primeiros caracteres contam
+  assert.ok(Date.now() - t0 < 50);
+  // sessao nova: a copia do pedido antigo nao carrega a lista de servicos vistos (so serve dentro da sessao)
+  assert.deepEqual(a.bvRecencia({ ultimaEntradaMs: Date.now() - 121 * 60000, agoraMs: Date.now(), janelaMin: 120, pedido: { idServico: 's', servicos_vistos: [{ id: 's1' }], pedido_anterior: { x: 1 } }, opcoes: null }).pedido_anterior, { idServico: 's', abandonado: true }); // nem a copia da sessao anterior
+  console.log('agente.test.js pedido de atendente ok');
+}

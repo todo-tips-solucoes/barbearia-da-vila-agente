@@ -465,7 +465,7 @@ Primeiras 2 h 30 de atendimento depois da volta da conexão (12:42 às 15:00), l
 | # | Ponto | Conversas | Situação |
 |---|---|---|---|
 | 1 | Aviso "a equipe não conseguiu te responder" depois de a equipe ter respondido e o cliente só agradecer | 2 de 3 avisos | **Corrigido** (abaixo) |
-| 2 | Cliente pediu cabelo e barba ("raspar na navalha e barba", serviço que a Graces não tem) e saiu só com barba, com outro barbeiro; ao pedir para incluir cabelo, a lista voltou três vezes (turnos de 87 s e 37 s) e "incluir" virou troca de barbeiro | 1 | Aberto |
+| 2 | Cliente pediu cabelo e barba ("raspar na navalha e barba", serviço que a Graces não tem) e saiu só com barba, com outro barbeiro; ao pedir para incluir cabelo, a lista voltou três vezes (turnos de 87 s e 37 s) e "incluir" virou troca de barbeiro. Na segunda leitura: corte + duas depilações agendado como três depilações | 2 | **Corrigido** o serviço trocado entre listas e o título cortado (abaixo); "incluir serviço num agendamento que já existe" segue aberto |
 | 3 | Duas respostas, às vezes contraditórias, quando a segunda mensagem chega de 11 a 13 s depois da primeira | 5 | **Corrigido**: janela da rajada em 15 s (ver "Rajada", em "Medições em PROD (22/11)") |
 | 4 | Lista que não corresponde à pergunta do texto (pergunta a idade e lista horários; pergunta se passa para a equipe e lista barbeiros) | 2 | Aberto |
 | 5 | Duas pessoas no mesmo horário com barbeiros diferentes: 5 minutos de tentativa antes de transferir, e o cliente repetiu tudo para a equipe | 1 | Aberto |
@@ -475,8 +475,15 @@ Primeiras 2 h 30 de atendimento depois da volta da conexão (12:42 às 15:00), l
 | 9 | Texto cita três barbeiros com horário e a lista só traz os de um | 1 | Aberto |
 | 10 | Tabela de preços num parágrafo só; três serviços têm nome maior que os 24 caracteres do item de lista | 2 | Aberto |
 | 11 | Áudio transcrito com frase que o cliente não disse ("Se inscreve no canal...") | 1 | Aberto |
+| 12 | Cliente escreveu "Atendente" e não foi transferido ("Claro! Como posso ajudar?") | 1 | **Corrigido** (abaixo) |
+| 13 | Já é cliente, mas escreve de outro número: passa por serviço, barbeiro, dia e horário e só no fim é transferido | 2 | Aberto |
+| 14 | Serviço que ninguém pediu: a "repetir o último" propôs depilação de orelha a quem perguntou só por um horário (hipótese: o último atendimento tinha mais de um serviço e vale o primeiro item do histórico) | 1 | Aberto |
+| 15 | Vendedores e divulgação: o agente convidou um a mandar o material; outro foi para a fila da equipe | 4 | Aberto |
+| 16 | Despedida repetida: a mesma frase em resposta a cada "obrigado" e emoji | 1 | Aberto |
 
-As causas dos pontos 2, 4 e 8 são hipóteses: as conversas foram lidas, não a execução de cada turno.
+As causas dos pontos 4, 8 e 14 são hipóteses: as conversas foram lidas, não a execução de cada turno. A do ponto 2 (serviço trocado) foi reproduzida no TESTE.
+
+**Segunda leitura, das 15:00 às 17:55** (antes do deploy das correções 1 e 3, que terminou às 17:55): 428 mensagens de 35 contatos no dia, 198 turnos, mediana de 9,6 s. Mais 12 agendamentos corretos sem ajuda; as 2 retomadas tiveram resposta e uma virou agendamento; "Ok" ao lembrete de 1 hora respondido em 2 de 2. Trouxe os pontos 12 a 16 e repetiu os pontos 4 (5 conversas no dia), 6 (4 conversas: horário perguntado em texto em vez de lista) e 10 (3 conversas; um cliente respondeu "Não entendi" à tabela de preços).
 
 **Ponto 1, corrigido.** O vigia encerra o chamado parado há 30 minutos no setor humano e avisava o cliente sempre que a última mensagem era dele. Em dois casos a equipe já tinha agendado e o cliente só respondeu "Obrigado". Agora o aviso não sai quando as três condições valem: a equipe escreveu nas últimas 24 horas; a última mensagem dela não é pergunta nem promessa de retorno ("vou ver", "já te falo", "um momento", "aguarde"); e, depois dela, todas as mensagens do cliente são só agradecimento ou despedida (`bvMSoAgradeceu`, em `workflows/shared/mensagens.js`). O chamado é encerrado do mesmo jeito, calado. Na dúvida, o aviso sai, como antes.
 
@@ -489,4 +496,22 @@ As causas dos pontos 2, 4 e 8 são hipóteses: as conversas foram lidas, não a 
 Limites conhecidos: promessa de retorno escrita de um jeito fora da lista ("deixa comigo") seguida de agradecimento encerra calado; a janela de 24 horas olha a última mensagem da equipe, não a da transferência em aberto (uma mensagem do cliente ao agente que não seja agradecimento já faz avisar); um envio do próprio agente gravado por engano como mensagem da equipe contaria como resposta (não conferido em PROD).
 
 Não medido: o encerramento de verdade no Chat Master com a regra nova (no TESTE o vigia não encerra); a lista de palavras e a de promessas contra um volume maior de conversas reais.
+
+**Pontos 2 e 12, corrigidos.**
+
+- **Serviço trocado entre duas listas (ponto 2).** Cada lista de serviços numerava as opções de 1 a n. Num pedido com mais de um serviço o agente consulta duas listas (cortes; depois depilações) e pede a sequência pelos números; o "1" da primeira (corte adulto) era resolvido como o "1" da segunda (Depilação). Em PROD isso agendou três depilações para quem pediu corte e duas depilações; o resumo mostrava os serviços errados e o cliente confirmou sem ler. Agora o id de um serviço vale para a conversa inteira (`bvgIdsDeServico`, guardado em `pedido.servicos_vistos`): o serviço já mostrado mantém o id e o novo ganha o seguinte, e um serviço de lista anterior continua resolvendo. O id leva "s" na frente ("s1", "s2"): deixa de ser a posição na lista, e um "2" digitado pelo cliente nunca resolve como serviço. Junto, saiu um defeito antigo do mesmo tipo: no "agendar separado" os serviços da sequência eram devolvidos ao agente com ids pela posição, que não resolviam, e o fluxo nunca passava do primeiro serviço.
+- **Título cortado (ponto 2).** O item da lista corta o nome em 24 caracteres e é esse texto que volta quando o cliente toca ("CORTE MAQUINA SIMPLES (1"). Quando o agente repassava esse texto como nome do serviço, ele não casava com o nome completo e a lista era reenviada. O título cortado da lista corrente passa a valer como o nome, desde que só um item da lista tenha esse título. Título de uma palavra ("Pezinho", "Selagem"), que tem formato de id, também passa a valer como nome quando não resolve como id.
+- **Pedido de atendente (ponto 12).** Pedido de falar com uma pessoa ("atendente", "quero falar com alguém", "me passa para a equipe", "atendimento humano") é reconhecido no código (`bvPediuPessoa`) antes do modelo e segue pelo ramo que já transferia sem o agente no limite de turnos, com o motivo `pediu_pessoa`. Só vale quando a mensagem inteira é o pedido (mais cumprimento ou "por favor"): dúvida ("com quem eu falo?", "é robô ou pessoa?"), relato ("vou falar com a equipe do meu trabalho"), barbeiro pelo nome, "é para outra pessoa" e pedido junto de outro assunto ("pode confirmar, depois falo com o gerente") continuam com o modelo, como antes. Nenhum nó novo.
+- Testado no TESTE: o roteiro `r12` do smoke reproduziu o defeito com o código antigo (pedido de corte adulto + duas depilações resolvido como três depilações) e passou com o novo; contato simulado que escreve "Atendente" recebe o texto de transferência, com a transferência aberta e o motivo registrado, e uma frase comum não transfere.
+- Três revisões independentes, em leitura, sem achado crítico: segurança; correção, performance, escala e duplicação; e a do Chat Master (abaixo). Delas saíram o "s" no id, o defeito do "agendar separado", o título ambíguo, o título de uma palavra, a limpeza de "s1 | título" que sobraria no texto ao cliente, a regra da mensagem inteira no pedido de atendente (a primeira versão transferia "vou falar com a equipe do meu trabalho") e a cópia do pedido antigo na sessão nova, que deixa de carregar a lista de serviços e a cópia anterior.
+- Limites conhecidos: os ids dependem de as ferramentas de um turno rodarem em série (medido em 19/11); se a transferência desse ramo falhar, o cliente recebe o texto de que a equipe vai ajudar e ninguém é acionado (já era assim no limite de turnos, que é raro; agora o ramo roda a cada pedido de atendente); pedidos de atendente fora das formas reconhecidas continuam dependendo do modelo.
+
+**Revisão contra a documentação do Chat Master (23/11).** Feita por um especialista com as skills da plataforma, em leitura. Ficam abertos, por ordem de conferência:
+
+1. A lista é enviada com `openTicket` 1 e o setor do agente. O artigo atual diz que isso põe a conversa em "Aguardando" mesmo em atendimento; um lembrete em lista enviado com o chamado no setor humano pode trazê-lo de volta ao setor do agente (inferência; conferir primeiro).
+2. Cada item de lista aceita uma descrição (`desc`), que o projeto manda vazia: nome completo e preço cabem ali, com o título curto. Resolve o ponto 10 sem mudar o que volta no toque (o que volta é o título). Limites de título, descrição e quantidade não estão documentados.
+3. As quebras de linha do texto do agente se perdem na composição das mensagens (as frases são rejuntadas com espaço), e por isso a tabela de preços sai num parágrafo só.
+4. A transferência manda só chamado e setor (`updateAPI`); `status` e atendente ficam como estavam. O encerramento do vigia não informa `retornoAoAtendente`, então vale a opção do setor no painel.
+5. `Transferir ticket` e `Encerrar atendimento` não informam `whatsappId`, que o artigo do Token da Empresa dá como obrigatório (hoje respondem 200).
+6. Campos novos que o projeto não usa: `assinaturaIa` (marca a mensagem como enviada pela IA no painel) e `eventoId`/`sequencia` nos avisos (descartar repetido e perceber aviso perdido).
 
