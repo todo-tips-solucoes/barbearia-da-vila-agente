@@ -934,6 +934,33 @@ console.log('graces.test.js remarcacao com qualquer barbeiro ok');
   const t = (motivo, ctx) => g.bvGPlano(entrada({ operacao: 'transferir_atendimento', ...(motivo ? { motivo } : {}) }), ctx || novo, aberto).final;
   assert.equal(t().resultado.code, 'cadastre_primeiro'); // barbeiro da equipe: cadastro antes
   assert.equal(t('barbeiro_equipe').resultado.code, 'cadastre_primeiro');
+  { // 23/11: o cadastro so segura a transferencia no turno em que o cliente foi visto sem cadastro; num turno seguinte, ainda sem
+    // cadastro, a transferencia sai (o cliente do barbeiro so da equipe nunca fica preso no pedido de cadastro)
+    const visto = (turno) => ({ pedido: { cliente_sem_cadastro: true, sem_cadastro_desde: turno } });
+    assert.equal(t('barbeiro_equipe', visto(T2)).resultado.code, 'cadastre_primeiro'); // mesmo turno da identificacao: pede o cadastro
+    assert.equal(t('barbeiro_equipe', visto(T2)).efeitos.pedido.sem_cadastro_desde, T2);
+    assert.match(t('barbeiro_equipe', visto(T2)).resultado.orientacao, /chame esta ferramenta de novo na próxima mensagem/);
+    const tr = t('barbeiro_equipe', visto(T1)); // turno seguinte: transfere, mesmo que o agente tenha pedido o cadastro por conta propria
+    assert.equal(tr.resultado.code, 'encaminhar_equipe');
+    assert.equal(tr.efeitos.falha.motivo, 'encaminhar_equipe|barbeiro_humano');
+    assert.equal(t(undefined, visto(T1)).resultado.code, 'encaminhar_equipe'); // sem motivo = barbeiro da equipe
+    // conversa sem a marca (anterior a esta versao): a primeira chamada pede o cadastro e marca; a de um turno seguinte transfere
+    const p1 = t('barbeiro_equipe');
+    assert.deepEqual([p1.resultado.code, p1.efeitos.pedido.sem_cadastro_desde], ['cadastre_primeiro', T2]);
+    // quem se cadastrou no meio segue como sempre; com o cadastro desligado nunca houve o pedido
+    assert.equal(t('barbeiro_equipe', { pedido: { idCliente: 'c1', cliente_sem_cadastro: false, sem_cadastro_desde: T1 } }).resultado.code, 'encaminhar_equipe');
+    assert.equal(g.bvGPlano(entrada({ operacao: 'transferir_atendimento' }), novo, { ...aberto, cadastroLiberado: false }).final.resultado.code, 'encaminhar_equipe');
+    // a identificacao sem cadastro grava o turno em que o cliente foi visto assim
+    const pi = g.bvGPlano(entrada({ operacao: 'identificar_cliente' }), { pedido: {} }, aberto);
+    assert.equal(g.bvGPasso(pi.st, [ok([])], aberto).final.efeitos.pedido.sem_cadastro_desde, T2);
+    // identificar de novo num turno seguinte nao recomeca a contagem (senao o pedido de cadastro voltava a cada mensagem)
+    const pi2 = g.bvGPlano(entrada({ operacao: 'identificar_cliente' }), visto(T1), aberto);
+    assert.equal(g.bvGPasso(pi2.st, [ok([])], aberto).final.efeitos.pedido.sem_cadastro_desde, T1);
+    assert.equal(t('barbeiro_equipe', { pedido: { ...visto(T1).pedido, ...g.bvGPasso(pi2.st, [ok([])], aberto).final.efeitos.pedido } }).resultado.code, 'encaminhar_equipe');
+    // marca sozinha, sem o cliente estar marcado como sem cadastro (resto de outro estado), nao vale
+    const pi3 = g.bvGPlano(entrada({ operacao: 'identificar_cliente' }), { pedido: { sem_cadastro_desde: T1 } }, aberto);
+    assert.equal(g.bvGPasso(pi3.st, [ok([])], aberto).final.efeitos.pedido.sem_cadastro_desde, T2);
+  }
   const jaPediu = { pedido: { cliente_sem_cadastro: true, pediu_numero: '99999999-9999-4999-8999-999999999999' } }; // pediu o numero num turno anterior
   for (const m of ['ja_cliente', 'pediu_pessoa', 'atraso', 'nao_resolvi']) { // esses vao direto, mesmo sem cadastro
     const r = t(m, m === 'ja_cliente' ? jaPediu : undefined);
