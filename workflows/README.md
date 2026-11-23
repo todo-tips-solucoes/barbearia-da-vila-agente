@@ -16,7 +16,7 @@ Fonte versionada dos workflows. Os JSON usam placeholders `{{BV:...}}` (config d
 
 ## bv-recepcao
 
-Webhook `POST` com auth por SHA-256 de `body.token_origin` (401), normalizacao (400 malformado, 200 descartado/aceito), grava em `mensagens`, espera `buffer.janela_s`, entrega o turno (um por contato, posse no Redis) a `entregar-rajada` e marca `processada_em`. Contrato: `docs/specs/recepcao-buffer/contracts/entrega-turno.md`. O stub atrasa `teste.atraso_entrega_s`; a feature 3 o substitui.
+Webhook `POST` com auth por SHA-256 de `body.token_origin` (401; o aviso `closed`, que o Chat Master manda sem token, responde 200 e e descartado), normalizacao (400 malformado, 200 descartado/aceito), grava em `mensagens`, espera `buffer.janela_s`, entrega o turno (um por contato, posse no Redis) a `entregar-rajada` e marca `processada_em`. Contrato: `docs/specs/recepcao-buffer/contracts/entrega-turno.md`. O stub atrasa `teste.atraso_entrega_s`; a feature 3 o substitui.
 
 Smoke no TESTE: `python3 -I scripts/smoke-recepcao.py` (contatos `+55000000xxxx`, limpa Postgres/Redis de TESTE no fim; `teto` (~80 s) e `ttl` (~5 min) rodam a parte; `falha` (SC-007) e `redis` (CA-4, senha invalida so na credencial do workflow de TESTE, restaurada no fim) rodam por padrao).
 

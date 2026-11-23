@@ -4,6 +4,10 @@
 // queueId do evento do Chat Master (numero, texto numerico, 'null' ou ausente) -> inteiro ou null
 function bvFila(b) { return b && /^\d+$/.test(String(b.queueId)) ? Number(b.queueId) : null; }
 
+// Aviso de chamado encerrado: o Chat Master manda sem token_origin (fixture 24). Nao e mensagem e nada e processado; a
+// recepcao responde 200 para o painel nao gravar "HTTP 401" no chamado. Com token_origin presente vale a checagem normal.
+function bvEncerradoSemToken(b) { return !!b && typeof b === 'object' && b.acao === 'closed' && b.token_origin === undefined; }
+
 // Mensagem enviada pela equipe na fila humana (from_internal, fromMe) -> { telefone, fila, id, texto, ticket } ou null. O texto de
 // encaminhamento do proprio agente chega como eco ja na fila humana: nao conta como resposta da equipe.
 function bvEquipe(b, filaHumana, textoAgente) { // ticket: chamadoId do evento (e ele que o vigia encerra)
@@ -84,4 +88,4 @@ function consolidar(linhas) {
   });
 }
 
-if (typeof module !== 'undefined') module.exports = { bvFila, bvEquipe, bvNormalizar, deveEntregar, consolidar };
+if (typeof module !== 'undefined') module.exports = { bvFila, bvEncerradoSemToken, bvEquipe, bvNormalizar, deveEntregar, consolidar };
