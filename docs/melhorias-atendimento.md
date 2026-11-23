@@ -339,7 +339,7 @@ Não há um degrau: os intervalos se espalham até 60 s. Subir a janela para 12 
 
 **"Sem contato" da conciliação de lembretes: nada a corrigir.** De 449 registros, 194 ganharam lembrete depois. Os 103 dos últimos 5 dias que nunca ganharam foram cruzados com a agenda da Graces: 53 sem celular válido no cadastro, 28 com início em até uma hora (não havia lembrete a mandar) e 22 que não estavam mais na agenda lida (cancelados, ou fora da página de 200 agendamentos). Nenhum caso em que o lembrete cabia e não saiu. Esses registros não contam para o alerta de falhas, que só conta `agente_falhou`.
 
-**Respostas da equipe: aberto.** O agente passou 22 contatos para a equipe; dos 13 que escreveram duas vezes ou mais nas 3 horas seguintes, 11 não têm nenhuma resposta da equipe gravada. O banco não separa "respondeu pelo aparelho da loja" (evento `start` com `fromMe`, descartado em `bvNormalizar`) de "não respondeu". O silêncio do agente não depende disso (vale a fila do chamado); o que se perde é o histórico quando o cliente volta ao agente. Próximo passo: ver no TESTE como chega o evento de uma mensagem digitada no aparelho da conexão e, se for identificável, gravá-la como mensagem da equipe. **Feito em 23/11: a hipótese do aparelho não se confirmou** (ver "Teste pela conexão 145 (23/11)").
+**Respostas da equipe: fechado em 23/11.** O agente passou 22 contatos para a equipe; dos 13 que escreveram duas vezes ou mais nas 3 horas seguintes, 11 não têm nenhuma resposta da equipe gravada. O banco não separa "respondeu pelo aparelho da loja" (evento `start` com `fromMe`, descartado em `bvNormalizar`) de "não respondeu". O silêncio do agente não depende disso (vale a fila do chamado); o que se perde é o histórico quando o cliente volta ao agente. Próximo passo: ver no TESTE como chega o evento de uma mensagem digitada no aparelho da conexão e, se for identificável, gravá-la como mensagem da equipe. **Feito em 23/11: a hipótese do aparelho não se confirmou, e a medição no Chat Master mostrou que as respostas sem registro são anteriores à gravação, que só entrou em PROD em 17/11** (ver "Teste pela conexão 145 (23/11)").
 
 ## Item 26: registro para auditar (22/11)
 
@@ -381,9 +381,25 @@ A 145 foi apontada para o `bv-captura` e o owner mandou três mensagens: uma com
 
 Os dois eventos do aparelho viraram as fixtures `evento-26` e `evento-27`, e `tests/rajada.test.js` passa os dois pelo código da recepção.
 
-**Conclusão para o item 17:** a resposta digitada no aparelho não é a causa das respostas da equipe sem registro. Com o chamado na fila humana ela já é gravada, sem mudança de código. Vale para a 145; a conexão 159 fica em outra conta do Chat Master e não foi testada.
+**Conclusão para o item 17:** a resposta digitada no aparelho não é a causa das respostas da equipe sem registro. Com o chamado na fila humana ela já é gravada, sem mudança de código. Vale para a 145; o owner informou em 23/11 que a 159 se comporta igual (mesma estrutura, com outros valores nas variáveis).
 
-**Hipótese que sobra, não verificada:** em PROD o vigia encerra o chamado 30 minutos depois da transferência mesmo sem resposta da equipe (`handoff.encerrar_so_respondido` desligado). A resposta dada depois disso chega com o chamado fora da fila humana e não é gravada. Para confirmar, falta uma leitura em PROD que cruze a hora da transferência, a do encerramento e as mensagens do chamado no Chat Master (`GET /api/tickets/{ticketId}/messages`), rodada pelo owner.
+### Medição em PROD: respostas da equipe (23/11)
+
+Leitura rodada pelo owner: para cada contato que o agente passou para a equipe nos últimos 10 dias (22 contatos, 15 a 17/11), as mensagens do chamado no Chat Master (`GET /api/tickets/{ticketId}/messages`) foram cruzadas com o que está gravado no banco. Cada mensagem do chamado traz a fila em que ele estava na hora, o atendente (`userId`, no painel) e a marca de aparelho (`fromApp`). Um chamado não foi lido por erro de rede.
+
+| Origem | Fila do chamado na hora | Gravada no banco | Mensagens |
+|---|---|---|---|
+| Aparelho | Humana | Sim | 12 |
+| Aparelho | Humana | Não | 34 |
+| Painel | Humana | Sim | 1 |
+| Painel | Humana | Não | 34 |
+| Aparelho | Do agente | Não | 20 |
+| Painel | Do agente | Não | 3 |
+
+- **A divisão é por data, não por origem.** Nenhuma resposta às transferências de 15 e 16/11 foi gravada; as de 17/11 foram todas (12 de 12 nas três horas seguintes, em 5 transferências). A gravação (`Registrar equipe`) entrou em `main` em 17/11 às 05:35 (PR #127): antes disso ela não existia. Não é defeito, e a hipótese do vigia fica descartada.
+- **A equipe respondeu quase sempre.** De 22 transferências lidas, 20 tiveram resposta no chamado: metade em até 8 minutos e 7 depois de 40 minutos. Duas, de 17/11, ficaram sem resposta.
+- **Limite desta leitura:** a tabela não saiu separada por dia; a atribuição das 68 não gravadas na fila humana ao período anterior a 17/11 vem das linhas por transferência. O script passou a imprimir a divisão por dia.
+- **Aberto:** 23 mensagens da equipe (20 pelo aparelho) foram enviadas com o chamado na fila do agente. Por desenho não são gravadas: o agente não fica sabendo o que a loja disse nem deixa de responder. Com `fromApp` e `userId` dá para separar essas mensagens do eco das mensagens do próprio agente, o que antes não se sabia fazer. Gravar no histórico e calar o agente são decisões do owner.
 
 ### Conversa de verdade com o agente do TESTE
 
