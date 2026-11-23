@@ -146,8 +146,8 @@ class Veredito(unittest.TestCase):
         self.assertEqual(sv.veredito(ex(notas=self.K(K1=4, K4=4))), "aprovado")
 
     def test_turno_26s_reprova_so_o_roteiro(self):
-        self.assertEqual(sv.veredito(ex(lat=(5, 26))), "reprovado")
-        self.assertEqual(sv.veredito(ex(lat=(25,))), "aprovado")
+        self.assertEqual(sv.veredito(ex(lat=(5, 33))), "reprovado")
+        self.assertEqual(sv.veredito(ex(lat=(32,))), "aprovado")
 
     def test_falha_deterministica_e_infra(self):
         self.assertEqual(sv.veredito(ex(det=["K6"])), "reprovado")
@@ -155,10 +155,10 @@ class Veredito(unittest.TestCase):
         self.assertEqual(sv.veredito(ex(notas={}, erro="x")), "erro_infra")
 
     def test_k7_limites_exatos(self):
-        self.assertTrue(sv.k7_rodada([15.0, 15.0, 25.0, 25.0])["p95"] <= 25.0)
-        self.assertTrue(sv.k7_rodada([15.0] * 20)["ok"])
-        self.assertFalse(sv.k7_rodada([15.1] * 20)["ok"])
-        self.assertFalse(sv.k7_rodada([1.0] * 18 + [25.1, 25.1])["ok"])
+        self.assertTrue(sv.k7_rodada([22.0, 22.0, 32.0, 32.0])["p95"] <= 32.0)
+        self.assertTrue(sv.k7_rodada([22.0] * 20)["ok"])
+        self.assertFalse(sv.k7_rodada([22.1] * 20)["ok"])
+        self.assertFalse(sv.k7_rodada([1.0] * 18 + [32.1, 32.1])["ok"])
 
     def test_deterministicas(self):
         t = lambda saidas, oferta=(): [dict(saidas=saidas, oferta=list(oferta))]

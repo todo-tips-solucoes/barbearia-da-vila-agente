@@ -43,7 +43,7 @@
     }
   },
   "buffer": {
-    "janela_s": 8,
+    "janela_s": 15,
     "teto_s": 60
   },
   "lock": {
@@ -59,7 +59,7 @@
     "max_kb": 2048
   },
   "execucao": {
-    "timeout_s": 300,
+    "timeout_s": 320,
     "turno_timeout_s": 140
   },
   "agente": {

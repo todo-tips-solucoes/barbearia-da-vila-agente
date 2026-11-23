@@ -92,7 +92,7 @@ Depois da publicação das correções, o owner relatou atendimentos ainda confu
 
 ### Decisões do owner (17/11)
 
-- **Fila humana sem interação há 30 minutos:** encerra também quando o cliente falou por último; nesse caso o cliente recebe um aviso (`textos.fila_sem_resposta`). Consequência assumida: o pedido sai da fila da equipe.
+- **Fila humana sem interação há 30 minutos:** encerra também quando o cliente falou por último; nesse caso o cliente recebe um aviso (`textos.fila_sem_resposta`). Consequência assumida: o pedido sai da fila da equipe. Desde 23/11 o aviso não sai quando a equipe respondeu e o cliente só agradeceu depois (ver "Leitura dos atendimentos de 23/11").
 - **Teto de agendamentos por contato por dia:** 3; acima disso, transfere para a equipe (etapa 3).
 - **Item 21 (Jayme):** manter os lembretes e as confirmações dos agendamentos dele.
 - **OpenAI:** chave separada para o TESTE, com orçamento próprio (depende de o owner criar a chave e a credencial no n8n).
@@ -324,7 +324,7 @@ Feitas pelo owner com um script só de leitura (contagens, sem nome, telefone ne
 
 Não está registrado se a desconexão foi decidida ou foi queda. A conexão por QR Code é um aparelho vinculado: com ela fora, o celular da loja continua funcionando e só o agente para.
 
-**Rajada (janela de 8 s): recomendação de manter.** Pares de mensagens seguidas do mesmo cliente com até 60 s de intervalo:
+**Rajada (janela de 8 s): recomendação de manter, revista em 23/11 para 15 s** (ver o fim deste trecho). Pares de mensagens seguidas do mesmo cliente com até 60 s de intervalo:
 
 | Intervalo (s) | Pares | Em turnos diferentes |
 |---|---|---|
@@ -336,6 +336,8 @@ Não está registrado se a desconexão foi decidida ou foi queda. A conexão por
 | 30 a 60 | 155 | 155 |
 
 Não há um degrau: os intervalos se espalham até 60 s. Subir a janela para 12 s juntaria 35 pares e atrasaria todos os turnos (617 no período, resposta com mediana de 9,8 s e p90 de 14,8 s).
+
+**Revisão em 23/11: a janela passa a 15 s** (`buffer.janela_s`, decisão do owner). Na leitura dos atendimentos de 23/11, 5 de 21 conversas tiveram resposta em dobro porque a segunda mensagem do cliente chegou de 11 a 13 s depois da primeira; numa delas saiu uma lista de horários e, 12 s depois, um texto dizendo que a lista não servia. Pela tabela acima, 15 s juntam os pares de 8 a 12 s e a maior parte dos de 12 a 16 s, perto de 1 em cada 10 turnos. Custo assumido: toda resposta fica 7 s mais lenta (mediana de 10,8 s para perto de 18 s em PROD). Junto com a janela: `execucao.timeout_s` vai de 300 para 320 s, para a execução da recepção continuar cobrindo janela + espera pela posse + um turno inteiro com folga (pior caso perto de 308 s), e os limites de latência da suíte sobem os mesmos 7 s (p50 22 s, p95 e turno 32 s). Pares com mais de 15 s de intervalo continuam em turnos separados. Testado no TESTE com contato simulado: duas mensagens a 12 s de intervalo viraram um turno e uma resposta, 22 s depois da segunda; a 20 s, dois turnos. Suíte (R1, R27 e R29) aprovada com p50 de 20,0 s e p95 de 22,5 s. Duas revisões independentes do diff, em leitura, sem achado crítico; delas saíram a folga do tempo limite (320 s em vez de 310), o prazo sem saída da suíte (67 s) e o smoke da recepção, que tinha os 8 s fixos. Fica como está: a segunda mensagem que chega depois dos 15 s com o turno ainda rodando gera outra resposta; fechar isso pede mudança de topologia em torno do agente.
 
 **"Sem contato" da conciliação de lembretes: nada a corrigir.** De 449 registros, 194 ganharam lembrete depois. Os 103 dos últimos 5 dias que nunca ganharam foram cruzados com a agenda da Graces: 53 sem celular válido no cadastro, 28 com início em até uma hora (não havia lembrete a mandar) e 22 que não estavam mais na agenda lida (cancelados, ou fora da página de 200 agendamentos). Nenhum caso em que o lembrete cabia e não saiu. Esses registros não contam para o alerta de falhas, que só conta `agente_falhou`.
 
@@ -435,3 +437,56 @@ O sincronizador só apaga agendamento futuro: lembrete vencido com a conexão fo
 Lembretes futuros na volta: 148, em 106 minutos diferentes, no máximo 3 no mesmo minuto. Cada um sai na hora do próprio agendamento.
 
 Não medido: se o Chat Master enviaria os lembretes vencidos ao religar; se os 6 que ficaram saíram; se o alerta de WhatsApp fora do ar parou de se repetir (só aparece no WhatsApp do owner).
+
+## Operacional: nota "HTTP 401" no chamado encerrado (23/11)
+
+O owner viu no painel do Chat Master, em 23/11 às 13:55, a nota vermelha "HTTP 401 em POST …/webhook/bv-recepcao-…" num chamado da loja, um minuto depois de o agente responder a uma confirmação de presença. O chamado já estava encerrado.
+
+**Causa.** O Chat Master avisa o encerramento do chamado (`acao: "closed"`) sem o campo `token_origin` (captura `tests/fixtures/chatmaster/evento-24.json`). A recepção autentica pelo SHA-256 desse campo e respondia 401; o painel grava a falha do aviso como nota no chamado. Pelo código, acontece em todo encerramento desde que a recepção autentica pelo token (não medido em PROD): a Decision 10 de `docs/specs/mensagens-agendadas/research.md` diz que o `closed` é descartado, mas a checagem do token vem antes da normalização.
+
+**Impacto.** Nenhuma mensagem se perdeu: a confirmação do cliente foi aceita e respondida, e o aviso de encerramento não é mensagem. O dano era a nota à vista da equipe.
+
+**Correção** (PR #178, promoção #180, em PROD desde 23/11 às 14:33). `bvEncerradoSemToken` (`workflows/shared/rajada.js`) reconhece só o `closed` sem `token_origin`; no nó `Normalizar` do `bv-recepcao` esse aviso sai como `descartada` (`nao_mensagem`), que responde 200 e não processa nada. O token continua obrigatório para todo o resto. Efeito na autenticação: quem conhece o caminho do webhook recebe 200 em vez de 401 para um corpo `{"acao":"closed"}`, sem ler, gravar nem devolver dado.
+
+Medido no webhook, com a `evento-24` e variações dela:
+
+| Evento enviado | TESTE antes | TESTE depois | PROD depois |
+|---|---|---|---|
+| `closed` sem token | 401 | 200 | 200 |
+| `closed` com token errado | não medido | 401 | 401 |
+| `start` (mensagem) sem token | não medido | 401 | 401 |
+
+Não medido: o corpo do aviso de PROD que gerou a nota (as execuções não ficam salvas; a causa vem da captura e do 401 reproduzido no TESTE); quem encerrou o chamado (o envio do agente ou o painel); se o Chat Master reenvia o aviso ou desliga o webhook depois de falhas repetidas; se a nota no chamado é novidade da plataforma; e um chamado da loja encerrado depois do deploy sem a nota, que é a prova final. Se a nota voltar, o aviso de PROD tem formato diferente do capturado e vale capturar um.
+
+## Leitura dos atendimentos de 23/11
+
+Primeiras 2 h 30 de atendimento depois da volta da conexão (12:42 às 15:00), lidas pelo owner com o script só de leitura: 213 mensagens de 21 contatos, 94 turnos, resposta com mediana de 10,8 s e p95 de 22,7 s. O básico funcionou: 8 agendamentos fechados sem ajuda, os 3 pedidos pelo barbeiro que só a equipe agenda foram para a equipe, 2 confirmações de presença reconhecidas, horário de funcionamento igual ao da Graces.
+
+| # | Ponto | Conversas | Situação |
+|---|---|---|---|
+| 1 | Aviso "a equipe não conseguiu te responder" depois de a equipe ter respondido e o cliente só agradecer | 2 de 3 avisos | **Corrigido** (abaixo) |
+| 2 | Cliente pediu cabelo e barba ("raspar na navalha e barba", serviço que a Graces não tem) e saiu só com barba, com outro barbeiro; ao pedir para incluir cabelo, a lista voltou três vezes (turnos de 87 s e 37 s) e "incluir" virou troca de barbeiro | 1 | Aberto |
+| 3 | Duas respostas, às vezes contraditórias, quando a segunda mensagem chega de 11 a 13 s depois da primeira | 5 | **Corrigido**: janela da rajada em 15 s (ver "Rajada", em "Medições em PROD (22/11)") |
+| 4 | Lista que não corresponde à pergunta do texto (pergunta a idade e lista horários; pergunta se passa para a equipe e lista barbeiros) | 2 | Aberto |
+| 5 | Duas pessoas no mesmo horário com barbeiros diferentes: 5 minutos de tentativa antes de transferir, e o cliente repetiu tudo para a equipe | 1 | Aberto |
+| 6 | Pergunta o barbeiro que o cliente já disse; depois de "qualquer barbeiro", pergunta o horário em texto em vez de listar | 2 | Aberto |
+| 7 | Cliente avisou que ficaria preso em reunião e o agente não conferiu se havia agendamento para oferecer remarcar | 1 | Aberto |
+| 8 | Pedido de desculpas e oferta da equipe sem motivo, em resposta a "Com certeza" | 1 | Aberto |
+| 9 | Texto cita três barbeiros com horário e a lista só traz os de um | 1 | Aberto |
+| 10 | Tabela de preços num parágrafo só; três serviços têm nome maior que os 24 caracteres do item de lista | 2 | Aberto |
+| 11 | Áudio transcrito com frase que o cliente não disse ("Se inscreve no canal...") | 1 | Aberto |
+
+As causas dos pontos 2, 4 e 8 são hipóteses: as conversas foram lidas, não a execução de cada turno.
+
+**Ponto 1, corrigido.** O vigia encerra o chamado parado há 30 minutos no setor humano e avisava o cliente sempre que a última mensagem era dele. Em dois casos a equipe já tinha agendado e o cliente só respondeu "Obrigado". Agora o aviso não sai quando as três condições valem: a equipe escreveu nas últimas 24 horas; a última mensagem dela não é pergunta nem promessa de retorno ("vou ver", "já te falo", "um momento", "aguarde"); e, depois dela, todas as mensagens do cliente são só agradecimento ou despedida (`bvMSoAgradeceu`, em `workflows/shared/mensagens.js`). O chamado é encerrado do mesmo jeito, calado. Na dúvida, o aviso sai, como antes.
+
+- Conta como agradecimento: "ok", "obrigado", "valeu", "beleza", "combinado", um emoji sozinho e parecidos, por lista de palavras (sem regex com repetição sobre texto de cliente).
+- Não conta, e o aviso continua saindo: pergunta, pedido, cumprimento sozinho ("boa tarde"), "sim" ou "isso mesmo" sozinhos, mensagem com número ou horário ("ok 14:30" é escolha), emoji que não é de fecho, texto em outro alfabeto, mídia, mensagem com mais de 80 caracteres, mais de 6 mensagens depois da equipe, e equipe que nunca respondeu.
+- A consulta `Filas paradas` devolve, por chamado, se a equipe respondeu e as mensagens do cliente depois dela (no máximo 7; texto longo, pergunta, mídia e mensagem com número ou "@" viram "?", para dado do cliente não trafegar pela execução, que fica salva quando dá erro). A decisão é do `Montar aviso`; não há nó novo.
+- Testado no TESTE com uma cópia temporária do `bv-vigia` (só o ramo da fila humana, encerramento no Chat Master trocado por nó sem efeito, 9 contatos simulados). Calado: equipe resolveu e o cliente agradeceu; dois agradecimentos seguidos; equipe fechou com "te aguardamos" e o cliente agradeceu; equipe por último, como antes. Aviso: equipe nunca respondeu; ficou pergunta do cliente; equipe prometeu retorno e sumiu; equipe fez pergunta e sumiu; cliente escolheu um horário e ficou sem resposta.
+- Duas revisões independentes do diff, em leitura (segurança; correção, performance, escala e duplicação), sem achado crítico. Delas saíram: a pergunta e a promessa de retorno da equipe, o número e o horário na mensagem do cliente, a lista de emojis de fecho, a retirada de palavras de apoio que deixavam passar pergunta sem "?" ("ok, e amanhã") e o corte de número e "@" no que trafega pela execução.
+
+Limites conhecidos: promessa de retorno escrita de um jeito fora da lista ("deixa comigo") seguida de agradecimento encerra calado; a janela de 24 horas olha a última mensagem da equipe, não a da transferência em aberto (uma mensagem do cliente ao agente que não seja agradecimento já faz avisar); um envio do próprio agente gravado por engano como mensagem da equipe contaria como resposta (não conferido em PROD).
+
+Não medido: o encerramento de verdade no Chat Master com a regra nova (no TESTE o vigia não encerra); a lista de palavras e a de promessas contra um volume maior de conversas reais.
+

@@ -477,5 +477,40 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax, atual) {
   return ''; // fora_do_teste: sem texto
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+// Vigia da fila humana: o aviso "a equipe nao conseguiu te responder" nao sai quando a equipe respondeu e, depois dela, o cliente so
+// agradeceu ou se despediu (PROD, 23/11: 2 de 3 avisos sairam depois de "Obrigado" a um atendimento ja resolvido). Na duvida, avisa:
+// cumprimento sozinho, "sim", pergunta, numero ou horario ("ok 14:30" e escolha, nao despedida), letra fora de a-z e emoji que nao e
+// de fecho nao contam. Por palavras, sem regex com repeticao sobre texto do cliente.
+const bvMJunta = (w) => w.replace(/(.)\1+/g, '$1'); // "valeuu" = "valeu", "okk" = "ok"
+const BVM_GRATO = new Set(['ok', 'okay', 'oki', 'blz', 'beleza', 'obrigado', 'obrigada', 'obrigados', 'obrigadao', 'obg', 'obgd', 'obgda', 'brigado', 'brigada', 'brigadao', 'valeu',
+  'vlw', 'flw', 'falou', 'fechou', 'show', 'perfeito', 'otimo', 'otima', 'combinado', 'fechado', 'certo', 'certinho', 'joia', 'legal', 'maravilha', 'top', 'tmj', 'tranquilo', 'tchau',
+  'abraco', 'abs', 'grato', 'grata', 'gratidao', 'agradeco', 'agradecido', 'agradecida', 'thanks', 'entendi', 'entendido', 'ciente', 'amem', 'igualmente'].map(bvMJunta));
+const BVM_GRATO_APOIO = new Set(['muito', 'mesmo', 'isso', 'sim', 'ss', 'ta', 'entao', 'bom', 'boa', 'dia', 'tarde', 'noite', 'eu', 'que', 'te', 'voce', 'vc', 'voces', 'vcs', 'ate',
+  'mais', 'logo', 'la', 'amanha', 'deus', 'abencoe', 'tudo', 'pela', 'pelo', 'atencao', 'ajuda', 'atendimento', 'irmao', 'mano', 'amigo', 'pessoal', 'galera',
+  'k', 'rs', 'rsrs', 'ha', 'haha', 'he', 'hehe'].map(bvMJunta));
+const BVM_EMOJI_FECHO = new Set([...'👍👌🙏🤝✅😊😉😀😁🙂🙌👏💪🤗😄😃🫡🤙'].concat(['❤', '♥']));
+function bvMSoAgradeceu(textos) {
+  const l = Array.isArray(textos) ? textos : [];
+  return l.length > 0 && l.length <= 6 && l.every((t) => {
+    const cru = String(t == null ? '' : t);
+    if (!cru.trim() || cru.length > 80 || cru.includes('?') || /\d/.test(cru)) return false;
+    const txt = cru.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+    if (/[^\P{L}a-z]/u.test(txt)) return false; // outro alfabeto: nao da para saber o que diz
+    const emojis = [...cru].filter((ch) => /\p{Extended_Pictographic}/u.test(ch));
+    if (emojis.some((ch) => !BVM_EMOJI_FECHO.has(ch))) return false; // 😡, 👎, 🤔 pedem resposta
+    const ps = txt.split(/[^a-z]+/).filter(Boolean).map(bvMJunta);
+    if (!ps.length) return emojis.length > 0; // so um joinha fecha a conversa; so pontuacao, nao
+    return ps.some((w) => BVM_GRATO.has(w)) && ps.every((w) => BVM_GRATO.has(w) || BVM_GRATO_APOIO.has(w));
+  });
+}
+// Linha do encerramento da fila humana ({equipe_respondeu, depois: mensagens do cliente depois da ultima da equipe}) -> o aviso sai?
+// Linha sem esses campos (turno que estourou o tempo) sempre avisa.
+function bvMAvisaFila(l) {
+  if (!l || l.equipe_respondeu !== true) return true;
+  let d = l.depois;
+  try { if (typeof d === 'string') d = JSON.parse(d); } catch (e) { return true; }
+  return !bvMSoAgradeceu(d);
+}
+
+if (typeof module !== 'undefined') module.exports = { bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

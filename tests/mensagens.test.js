@@ -441,3 +441,28 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.match(ctx, /a decisão "remarcar ou cancelar\?" já foi enviada a ele em lista: não a repita/);
   console.log('mensagens.test.js recusa em lista e lembrete desatualizado ok');
 }
+
+{ // Vigia da fila humana (23/11): o aviso de "sem resposta" nao sai quando a equipe respondeu e o cliente so agradeceu depois
+  const { bvMSoAgradeceu: G, bvMAvisaFila: A } = require('../workflows/shared/mensagens.js');
+  for (const t of ['Obrigado!', 'Ok obrigado', 'valeuu 🙏🏻', 'Beleza', 'ok', 'Okk', 'Muito obrigada, até amanhã', 'Show, valeu', '👍', 'Tá bom, obrigado', 'Eu que agradeço', 'kkkk valeu', 'Combinado', 'Perfeito. Obrigado pela atenção']) assert.equal(G([t]), true, t);
+  // pergunta, pedido, cumprimento, "sim" sozinho, pontuacao e texto longo nao sao agradecimento: o cliente ficou esperando
+  for (const t of ['Obrigado, mas e amanhã?', 'Ótimo! Pode ser 17:20', 'Boa tarde', 'Sim', 'Isso mesmo', 'E antes das 9h?', '...', '', 'Conseguem agendar por favor', 'ok ' + 'obrigado '.repeat(12), 'Pode ser esse horário das 14h', 'Não', '?']) assert.equal(G([t]), false, t);
+  // revisoes de 23/11: numero ou horario e escolha; pergunta sem "?"; emoji que nao e de fecho; outro alfabeto; "entendi nada"
+  for (const t of ['Beleza, 15:30', 'ok 2', 'Obrigado 17:20', 'Ok, e amanhã', 'Legal, e o de amanhã', 'Ok, por que', 'certo e a de amanha', '😡', '!!! 👎', 'ok 🤔', 'ok спасибо', 'Entendi nada', 'Não entendi', 'Tá bom']) assert.equal(G([t]), false, t);
+  for (const t of ['Obrigado, boa tarde', 'Valeu, irmão', 'Obrigado pessoal', 'Brigadão', 'Fechou', 'Então tá, obrigado', 'Muito obrigado pelo atendimento', '❤️', '🙏🏻', 'Tranquilo', 'flw']) assert.equal(G([t]), true, t);
+  assert.equal(G(['Ok', 'Obrigado!']), true);
+  assert.equal(G(['Obrigado', 'Tem horário amanhã']), false); // uma mensagem que pede resposta basta
+  assert.equal(G([]), false);
+  assert.equal(G(null), false);
+  assert.equal(G(Array(7).fill('ok')), false); // a consulta manda no maximo 7: acima de 6 pode haver mensagem anterior nao lida
+  // linha do encerramento: so cala com a equipe tendo respondido E o cliente so agradecendo; o resto avisa como antes
+  assert.equal(A({ equipe_respondeu: true, depois: '["Obrigado!"]' }), false);
+  assert.equal(A({ equipe_respondeu: true, depois: ['Ok obrigado'] }), false);
+  assert.equal(A({ equipe_respondeu: false, depois: '["Obrigado!"]' }), true); // a equipe nunca respondeu
+  assert.equal(A({ equipe_respondeu: true, depois: '["Beleza","?"]' }), true); // midia, pergunta ou texto longo chegam como "?"
+  assert.equal(A({ equipe_respondeu: true, depois: '[]' }), true);
+  assert.equal(A({ equipe_respondeu: true, depois: 'x' }), true); // JSON invalido: avisa
+  assert.equal(A({ equipe_respondeu: 'true', depois: '["ok"]' }), true); // so o booleano do banco vale
+  assert.equal(A({ contato_id: 1, telefone: '+55' }), true); // turno que estourou o tempo (sem os campos): sempre avisa
+  console.log('mensagens.test.js aviso do vigia ok');
+}
