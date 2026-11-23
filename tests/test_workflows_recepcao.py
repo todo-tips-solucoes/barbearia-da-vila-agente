@@ -26,6 +26,8 @@ class WorkflowRecepcao(unittest.TestCase):
         self.assertNotIn("console.log", texto)
         self.assertNotRegex(texto, r"[0-9a-f]{64}")  # so placeholder, nunca o hash/token
         self.assertIn("{{BV:TOKEN_SHA256}}", texto)
+        # sem token so passa o aviso de chamado encerrado, e como descartado (nada e processado)
+        self.assertIn("bvEncerradoSemToken(ev.body) ? { resultado: 'descartada', motivo: 'nao_mensagem' } : { resultado: 'nao_autenticada' }", texto)
         self.assertEqual(json.loads(texto)["settings"]["saveDataSuccessExecution"], "none")
 
     def test_chaves_redis_usam_prefixo_do_ambiente(self):

@@ -300,7 +300,7 @@ Leitura do contato em PROD (21/11): o "Simm" de 17/11 chegou junto com o lembret
 
 Correção: o `Ler contexto` lê o lembrete de 1 hora do contato (enviado, ou criado no Chat Master e prestes a sair em 2 minutos, pela própria `bv_respondivel`, sem copiar a regra; vale até a hora marcada) e `bvMPromptConfirmacoes` acrescenta uma linha de dado ao contexto. Com confirmação de presença aberta a linha não entra: o "sim" confirma a presença. No meio de uma conversa também não entra: ali o "sim" responde à última pergunta do agente (um resumo, por exemplo). A linha não leva o nome do barbeiro. Sem lembrete, o contexto fica byte a byte igual ao da etapa 7.
 
-Observado na mesma leitura e ainda aberto: as respostas da equipe a esse contato em 16/11 não ficaram gravadas (o cliente respondia a alguém entre 16:05 e 16:24 e não há nenhuma mensagem `equipe-` no período). Só entra a mensagem enviada pelo Chat Master com o chamado na fila humana; resposta pelo aparelho da loja, ou com o chamado em outra fila, é descartada. Medido em 22/11: ver "Medições em PROD (22/11)".
+Observado na mesma leitura e ainda aberto: as respostas da equipe a esse contato em 16/11 não ficaram gravadas (o cliente respondia a alguém entre 16:05 e 16:24 e não há nenhuma mensagem `equipe-` no período). Só entra a mensagem da equipe com o chamado na fila humana; com o chamado em outra fila, é descartada. A resposta pelo aparelho da conexão também entra (captura de 23/11: ver "Teste pela conexão 145 (23/11)"). Medido em 22/11: ver "Medições em PROD (22/11)".
 
 ## Operacional: alerta de WhatsApp fora do ar (21/11)
 
@@ -339,7 +339,7 @@ Não há um degrau: os intervalos se espalham até 60 s. Subir a janela para 12 
 
 **"Sem contato" da conciliação de lembretes: nada a corrigir.** De 449 registros, 194 ganharam lembrete depois. Os 103 dos últimos 5 dias que nunca ganharam foram cruzados com a agenda da Graces: 53 sem celular válido no cadastro, 28 com início em até uma hora (não havia lembrete a mandar) e 22 que não estavam mais na agenda lida (cancelados, ou fora da página de 200 agendamentos). Nenhum caso em que o lembrete cabia e não saiu. Esses registros não contam para o alerta de falhas, que só conta `agente_falhou`.
 
-**Respostas da equipe: aberto.** O agente passou 22 contatos para a equipe; dos 13 que escreveram duas vezes ou mais nas 3 horas seguintes, 11 não têm nenhuma resposta da equipe gravada. O banco não separa "respondeu pelo aparelho da loja" (evento `start` com `fromMe`, descartado em `bvNormalizar`) de "não respondeu". O silêncio do agente não depende disso (vale a fila do chamado); o que se perde é o histórico quando o cliente volta ao agente. Próximo passo: ver no TESTE como chega o evento de uma mensagem digitada no aparelho da conexão e, se for identificável, gravá-la como mensagem da equipe.
+**Respostas da equipe: fechado em 23/11.** O agente passou 22 contatos para a equipe; dos 13 que escreveram duas vezes ou mais nas 3 horas seguintes, 11 não têm nenhuma resposta da equipe gravada. O banco não separa "respondeu pelo aparelho da loja" (evento `start` com `fromMe`, descartado em `bvNormalizar`) de "não respondeu". O silêncio do agente não depende disso (vale a fila do chamado); o que se perde é o histórico quando o cliente volta ao agente. Próximo passo: ver no TESTE como chega o evento de uma mensagem digitada no aparelho da conexão e, se for identificável, gravá-la como mensagem da equipe. **Feito em 23/11: a hipótese do aparelho não se confirmou, e a medição no Chat Master mostrou que as respostas sem registro são anteriores à gravação, que só entrou em PROD em 17/11** (ver "Teste pela conexão 145 (23/11)").
 
 ## Item 26: registro para auditar (22/11)
 
@@ -356,7 +356,7 @@ Não muda o atendimento: são gravações a mais em consultas que já existiam, 
 Limites:
 
 - Chamado que a equipe encerra sem o cliente voltar a escrever: a linha fica `aberto` até o vigia agir (PROD) ou até a próxima mensagem do cliente. No TESTE o vigia não encerra.
-- As mensagens da equipe digitadas no aparelho da loja continuam fora do banco (ver "Medições em PROD (22/11)").
+- A mensagem da equipe com o chamado fora da fila humana continua fora do banco. A digitada no aparelho da conexão entra, desde que o chamado esteja na fila humana (ver "Teste pela conexão 145 (23/11)").
 - Transferências e listas anteriores à publicação não são reconstruídas.
 
 Ordem de publicação: a migração 0019 vem antes do deploy (os workflows gravam nas colunas novas).
@@ -364,3 +364,74 @@ Ordem de publicação: a migração 0019 vem antes do deploy (os workflows grava
 Consulta de exemplo, transferências por dia, motivo e desfecho: `SELECT (iniciado_em AT TIME ZONE 'America/Sao_Paulo')::date, motivo, coalesce(encerrado_por, 'aberto'), count(*), round(avg(extract(epoch from encerrado_em - iniciado_em)) / 60) AS minutos FROM handoffs GROUP BY 1, 2, 3 ORDER BY 1;`
 
 Testado no TESTE (22/11), com a migração aplicada: teste ao vivo com 20 conferências (itens gravados iguais aos da oferta da conversa; transferência aberta com o motivo; segunda chamada sem linha nova; agente calado na fila humana com a linha aberta; encerrada por `retorno` quando o agente volta; encerrada por `vigia` rodando a consulta do `Gravar encerramento`); as seis consultas alteradas conferidas no banco com `PREPARE`; R1, R2, R15, R28, R30 e R35 da suíte, 6 de 6, com as conversas do R28 e do R35 lidas. Não exercitado: o vigia encerrando de verdade (desligado no TESTE) e a gravação da lista de decisão pelo `bv-confirmacao` conferida no banco (o R35 passa por ela; a expressão foi testada isolada).
+
+## Teste pela conexão 145 (23/11)
+
+Com a conexão da loja fora do ar por decisão do owner, os testes que dependiam de WhatsApp de verdade foram feitos pela conexão de teste (145), com o owner no papel de cliente (o número de teste registrado em `docs/decisoes-pre-00c.md`).
+
+### Captura: mensagem digitada no aparelho da conexão
+
+A 145 foi apontada para o `bv-captura` e o owner mandou três mensagens: uma como cliente, uma pelo painel do Chat Master e uma digitada no aplicativo do WhatsApp do aparelho da 145, com o chamado na fila humana (78).
+
+| Origem | Eventos | O que a recepção faz |
+|---|---|---|
+| Cliente | `start` e o eco `from_internal`, os dois com `fromMe` falso | Aceita o `start` como mensagem do cliente |
+| Painel | `from_internal` com `fromMe`, fila 78 e o atendente em `userId` | `bvEquipe` grava como mensagem da equipe |
+| Aparelho da conexão | `start` com `fromMe` e `fromApp`; e o eco `from_internal` com `fromMe`, fila 78, `mensagem.fromApp` e sem `userId` | O `start` é descartado (`enviada_pela_loja`); o eco é gravado por `bvEquipe` como mensagem da equipe |
+
+Os dois eventos do aparelho viraram as fixtures `evento-26` e `evento-27`, e `tests/rajada.test.js` passa os dois pelo código da recepção.
+
+**Conclusão para o item 17:** a resposta digitada no aparelho não é a causa das respostas da equipe sem registro. Com o chamado na fila humana ela já é gravada, sem mudança de código. Vale para a 145; o owner informou em 23/11 que a 159 se comporta igual (mesma estrutura, com outros valores nas variáveis).
+
+### Medição em PROD: respostas da equipe (23/11)
+
+Leitura rodada pelo owner: para cada contato que o agente passou para a equipe nos últimos 10 dias (22 contatos, 15 a 17/11), as mensagens do chamado no Chat Master (`GET /api/tickets/{ticketId}/messages`) foram cruzadas com o que está gravado no banco. Cada mensagem do chamado traz a fila em que ele estava na hora, o atendente (`userId`, no painel) e a marca de aparelho (`fromApp`). Um chamado não foi lido por erro de rede.
+
+| Origem | Fila do chamado na hora | Gravada no banco | Mensagens |
+|---|---|---|---|
+| Aparelho | Humana | Sim | 12 |
+| Aparelho | Humana | Não | 34 |
+| Painel | Humana | Sim | 1 |
+| Painel | Humana | Não | 34 |
+| Aparelho | Do agente | Não | 20 |
+| Painel | Do agente | Não | 3 |
+
+- **A divisão é por data, não por origem.** Nenhuma resposta às transferências de 15 e 16/11 foi gravada; as de 17/11 foram todas (12 de 12 nas três horas seguintes, em 5 transferências). A gravação (`Registrar equipe`) entrou em `main` em 17/11 às 05:35 (PR #127): antes disso ela não existia. Não é defeito, e a hipótese do vigia fica descartada.
+- **A equipe respondeu quase sempre.** De 22 transferências lidas, 20 tiveram resposta no chamado: metade em até 8 minutos e 7 depois de 40 minutos. Duas, de 17/11, ficaram sem resposta.
+- **Limite desta leitura:** a tabela não saiu separada por dia; a atribuição das 68 não gravadas na fila humana ao período anterior a 17/11 vem das linhas por transferência. O script passou a imprimir a divisão por dia.
+- **Aberto:** 23 mensagens da equipe (20 pelo aparelho) foram enviadas com o chamado na fila do agente. Por desenho não são gravadas: o agente não fica sabendo o que a loja disse nem deixa de responder. Com `fromApp` e `userId` dá para separar essas mensagens do eco das mensagens do próprio agente, o que antes não se sabia fazer. Gravar no histórico e calar o agente são decisões do owner.
+
+### Conversa de verdade com o agente do TESTE
+
+A 145 foi apontada para a recepção do TESTE, com o número de teste na lista de escrita (publicação local, sem commit). Quatro turnos, respostas entre 10 e 16 segundos depois da mensagem, nenhuma falha gravada:
+
+- o agente ofereceu repetir o último serviço com o mesmo barbeiro;
+- o cliente trocou o dia duas vezes (quarta, depois sábado) e o agente acompanhou sem perder o serviço;
+- antes de pedir a confirmação, avisou que já havia outro horário marcado no mesmo dia.
+
+A conversa parou na pergunta de confirmação: nada foi agendado. Não foram exercitados a gravação do agendamento, as listas, a transferência, os lembretes e a resposta ao lembrete de 1 hora.
+
+### Estado da 145 antes e depois
+
+- A 145 estava **sem webhook**: nenhum evento dela chegava ao TESTE. A anotação `.captura-145.url`, de outubro, apontava para o n8n2 desativado; passou a guardar "vazio", que era o estado real, e a API aceita gravar o webhook vazio.
+- No fim: webhook da 145 de volta a vazio, TESTE republicado com a lista de escrita vazia, execuções do `bv-captura` apagadas e nenhum agendamento no barbeiro de teste.
+- Com o chamado na fila 78 o agente do TESTE fica calado (regra da fila humana), e no TESTE o vigia não encerra: para o agente responder, o chamado tem de ser encerrado ou devolvido no painel.
+
+Para repetir: `python3 -I scripts/capturar-webhook.py trocar` (captura) e `restaurar` (volta ao vazio). Apontar a 145 para a recepção do TESTE não tem comando no script: foi feito com a mesma chamada (`POST /api/whatsapp/update`) e a URL da recepção do `integracao.json`.
+
+## Volta da conexão da loja (23/11)
+
+A conexão da loja voltou em 23/11 às 12:41, depois de parada desde 17/11 às 12:57. Medido pelo owner 36 minutos depois, com script só de leitura (contagens, sem nome, telefone nem texto de cliente):
+
+- conexão `CONNECTED` e webhook apontando para a recepção de PROD;
+- 23 mensagens recebidas, 17 turnos concluídos, resposta em 11,1 s na mediana, nenhum turno com falha. São os primeiros atendimentos reais das etapas 5 a 8 e do item 26;
+- sem pico na volta (1 a 2 contatos a cada 10 minutos): as mensagens dos dias parados não foram entregues ao agente. A recepção não tem filtro de idade da mensagem; se o Chat Master entregasse essa fila, o agente responderia todas;
+- falhas registradas: 17 `sem_contato` da conciliação de lembretes (pendência conhecida), 2 `busca_repetida` e 2 `encaminhar_equipe`, uma delas pelo barbeiro que só a equipe agenda; 2 transferências.
+
+**Lembretes vencidos durante a parada.** 238 lembretes (88 do dia anterior e 150 da hora) venceram com a conexão fora e estavam agendados no Chat Master; o banco os marcou `enviada` na hora prevista. Regra do owner (23/11): lembrete de agendamento que já passou não é enviado, e nada sai em lote, para não bloquear o número. Os 232 cujo agendamento já havia passado foram apagados do Chat Master pelo owner (`POST /api/schedules/delete`, um por um): 231 responderam `200` e, na segunda rodada, `404`; o que ficou sem resposta respondeu `200` na segunda. Ou seja, o Chat Master ainda guardava os registros. Os 6 de agendamentos que ainda iam acontecer ficaram.
+
+O sincronizador só apaga agendamento futuro: lembrete vencido com a conexão fora continua no Chat Master. Numa próxima parada, a limpeza precisa ser repetida antes ou logo depois de religar (critério: `agendamento_canal_id` preenchido, `previsto_para` dentro da parada e `inicio` já passado).
+
+Lembretes futuros na volta: 148, em 106 minutos diferentes, no máximo 3 no mesmo minuto. Cada um sai na hora do próprio agendamento.
+
+Não medido: se o Chat Master enviaria os lembretes vencidos ao religar; se os 6 que ficaram saíram; se o alerta de WhatsApp fora do ar parou de se repetir (só aparece no WhatsApp do owner).
