@@ -41,7 +41,7 @@ Insumo do briefing e da constituição. Tudo aqui foi respondido pelo owner nest
 |---|---|
 | Fonte da verdade | **Graces**, inclusive para faixas de idade e preços (não `informacaoes_barbearia.txt`). |
 | Testes | Só em produção da Graces, **sempre com o barbeiro de teste** (o que tem "TESTE" no nome). |
-| Pacotes | ~~Perguntar antes se quer usar a sessão do pacote ou pagar avulso.~~ **Revisto em 2026-10-19:** o agente **não trata de pacote**. Informações e abatimento de pacote ficam com a equipe da barbearia, dentro da Graces; o agente agenda o serviço normalmente (constituição 3.0.0, princípio XI). |
+| Pacotes | ~~Perguntar antes se quer usar a sessão do pacote ou pagar avulso.~~ **Revisto em 2026-10-19:** o agente **não trata de pacote**. Informações e abatimento de pacote ficam com a equipe da barbearia, dentro da Graces; o agente agenda o serviço normalmente (constituição 3.0.0, princípio XI). **Revisto em 2026-11-23 (item 12 das melhorias):** o agente consulta o pacote do cliente na Graces e agenda abatendo dele, dizendo isso no resumo antes da confirmação; continua sem perguntar "pacote ou avulso", e quando a Graces não mostra pacote ele agenda pelo valor avulso e a equipe confere (constituição 4.0.0, princípio XI). |
 | Serviços "2º vez" | **Nunca** oferecer nem agendar. |
 | Terceiros | **Permitido** agendar para outra pessoa (filho, amigo): pedir o nome e buscar ou cadastrar a pessoa na Graces. |
 | Vários serviços | **Permitido**: um agendamento por serviço, com horários encadeados. |
