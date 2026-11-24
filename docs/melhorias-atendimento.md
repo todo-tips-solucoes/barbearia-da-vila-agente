@@ -698,6 +698,22 @@ Suíte no TESTE com a mudança: R1, R2, R5, R18 e R23 aprovados (p95 de 24,8 s).
 - **Cliente com pacote de um dos serviços.** O combinado é outro serviço na Graces: a sessão do pacote não é abatida e o resumo sai pelo valor avulso. A orientação manda usar os avulsos em sequência quando o cliente diz que tem pacote, e a transferência por `pacote` continua valendo. Falta o owner dizer quais pacotes existem.
 - **Barbeiro de teste:** como o combinado dura 40 min para ele, não há como provar no TESTE, com escrita, que o agendamento ocupa 80 min; a prova é a leitura da grade dos barbeiros reais.
 
+### Serviço pedido que a loja não tem (24/11)
+
+Origem do ponto 2 da leitura de 23/11: o cliente pediu dois serviços, um não existia com aquele nome, e o agente seguiu só com o outro, calado. O caso real ("raspar na navalha e barba") foi resolvido pela lista dos combinados. Para os outros pares:
+
+- **Base medida no TESTE:** o agente já dizia qual serviço não achou em 9 de 9 conversas ("barba e sobrancelha", "corte e luzes", "barba e limpeza de pele"). No controle "barba e pezinho" (os dois existem), 1 de 3 procurou a frase inteira como um serviço só e disse que não achou.
+- **O que mudou:** `listar_servicos` sem resultado devolve a orientação de dizer qual serviço não achou, sem trocar por outro nem seguir só com o que achou, e deixa a oferta como estava (a lista do outro serviço pedido não some). No prompt, uma frase manda procurar cada serviço pelo termo dele antes de buscar horário.
+- **Efeito colateral corrigido:** com duas buscas de serviço no mesmo turno, a segunda desfazia a lista dos combinados (1 de 2 em "raspar na navalha e barba"). O "vale uma vez" da lista dos combinados passou a ser por turno (`pedido.dois_turno`).
+
+| Medição no TESTE | Antes | Depois |
+|---|---|---|
+| Dois serviços, um não existe (três frases) | 9 de 9 dizem qual não acharam | 17 de 18, somando duas rodadas (uma conversa perguntou a barba sem dizer que não achou "limpeza de pele") |
+| "Barba e pezinho" (os dois existem) | 2 de 3 | 3 de 3 |
+| "Raspar na navalha e barba" e "um corte e uma barba" (combinados) | 6 de 6 | 8 de 8 |
+
+Ou seja: o comportamento pedido já existia e a medição não mostra ganho nele; a mudança o amarra ao resultado da ferramenta e corrige o controle. Não há barreira em código que impeça o modelo de não procurar um dos serviços.
+
 ### Cliente com pacote (24/11)
 
 O serviço combinado é outro serviço na Graces: quem tem pacote de corte ou de barba e é levado ao combinado não abate a sessão e vê o resumo pelo valor avulso.
