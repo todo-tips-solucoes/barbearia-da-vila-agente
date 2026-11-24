@@ -329,7 +329,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5040,
+        5760,
         0
       ]
     },
@@ -547,6 +547,89 @@
         }
       },
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/config.js}}\n// Aviso a equipe (owner, 2026-11-24): a transferencia por API e silenciosa no painel. Um texto por numero de handoff.avisar_numeros,\n// com o nome e o telefone do cliente (do estado da conversa, nunca do modelo). No TESTE o destino fora da lista de escrita e simulado.\n// Sempre sai um item: sem aviso a enviar, a Saida ainda precisa rodar.\nconst nome = (((($('Contexto').first().json) || {}).pedido) || {}).cliente_nome;\nconst avisos = bvMAvisoEquipe({ nome, telefone: ($('Gatilho').first().json || {}).telefone }, {{BV:handoff.avisar_numeros}}, \"{{BV:textos.aviso_equipe}}\", { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}' })\n  .filter((a) => !bvSimulado(a.destino));\nreturn avisos.length ? avisos.map((a) => ({ json: { enviar: true, req: a.req } })) : [{ json: { enviar: false } }];"
+      },
+      "id": "ad1ff371-8c0a-55c1-9f8a-a79f8f95eca1",
+      "name": "Aviso equipe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5040,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "36b7b41b-7942-5754-82ed-1224d4512c03",
+              "leftValue": "={{ String($json.enviar) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4a387f9e-ead9-5610-a0b9-b21372878b32",
+      "name": "Avisa?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.chatmasterveloz.com{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": false,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.req.body) }}"
+      },
+      "id": "9c4ce5a9-6090-54e3-88a5-62e26d80dc82",
+      "name": "Enviar aviso equipe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5520,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.chatmaster}}",
+          "name": "Barbearia Vila Chat Master"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -714,7 +797,7 @@
       "main": [
         [
           {
-            "node": "Saida",
+            "node": "Aviso equipe",
             "type": "main",
             "index": 0
           }
@@ -766,6 +849,46 @@
         [
           {
             "node": "Tem chamada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aviso equipe": {
+      "main": [
+        [
+          {
+            "node": "Avisa?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisa?": {
+      "main": [
+        [
+          {
+            "node": "Enviar aviso equipe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Saida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar aviso equipe": {
+      "main": [
+        [
+          {
+            "node": "Saida",
             "type": "main",
             "index": 0
           }

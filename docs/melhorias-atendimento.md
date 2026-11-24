@@ -754,3 +754,28 @@ Decisão do owner (24/11). Até aqui, na terceira vez da mesma pergunta o agente
 - **Ler em PROD quantas vezes o texto antigo do laço saiu e quantas eram legítimas.** A pergunta em texto, sem lista, não tem rede em código; a leitura do dia seguinte ao deploy mostra se alguém foi transferido sem motivo.
 - **Aviso à equipe:** conferir se o **Avise-me** está ligado no setor humano; a transferência por API não avisa ninguém sozinha.
 - Contraprova como roteiro permanente da suíte: não foi criado; a medição ficou no registro acima.
+
+## Aviso à equipe na transferência (24/11)
+
+Pedido do owner (24/11): quando a conversa é passada para a equipe, mandar do WhatsApp da loja uma mensagem para os celulares da equipe com o nome e o telefone do cliente. Mover o chamado de setor pela API não avisa ninguém no painel, e a conversa ficava esperando até alguém olhar a fila.
+
+### Como funciona
+
+- **Onde:** no `bv-graces`, depois de `Registrar handoff`: `Aviso equipe` (monta um texto por número) → `Avisa?` → `Enviar aviso equipe` → `Saida`. Vale para toda transferência (pedido do cliente, laço, limite, barbeiro só da equipe, pacote). Sem transferência, nada muda.
+- **Para quem:** `handoff.avisar_numeros` do ambiente. Em PROD, os dois números indicados pelo owner; no TESTE, lista vazia, e mesmo com número o destino fora de `teste.contatos_escrita` é simulado.
+- **Texto:** `textos.aviso_equipe`, com `{nome}` e `{telefone}`: "Aviso automático, não precisa responder. Atendimento passado para a equipe pelo agente. Cliente: … WhatsApp: …". Nome e telefone vêm do estado da conversa, nunca do modelo; sem nome no cadastro sai "sem nome no cadastro".
+- **Envio:** `POST /api/messages/send` pela conexão da loja, com `openTicket: '0'` (`bvMTexto`, o mesmo construtor dos textos ao cliente e do `bv-alerta`). Um aviso por transferência: depois dela o agente fica em silêncio e não há segunda transferência da mesma conversa. O envio não é repetido sozinho em caso de falha.
+- **Custo:** só no turno da transferência: uma chamada por número (duas em PROD), depois da resposta ao cliente já estar decidida.
+
+### Parecer do Chat Master
+
+- O endpoint e os campos são os documentados para texto na conexão Pro; `openTicket: '0'` não abre atendimento. Se o envio a um número sem contato cria contato no painel, não está documentado.
+- **Resposta da equipe ao aviso:** entra pela conexão da loja como mensagem de cliente, e o agente responde. O texto avisa que não precisa responder. Alternativas, não adotadas sem decisão do owner: o agente ignorar mensagens desses números (uma linha na recepção; eles deixariam de poder falar com o agente) ou **Ignorar Números** na conexão (efeito sobre o envio por API não documentado).
+- **Avise-me nativo** (Setores & Chatbot › Notificar Operador no WhatsApp): avisa todos os usuários do setor, com texto único para a empresa; não está documentado se dispara na transferência por API nem se aceita nome e telefone do cliente no texto. Por isso o aviso ficou em código.
+- Risco de bloqueio do chip por envios repetidos: sem limite documentado; dois destinatários fixos que têm o número da loja salvo são o caso de menor risco.
+
+### O que falta e limites
+
+- **Envio real não provado no TESTE:** lá o destino é simulado; a primeira mensagem de verdade sai em PROD. O construtor e a chamada são os mesmos do `bv-alerta`, que já envia em PROD.
+- **Falha no envio não é registrada** em `falhas_agente`: o aviso se perde em silêncio se o Chat Master recusar.
+- Se a equipe responder ao aviso, o agente responde como a um cliente.

@@ -82,6 +82,18 @@ function bvMTexto(m, contato, cfg) {
     body: { number: lid ? String(contato) : bvMDig(contato), openTicket: '0', queueId: cfg.fila || '0', whatsappId: cfg.wid, body: m.texto } };
 }
 
+// Aviso a equipe na transferencia (owner, 2026-11-24): mover o ticket de setor pela API nao avisa ninguem no painel, e a conversa
+// ficava esperando ate alguem olhar a fila. Um texto por numero da equipe (handoff.avisar_numeros), pela conexao da loja, com o
+// nome e o telefone do cliente. Nome e telefone vem do estado da conversa, nunca do modelo; numero invalido ou repetido e o
+// proprio cliente ficam de fora. Reusa bvMTexto (openTicket '0': nao abre atendimento para o numero da equipe).
+function bvMAvisoEquipe(d, numeros, texto, cfg) {
+  const tel = bvMDig(d && d.telefone);
+  const nome = bvMNomeProprio(String((d && d.nome) || '').replace(/[\u0000-\u001f*_~`]/g, ' ').trim().slice(0, 60)) || 'sem nome no cadastro';
+  if (tel.length < 10 || !texto) return [];
+  const destinos = [...new Set((Array.isArray(numeros) ? numeros : []).map(bvMDig))].filter((n) => /^\d{12,13}$/.test(n) && n !== tel);
+  return destinos.map((destino) => ({ destino, req: bvMTexto({ texto: bvMTemplate(texto, { nome, telefone: `+${tel}` }) }, destino, cfg) }));
+}
+
 // status HTTP do envio; tentativas = recusas ANTERIORES. 2xx enviada; 0/ausente = incerto (nunca reenvia, SC-007);
 // recusa: retentativas_min ([1,5,15]) e depois falhou.
 function bvMResultadoEnvio(status, tentativas, cfg, agora) {
@@ -549,5 +561,5 @@ function bvMAvisaFila(l) {
   return !bvMSoAgradeceu(d);
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMAvisoEquipe, bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

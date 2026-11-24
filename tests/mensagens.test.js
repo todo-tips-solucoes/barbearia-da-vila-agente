@@ -514,3 +514,19 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   console.log('mensagens.test.js agendamento por pacote ok');
 }
 
+// Aviso a equipe na transferencia (owner, 2026-11-24): um texto por numero da equipe, com o nome e o telefone do cliente
+{
+  const m = require('../workflows/shared/mensagens.js');
+  const cfgA = { wid: '159', fila: '5' }, T = 'Atendimento passado para a equipe pelo agente. Cliente: {nome}. WhatsApp: {telefone}';
+  const av = m.bvMAvisoEquipe({ nome: 'JOAO', telefone: '+55 11 98888-7777' }, ['5511971634416', '55 (11) 99516-4884', '5511971634416', '123', '5511988887777', null], T, cfgA);
+  assert.deepEqual(av.map((a) => a.destino), ['5511971634416', '5511995164884']); // sem repetido, sem invalido e sem o proprio cliente
+  assert.deepEqual(av[0].req, { path: '/api/messages/send', body: { number: '5511971634416', openTicket: '0', queueId: '5', whatsappId: '159', body: 'Atendimento passado para a equipe pelo agente. Cliente: Joao. WhatsApp: +5511988887777' } });
+  assert.match(m.bvMAvisoEquipe({ telefone: '+5511988887777' }, ['5511971634416'], T, cfgA)[0].req.body.body, /Cliente: sem nome no cadastro\. WhatsApp: \+5511988887777/);
+  // o nome nao carrega formatacao do WhatsApp nem quebra de linha, e tem teto
+  const feio = m.bvMAvisoEquipe({ nome: '*Ana*\n_Maria_ ' + 'x'.repeat(200), telefone: '+5511988887777' }, ['5511971634416'], '{nome}', cfgA)[0].req.body.body;
+  assert.ok(!/[*_\n]/.test(feio) && feio.length <= 60, feio);
+  for (const [d, nums, t] of [[{ nome: 'x', telefone: '' }, ['5511971634416'], T], [{ nome: 'x', telefone: '+5511988887777' }, [], T], [{ nome: 'x', telefone: '+5511988887777' }, null, T], [{ nome: 'x', telefone: '+5511988887777' }, ['5511971634416'], ''], [null, ['5511971634416'], T]]) {
+    assert.deepEqual(m.bvMAvisoEquipe(d, nums, t, cfgA), []);
+  }
+  console.log('mensagens.test.js aviso a equipe ok');
+}
