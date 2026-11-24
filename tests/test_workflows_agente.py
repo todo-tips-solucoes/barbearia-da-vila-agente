@@ -116,7 +116,19 @@ class BvGraces(unittest.TestCase):
             self.assertIn(trecho, q)
         self.assertIn("{{BV:proposta.validade_min}}", self.nos["Contexto"]["parameters"]["options"]["queryReplacement"])
         # revalida antes de escrever e o POST/PUT so nasce depois da revalidacao
-        self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda', body: { idCliente: d.idCliente"))
+        self.assertLess(self.js.index("etapa === 'reval'"), self.js.index("m: 'POST', path: '/agenda', body: bvgCorpoAgendar(d.idCliente"))
+
+    def test_pacote_item_12(self):  # owner, 2026-11-23: agendar abatendo do pacote
+        # um so lugar monta o corpo do POST /agenda, com exatamente um entre o servico e a secao do pacote
+        self.assertEqual(self.js.count("m: 'POST', path: '/agenda', body: bvgCorpoAgendar("), 2)
+        self.assertNotIn("path: '/agenda', body: {", self.js)
+        self.assertIn("...(secao ? { idClienteItemPacote: secao } : { idServico: x.idServico })", self.js)
+        # a secao so nasce da leitura da Graces: nenhum campo de entrada (modelo ou Gatilho) a carrega, e so ha GET em /agenda/pacotes
+        i = self.js.index("const BVG_CAMPOS")
+        self.assertNotIn("acote", self.js[i:self.js.index("];", i)])
+        self.assertNotIn("acote", json.dumps(self.nos["Gatilho"]["parameters"]))
+        self.assertEqual(self.js.count("path: '/agenda/pacotes'"), 1)
+        self.assertIn("({ m: 'GET', path: '/agenda/pacotes', qs: { idCliente, idServico } })", self.js)
 
     def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
         rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]

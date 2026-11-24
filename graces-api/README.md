@@ -70,6 +70,7 @@ O portal exige login com a chave de API. Esta pasta é autocontida e **não cont
 - Status de um agendamento cancelado (não aparece na tabela de status).
 - Limites de requisições (rate limit): não documentados.
 - Respostas de erro específicas de cada endpoint: o portal só mostra exemplos de `200`.
+- Pacotes (item 12, medido em 2026-11-23 com o cliente de teste do pacote): cliente sem pacote devolve `200 []` em 0,05 a 0,15 s; sem `idCliente`, `400 PARAMETRO_INVALIDO`. Agendar por `idClienteItemPacote` reserva a seção na hora (ela sai de `/agenda/pacotes`); `secoes[].idProdutoServico` é o `idServico` da loja; remarcar mantém a seção; **cancelar pela API não a devolve** (ver a tabela de divergências). Não medido: o código da recusa por validade e por seção já usada.
 
 ## Como usar
 

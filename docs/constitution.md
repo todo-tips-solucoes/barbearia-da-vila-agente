@@ -1,16 +1,18 @@
 <!--
 Sync Impact Report
-- Version: 2.0.0 → 3.0.0 (MAJOR)
-- Princípios modificados: XI (Escrita segura na agenda) redefinido. O agente deixa de perguntar
-  "pacote ou avulso" e não trata de pacote: abatimento é feito pela equipe na Graces (decisão do
-  owner em 2026-10-19). X perde "pacote ou avulso" da lista de exemplos.
+- Version: 3.0.0 → 4.0.0 (MAJOR)
+- Princípios modificados: XI (Escrita segura na agenda) redefinido. O agente passa a consultar o
+  pacote do cliente na Graces e a agendar abatendo dele, com o abatimento dito no resumo antes da
+  confirmação (decisão do owner em 2026-11-23, item 12 de docs/melhorias-atendimento.md; revê a de
+  2026-10-19). Continua sem perguntar "pacote ou avulso".
 - Seções adicionadas: nenhuma
 - Seções removidas: nenhuma
-- Artefatos que precisam atualização: docs/briefing.md, docs/roadmap.md e docs/decisoes-pre-00c.md
-  (atualizados nesta mesma PR); spec de regras-negocio-agenda (em andamento)
+- Artefatos que precisam atualização: docs/decisoes-pre-00c.md e docs/melhorias-atendimento.md
+  (atualizados nesta mesma PR)
 - TODOs pendentes: nenhum
 - Histórico: 1.0.0 → 1.1.0 (MINOR) acrescentou os princípios IX-XVI; 1.1.0 → 2.0.0 (MAJOR) redefiniu
-  o X para múltipla escolha sempre por botão de lista
+  o X para múltipla escolha sempre por botão de lista; 2.0.0 → 3.0.0 (MAJOR) tirou o pacote do
+  agente (decisão do owner em 2026-10-19: abatimento feito pela equipe na Graces)
 -->
 
 # Constituição de Barbearia da Vila - Agente
@@ -179,8 +181,14 @@ repositório são código como qualquer outro.
 - O agente MUST confirmar com o cliente antes de agendar, reagendar ou cancelar.
 - Erros da Graces MUST ser tratados pelo campo `code`; uma escrita MUST NOT ser repetida às cegas
   após timeout, e sim verificada antes.
-- O agente MUST NOT tratar de pacote nem de abatimento de sessão: isso é feito pela equipe da
-  barbearia dentro da Graces. O agente agenda o serviço normalmente, sem perguntar sobre pacote.
+- Antes de propor um agendamento, o agente MUST consultar na Graces o pacote do cliente para o
+  serviço. Havendo sessão em aberto, ele MUST agendar abatendo dela, e o resumo MUST dizer que o
+  horário sai do pacote antes da confirmação do cliente.
+- O identificador da sessão do pacote MUST vir só da leitura da Graces, relida na hora de gravar;
+  MUST NOT vir do modelo.
+- O agente MUST NOT perguntar "pacote ou avulso", prometer abatimento que a Graces não mostrou nem
+  informar saldo de sessões. Quando o cliente diz ter pacote e a Graces não mostra, o agente agenda
+  pelo valor avulso e passa a conferência para a equipe.
 
 ### XII. Skills e validação de n8n
 
@@ -233,4 +241,4 @@ de um humano registrada no corpo da PR; a versão segue SemVer (MAJOR: princípi
 redefinido; MINOR: princípio ou regra adicionada; PATCH: redação). A primeira versão é a 1.0.0,
 ratificada no merge da PR que adota esta constituição.
 
-**Version**: 3.0.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-10-19
+**Version**: 4.0.0 | **Ratified**: no merge da PR que adota esta constituição | **Last Amended**: 2026-11-23
