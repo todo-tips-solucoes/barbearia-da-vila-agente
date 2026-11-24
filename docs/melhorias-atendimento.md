@@ -698,6 +698,22 @@ Suíte no TESTE com a mudança: R1, R2, R5, R18 e R23 aprovados (p95 de 24,8 s).
 - **Cliente com pacote de um dos serviços.** O combinado é outro serviço na Graces: a sessão do pacote não é abatida e o resumo sai pelo valor avulso. A orientação manda usar os avulsos em sequência quando o cliente diz que tem pacote, e a transferência por `pacote` continua valendo. Falta o owner dizer quais pacotes existem.
 - **Barbeiro de teste:** como o combinado dura 40 min para ele, não há como provar no TESTE, com escrita, que o agendamento ocupa 80 min; a prova é a leitura da grade dos barbeiros reais.
 
+### Serviço pedido que a loja não tem (24/11)
+
+Origem do ponto 2 da leitura de 23/11: o cliente pediu dois serviços, um não existia com aquele nome, e o agente seguiu só com o outro, calado. O caso real ("raspar na navalha e barba") foi resolvido pela lista dos combinados. Para os outros pares:
+
+- **Base medida no TESTE:** o agente já dizia qual serviço não achou em 9 de 9 conversas ("barba e sobrancelha", "corte e luzes", "barba e limpeza de pele"). No controle "barba e pezinho" (os dois existem), 1 de 3 procurou a frase inteira como um serviço só e disse que não achou.
+- **O que mudou:** `listar_servicos` sem resultado devolve a orientação de dizer qual serviço não achou, sem trocar por outro nem seguir só com o que achou, e deixa a oferta como estava (a lista do outro serviço pedido não some). No prompt, uma frase manda procurar cada serviço pelo termo dele antes de buscar horário.
+- **Efeito colateral corrigido:** com duas buscas de serviço no mesmo turno, a segunda desfazia a lista dos combinados (1 de 2 em "raspar na navalha e barba"). O "vale uma vez" da lista dos combinados passou a ser por turno (`pedido.dois_turno`).
+
+| Medição no TESTE | Antes | Depois |
+|---|---|---|
+| Dois serviços, um não existe (três frases) | 9 de 9 dizem qual não acharam | 17 de 18, somando duas rodadas (uma conversa perguntou a barba sem dizer que não achou "limpeza de pele") |
+| "Barba e pezinho" (os dois existem) | 2 de 3 | 3 de 3 |
+| "Raspar na navalha e barba" e "um corte e uma barba" (combinados) | 6 de 6 | 8 de 8 |
+
+Ou seja: o comportamento pedido já existia e a medição não mostra ganho nele; a mudança o amarra ao resultado da ferramenta e corrige o controle. Não há barreira em código que impeça o modelo de não procurar um dos serviços.
+
 ### Cliente com pacote (24/11)
 
 O serviço combinado é outro serviço na Graces: quem tem pacote de corte ou de barba e é levado ao combinado não abate a sessão e vê o resumo pelo valor avulso.
@@ -723,6 +739,26 @@ Limites:
 - **Pacote que vence antes do dia marcado:** a listagem não tem data; o agente diz que o pacote entra e o resumo sai pelo valor avulso.
 - **Cliente com pacote que quer o combinado mesmo assim:** a listagem de "cabelo e barba" volta ao caminho do pacote; a saída é pedir o serviço pelo nome.
 - **Prova com escrita não feita:** confirmar o agendamento consumiria uma sessão do pacote de teste, que a API não devolve. O abatimento na escrita é o do item 12, já provado em 23/11.
+
+### Sequência respeita o barbeiro e o período (24/11)
+
+Pedido do owner (24/11). A busca de dois ou três serviços em sequência (`id_opcoes_servicos`) ignorava o barbeiro e o período pedidos. Desde o ajuste do pacote, cerca de um quarto dos clientes passa por ela ao pedir "cabelo e barba".
+
+- **Base medida no TESTE:** cliente com pacote, "cabelo e barba amanhã de manhã com o Black": 0 de 2; saíram 21 inícios, das 09:20 às 19:20, de três barbeiros. "Corte adulto e barba express amanhã à tarde com o Black": 0 de 2; o agente voltava a perguntar o serviço e, numa rodada, ofereceu os combinados.
+- **Período e hora mínima:** valem pelo início da sequência, com a mesma regra da busca de um serviço (`bvgNoPedido`, `bvgQuando`, extraídas do caminho de um serviço, que passou a usá-las; saídas dele idênticas em 20.000 cenários comparados com a versão anterior).
+- **Barbeiro:** o informado na busca ou o já escolhido na conversa (`bvgBarbeiroDe`); `qualquer=true` traz todos. Com barbeiro escolhido só ele é consultado; os outros entram num estágio a mais quando ele não tem o pedido (menos chamadas no caso comum, nunca mais que antes).
+- **Quando não há o que foi pedido** (`bvgSeqsDoPedido`): saem as sequências que atendem um dos dois (as dele em outro horário e as de outros no período) e, sem essas, as do dia, com a orientação dizendo o que não há. A proposta dessas opções espera a escolha do cliente (`cliente_nao_escolheu` no turno da busca), como na busca de um serviço.
+- **Pacote:** a montagem do par (`pedido.dois_pacote`) preserva o barbeiro e o período, e vale também com a lista de barbeiros na tela ou com o serviço vindo de `pedido.servico` (quem pede um barbeiro passa por `listar_barbeiros` antes da busca).
+- **Avulsos ditos pelo nome** ("corte adulto e barba express"): frase no prompt manda buscar os dois em sequência, não o combinado.
+- **Barbeiro que não veio da lista:** recusa própria (`barbeiro_nao_listado`), mandando listar os barbeiros ou buscar sem barbeiro.
+- **Revisão independente:** seis achados, todos corrigidos com teste: a conversão do pacote se desfazia depois de `listar_barbeiros`; hora aproximada passava pela barreira; a busca dia a dia travava no primeiro dia com sequência fora do pedido (regressão para "depois das 18"); rebusca idêntica no turno seguinte barrava a escolha do cliente; orientação descrevia itens que a lista não tinha; recusa do barbeiro mandava reenviar a lista errada.
+
+| Medição no TESTE | Antes | Depois |
+|---|---|---|
+| Cliente com pacote, "cabelo e barba amanhã de manhã com o Black" e depois "barba design" | 0 de 2 | 3 de 3: só o Black, de 09:20 a 11:20 |
+| "Corte adulto e barba express amanhã à tarde com o Black" | 0 de 2 | 3 de 3: sequência só com o Black, de 12:00 a 17:20 |
+
+Limites: barbeiro de uma busca anterior restringe a sequência seguinte (como já acontece com um serviço; `qualquer=true` solta); com mais barbeiros que o teto por estágio, um dos outros fica fora das alternativas; sequência de três serviços não tem teste novo; "só a barba", dito logo depois da listagem de cabelo e barba de quem tem pacote, ainda vira o par enquanto a oferta é a lista de serviços ou de barbeiros.
 
 ## Laço: na terceira vez transfere direto (24/11)
 
@@ -754,3 +790,28 @@ Decisão do owner (24/11). Até aqui, na terceira vez da mesma pergunta o agente
 - **Ler em PROD quantas vezes o texto antigo do laço saiu e quantas eram legítimas.** A pergunta em texto, sem lista, não tem rede em código; a leitura do dia seguinte ao deploy mostra se alguém foi transferido sem motivo.
 - **Aviso à equipe:** conferir se o **Avise-me** está ligado no setor humano; a transferência por API não avisa ninguém sozinha.
 - Contraprova como roteiro permanente da suíte: não foi criado; a medição ficou no registro acima.
+
+## Aviso à equipe na transferência (24/11)
+
+Pedido do owner (24/11): quando a conversa é passada para a equipe, mandar do WhatsApp da loja uma mensagem para os celulares da equipe com o nome e o telefone do cliente. Mover o chamado de setor pela API não avisa ninguém no painel, e a conversa ficava esperando até alguém olhar a fila.
+
+### Como funciona
+
+- **Onde:** no `bv-graces`, depois de `Registrar handoff`: `Aviso equipe` (monta um texto por número) → `Avisa?` → `Enviar aviso equipe` → `Saida`. Vale para toda transferência (pedido do cliente, laço, limite, barbeiro só da equipe, pacote). Sem transferência, nada muda.
+- **Para quem:** `handoff.avisar_numeros` do ambiente. Em PROD, os dois números indicados pelo owner; no TESTE, lista vazia, e mesmo com número o destino fora de `teste.contatos_escrita` é simulado.
+- **Texto:** `textos.aviso_equipe`, com `{nome}` e `{telefone}`: "Aviso automático, não precisa responder. Atendimento passado para a equipe pelo agente. Cliente: … WhatsApp: …". Nome e telefone vêm do estado da conversa, nunca do modelo; sem nome no cadastro sai "sem nome no cadastro".
+- **Envio:** `POST /api/messages/send` pela conexão da loja, com `openTicket: '0'` (`bvMTexto`, o mesmo construtor dos textos ao cliente e do `bv-alerta`). Um aviso por transferência: depois dela o agente fica em silêncio e não há segunda transferência da mesma conversa. O envio não é repetido sozinho em caso de falha.
+- **Custo:** só no turno da transferência: uma chamada por número (duas em PROD), depois da resposta ao cliente já estar decidida.
+
+### Parecer do Chat Master
+
+- O endpoint e os campos são os documentados para texto na conexão Pro; `openTicket: '0'` não abre atendimento. Se o envio a um número sem contato cria contato no painel, não está documentado.
+- **Resposta da equipe ao aviso:** entra pela conexão da loja como mensagem de cliente, e o agente responde. O texto avisa que não precisa responder. Alternativas, não adotadas sem decisão do owner: o agente ignorar mensagens desses números (uma linha na recepção; eles deixariam de poder falar com o agente) ou **Ignorar Números** na conexão (efeito sobre o envio por API não documentado).
+- **Avise-me nativo** (Setores & Chatbot › Notificar Operador no WhatsApp): avisa todos os usuários do setor, com texto único para a empresa; não está documentado se dispara na transferência por API nem se aceita nome e telefone do cliente no texto. Por isso o aviso ficou em código.
+- Risco de bloqueio do chip por envios repetidos: sem limite documentado; dois destinatários fixos que têm o número da loja salvo são o caso de menor risco.
+
+### O que falta e limites
+
+- **Envio real não provado no TESTE:** lá o destino é simulado; a primeira mensagem de verdade sai em PROD. O construtor e a chamada são os mesmos do `bv-alerta`, que já envia em PROD.
+- **Falha no envio não é registrada** em `falhas_agente`: o aviso se perde em silêncio se o Chat Master recusar.
+- Se a equipe responder ao aviso, o agente responde como a um cliente.

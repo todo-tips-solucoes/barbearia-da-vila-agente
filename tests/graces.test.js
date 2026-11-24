@@ -1924,5 +1924,255 @@ console.log('graces.test.js segunda analise ok');
   assert.deepEqual(de2('barba', { dois_pacote: { cabelo: idC1, barba: null } }).reqs.map((q) => [q.path, q.qs.texto]), [['/agenda/servicos', 'barba']]); // outra busca segue como pedida
   // sem a fala dos dois e sem a marca do pacote ninguem le pacote na listagem
   assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: 'quero fazer a barba' }), ctxP(), cfg).reqs.map((q) => q.path), ['/agenda/servicos']);
+  // duas buscas de servico no MESMO turno ("raspar na navalha" e depois "barba", TESTE 24/11): a segunda nao desfaz a lista dos
+  // combinados; "vale uma vez" e por turno. No turno seguinte, com a lista dos combinados na tela, a busca do modelo segue como pedida.
+  {
+    const fala = 'Raspar na navalha e barba';
+    const p1 = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'raspar na navalha', texto_cliente: fala }), null, cfg);
+    const f1 = g.bvGPasso(p1.st, p1.reqs.map(() => ok(cat)), cfg).final;
+    assert.deepEqual([nomes(f1.resultado), f1.efeitos.pedido.dois_turno], [['Cabelo adulto + barba', 'Cabelo máquina + barba'], T2]);
+    const ctx2 = { pedido: { ...f1.efeitos.pedido }, opcoes: f1.efeitos.opcoes };
+    const p2b = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: fala }), ctx2, cfg);
+    assert.deepEqual(nomes(g.bvGPasso(p2b.st, p2b.reqs.map(() => ok(cat)), cfg).final.resultado), ['Cabelo adulto + barba', 'Cabelo máquina + barba']);
+    const p3b = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: 'prefiro corte e barba separados', turno_id: T1 }), ctx2, cfg);
+    assert.equal(nomes(g.bvGPasso(p3b.st, p3b.reqs.map(() => ok(cat)), cfg).final.resultado).length, 4);
+  }
+  // busca de servico sem resultado (PROD, 23/11): o resultado manda dizer qual nao achou, e a oferta anterior (a lista do outro
+  // servico pedido) fica como estava
+  {
+    const pz = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'sobrancelha' }), { pedido: {}, opcoes: ofS }, cfg);
+    const fz = g.bvGPasso(pz.st, [ok([])], cfg).final;
+    assert.deepEqual([fz.resultado.ok, fz.resultado.total, fz.resultado.servicos], [true, 0, []]);
+    assert.match(fz.resultado.orientacao, /nenhum serviço da loja com esse termo: diga ao cliente qual serviço você não achou.*sem trocar por outro/);
+    assert.equal(fz.efeitos.opcoes, undefined);
+    const fa = g.bvGPasso(pz.st, [ok([{ idServico: 'b1', descricaoAgenda: 'barba design', valorPadrao: 70 }])], cfg).final; // com resultado segue igual
+    assert.deepEqual([fa.resultado.orientacao, fa.efeitos.opcoes.itens.length], [undefined, 1]);
+  }
   console.log('graces.test.js cabelo e barba ok');
+}
+
+// ---- Sequencia respeita barbeiro e periodo (owner, 24/11: "cabelo e barba de manha com o Pedro" trazia o dia inteiro de todos) ----
+{
+  const D = '2026-11-26';
+  const ofS = { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte', valor: { idServico: 's1', nome: 'corte adulto', preco: 85, minutos: 40 } }, { id: '2', rotulo: 'barba', valor: { idServico: 's2', nome: 'barba', preco: 40, minutos: 30 } }] };
+  const NOMES = { p1: 'Pedro', p2: 'Rui', p3: 'Beto', bj: 'Jayme', [TESTE]: 'ZZ TESTE' };
+  const PEDRO = { idProfissional: 'p1', apelido: 'Pedro' };
+  // a lista de barbeiros ja mostrada ao cliente (listar_barbeiros): '1' Pedro, '2' Rui, '3' Qualquer barbeiro
+  const listados = { barbeiros: [{ opcao_id: '1', ...PEDRO }, { opcao_id: '2', idProfissional: 'p2', apelido: 'Rui' }], qualquer_opcao: '3' };
+  const mais40 = (h) => { const m = Number(h.slice(0, 2)) * 60 + Number(h.slice(3)) + 40; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
+  // agenda = inicios de sequencia de cada barbeiro (corte 40 min + barba em seguida); fazem = quem faz cada servico
+  const rodar = (pl, agenda, fazem, c = cfg, falhaEm = 0) => { // falhaEm: estagio (1 = barbeiros) cuja 1a resposta e um 500
+    if (pl.final) return { fim: pl.final, reqs: 0, consultados: [] };
+    const profs = (ids) => ok(ids.map((id) => ({ idProfissional: id, apelido: `${NOMES[id]} ` })));
+    const grade = (q) => (q.path === '/agenda/horarios' ? ok({ horarios: [] }) : q.qs.idServico === 's1' ? ok({ minutos: 40, horarios: agenda[q.qs.idProfissional] || [] }) : ok({ minutos: 30, horarios: (agenda[q.qs.idProfissional] || []).map(mais40) }));
+    let reqs = pl.reqs.length, estagios = 1;
+    const consultados = [];
+    let x = g.bvGPasso(pl.st, [profs(fazem[0]), profs(fazem[1])], c);
+    while (x.reqs) {
+      reqs += x.reqs.length; estagios += 1;
+      assert.ok(x.reqs.length <= 20); // teto de consultas por estagio
+      consultados.push(...new Set(x.reqs.map((q) => q.qs.idProfissional)));
+      x = g.bvGPasso(x.st, x.reqs.map((q, k) => (estagios === falhaEm && k === 0 ? resp(500, { code: 'ERRO_INTERNO' }) : grade(q))), c);
+    }
+    return { fim: x.final, reqs, estagios, consultados };
+  };
+  const TODOS = [['p1', 'p2'], ['p1', 'p2']];
+  const seq = (o, pedido, agenda, fazem = TODOS, c = cfg, falhaEm = 0, of = ofS) => rodar(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: D, ...o }), ctxOp(of, { idCliente: 'c1', ...pedido }), c), agenda, fazem, c, falhaEm);
+  const lista = (x) => x.fim.resultado.opcoes.map((o) => `${o.hora} ${o.barbeiro}`);
+  const AG = { p1: ['09:00', '14:00'], p2: ['10:00', '15:00'] };
+  // agendar no turno da busca (T2) e no turno seguinte (T1), com a 1a opcao da lista
+  const agendar = (x, turno) => semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: x.fim.resultado.opcoes[0].id, turno_id: turno }), ctxOp(x.fim.efeitos.opcoes, { idCliente: 'c1', ...x.fim.efeitos.pedido }), cfg)).final.resultado;
+
+  // sem barbeiro e sem periodo: como antes (todos os barbeiros que fazem os dois, o dia inteiro); a contagem de chamadas e a base
+  let x = seq({}, {}, AG);
+  assert.deepEqual([lista(x), x.fim.resultado.orientacao, x.reqs, x.estagios], [['09:00 Pedro', '10:00 Rui', '14:00 Pedro', '15:00 Rui'], undefined, 8, 2]); // 2 + 2 barbeiros x (2 grades + 1 ocupacao)
+  assert.deepEqual([x.fim.efeitos.pedido.busca.outros, x.fim.efeitos.pedido.barbeiro], [false, undefined]);
+  assert.equal(agendar(x, T2).aguardando_confirmacao, true); // lista do pedido: segue como antes
+  const BASE = x.reqs;
+
+  // periodo: ha no periodo => so as do periodo (pelo inicio da sequencia)
+  x = seq({ periodo: 'manha' }, {}, AG);
+  assert.deepEqual([lista(x), x.fim.resultado.orientacao, x.reqs], [['09:00 Pedro', '10:00 Rui'], undefined, BASE]);
+  x = seq({ periodo: 'tarde' }, {}, AG);
+  assert.deepEqual(lista(x), ['14:00 Pedro', '15:00 Rui']);
+  // nao ha no periodo, ha no dia => diz isso e entrega as do dia; quem escolhe e o cliente (nao vira proposta no turno da busca)
+  x = seq({ periodo: 'noite' }, {}, AG);
+  assert.deepEqual([lista(x), x.reqs], [['09:00 Pedro', '10:00 Rui', '14:00 Pedro', '15:00 Rui'], BASE]);
+  assert.match(x.fim.resultado.orientacao, /^sem horário para os serviços em sequência de noite nesse dia: diga isso ao cliente; a lista traz os horários do dia\. Pergunte qual horário ele prefere, sem escolher por ele$/);
+  assert.equal(x.fim.efeitos.pedido.busca.outros, true);
+  assert.equal(agendar(x, T2).code, 'cliente_nao_escolheu');
+  assert.equal(agendar(x, T1).aguardando_confirmacao, true);
+  // "depois das 18h" segue a mesma regra do periodo (antes a lista saia vazia e sem orientacao)
+  x = seq({ a_partir: '18:00' }, {}, AG);
+  assert.equal(lista(x).length, 4);
+  assert.match(x.fim.resultado.orientacao, /^sem horário para os serviços em sequência a partir das 18:00 nesse dia: diga isso/);
+  assert.deepEqual(lista(seq({ a_partir: '14:00' }, {}, AG)), ['14:00 Pedro', '15:00 Rui']);
+  // nao ha no dia: a decisao de sempre (barbeiros diferentes | agendar separado), com ou sem periodo
+  for (const o of [{}, { periodo: 'manha' }]) {
+    x = seq(o, {}, {});
+    assert.deepEqual([x.fim.resultado.sem_barbeiro_unico, x.fim.efeitos.opcoes.tipo, x.reqs], [true, 'modo_encadeamento', BASE]);
+  }
+
+  // barbeiro escolhido (pela opcao ou o que ja vale na conversa) e ele tem: so ele e consultado e so as dele saem
+  for (const [o, pedido] of [[{ id_opcao_barbeiro: '1' }, listados], [{}, { barbeiro: PEDRO }]]) {
+    x = seq(o, pedido, AG);
+    assert.deepEqual([lista(x), x.fim.resultado.orientacao, x.consultados, x.reqs, x.estagios], [['09:00 Pedro', '14:00 Pedro'], undefined, ['p1'], 5, 2]); // 2 + (2 grades + 1 ocupacao)
+    assert.deepEqual([x.fim.efeitos.pedido.barbeiro, x.fim.efeitos.pedido.busca.outros], [PEDRO, false]); // segue valendo na conversa
+  }
+  x = seq({ id_opcao_barbeiro: '1', periodo: 'manha' }, listados, AG);
+  assert.deepEqual([lista(x), x.fim.resultado.orientacao, x.reqs], [['09:00 Pedro'], undefined, 5]);
+  // ele nao tem no dia e outros tem: diz isso pelo apelido e entrega as dos outros; as chamadas nao passam das de antes
+  x = seq({ id_opcao_barbeiro: '1' }, listados, { p2: AG.p2 });
+  assert.deepEqual([lista(x), x.consultados, x.reqs, x.estagios], [['10:00 Rui', '15:00 Rui'], ['p1', 'p2'], BASE, 3]);
+  assert.match(x.fim.resultado.orientacao, /^Pedro não tem horário para os serviços em sequência nesse dia: diga isso ao cliente; os horários da lista são de outros barbeiros\. Pergunte qual horário ele prefere, sem escolher por ele$/);
+  assert.equal(x.fim.efeitos.pedido.busca.outros, true);
+  assert.equal(agendar(x, T2).code, 'cliente_nao_escolheu'); // pediu o Pedro: a sequencia de outro barbeiro espera a resposta dele
+  assert.equal(agendar(x, T1).aguardando_confirmacao, true);
+  // ele nao tem no periodo: as dele em outro horario e as de outros barbeiros no periodo (a das 15:00 do Rui nao atende nem um nem outro)
+  x = seq({ periodo: 'manha' }, { barbeiro: PEDRO }, { p1: ['14:00'], p2: AG.p2 });
+  assert.deepEqual([lista(x), x.reqs], [['10:00 Rui', '14:00 Pedro'], BASE]);
+  assert.match(x.fim.resultado.orientacao, /^Pedro não tem horário para os serviços em sequência de manha nesse dia: diga isso ao cliente; a lista traz os horários dele em outro horário do dia e os de outros barbeiros de manha nesse dia\. Pergunte/);
+  x = seq({ periodo: 'manha' }, { barbeiro: PEDRO }, { p1: ['14:00'] }); // so ele tem, e fora do periodo
+  assert.deepEqual(lista(x), ['14:00 Pedro']);
+  assert.match(x.fim.resultado.orientacao, /a lista traz os horários dele em outro horário do dia\. Pergunte/);
+  assert.equal(agendar(x, T2).code, 'cliente_nao_escolheu'); // unica opcao, mas fora do que ele pediu
+  x = seq({ periodo: 'manha' }, { barbeiro: PEDRO }, { p2: ['15:00'] }); // nem ele no dia, nem ninguem no periodo
+  assert.deepEqual(lista(x), ['15:00 Rui']);
+  assert.match(x.fim.resultado.orientacao, /^Pedro não tem horário para os serviços em sequência nesse dia: diga isso ao cliente; os horários da lista são de outros barbeiros, em outro horário do dia \(de manha nesse dia não há com ninguém\)\. Pergunte/);
+  x = seq({ periodo: 'manha' }, { barbeiro: PEDRO }, {}); // ninguem no dia: a decisao de sempre
+  assert.deepEqual([x.fim.resultado.sem_barbeiro_unico, x.reqs], [true, BASE]);
+  // ele nao faz um dos servicos: diz isso e entrega as de quem faz os dois, sem consultar a agenda dele
+  x = seq({ id_opcao_barbeiro: '1' }, listados, AG, [['p1', 'p2'], ['p2']]);
+  assert.deepEqual([lista(x), x.consultados, x.reqs], [['10:00 Rui', '15:00 Rui'], ['p2'], 5]);
+  assert.match(x.fim.resultado.orientacao, /^Pedro não faz todos os serviços pedidos: diga isso ao cliente; os horários da lista são de outros barbeiros\. Pergunte/);
+  assert.equal(seq({ id_opcao_barbeiro: '1' }, listados, AG, [['p1'], ['p2']]).fim.resultado.sem_barbeiro_unico, true); // ninguem faz os dois
+  // hora aproximada: vale entre as sequencias dele
+  x = seq({ id_opcao_barbeiro: '1', hora: '14:30' }, listados, AG);
+  assert.deepEqual([lista(x), x.reqs], [['14:00 Pedro'], 5]);
+  // teto de barbeiros por estagio: o escolhido e sempre consultado, mesmo sendo o ultimo da lista da Graces
+  const c2 = { ...cfg, graces: { max_consultas_estagio: 6 } }; // 2 barbeiros
+  x = seq({}, { barbeiro: PEDRO }, { p3: ['11:00'] }, [['p2', 'p3', 'p1'], ['p2', 'p3', 'p1']], c2);
+  assert.deepEqual([x.consultados, x.fim.resultado.sem_barbeiro_unico], [['p1', 'p2'], true]);
+
+  // qualquer=true (campo ou o item "Qualquer barbeiro"): todos, mesmo com barbeiro ja escolhido na conversa
+  for (const o of [{ qualquer: true }, { id_opcao_barbeiro: '3' }]) {
+    x = seq(o, { ...listados, barbeiro: PEDRO }, AG);
+    assert.deepEqual([lista(x), x.fim.resultado.orientacao, x.reqs, x.fim.efeitos.pedido.barbeiro], [['09:00 Pedro', '10:00 Rui', '14:00 Pedro', '15:00 Rui'], undefined, BASE, undefined]);
+  }
+
+  // clausula petrea: barbeiro so da equipe escolhido => encaminha, sem consultar; na resposta da Graces ele nunca entra na lista
+  const cj = { ...cfg, humanos: [{ id: 'bj', nome: 'Jayme' }] };
+  x = seq({}, { barbeiro: { idProfissional: 'bj', apelido: 'Jayme' } }, AG, TODOS, cj);
+  assert.deepEqual([x.fim.resultado.code, x.fim.resultado.motivo, x.fim.efeitos.pedido.handoff, x.reqs], ['encaminhar_equipe', 'barbeiro_humano', true, 0]);
+  x = seq({ periodo: 'manha' }, {}, { ...AG, bj: ['08:00'], [TESTE]: ['08:00'] }, [['bj', TESTE, 'p1', 'p2'], ['bj', TESTE, 'p1', 'p2']], cj);
+  assert.deepEqual([lista(x), x.consultados], [['09:00 Pedro', '10:00 Rui'], ['p1', 'p2']]);
+  x = seq({ id_opcao_barbeiro: '1' }, listados, { bj: ['08:00'], [TESTE]: ['08:00'] }, [['bj', TESTE, 'p1'], ['bj', TESTE, 'p1']], cj); // sem alternativa que possa ser ofertada
+  assert.deepEqual([x.fim.resultado.sem_barbeiro_unico, x.consultados], [true, ['p1']]);
+  assert.doesNotMatch(JSON.stringify(x.fim), /Jayme|TESTE/);
+  // opcao de barbeiro que nao veio de uma lista (id inventado, o nome no lugar do id) ou o barbeiro de teste: nunca troca de barbeiro em
+  // silencio, e a recusa diz o que fazer (a oferta guardada e a de servicos: "mande a lista de novo" nao dizia qual)
+  for (const [o, pedido] of [[{ id_opcao_barbeiro: '9' }, listados], [{ id_opcao_barbeiro: 'Pedro' }, {}], [{}, { barbeiro: { idProfissional: TESTE, apelido: 'ZZ TESTE' } }]]) {
+    x = seq(o, pedido, AG);
+    assert.deepEqual([x.fim.resultado.code, x.reqs, x.fim.efeitos], ['barbeiro_nao_listado', 0, {}]);
+    assert.match(x.fim.resultado.orientacao, /nada foi consultado: chame listar_barbeiros com id_opcao_servico de um dos serviços e repita esta busca com o id_opcao_barbeiro da lista; se o cliente não pediu barbeiro, busque sem barbeiro$/);
+  }
+
+  // conversao do pacote (busca de UM servico vira o par): barbeiro, qualquer e periodo que o modelo mandou seguem valendo
+  const pac = (o, pedido = {}) => g.bvGPlano(entrada({ operacao: 'horarios_livres', data: D, id_opcao_servico: '2', ...o }), ctxOp(ofS, { idCliente: 'c1', dois_pacote: { cabelo: '1', barba: null }, ...listados, ...pedido }), cfg);
+  let pp = pac({ id_opcao_barbeiro: '1', periodo: 'manha' });
+  assert.deepEqual([pp.st.in.id_opcoes_servicos, pp.st.in.id_opcao_barbeiro, pp.st.meta.enc, pp.st.meta.esc, pp.st.meta.periodo], [['1', '2'], '1', true, PEDRO, 'manha']);
+  x = rodar(pp, AG, TODOS);
+  assert.deepEqual([lista(x), x.reqs], [['09:00 Pedro'], 5]);
+  assert.deepEqual(x.fim.efeitos.opcoes.itens[0].valor.itens.map((it) => [it.servico, it.hora, it.apelido]), [['corte adulto', '09:00', 'Pedro'], ['barba', '09:40', 'Pedro']]);
+  assert.deepEqual(pac({ periodo: 'tarde' }, { barbeiro: PEDRO }).st.meta.esc, PEDRO); // sem a opcao, o barbeiro ja escolhido na conversa
+  pp = pac({ qualquer: true, periodo: 'tarde' }, { barbeiro: PEDRO });
+  assert.deepEqual([pp.st.in.qualquer, pp.st.meta.esc, pp.st.meta.periodo], [true, null, 'tarde']);
+  assert.deepEqual(lista(rodar(pp, AG, TODOS)), ['14:00 Pedro', '15:00 Rui']);
+  assert.deepEqual([pac({}).st.meta.esc, pac({}).st.meta.periodo], [null, undefined]); // sem barbeiro e sem periodo: como antes
+
+  // "Outro dia" (mesma sequencia em outra data) leva periodo e barbeiro; "Barbeiros diferentes" leva so o periodo
+  const modos = { tipo: 'modo_encadeamento', itens: [{ id: '1', rotulo: 'Outro dia', valor: 'outro_dia' }, { id: '2', rotulo: 'Barbeiros diferentes', valor: 'barbeiros_diferentes' }] };
+  const pedM = { idCliente: 'c1', barbeiro: PEDRO, seq_dia: '2026-11-25', servicos: ofS.itens.map((it) => ({ opcao_id: it.id, ...it.valor })) };
+  const modo = (id, o) => g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao: id, data: D, ...o }), ctxOp(modos, pedM), cfg);
+  pp = modo('1', { periodo: 'tarde' });
+  assert.deepEqual([pp.st.meta.etapa, pp.st.meta.esc, pp.st.meta.periodo], ['enc_prof', PEDRO, 'tarde']);
+  assert.deepEqual(lista(rodar(pp, AG, TODOS)), ['14:00 Pedro']);
+  pp = modo('2', { periodo: 'tarde' });
+  assert.deepEqual([pp.st.meta.etapa, pp.st.meta.esc, pp.st.meta.periodo], ['dif_prof', null, 'tarde']);
+  const dif = (o, agenda) => rodar(modo('2', o), agenda, [['p1'], ['p2']]).fim; // corte so com o Pedro, barba so com o Rui
+  let fd = dif({ periodo: 'tarde' }, { p1: ['09:00', '14:00'], p2: ['09:00', '14:00'] });
+  assert.deepEqual([fd.resultado.opcoes.map((o) => `${o.hora} ${o.barbeiros.join('+')}`), fd.resultado.orientacao, fd.efeitos.pedido.busca.outros, fd.efeitos.pedido.barbeiro], [['14:00 Pedro+Rui'], undefined, false, undefined]);
+  fd = dif({ periodo: 'noite' }, { p1: ['09:00', '14:00'], p2: ['09:00', '14:00'] });
+  assert.deepEqual([fd.resultado.opcoes.map((o) => o.hora), fd.efeitos.pedido.busca.outros], [['09:00', '14:00'], true]);
+  assert.match(fd.resultado.orientacao, /^sem horário para os serviços em sequência de noite nesse dia: diga isso ao cliente; a lista traz os horários do dia\. Pergunte/);
+
+  // ---- revisao de 24/11 ----
+  const vistos = ofS.itens.map((it) => ({ id: it.id, ...it.valor }));
+  const depois = (x, pedido = {}) => ctxOp(x.fim.efeitos.opcoes, { idCliente: 'c1', servicos_vistos: vistos, ...pedido, ...x.fim.efeitos.pedido }); // o contexto da chamada seguinte
+  // A. pacote + barbeiro: quem pede um barbeiro passa por listar_barbeiros, que troca a oferta para barbeiros e guarda UM servico no
+  // pedido; a busca desse servico (pelo id, pelo nome ou sem servico nenhum) continua virando o par, com o barbeiro e o periodo
+  const ofB = { tipo: 'barbeiro', itens: [{ id: '1', rotulo: 'Pedro', valor: PEDRO }, { id: '2', rotulo: 'Rui', valor: { idProfissional: 'p2', apelido: 'Rui' } }, { id: '3', rotulo: 'Qualquer barbeiro', valor: { qualquer: true } }] };
+  const pedB = { idCliente: 'c1', dois_pacote: { cabelo: '1', barba: null }, servicos_vistos: vistos, servico: { ...ofS.itens[1].valor, opcao_id: '2' }, ...listados };
+  const pacB = (o, pedido = pedB, of = ofB) => g.bvGPlano(entrada({ operacao: 'horarios_livres', data: D, id_opcao_barbeiro: '1', periodo: 'manha', ...o }), ctxOp(of, pedido), cfg);
+  for (const o of [{ id_opcao_servico: '2' }, {}, { id_opcao_servico: 'barba' }]) {
+    pp = pacB(o);
+    assert.deepEqual([pp.st.in.id_opcoes_servicos, pp.st.in.id_opcao_servico, pp.st.in.servico_nome, pp.st.meta.esc, pp.st.meta.periodo, pp.reqs.map((q) => q.qs.idServico)], [['1', '2'], undefined, undefined, PEDRO, 'manha', ['s1', 's2']], JSON.stringify(o));
+    x = rodar(pp, AG, TODOS);
+    assert.deepEqual([lista(x), x.reqs], [['09:00 Pedro'], 5]);
+    assert.deepEqual(x.fim.efeitos.opcoes.itens[0].valor.itens.map((it) => [it.servico, it.hora]), [['corte adulto', '09:00'], ['barba', '09:40']]);
+  }
+  assert.deepEqual(pacB({ id_opcao_barbeiro: '3' }).st.meta.esc, null); // "Qualquer barbeiro" da lista: o par, com todos
+  // pacote de barba e a busca do corte: o par sai na mesma ordem (cabelo primeiro)
+  assert.deepEqual(pacB({}, { ...pedB, dois_pacote: { cabelo: null, barba: '2' }, servico: { ...ofS.itens[0].valor, opcao_id: '1' } }).st.in.id_opcoes_servicos, ['1', '2']);
+  // segue sendo busca de um servico so: sem a marca do pacote, depois que a oferta ja e de horarios, e o proprio servico do pacote
+  for (const um of [pacB({ id_opcao_servico: '2' }, { ...pedB, dois_pacote: null }), pacB({}, pedB, { tipo: 'horario', itens: [] }), pacB({ id_opcao_servico: '1' })]) {
+    assert.deepEqual([um.st.meta.enc, um.reqs.map((q) => q.path)], [undefined, ['/agenda/horarios-livres', '/agenda/horarios']]);
+  }
+  // B. hora pedida sem horario perto: a lista traz os mais proximos e espera a escolha do cliente, como na busca de um servico
+  x = seq({ id_opcao_barbeiro: '1', hora: '17:00' }, listados, AG);
+  assert.deepEqual([lista(x), x.fim.efeitos.pedido.busca.outros], [['09:00 Pedro', '14:00 Pedro'], true]);
+  assert.match(x.fim.resultado.orientacao, /^não há horário perto das 17:00/);
+  assert.equal(agendar(x, T2).code, 'cliente_nao_escolheu');
+  assert.equal(agendar(x, T1).aguardando_confirmacao, true);
+  assert.deepEqual([x.fim.efeitos.pedido.busca.outros, x.fim.efeitos.pedido.busca.fora], [true, false]); // "mais proximos" nao e lista fora do pedido: segue travando o turno
+  // C. busca dia a dia no mesmo turno ("de manha, qualquer dia" | "depois das 18"): o dia que so tem sequencia fora do pedido nao
+  // trava a busca do dia seguinte; a lista que atendeu o pedido continua sendo a unica do turno
+  const outroDia = (x, o) => g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: '2026-11-27', ...o }), depois(x), cfg);
+  for (const o of [{ periodo: 'manha' }, { a_partir: '18:00' }]) {
+    x = seq(o, { servicos_vistos: vistos }, { p1: ['14:00'], p2: ['15:00'] });
+    assert.deepEqual([x.fim.efeitos.pedido.busca.n, x.fim.efeitos.pedido.busca.outros, x.fim.efeitos.pedido.busca.fora, x.fim.efeitos.opcoes.tipo], [2, true, true, 'sequencia']);
+    assert.deepEqual(outroDia(x, o).reqs.map((q) => q.path), ['/servicos/profissionais', '/servicos/profissionais']);
+  }
+  x = seq({ periodo: 'manha' }, { servicos_vistos: vistos }, AG);
+  assert.equal(outroDia(x, { periodo: 'manha' }).final.resultado.code, 'lista_ja_definida');
+  // D. o cliente toca num item da lista mista e o modelo repete a MESMA busca antes de agendar: a busca guarda o turno da primeira e a
+  // escolha passa; no turno da primeira busca a barreira segue valendo, e uma busca diferente volta a contar do turno dela
+  const mista = (turno, ctx) => rodar(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: D, periodo: 'manha', turno_id: turno }), ctx, cfg), { p1: ['14:00'], p2: AG.p2 }, TODOS);
+  const m1 = mista(T1, ctxOp(ofS, { idCliente: 'c1', servicos_vistos: vistos, barbeiro: PEDRO }));
+  assert.deepEqual([lista(m1), m1.fim.efeitos.pedido.busca.turno, m1.fim.efeitos.pedido.busca.outros], [['10:00 Rui', '14:00 Pedro'], T1, true]);
+  assert.equal(agendar(m1, T1).code, 'cliente_nao_escolheu');
+  const m2 = mista(T2, depois(m1));
+  assert.deepEqual([lista(m2), m2.fim.efeitos.pedido.busca.turno, m2.fim.efeitos.pedido.busca.outros], [['10:00 Rui', '14:00 Pedro'], T1, true]);
+  assert.equal(agendar(m2, T2).aguardando_confirmacao, true);
+  assert.equal(agendar(mista(T1, depois(m1)), T1).code, 'cliente_nao_escolheu'); // a repeticao no turno da primeira busca nao libera
+  x = rodar(g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: D, periodo: 'noite' }), depois(m1), cfg), AG, TODOS); // outra busca, no T2
+  assert.deepEqual([x.fim.efeitos.pedido.busca.turno, agendar(x, T2).code], [T2, 'cliente_nao_escolheu']);
+  // E. com hora pedida a lista e so um trecho: a orientacao fala dos itens entregues
+  x = seq({ periodo: 'manha', hora: '10:00' }, { barbeiro: PEDRO }, { p1: ['14:00'], p2: ['10:00', '15:00'] });
+  assert.deepEqual(lista(x), ['10:00 Rui']);
+  assert.match(x.fim.resultado.orientacao, /^Pedro não tem horário para os serviços em sequência de manha nesse dia: diga isso ao cliente; os horários da lista são de outros barbeiros\. Pergunte qual horário ele prefere, sem escolher por ele$/);
+  x = seq({ periodo: 'noite', hora: '19:00' }, {}, AG);
+  assert.deepEqual(lista(x), ['14:00 Pedro', '15:00 Rui']);
+  assert.match(x.fim.resultado.orientacao, /^não há horário perto das 19:00; a lista traz os mais próximos.*; sem horário para os serviços em sequência de noite nesse dia: diga isso ao cliente; a lista traz outros horários do dia\. Pergunte/);
+  x = seq({ periodo: 'manha', hora: '15:00' }, { barbeiro: PEDRO }, { p1: ['14:00'], p2: ['10:00', '15:00'] }); // perto das 15h so ha o dele
+  assert.deepEqual(lista(x), ['14:00 Pedro']);
+  assert.match(x.fim.resultado.orientacao, /a lista traz os horários dele em outro horário do dia\. Pergunte/);
+  // G. a consulta dos outros barbeiros (estagio a mais) falha: as do barbeiro escolhido, ja calculadas, seguem; sem nenhuma dele, e falha
+  x = seq({ periodo: 'manha' }, { barbeiro: PEDRO }, { p1: ['14:00'], p2: AG.p2 }, TODOS, cfg, 3);
+  assert.deepEqual([x.fim.resultado.ok, lista(x), x.estagios, x.fim.efeitos.falha.operacao], [true, ['14:00 Pedro'], 3, 'horarios_livres']);
+  assert.match(x.fim.resultado.orientacao, /^Pedro não tem horário para os serviços em sequência de manha nesse dia: diga isso ao cliente; a lista traz os horários dele em outro horário do dia\. Pergunte/);
+  x = seq({ periodo: 'manha' }, { barbeiro: PEDRO }, { p2: AG.p2 }, TODOS, cfg, 3);
+  assert.deepEqual([x.fim.resultado.ok, x.fim.efeitos.opcoes, !!x.fim.efeitos.falha], [false, undefined, true]);
+  assert.equal(seq({}, {}, AG, TODOS, cfg, 2).fim.resultado.ok, false); // sem barbeiro escolhido: como antes
+  console.log('graces.test.js sequencia com barbeiro e periodo ok');
 }

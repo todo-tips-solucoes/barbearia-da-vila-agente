@@ -49,7 +49,7 @@ class BvGraces(unittest.TestCase):
         self.assertIn("bvGNormalizar", self.nos["Normalizar"]["parameters"]["jsCode"])
 
     def test_http_graces_com_timeout_neverError_e_credencial(self):
-        https = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.httpRequest" and n["name"] != "Transferir ticket"]
+        https = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.httpRequest" and n["name"] not in ("Transferir ticket", "Enviar aviso equipe")]  # os dois do Chat Master tem teste proprio
         self.assertEqual(len(https), 2)  # laco: 1 sem corpo + 1 com corpo
         for n in https:
             p = n["parameters"]
@@ -596,6 +596,45 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
             self.assertEqual(c["handoff"]["setor_id"], self.cfgs[amb]["handoff"]["setor_id"])
             self.assertEqual(c["graces"]["max_estagios"], self.cfgs[amb]["graces"]["max_estagios"])
             self.assertTrue(c["humanos"])  # clausula petrea: os barbeiros so da equipe chegam a todos os nos
+
+    def test_aviso_a_equipe_na_transferencia(self):
+        # owner, 24/11: a transferencia por API e silenciosa no painel; a equipe recebe o nome e o telefone do cliente pela conexao da loja
+        con = json.loads(ler("workflows/sub/bv-graces.json"))["connections"]
+        alvo = lambda n: [[x["node"] for x in saida] for saida in con[n]["main"]]
+        self.assertEqual([alvo("Registrar handoff"), alvo("Aviso equipe"), alvo("Avisa?"), alvo("Enviar aviso equipe")], [[["Aviso equipe"]], [["Avisa?"]], [["Enviar aviso equipe"], ["Saida"]], [["Saida"]]])
+        self.assertEqual(alvo("Handoff?")[1], ["Saida"])  # sem transferencia nada muda
+        env = self.graces["Enviar aviso equipe"]
+        self.assertEqual([env.get("onError"), env.get("retryOnFail"), env["parameters"]["url"]], ["continueRegularOutput", None, "=https://api.chatmasterveloz.com{{ $json.req.path }}"])  # envio nunca e repetido sozinho
+        self.assertEqual(self.graces["Saida"]["parameters"].get("mode", "runOnceForAllItems"), "runOnceForAllItems")  # dois avisos, uma saida so
+        js = self.graces["Aviso equipe"]["parameters"]["jsCode"]
+        self.assertNotIn("$fromAI", js)
+        self.assertIn("{{BV:handoff.avisar_numeros}}", js)
+        self.assertEqual(self.cfgs["producao"]["handoff"]["avisar_numeros"], ["5511971634416", "5511995164884"])
+        self.assertEqual(self.cfgs["integracao"]["handoff"]["avisar_numeros"], [])
+        if not shutil.which("node"):
+            self.skipTest("node ausente")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("deploy_n8n_aviso", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
+        dep = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(dep)
+
+        def rodar(amb, pedido, cfg=None):
+            cod = json.loads(dep.renderizar(json.dumps({"js": js}), cfg or self.cfgs[amb], RAIZ))["js"]
+            refs = {"Contexto": [{"pedido": pedido}], "Gatilho": [{"telefone": "+5511988887777"}]}
+            r = subprocess.run(["node", os.path.join(RAIZ, "tests", "harness_code_node.js")], capture_output=True, text=True, input=json.dumps({"js": cod, "input": [{}], "refs": refs}))
+            self.assertEqual(r.returncode, 0, r.stderr[:500])
+            return json.loads(r.stdout)
+        prod = rodar("producao", {"cliente_nome": "joao"})
+        self.assertEqual([x["enviar"] for x in prod], [True, True])
+        self.assertEqual([x["req"]["body"]["number"] for x in prod], ["5511971634416", "5511995164884"])
+        b = prod[0]["req"]["body"]
+        self.assertEqual([b["whatsappId"], b["openTicket"], b["body"]], [str(self.cfgs["producao"]["chatmaster"]["whatsapp_id"]), "0", "Aviso automático, não precisa responder. Atendimento passado para a equipe pelo agente. Cliente: Joao. WhatsApp: +5511988887777"])
+        self.assertIn("sem nome no cadastro", rodar("producao", {})[0]["req"]["body"]["body"])
+        # TESTE: lista vazia; e mesmo com numero configurado o destino fora da lista de escrita e simulado. Sempre sai um item (a Saida roda)
+        self.assertEqual(rodar("integracao", {"cliente_nome": "joao"}), [{"enviar": False}])
+        com_numero = json.loads(json.dumps(self.cfgs["integracao"]))
+        com_numero["handoff"]["avisar_numeros"] = ["5511971634416"]
+        self.assertEqual(rodar("integracao", {"cliente_nome": "joao"}, com_numero), [{"enviar": False}])
 
     def test_teto_de_agendamentos_por_contato(self):
         q = self.graces["Contexto"]["parameters"]["query"]
