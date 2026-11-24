@@ -724,6 +724,26 @@ Limites:
 - **Cliente com pacote que quer o combinado mesmo assim:** a listagem de "cabelo e barba" volta ao caminho do pacote; a saída é pedir o serviço pelo nome.
 - **Prova com escrita não feita:** confirmar o agendamento consumiria uma sessão do pacote de teste, que a API não devolve. O abatimento na escrita é o do item 12, já provado em 23/11.
 
+### Sequência respeita o barbeiro e o período (24/11)
+
+Pedido do owner (24/11). A busca de dois ou três serviços em sequência (`id_opcoes_servicos`) ignorava o barbeiro e o período pedidos. Desde o ajuste do pacote, cerca de um quarto dos clientes passa por ela ao pedir "cabelo e barba".
+
+- **Base medida no TESTE:** cliente com pacote, "cabelo e barba amanhã de manhã com o Black": 0 de 2; saíram 21 inícios, das 09:20 às 19:20, de três barbeiros. "Corte adulto e barba express amanhã à tarde com o Black": 0 de 2; o agente voltava a perguntar o serviço e, numa rodada, ofereceu os combinados.
+- **Período e hora mínima:** valem pelo início da sequência, com a mesma regra da busca de um serviço (`bvgNoPedido`, `bvgQuando`, extraídas do caminho de um serviço, que passou a usá-las; saídas dele idênticas em 20.000 cenários comparados com a versão anterior).
+- **Barbeiro:** o informado na busca ou o já escolhido na conversa (`bvgBarbeiroDe`); `qualquer=true` traz todos. Com barbeiro escolhido só ele é consultado; os outros entram num estágio a mais quando ele não tem o pedido (menos chamadas no caso comum, nunca mais que antes).
+- **Quando não há o que foi pedido** (`bvgSeqsDoPedido`): saem as sequências que atendem um dos dois (as dele em outro horário e as de outros no período) e, sem essas, as do dia, com a orientação dizendo o que não há. A proposta dessas opções espera a escolha do cliente (`cliente_nao_escolheu` no turno da busca), como na busca de um serviço.
+- **Pacote:** a montagem do par (`pedido.dois_pacote`) preserva o barbeiro e o período, e vale também com a lista de barbeiros na tela ou com o serviço vindo de `pedido.servico` (quem pede um barbeiro passa por `listar_barbeiros` antes da busca).
+- **Avulsos ditos pelo nome** ("corte adulto e barba express"): frase no prompt manda buscar os dois em sequência, não o combinado.
+- **Barbeiro que não veio da lista:** recusa própria (`barbeiro_nao_listado`), mandando listar os barbeiros ou buscar sem barbeiro.
+- **Revisão independente:** seis achados, todos corrigidos com teste: a conversão do pacote se desfazia depois de `listar_barbeiros`; hora aproximada passava pela barreira; a busca dia a dia travava no primeiro dia com sequência fora do pedido (regressão para "depois das 18"); rebusca idêntica no turno seguinte barrava a escolha do cliente; orientação descrevia itens que a lista não tinha; recusa do barbeiro mandava reenviar a lista errada.
+
+| Medição no TESTE | Antes | Depois |
+|---|---|---|
+| Cliente com pacote, "cabelo e barba amanhã de manhã com o Black" e depois "barba design" | 0 de 2 | 3 de 3: só o Black, de 09:20 a 11:20 |
+| "Corte adulto e barba express amanhã à tarde com o Black" | 0 de 2 | 3 de 3: sequência só com o Black, de 12:00 a 17:20 |
+
+Limites: barbeiro de uma busca anterior restringe a sequência seguinte (como já acontece com um serviço; `qualquer=true` solta); com mais barbeiros que o teto por estágio, um dos outros fica fora das alternativas; sequência de três serviços não tem teste novo; "só a barba", dito logo depois da listagem de cabelo e barba de quem tem pacote, ainda vira o par enquanto a oferta é a lista de serviços ou de barbeiros.
+
 ## Laço: na terceira vez transfere direto (24/11)
 
 Decisão do owner (24/11). Até aqui, na terceira vez da mesma pergunta o agente só oferecia a equipe ("Quer que eu passe para a equipe te ajudar por aqui?"). Em PROD (23/11) um cliente não respondeu a essa oferta e a conversa ficou na fila de ninguém.

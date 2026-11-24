@@ -763,7 +763,7 @@
     {
       "parameters": {
         "name": "horarios_livres",
-        "description": "Lista todos os inícios livres do serviço num dia, como opções. Sem barbeiro, usa o que o cliente já escolheu (numa remarcação, o barbeiro do agendamento); qualquer=true busca todos e devolve por_barbeiro (quantos horários cada um tem). Se o cliente pediu manhã, tarde ou noite, informe periodo; se disse uma hora aproximada, informe hora (HH:mm) e a lista traz só os inícios perto dela. Para 2 ou 3 serviços em sequência, informe id_opcoes_servicos (sem barbeiro). Se devolver sem_barbeiro_unico, ofereça as opções de modo e, com a resposta do cliente, chame de novo com id_opcao.",
+        "description": "Lista todos os inícios livres do serviço num dia, como opções. Sem barbeiro, usa o que o cliente já escolheu (numa remarcação, o barbeiro do agendamento); qualquer=true busca todos e devolve por_barbeiro (quantos horários cada um tem). Se o cliente pediu manhã, tarde ou noite, informe periodo; se disse uma hora aproximada, informe hora (HH:mm) e a lista traz só os inícios perto dela. Para 2 ou 3 serviços em sequência, informe id_opcoes_servicos; o barbeiro (o informado ou o que o cliente já escolheu), qualquer=true e periodo valem do mesmo jeito. Se devolver sem_barbeiro_unico, ofereça as opções de modo e, com a resposta do cliente, chame de novo com id_opcao.",
         "source": "database",
         "workflowId": {
           "__rl": true,
