@@ -212,7 +212,7 @@ function bvgListarOsDois(i, ctx, t) {
   const of = ctx.opcoes && ctx.opcoes.tipo === 'servico' && Array.isArray(ctx.opcoes.itens) ? ctx.opcoes.itens : [];
   // quem tem pacote (pedido.dois_pacote, da listagem anterior) segue no mesmo caminho quando o modelo lista "cabelo e barba" de novo
   // num turno sem a fala (TESTE, 24/11: depois de "barba design" ele listava outra vez e saiam os combinados)
-  return (!!i.cabelo_barba || (!!ctx.pedido.dois_pacote && bvgBuscaOsDois(t))) && !(Array.isArray(ctx.pedido.futuros) && ctx.pedido.futuros.length) && !(of.length && of.every((x) => bvgEhCombinado(x.rotulo)))
+  return (!!i.cabelo_barba || (!!ctx.pedido.dois_pacote && bvgBuscaOsDois(t))) && !(Array.isArray(ctx.pedido.futuros) && ctx.pedido.futuros.length) && !(of.length && of.every((x) => bvgEhCombinado(x.rotulo)) && ctx.pedido.dois_turno !== i.turno_id) // "uma vez" e por turno: duas buscas no mesmo turno (TESTE, 24/11) nao desfazem a lista
     && (!t || BVG_BUSCA_DOS_DOIS.test(bvgNomeNorm(t)));
 }
 // Cliente com pacote (24/11: 65 de 288 clientes com agendamento em duas semanas tinham pacote em aberto, todos de servico avulso e
@@ -973,9 +973,12 @@ function bvgPassoUm(st, resps0, cfg) {
         { ...(e0 ? { opcoes: { ...of, itens: ids.itens.filter((x) => doTipo.has(x.valor.idServico)) } } : {}), pedido: { servicos_vistos: ids.lista, dois_pacote: { cabelo: idDe(dp.fixo.cabelo), barba: idDe(dp.fixo.barba) } } });
       }
       const orientacao = comb.length ? 'o cliente pediu cabelo e barba: estes são os serviços que fazem os dois no mesmo atendimento, em dois horários seguidos com o mesmo barbeiro. Pergunte qual deles ele quer (a lista vai junto); não ofereça corte ou barba avulsos para este pedido, a não ser que ele peça ou diga que tem pacote de um dos dois (aí liste de novo e use id_opcoes_servicos com os dois)'
+        // Busca sem resultado (PROD, 23/11: o cliente pediu dois servicos, um nao existia e o agente seguiu so com o outro, calado)
+        : !ss.length ? 'nenhum serviço da loja com esse termo: diga ao cliente qual serviço você não achou, sem trocar por outro nem seguir só com o que achou, e pergunte se ele quer ver a lista de serviços ou falar com a equipe'
         : meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'a lista traz os serviços mais pedidos e há outros: se o cliente não achar o que quer, peça um termo para filtrar' : undefined;
       // listagem dos dois sem pacote (ou com a leitura falha): a marca do pacote de uma listagem anterior nao vale mais
-      return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of, pedido: { servicos_vistos: ids.lista, ...(meta.dois ? { dois_pacote: null } : {}) } });
+      // sem resultado a oferta fica como estava: a lista do outro servico que ele pediu nao pode sumir
+      return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { ...(ss.length ? { opcoes: of } : {}), pedido: { servicos_vistos: ids.lista, ...(meta.dois ? { dois_pacote: null } : {}), ...(comb.length ? { dois_turno: st.in.turno_id } : {}) } });
     }
     case 'listar_barbeiros': {
       const bs = bvFiltrarBarbeiros(lista.map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos);

@@ -1924,6 +1924,30 @@ console.log('graces.test.js segunda analise ok');
   assert.deepEqual(de2('barba', { dois_pacote: { cabelo: idC1, barba: null } }).reqs.map((q) => [q.path, q.qs.texto]), [['/agenda/servicos', 'barba']]); // outra busca segue como pedida
   // sem a fala dos dois e sem a marca do pacote ninguem le pacote na listagem
   assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: 'quero fazer a barba' }), ctxP(), cfg).reqs.map((q) => q.path), ['/agenda/servicos']);
+  // duas buscas de servico no MESMO turno ("raspar na navalha" e depois "barba", TESTE 24/11): a segunda nao desfaz a lista dos
+  // combinados; "vale uma vez" e por turno. No turno seguinte, com a lista dos combinados na tela, a busca do modelo segue como pedida.
+  {
+    const fala = 'Raspar na navalha e barba';
+    const p1 = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'raspar na navalha', texto_cliente: fala }), null, cfg);
+    const f1 = g.bvGPasso(p1.st, p1.reqs.map(() => ok(cat)), cfg).final;
+    assert.deepEqual([nomes(f1.resultado), f1.efeitos.pedido.dois_turno], [['Cabelo adulto + barba', 'Cabelo máquina + barba'], T2]);
+    const ctx2 = { pedido: { ...f1.efeitos.pedido }, opcoes: f1.efeitos.opcoes };
+    const p2b = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: fala }), ctx2, cfg);
+    assert.deepEqual(nomes(g.bvGPasso(p2b.st, p2b.reqs.map(() => ok(cat)), cfg).final.resultado), ['Cabelo adulto + barba', 'Cabelo máquina + barba']);
+    const p3b = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: 'prefiro corte e barba separados', turno_id: T1 }), ctx2, cfg);
+    assert.equal(nomes(g.bvGPasso(p3b.st, p3b.reqs.map(() => ok(cat)), cfg).final.resultado).length, 4);
+  }
+  // busca de servico sem resultado (PROD, 23/11): o resultado manda dizer qual nao achou, e a oferta anterior (a lista do outro
+  // servico pedido) fica como estava
+  {
+    const pz = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'sobrancelha' }), { pedido: {}, opcoes: ofS }, cfg);
+    const fz = g.bvGPasso(pz.st, [ok([])], cfg).final;
+    assert.deepEqual([fz.resultado.ok, fz.resultado.total, fz.resultado.servicos], [true, 0, []]);
+    assert.match(fz.resultado.orientacao, /nenhum serviço da loja com esse termo: diga ao cliente qual serviço você não achou.*sem trocar por outro/);
+    assert.equal(fz.efeitos.opcoes, undefined);
+    const fa = g.bvGPasso(pz.st, [ok([{ idServico: 'b1', descricaoAgenda: 'barba design', valorPadrao: 70 }])], cfg).final; // com resultado segue igual
+    assert.deepEqual([fa.resultado.orientacao, fa.efeitos.opcoes.itens.length], [undefined, 1]);
+  }
   console.log('graces.test.js cabelo e barba ok');
 }
 
