@@ -76,6 +76,12 @@ assert.equal(bvMReconhecer(st('Confirmo sim obrigado'), cfg), null);
 assert.equal(bvMReconhecer({ ...st('Confirmo'), mensagem: [{ type: 'text', text: 'Confirmo' }, { type: 'text', text: 'x' }] }, cfg), null);
 // texto do cliente com cara de id nao vira id
 assert.equal(bvMReconhecer(st('bvc:7:s'), cfg), null);
+// "sim" digitado ao lembrete de 24 h (23/11): so a mensagem inteira; o resto segue para o agente
+for (const t of ['Sim', 'sim', 'SIM!', 'Simm', ' sim. ', 'Sim 👍', 'Confirmado', 'Confirmado!', 'confirmo', 'confirmo sim', 'Pode confirmar', 'Tá confirmado']) assert.deepEqual(bvMReconhecer(st(t), cfg), { origem: 'titulo', confirmado: true, digitado: true }, t);
+assert.deepEqual(bvMReconhecer(st('Confirmo'), cfg), { origem: 'titulo', confirmado: true }); // o titulo exato continua sendo titulo (a rota trata os dois)
+// o "nao" fica com o agente (revisao de 24/11: recusa por engano muda a agenda); so o titulo exato da lista recusa em codigo
+for (const t of ['Não', 'nao', 'NÃO.', 'Não posso', 'não vou conseguir ir', 'Nao vou poder ir', 'Não, vou', 'Sum', 'Sim, mas vou atrasar', 'sim?', 'Sim às 15h', 'Sim 😡', 'sim да', 'Amanhã não. Eu agendei para quarta feira 25/11', 'ok',
+  'Confirmo sim obrigado', 'não quero remarcar, quero cancelar mesmo', 'si', 'да', '', 'sim '.repeat(12)]) assert.equal(bvMReconhecer(st(t), cfg), null, t);
 
 // reconciliacao
 const now = '2026-10-20T12:00:00Z';
@@ -186,6 +192,19 @@ console.log('mensagens.test.js (decisao) ok');
   assert.deepEqual(A(409, 0, true), { code: 'conferir' });
   assert.deepEqual(A(409, 0, false), { code: 'conferir' });
   const { bvMConfConferir: C, bvMConfReq: Q, bvMTituloRota: R } = require('../workflows/shared/mensagens.js');
+  // rota do "sim" ao lembrete de 24 h: confirmacao aberta, sem proposta pendente e o lembrete como a ultima coisa dita pela barbearia
+  const dg = { digitado: true, sim: true };
+  assert.equal(R({ ...dg, abertas: '1', propostas: '0', lembrete_ultimo: true, recentes: '0' }), 'consumir');
+  assert.equal(R({ ...dg, abertas: 2, propostas: 0, lembrete_ultimo: 'true' }), 'consumir'); // 2 abertas: o bv-confirmacao pede para escolher
+  for (const e of [{ abertas: 1, propostas: 0, lembrete_ultimo: false }, { abertas: 1, propostas: 1, lembrete_ultimo: true }, { abertas: 0, propostas: 0, lembrete_ultimo: true },
+    { abertas: 1, propostas: 0, lembrete_ultimo: false, ultima_lista: true }, { abertas: 0, propostas: 0, recentes: 3 }, {}]) assert.equal(R({ ...e, ...dg }), 'agente', JSON.stringify(e));
+  // o titulo exato: recentes, ou aberta + lista como ultima saida, como antes; "Confirmo" escrito a mao depois do lembrete de 24 h tambem confirma
+  assert.equal(R({ sim: true, abertas: 1, propostas: 0, ultima_lista: true, lembrete_ultimo: false }), 'consumir');
+  assert.equal(R({ sim: true, abertas: 1, propostas: 0, ultima_lista: false, lembrete_ultimo: true }), 'consumir');
+  assert.equal(R({ sim: false, abertas: 1, propostas: 0, ultima_lista: false, lembrete_ultimo: true }), 'agente'); // "Nao vou poder" sem a lista: agente
+  assert.equal(R({ sim: false, abertas: 1, propostas: 0, ultima_lista: true }), 'consumir');
+  assert.equal(R({ recentes: 1 }), 'consumir');
+  assert.equal(R({}), 'agente'); // consulta com erro (linha vazia)
   const lr = { graces_agendamento_id: 'A', inicio: '2026-10-22T14:00:00' };
   const g = (st, o) => ({ status: 200, body: [{ idAgenda: 'A', horaInicio: '2026-10-22T14:00:00', idStatusAgenda: st, ...o }] });
   assert.equal(C(g(3), lr, true).code, 'confirmada');

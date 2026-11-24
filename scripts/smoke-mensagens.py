@@ -222,6 +222,44 @@ def m8():
         checar(f"{resposta}: nenhuma falha registrada", sa.sql(f"SELECT count(*) FROM falhas_agente WHERE contato_id={cid};") == "0")
 
 
+def m9():
+    print("M9 'sim' digitado ao lembrete de 24 h (23/11): confirma direto, sem o agente, mesmo com dois cadastros no telefone; o 'nao' fica com o agente")
+    varios = {"idCliente": None, "cliente_sem_cadastro": False, "identificado": True}
+    def lembrete_dia(n):  # como em PROD: lembrete de 24 h e texto agendado no Chat Master, enviado ha 2 h, e nao entra em `mensagens`
+        cid, i, ag = confirmacao_aberta(n)
+        sa.sql(f"UPDATE mensagens_agendadas SET tipo='lembrete_dia', enviada_em=now() - interval '2 hours', previsto_para=now() - interval '2 hours' WHERE id={i}; "
+               f"DELETE FROM mensagens WHERE contato_id={cid};")
+        sa.semear(n, varios, {"tipo": "cliente", "itens": [{"id": "1", "rotulo": "Um", "valor": {"idCliente": "x1", "nome": "Um", "primeiroNome": "Um"}}, {"id": "2", "rotulo": "Dois", "valor": {"idCliente": "x2", "nome": "Dois", "primeiroNome": "Dois"}}]})
+        return cid, i, ag
+    cid, i, ag = lembrete_dia(509)
+    t0 = time.time()
+    sa.post(sa.evento(509, "Sim"))
+    checar("resposta gravada como confirmada", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='confirmada'", 40, 2) == "1", estado_linha(i))
+    _info_m9 = round(time.time() - t0)
+    checar("Graces confirmou (status 3)", (st := status_graces_em(ag, 3)) == 3, str(st))
+    checar("texto de presenca confirmada saiu", sa.sql(f"SELECT count(*) FROM mensagens WHERE contato_id={cid} AND mensagem_id_canal LIKE 'conf-confirmada-%';") == "1")
+    checar("nao virou turno do agente nem pergunta de cadastro", sa.sql(f"SELECT (SELECT count(*) FROM mensagens WHERE contato_id={cid} AND direcao='entrada') + (SELECT count(*) FROM turnos WHERE contato_id={cid});") == "0")
+    print(f"  (medido) do 'Sim' a resposta gravada: ~{_info_m9} s")
+    # o agente falou depois do lembrete: o "sim" responde a ele, nao ao lembrete -> segue para o agente (entra como mensagem)
+    cid2, i2, ag2 = lembrete_dia(510)
+    sa.sql(f"INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) VALUES ({cid2}, 'smoke-{uuid.uuid4().hex[:8]}', 'saida', 'texto', 'Qual dia fica melhor para você?');")
+    sa.post(sa.evento(510, "Sim"))
+    checar("com saida nossa depois do lembrete, o 'sim' vai ao agente", esperar(f"SELECT count(*) FROM mensagens WHERE contato_id={cid2} AND direcao='entrada'", 20, 2) == "1")
+    checar("e a confirmacao nao e respondida pela rota", estado_linha(i2) in ("enviada//",), estado_linha(i2))
+    # pergunta nossa feita pouco ANTES do lembrete (dentro da validade de uma proposta): o "sim" tambem vai ao agente
+    cid3, i3, ag3 = lembrete_dia(511)
+    sa.sql(f"INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo, criado_em) VALUES ({cid3}, 'smoke-{uuid.uuid4().hex[:8]}', 'saida', 'texto', 'Posso ajudar em algo mais?', now() - interval '2 hours 5 minutes');")
+    sa.post(sa.evento(511, "Sim"))
+    checar("com pergunta nossa pouco antes do lembrete, o 'sim' vai ao agente", esperar(f"SELECT count(*) FROM mensagens WHERE contato_id={cid3} AND direcao='entrada'", 20, 2) == "1" and estado_linha(i3) == "enviada//", estado_linha(i3))
+    # "nao" digitado nunca e tratado em codigo: vai ao agente
+    cid4, i4, ag4 = lembrete_dia(512)
+    sa.post(sa.evento(512, "Não"))
+    checar("o 'nao' digitado vai ao agente (nao recusa em codigo)", esperar(f"SELECT count(*) FROM mensagens WHERE contato_id={cid4} AND direcao='entrada'", 20, 2) == "1" and estado_linha(i4) == "enviada//", estado_linha(i4))
+    for cx in (cid3, cid4):
+        esperar(f"SELECT (EXISTS (SELECT 1 FROM turnos WHERE contato_id={cx}) AND NOT EXISTS (SELECT 1 FROM turnos WHERE contato_id={cx} AND estado='em_andamento'))::int", 120)
+    esperar(f"SELECT (EXISTS (SELECT 1 FROM turnos WHERE contato_id={cid2}) AND NOT EXISTS (SELECT 1 FROM turnos WHERE contato_id={cid2} AND estado='em_andamento'))::int", 120)  # deixa o turno do agente terminar antes da limpeza
+
+
 def encerrar():
     for a in _agendas:
         sa._del(a)
@@ -233,7 +271,7 @@ def encerrar():
         sa.sql(f"DELETE FROM falhas_agente WHERE code IN ({codes}) AND contato_id IS NULL;")
 
 
-CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6, m7=m7, m8=m8)
+CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6, m7=m7, m8=m8, m9=m9)
 
 if __name__ == "__main__":
     sa._env(".env.smoke", ".env.n8n")
