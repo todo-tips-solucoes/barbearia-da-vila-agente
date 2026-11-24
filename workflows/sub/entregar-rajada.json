@@ -774,7 +774,7 @@
             "data": "={{ $fromAI('data', 'dia no formato AAAA-MM-DD', 'string') }}",
             "id_opcoes_servicos": "={{ $fromAI('id_opcoes_servicos', '2 ou 3 ids de opcoes de servico, como oferecidos, separados por virgula, para encadear servicos em sequencia; vazio se for um servico so', 'string') }}",
             "id_opcao": "={{ $fromAI('id_opcao', 'id da opcao de modo de encadeamento (barbeiros diferentes ou agendar separado) que o cliente escolheu; vazio nos demais casos', 'string') }}",
-            "id_opcao_agendamento": "={{ $fromAI('id_opcao_agendamento', 'id do agendamento a mudar, so para reagendar; vazio nos demais casos', 'string') }}",
+            "id_opcao_agendamento": "={{ $fromAI('id_opcao_agendamento', 'id do agendamento a remarcar, ou ao qual o cliente quer juntar outro serviço; vazio nos demais casos', 'string') }}",
             "periodo": "={{ $fromAI('periodo', 'manha, tarde ou noite se o cliente pediu um periodo do dia; vazio caso contrario', 'string') }}",
             "hora": "={{ $fromAI('hora', 'hora aproximada que o cliente disse, no formato HH:mm (ex.: umas 14h = 14:00); vazio caso contrario', 'string') }}",
             "texto_cliente": "={{ $('Preparar').first().json.texto_cliente }}"

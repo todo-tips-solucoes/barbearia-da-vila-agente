@@ -607,7 +607,9 @@ def dias(k=21):
 
 
 def reais(sv):
-    return [b for b in graces_get(f"/servicos/profissionais?idServico={sv}") if b["idProfissional"] != TESTE_ID and "TESTE" not in json.dumps(b).upper()]
+    """Barbeiros que o agente pode ofertar: fora o de teste e os que so a equipe agenda (24/11: o r1 acusava como faltante um horario que so esse barbeiro tinha)."""
+    so_equipe = {h.get("id") for h in CFG["graces"].get("barbeiros_humanos") or []}
+    return [b for b in graces_get(f"/servicos/profissionais?idServico={sv}") if b["idProfissional"] != TESTE_ID and b["idProfissional"] not in so_equipe and "TESTE" not in json.dumps(b).upper()]
 
 
 def uniao(sv, dia):

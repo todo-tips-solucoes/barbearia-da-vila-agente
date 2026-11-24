@@ -401,6 +401,11 @@ console.log('agente.test.js itens 7 a 9 ok');
   assert.match(c, /não cadastre de novo.*motivo ja_cliente: na primeira vez a ferramenta não transfere e devolve o texto.*chame de novo com o mesmo motivo e ela transfere/);
   assert.doesNotMatch(c, /Antes do cadastro não responda preço/);
   assert.match(a.bvContextoCliente({ nome: 'Ana', varios: true, opcoes: [{ id: '1', nome: 'Ana' }] }, String), /a lista deles vai junto com a sua primeira resposta/);
+  // 23/11 (ponto 14): ultima visita com varios servicos -> pergunta, nao propoe um so; vale no primeiro turno e nos seguintes
+  for (const cv of [a.bvContextoCliente(a.bvClienteDoResultado({ ok: true, nome: 'Ana', ultimo: { servicos: ['corte adulto', 'orelha'] } }), String), a.bvContextoCliente(a.bvClienteDoPedido({ identificado: true, idCliente: 'c1', ultimo: { servicos: ['corte adulto', 'orelha'] } }), String)]) {
+    assert.match(cv, /fez mais de um serviço \(dado\): corte adulto; orelha\. Não proponha repetir um só deles/);
+    assert.doesNotMatch(cv, /Último atendimento do cliente \(dado\)/);
+  }
   const inf = a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'Corte Infantil ate 11 anos', barbeiro: 'Kiel' } }, String);
   assert.match(inf, /não presuma; pergunte para quem é o atendimento/);
   assert.doesNotMatch(a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'corte adulto', barbeiro: 'Kiel' } }, String), /não presuma/);
@@ -798,4 +803,20 @@ console.log('agente.test.js retomada longa ok');
   // sessao nova: a copia do pedido antigo nao carrega a lista de servicos vistos (so serve dentro da sessao)
   assert.deepEqual(a.bvRecencia({ ultimaEntradaMs: Date.now() - 121 * 60000, agoraMs: Date.now(), janelaMin: 120, pedido: { idServico: 's', servicos_vistos: [{ id: 's1' }], pedido_anterior: { x: 1 } }, opcoes: null }).pedido_anterior, { idServico: 's', abandonado: true }); // nem a copia da sessao anterior
   console.log('agente.test.js pedido de atendente ok');
+}
+
+// Incluir um servico num agendamento que ja existe (PROD, 23/11): a regra esta no prompt e, turno a turno, no contexto de quem tem
+// agendamento futuro (a orientacao da ferramenta so existe no turno da busca; no toque do horario o modelo mandava a substituicao).
+{
+  const pr = a.bvPrompt({ saida: { max_mensagens: 3 } });
+  assert.match(pr, /Incluir um serviço no que ele já tem .* não é trocar nem remarcar: .*horarios_livres com o id_opcao_servico dele e a data do agendamento .*sem perguntar o horário preferido/);
+  assert.match(pr, /Escolhido, agendar normal, sem substitui_id_opcao_agendamento\./);
+  // os campos novos dos futuros (fim e id do barbeiro) nao vao ao modelo; a frase do servico a mais vai junto dos agendamentos
+  const fut = [{ idAgenda: 'f', idServico: 's1', horaInicio: '2026-11-26T11:20:00', servico: 'BARBA EXPRESS', fim: '12:00', idProfissional: 'b623cd84-6068-4a57-9ce6-2f7d9a37a11e' }];
+  const t = a.bvContextoCliente(a.bvClienteDoPedido({ identificado: true, idCliente: 'c1', cliente_nome: 'Ana', futuros: fut }), a.bvNeutralizar, '2026-11-24 10:00:00');
+  assert.match(t, /Agendamentos futuros do cliente \(dado\): BARBA EXPRESS em quinta-feira, 26\/11 às 11:20\. /);
+  assert.match(t, /Novo agendamento só se ele pedir mais um ou um serviço a mais; serviço a mais é agendar normal, sem substitui_id_opcao_agendamento: o que ele já tem fica\./);
+  assert.doesNotMatch(t, /b623cd84|12:00|idProfissional/);
+  assert.doesNotMatch(a.bvContextoCliente({ nome: 'Ana', futuros: [] }, a.bvNeutralizar, '2026-11-24 10:00:00'), /serviço a mais/); // sem agendamento futuro a frase nao aparece
+  console.log('agente.test.js incluir servico ok');
 }
