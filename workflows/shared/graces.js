@@ -227,14 +227,43 @@ const bvgBusca = (i, n, extra = {}) => ({ turno: i.turno_id, n, livre: null, hor
 const bvgAgsVisiveis = (lista, cfg) => (Array.isArray(lista) ? lista : []).filter((a) => a && a.idAgenda && (cfg.ambiente !== 'producao' || cfg.testeLiberado || (a.idProfissional !== cfg.testeId && !/\bteste\b/i.test(String(a.profissional || '')))));
 // Agendamentos futuros do cliente no pedido (revisao de 17/11): o modelo os ve no contexto e a fase 1 avisa de duplicidade.
 // Lidos na identificacao e em meus_agendamentos; cada escrita desta conversa os atualiza (bvgFuturos).
-const bvgFut = (a) => ({ idAgenda: a.idAgenda, idServico: a.idServico, horaInicio: String(a.horaInicio), servico: a.descricaoServico || a.servico || '' });
+const bvgFut = (a) => ({ idAgenda: a.idAgenda, idServico: a.idServico, horaInicio: String(a.horaInicio), servico: a.descricaoServico || a.servico || '', ...(a.pacote ? { pacote: true } : {}) });
+// Agendamento feito por pacote: cancelar pela API nao devolve a sessao (medido em 23/11 e conferido pelo owner no sistema: ela fica
+// "Agendado" no pacote do cliente e so a equipe a libera). O agente nunca manda o DELETE nesse agendamento: remarcar mantem a sessao
+// e segue com ele; quem quer mesmo cancelar, ou trocar o servico, vai para a equipe. A decisao e sempre pela agenda lida NA HORA, na
+// fase 2 (a proposta pode ter nascido do lembrete, ou antes desta versao, sem marca nenhuma); a marca que acompanha a opcao e os
+// agendamentos da conversa so serve para avisar o modelo na fase 1. Na duvida (leitura falhou, agendamento sumiu, cliente
+// desconhecido), nada e apagado.
+const bvgEhPacote = (ctx, idAgenda, d) => !!(d && d.pacote) || [...((ctx.pedido || {}).agendamentos || []), ...((ctx.pedido || {}).futuros || [])].some((a) => a && idAgenda && String(a.idAgenda) === String(idAgenda) && a.pacote);
+const BVG_TXT_PACOTE = {
+  cancelar: 'Como esse horário é do seu pacote, quem cancela é a equipe, para a sessão voltar para o seu pacote. ',
+  cancelar_conjunto: 'Tem horário do seu pacote aí, então quem cancela é a equipe, para a sessão voltar para o seu pacote. ',
+  trocar_servico: 'Como esse horário é do seu pacote, quem troca o serviço é a equipe, para você não perder a sessão do pacote. ',
+};
+// Fim da fase 2 que passa a conversa para a equipe em vez de apagar (motivo `pacote`, ou outro quando nao deu para conferir).
+function bvgParaEquipe(p, cfg, motivo) {
+  const e = bvgEncaminhar(motivo, p.acao === 'trocar_servico' ? 'agendar' : 'cancelar', cfg);
+  return bvgFim({ ...e.final.resultado, texto: (motivo === 'pacote' ? BVG_TXT_PACOTE[p.acao] || '' : '') + (e.final.resultado.texto || '') },
+    { ...e.final.efeitos, proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: motivo === 'pacote' ? 'pacote_equipe' : 'encaminhar_equipe' } } });
+}
+// Confere na agenda do cliente (lida agora) os agendamentos que a proposta quer apagar. -> { fim } quando nada deve ser apagado.
+function bvgConfereApagar(p, alvos, resp, cfg, termina) {
+  const lista = resp && resp.status >= 200 && resp.status < 300 && Array.isArray(resp.body) ? resp.body : null;
+  if (!lista) return { fim: termina('falhou', { ok: false, code: 'nao_conferido', orientacao: 'não deu para conferir o agendamento na agenda agora e nada foi apagado: peça desculpas em uma frase e ofereça tentar de novo ou passar para a equipe' }, resp ? { falha: bvGErro(resp, 'meus_agendamentos').falha } : {}) };
+  const achados = alvos.map((x) => lista.find((a) => a && x && x.idAgenda && String(a.idAgenda) === String(x.idAgenda)));
+  if (achados.some((a) => !a)) return { fim: termina('falhou', { ok: false, code: 'agendamento_nao_encontrado', orientacao: 'esse agendamento não está mais na agenda do cliente (pode já ter sido cancelado ou alterado) e nada foi apagado: chame meus_agendamentos e confira com ele; se ele confirmar que o horário existe (pode estar em outro cadastro), chame transferir_atendimento com motivo nao_resolvi' }, { opcoes: {} }) };
+  // qualquer ocorrencia do alvo com servicoPacote, em qualquer formato, basta (serie recorrente vem expandida em varias linhas)
+  if (lista.some((a) => a && (a.pacote || a.servicoPacote) && alvos.some((x) => String(x.idAgenda) === String(a.idAgenda)))) return { fim: bvgParaEquipe(p, cfg, 'pacote') };
+  return {};
+}
+const BVG_ORIENT_PACOTE = 'agendamento do pacote do cliente: remarcar mantém a sessão do pacote e você faz normalmente; se ele escolher cancelar mesmo, chame cancelar com o proposta_id como sempre, que a ferramenta passa para a equipe (só ela cancela devolvendo a sessão)';
 function bvgFuturos(ped, acao, d, novoId) {
   const fs = Array.isArray(ped && ped.futuros) ? ped.futuros : [];
   const novo = (x, id) => ({ idAgenda: id || null, idServico: x.idServico, horaInicio: `${x.data}T${x.hora}:00`, servico: x.servico });
   const sem = (id) => fs.filter((a) => a.idAgenda !== id);
   if (acao === 'agendar') return [...fs, novo(d, novoId)];
   if (acao === 'trocar_servico') return [...sem((d.antigo || {}).idAgenda), novo(d, novoId)];
-  if (acao === 'reagendar') return [...sem(d.idAgenda), novo(d, d.idAgenda)];
+  if (acao === 'reagendar') return [...sem(d.idAgenda), { ...novo(d, d.idAgenda), ...(d.pacote || fs.some((a) => a.idAgenda === d.idAgenda && a.pacote) ? { pacote: true } : {}) }];
   if (acao === 'cancelar') return sem(d.idAgenda);
   return fs;
 }
@@ -486,9 +515,9 @@ function bvgFase1(i, ctx, cfg) {
     const ags = i.id_opcoes_agendamentos.map((x) => bvgResolver(x, 'agendamento', ctx));
     if (ags.some((a) => !a)) return bvgFim(bvgOpcaoInvalida());
     if (!real && ags.some((a) => a.idProfissional !== cfg.testeId)) return bvgFim(fora);
-    const itens = ags.map((a, k) => ({ ordem: k + 1, idAgenda: a.idAgenda, horaInicio: a.horaInicio, recorrente: !!a.recorrente, servico: a.servico }));
+    const itens = ags.map((a, k) => ({ ordem: k + 1, idAgenda: a.idAgenda, horaInicio: a.horaInicio, recorrente: !!a.recorrente, servico: a.servico, ...(bvgEhPacote(ctx, a.idAgenda, a) ? { pacote: true } : {}) }));
     const resumo = `Cancelar ${itens.map((x) => `${x.servico} em ${bvgDiaSem(x.horaInicio)} às ${x.horaInicio.slice(11, 16)}`).join(' e ')}`;
-    return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar_conjunto', dados: { itens, resumo }, resumo } }, cfg);
+    return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo, ...(itens.some((x) => x.pacote) ? { pacote: BVG_ORIENT_PACOTE } : {}) }, { proposta_nova: { acao: 'cancelar_conjunto', dados: { itens, resumo }, resumo } }, cfg);
   }
   const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
   const h = i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'horario', ctx) : null;
@@ -508,7 +537,9 @@ function bvgFase1(i, ctx, cfg) {
   }
   const alvo = i.operacao === 'reagendar' ? ag : h; // serviço que seria escrito; cancelar segue permitido
   if (i.operacao !== 'cancelar' && alvo && bvSegundaVez(alvo.servico)) return bvgFim(bvgNaoOferecido()); // FR-005
-  const agAnt = { idAgenda: ag0 && ag0.idAgenda, horaInicio: ag0 && ag0.horaInicio, recorrente: !!(ag0 && ag0.recorrente) };
+  const agAnt = { idAgenda: ag0 && ag0.idAgenda, horaInicio: ag0 && ag0.horaInicio, recorrente: !!(ag0 && ag0.recorrente), ...(ag0 && bvgEhPacote(ctx, ag0.idAgenda, ag0) ? { pacote: true } : {}) };
+  // trocar o servico de um agendamento do pacote cancelaria o antigo (a sessao nao volta): fica com a equipe
+  if (i.operacao === 'agendar' && antigo && agAnt.pacote) return bvgFim(bvgRecusa('pacote_equipe', 'esse agendamento é do pacote do cliente e trocar o serviço por aqui faria ele perder a sessão: ofereça passar para a equipe e, se ele aceitar, chame transferir_atendimento com motivo pacote'));
   if (i.operacao === 'agendar') {
     if (!h || (i.substitui_id_opcao_agendamento && !antigo)) return bvgFim(bvgOpcaoInvalida());
     const dados = { idCliente: ctx.pedido.idCliente, idServico: h.idServico, servico: h.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, valor: h.preco, minutos: h.minutos };
@@ -531,10 +562,10 @@ function bvgFase1(i, ctx, cfg) {
   // Recusou a presenca deste agendamento (item 19): a pergunta "remarcar ou cancelar?" ja foi feita no texto da recusa; a lista
   // de decisao voltava a mesma pergunta. So a confirmacao do cancelamento.
   if (ctx.pedido.confirmacao_recusada && String(ctx.pedido.confirmacao_recusada.idAgenda) === String(ag.idAgenda)) {
-    return bvgFim({ ok: true, aguardando_confirmacao: true, resumo, orientacao: 'ele já ouviu a oferta de remarcar: peça só a confirmação do cancelamento, em uma frase; com o sim, chame cancelar só com o proposta_id' },
+    return bvgFim({ ok: true, aguardando_confirmacao: true, resumo, ...(agAnt.pacote ? { pacote: BVG_ORIENT_PACOTE } : {}), orientacao: 'ele já ouviu a oferta de remarcar: peça só a confirmação do cancelamento, em uma frase; com o sim, chame cancelar só com o proposta_id' },
       { opcoes: {}, proposta_nova: { acao: 'cancelar', dados: { ...agAnt, servico: ag.servico, barbeiro: ag.profissional, resumo }, resumo } });
   }
-  return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo }, { proposta_nova: { acao: 'cancelar', dados: { ...agAnt, servico: ag.servico, barbeiro: ag.profissional, resumo }, resumo } }, cfg);
+  return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo, ...(agAnt.pacote ? { pacote: BVG_ORIENT_PACOTE } : {}) }, { proposta_nova: { acao: 'cancelar', dados: { ...agAnt, servico: ag.servico, barbeiro: ag.profissional, resumo }, resumo } }, cfg);
 }
 
 // Fase 2: a proposta ja vem reivindicada (UPDATE atomico no Contexto: pendente, mesmo contato, turno anterior, na validade).
@@ -568,15 +599,17 @@ function bvgFase2(i, ctx, cfg, chamar) {
     if ((d.itens || []).some((x) => bvSegundaVez(x.servico))) return bvgFim(bvgNaoOferecido(), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'servico_nao_oferecido' } } });
     return chamar(bvgReqsLivre(d.itens.map((x) => ({ idServico: x.idServico, idProfissional: bvgProfDe(x, meta), data: x.data }))), { ...meta, etapa: 'reval_c', res: [] });
   }
-  if (p.acao === 'cancelar_conjunto') return chamar([bvgReqItem(p, 0, meta)], { ...meta, etapa: 'escrita_c', k: 0, res: [] });
-  if (p.acao === 'cancelar') {
-    return chamar([{ m: 'DELETE', path: `/agenda/${d.idAgenda}`, qs: d.recorrente ? { data: String(d.horaInicio).slice(0, 10) } : {} }], { ...meta, etapa: 'escrita' });
+  // cancelar (um ou varios): antes de qualquer DELETE, a agenda do cliente e lida agora e conferida no passo (etapa confere_canc)
+  if (p.acao === 'cancelar' || p.acao === 'cancelar_conjunto') {
+    const icc = d.idCliente || ctx.pedido.idCliente;
+    if (!icc) return bvgParaEquipe(p, cfg, 'nao_resolvi'); // sem o cliente nao ha como conferir: nao apaga
+    return chamar([{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: icc, proximos: true, pageSize: 200 } }], { ...meta, etapa: 'confere_canc', idCliente: icc });
   }
   // reval + linha de base de agendamentos (Decision 8); idCliente so do pedido/proposta (FR-020)
   const ic = d.idCliente || ctx.pedido.idCliente;
   const qs = { idServico: d.idServico, idProfissional: prof, data: d.data };
   const reqs = [{ m: 'GET', path: '/agenda/horarios-livres', qs }];
-  if (ic) reqs.push({ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: ic, proximos: true } });
+  if (ic) reqs.push({ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: ic, proximos: true, pageSize: 200 } });
   reqs.push({ m: 'GET', path: '/agenda/horarios', qs }); // ocupacoes por ultimo: a linha de base continua em resps[1]
   return chamar(reqs, { ...meta, etapa: 'reval', idCliente: ic });
 }
@@ -834,7 +867,7 @@ function bvgPassoUm(st, resps0, cfg) {
       const ags = bvgAgsVisiveis(lista, cfg);
       const of = bvMontarOferta('agendamento', ags.map((a) => ({
         rotulo: `${bvgDia(String(a.horaInicio))} ${String(a.horaInicio).slice(11, 16)} ${a.descricaoServico || ''}`.trim(),
-        valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico || 'agendamento' /* nunca "undefined" no resumo */, idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
+        valor: { idAgenda: a.idAgenda, horaInicio: a.horaInicio, idServico: a.idServico, servico: a.descricaoServico || 'agendamento' /* nunca "undefined" no resumo */, ...(a.pacote ? { pacote: true } : {}), idProfissional: a.idProfissional, profissional: String(a.profissional || '').trim(), recorrente: !!a.recorrente },
       })), cfg);
       const ident = meta.ident ? { nome: meta.ident.cliente_nome } : {};
       // barbeiro de teste e barbeiro so da equipe: o nome nao vai ao modelo (item 21; no TESTE a frase com o nome era cortada na saida e a
@@ -991,6 +1024,13 @@ function bvgPassoEscrita(st, resps, cfg) {
     if (!livre) return termina('falhou', { ok: false, code: 'horario_indisponivel', orientacao: 'a sequência não está mais livre; consulte horarios_livres de novo e ofereça outras opções' }, { opcoes: {} });
     return prox('escrita_c', [bvgReqItem(p, 0, meta)], { k: 0, res: [] });
   }
+  if (meta.etapa === 'confere_canc') {
+    const c = bvgConfereApagar(p, p.acao === 'cancelar' ? [d] : (d.itens || []), r0, cfg, termina);
+    if (c.fim) return c.fim;
+    if (p.acao === 'cancelar_conjunto') return prox('escrita_c', [bvgReqItem(p, 0, meta)], { k: 0, res: [] });
+    const del = { m: 'DELETE', path: `/agenda/${d.idAgenda}`, qs: d.recorrente ? { data: String(d.horaInicio).slice(0, 10) } : {} };
+    return prox('escrita', [del], { w: del }); // w: a verificacao so repete este mesmo DELETE, ja conferido
+  }
   if (meta.etapa === 'escrita_c') return bvgPassoConjunto(st, r0, cfg);
   if (meta.etapa === 'reval') {
     const livre = r0.status === 200 && r0.body && Array.isArray(r0.body.horarios) && bvgLivre(r0.body, resps[meta.idCliente ? 2 : 1]).cabe(d.hora);
@@ -999,6 +1039,10 @@ function bvgPassoEscrita(st, resps, cfg) {
       const of = bvMontarOferta('horario', hs.map((hh) => ({ rotulo: hh, valor: { data: d.data, hora: hh, idProfissional: d.idProfissional, apelido: d.barbeiro, idServico: d.idServico, servico: d.servico, preco: d.valor } })), cfg);
       const { e, f } = r0.status === 200 ? { e: null, f: null } : err('horarios_livres', r0);
       return termina('falhou', { ok: false, code: 'horario_indisponivel', orientacao: 'esse horário não está mais livre; ofereça as novas opções', opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.hora })) }, { opcoes: of, falha: f });
+    }
+    if (p.acao === 'trocar_servico') { // o antigo sera apagado depois do novo: confere agora, na linha de base lida neste estagio
+      const c = bvgConfereApagar(p, [d.antigo || {}], meta.idCliente ? resps[1] || { status: 0 } : null, cfg, termina);
+      if (c.fim) return c.fim;
     }
     const base = resps[1] && sucesso2xx(resps[1]) && Array.isArray(resps[1].body) ? bvgNumAgenda(resps[1].body).map((a) => a.idAgenda) : null; // linha de base so de ids
     const hora = d.hora;

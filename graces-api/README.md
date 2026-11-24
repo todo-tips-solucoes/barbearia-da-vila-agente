@@ -11,7 +11,7 @@ O portal exige login com a chave de API. Esta pasta é autocontida e **não cont
 - **Content-Type:** `application/json` · **Fuso:** horário da loja (São Paulo), datas **sem offset**.
 - **Paginação:** `pageNumber`/`pageSize` (50, máx. 200); metadados no cabeçalho `X-Pagination`.
 - **Erros:** ProblemDetails (RFC 7807). Decida pelo campo `code`.
-- **Sem webhooks** (seção "em breve"): o estado da agenda só se obtém consultando a API.
+- **Webhooks:** na sincronização de 2026-10-18 a seção era "em breve"; em 2026-11-24 o portal já os documenta (`/docs/webhooks`: agendamento criado, alterado, status, executado e cancelado, cadastrados pelo salão em Configurações › Opções de Sistema › Integrações). **Ainda não copiados para esta pasta nem usados pelo agente:** o estado da agenda segue vindo de consulta à API.
 
 ## Referência rápida
 
@@ -59,7 +59,7 @@ O portal exige login com a chave de API. Esta pasta é autocontida e **não cont
 | `apelido` do profissional | — | pode ter espaço no final (`"Rodrigo "`) |
 | Agendamento feito por pacote em `/agenda/agendamentos` (medido em 2026-11-23) | `idServico`, `descricaoServico` e `servicoPacote` no mesmo nível | o serviço vem só dentro de `servicoPacote: { idServico, descricaoServico }`; não há `idServico` nem `descricaoServico` em cima. No avulso é o contrário, e `servicoPacote` nem vem |
 | O mesmo agendamento em `/agenda/completa` (2026-11-23) | — | vem com `nomeServico`, sem `idServico` e sem `servicoPacote` |
-| Cancelar (`DELETE /agenda/{id}`) agendamento feito por pacote (2026-11-23) | — | a seção usada **não voltou** para `/agenda/pacotes`: medido três vezes no cliente de teste, até 90 s depois e de novo minutos depois (4 seções viraram 1 com três agendamentos cancelados) |
+| Cancelar (`DELETE /agenda/{id}`) agendamento feito por pacote (2026-11-23) | — | a seção usada **não voltou** para `/agenda/pacotes`: medido três vezes no cliente de teste, até 90 s depois e de novo minutos depois (4 seções viraram 1 com três agendamentos cancelados). Conferido pelo owner no sistema da Graces em 2026-11-23: as seções ficam como "Agendado" no pacote e só a equipe as libera. Por isso o agente não cancela agendamento de pacote: passa para a equipe. Portal relido em 2026-11-24: a seção é "reservada no mesmo instante" ao agendar, o `DELETE` não cita a seção e não existe chamada para liberá-la |
 | Remarcar (`PUT /agenda/{id}`) agendamento feito por pacote (2026-11-23) | — | move o mesmo agendamento, que continua por pacote, e as seções em aberto não mudam |
 | `idProdutoServico` da seção em `/agenda/pacotes` (2026-11-23) | — | é o `idServico` do serviço da loja |
 

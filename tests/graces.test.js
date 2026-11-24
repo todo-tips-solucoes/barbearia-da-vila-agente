@@ -282,6 +282,13 @@ assert.equal(f2({ operacao: 'agendar' }, { pedido: {}, info: { estado: 'executad
 assert.equal(f2({ operacao: 'agendar' }, { pedido: {}, info: { estado: 'pendente', mesmo_turno: false } }).final.resultado.code, 'proposta_expirada');
 assert.equal(f2({ operacao: 'agendar' }, { pedido: {} }).final.resultado.code, 'proposta_invalida');
 const prop = (acao, dados) => ({ pedido: { idCliente: 'c1' }, proposta: { id: PID, acao, dados } });
+// Fase 2 de cancelar (24/11): antes do DELETE a agenda do cliente e lida e conferida. `conferido` devolve o passo seguinte (o DELETE)
+// de um plano de cancelamento cujos alvos estao na agenda e nao sao de pacote.
+const conferido = (pl, c = cfg) => {
+  assert.deepEqual(pl.reqs.map((q) => [q.m, q.path, q.qs.pageSize]), [['GET', '/agenda/agendamentos', 200]]);
+  const dd = pl.st.meta.proposta.dados;
+  return g.bvGPasso(pl.st, [ok((dd.itens || [dd]).map((x) => ({ idAgenda: x.idAgenda, idServico: 's1', descricaoServico: 'corte adulto' })))], c);
+};
 { // Encaixe na fase 2 (ajuste 2): 10:50 (fim de ocupacao) revalida pelas ocupacoes; sem elas, vale so a grade
   const pe = f2({ operacao: 'agendar' }, prop('agendar', { ...dadosAg, hora: '10:50' }));
   assert.deepEqual(pe.reqs.map((q) => q.path), ['/agenda/horarios-livres', '/agenda/agendamentos', '/agenda/horarios']);
@@ -335,7 +342,7 @@ assert.equal(r.efeitos.proposta_upd.estado, 'executada');
   assert.equal(livre.ja_tem, undefined);
   assert.equal(livre.aguardando_confirmacao, true);
   // cancelar: sai da lista de futuros e devolve o texto final
-  const pc = f2({ operacao: 'cancelar' }, { pedido: { idCliente: 'c1', futuros: [{ idAgenda: dadosCanc.idAgenda, horaInicio: dadosCanc.horaInicio, servico: 'corte adulto' }, { idAgenda: 'fica', horaInicio: '2027-01-04T09:00:00', servico: 'barba' }] }, proposta: { id: PID, acao: 'cancelar', dados: dadosCanc } });
+  const pc = conferido(f2({ operacao: 'cancelar' }, { pedido: { idCliente: 'c1', futuros: [{ idAgenda: dadosCanc.idAgenda, horaInicio: dadosCanc.horaInicio, servico: 'corte adulto' }, { idAgenda: 'fica', horaInicio: '2027-01-04T09:00:00', servico: 'barba' }] }, proposta: { id: PID, acao: 'cancelar', dados: dadosCanc } }));
   const rc = g.bvGPasso(pc.st, [ok({ sucesso: true })], cfg).final;
   assert.match(rc.resultado.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00$/); // o barbeiro de teste nao entra no resumo
   assert.deepEqual(rc.efeitos.pedido.futuros.map((x) => x.idAgenda), ['fica']);
@@ -359,13 +366,16 @@ s2 = g.bvGPasso(p.st, [ok({ horarios: ['10:00'] })], cfg);
 assert.deepEqual(s2.reqs[0], { m: 'PUT', path: '/agenda/a1', body: { horaInicioOriginal: '2026-10-20T14:00:00', horaInicioNovo: '2026-10-21T10:00:00', idProfissional: TESTE } });
 
 // cancelar fase 2: DELETE direto (recorrente leva ?data=); trocar_servico: POST e so depois DELETE do antigo.
-p = f2({ operacao: 'cancelar' }, prop('cancelar', { ...dadosCanc, recorrente: true }));
+p = conferido(f2({ operacao: 'cancelar' }, prop('cancelar', { ...dadosCanc, recorrente: true })));
 assert.deepEqual(p.reqs[0], { m: 'DELETE', path: '/agenda/a1', qs: { data: '2026-10-20' } });
 r = g.bvGPasso(p.st, [ok({ sucesso: true })], cfg).final;
 assert.equal(r.efeitos.proposta_upd.estado, 'executada');
 const dadosTroca = { ...dadosAg, antigo: { idAgenda: 'a1', horaInicio: '2026-10-20T14:00:00', recorrente: false } };
 p = f2({ operacao: 'agendar' }, prop('trocar_servico', dadosTroca));
-s2 = g.bvGPasso(p.st, [ok({ horarios: ['14:00'] })], cfg);
+// 24/11: o antigo so e apagado se estiver na agenda lida neste estagio e nao for de pacote; sem a leitura, nada e escrito
+assert.equal(g.bvGPasso(p.st, [ok({ horarios: ['14:00'] })], cfg).final.resultado.code, 'nao_conferido');
+assert.equal(g.bvGPasso(p.st, [ok({ horarios: ['14:00'] }), ok([]), ok({ horarios: [] })], cfg).final.resultado.code, 'agendamento_nao_encontrado');
+s2 = g.bvGPasso(p.st, [ok({ horarios: ['14:00'] }), ok([{ idAgenda: 'a1', idServico: 's9', descricaoServico: 'barba' }]), ok({ horarios: [] })], cfg);
 const s3 = g.bvGPasso(s2.st, [ok({ sucesso: true, idAgenda: 'n2' })], cfg);
 assert.deepEqual(s3.reqs[0], { m: 'DELETE', path: '/agenda/a1', qs: {} });
 assert.equal(g.bvGPasso(s3.st, [ok({ sucesso: true })], cfg).final.efeitos.proposta_upd.estado, 'executada');
@@ -399,7 +409,8 @@ for (const nome of ['corte adulto 2º vez', 'BARBA 2a VEZ', 'corte 2ª vez', 'Co
   const f2u = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: T1 }), { pedido: {}, opcoes: {}, proposta: pr }, cfg).final;
   assert.equal(f2u.resultado.code, 'servico_nao_oferecido', nome);
   assert.equal(f2u.efeitos.proposta_upd.estado, 'falhou');
-  assert.equal(g.bvGPlano(entrada({ operacao: 'cancelar', proposta_id: T1 }), { pedido: {}, opcoes: {}, proposta: { id: 'p1', acao: 'cancelar', dados: { idAgenda: 'a1', servico: nome } } }, cfg).reqs[0].m, 'DELETE');
+  // cancelar a variante continua permitido: segue para a conferencia da agenda (24/11) e, dela, para o DELETE
+  assert.equal(conferido(g.bvGPlano(entrada({ operacao: 'cancelar', proposta_id: T1 }), { pedido: { idCliente: 'c1' }, opcoes: {}, proposta: { id: 'p1', acao: 'cancelar', dados: { idAgenda: 'a1', servico: nome } } }, cfg)).reqs[0].m, 'DELETE');
 }
 {
   const pb = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'corte adulto 2ª vez' }), null, cfg);
@@ -449,7 +460,7 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 18);
   r = g.bvGPasso(v.st, [resp(500, {})], cfg).final;
   assert.equal(r.efeitos.proposta_upd.estado, 'incerta');
   // DELETE incerto: id ausente na releitura = aplicada
-  const pc = f2({ operacao: 'cancelar' }, prop('cancelar', dadosCanc));
+  const pc = conferido(f2({ operacao: 'cancelar' }, prop('cancelar', dadosCanc)));
   const vc = g.bvGPasso(g.bvGPasso(pc.st, [resp(0)], cfg).st, [ok([])], cfg);
   assert.equal(vc.final.efeitos.proposta_upd.estado, 'executada');
   // u13: reacao pelo code; detail (en/pt) nunca na saida
@@ -580,7 +591,7 @@ assert.equal(g.bvGParams({ ...base }, {}).length, 18);
   const ofA = { tipo: 'agendamento', itens: ['1', '2'].map((id) => ({ id, rotulo: 'x', valor: { idAgenda: `a${id}`, horaInicio: `2026-10-20T1${id}:00:00`, idServico: 's1', servico: 'corte', idProfissional: TESTE, profissional: 'ZZ' } })) };
   const c1 = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcoes_agendamentos: ['1', '2'] }), ctxOp(ofA, { idCliente: 'c1' }), cfg).final;
   assert.equal(c1.efeitos.proposta_nova.acao, 'cancelar_conjunto');
-  const pc = f2({ operacao: 'cancelar' }, prop('cancelar_conjunto', c1.efeitos.proposta_nova.dados));
+  const pc = conferido(f2({ operacao: 'cancelar' }, prop('cancelar_conjunto', c1.efeitos.proposta_nova.dados)));
   assert.equal(pc.reqs[0].path, '/agenda/a1');
   const pc2 = g.bvGPasso(pc.st, [ok({ sucesso: true })], cfg);
   assert.equal(pc2.reqs[0].path, '/agenda/a2');
@@ -651,7 +662,7 @@ assert.equal(g.bvGNormalizar({ ...base, operacao: 'horarios_livres', data: '2026
   r = g.bvGPasso(v.st, [ok([{ idAgenda: 'n9', idServico: 's1', idProfissional: TESTE, horaInicio: '2026-10-22T14:00:00' }])], cfg).final;
   assert.equal(r.efeitos.mensagens.criar[0].idAgenda, 'n9');
   // cancelar: so cancela as pendentes
-  const pc = f2({ operacao: 'cancelar' }, prop('cancelar', dadosCanc));
+  const pc = conferido(f2({ operacao: 'cancelar' }, prop('cancelar', dadosCanc)));
   r = g.bvGPasso(pc.st, [ok({ sucesso: true })], cfg).final;
   assert.deepEqual(r.efeitos.mensagens, { criar: [], cancelar: [{ idAgenda: dadosCanc.idAgenda, motivo: 'cancelada_agente' }] });
   // falha na Graces: nenhum efeito em mensagens
@@ -1184,7 +1195,7 @@ console.log('graces.test.js segunda analise ok');
   assert.match(res(ag('Jayme', 'jay')).resultado.resumo, /às 14:00$/); // clausula petrea: o nome nao aparece
   const dados = res(ag('Pedro', 'b1')).efeitos.proposta_nova.dados;
   const f2 = g.bvGPlano(entrada({ operacao: 'cancelar', proposta_id: '33333333-3333-4333-8333-333333333333' }), { pedido: { idCliente: 'c1' }, proposta: { id: '33333333-3333-4333-8333-333333333333', acao: 'cancelar', dados } }, c);
-  const fim = g.bvGPasso(f2.st, [ok({ sucesso: true })], c).final.resultado;
+  const fim = g.bvGPasso(conferido(f2, c).st, [ok({ sucesso: true })], c).final.resultado;
   assert.match(fim.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00 com Pedro$/);
   assert.match(fim.orientacao, /depois, numa pergunta só, ofereça marcar outro horário$/);
   console.log('graces.test.js resumo do cancelamento ok');
@@ -1290,4 +1301,97 @@ console.log('graces.test.js segunda analise ok');
   const pcs = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: semServ.efeitos.opcoes.itens[0].id }), { opcoes: semServ.efeitos.opcoes, pedido: { idCliente: 'c1', ...semServ.efeitos.pedido } }, cfg).final;
   assert.match(pcs.resultado.resumo, /^Cancelar agendamento em /);
   console.log('graces.test.js agendamento por pacote com servico ok');
+}
+
+{ // Cancelar agendamento de pacote (24/11): pela API a sessao nao volta ao pacote (medido e conferido pelo owner no sistema). O agente
+  // nunca manda o DELETE: confere a agenda na hora, antes de apagar, e passa para a equipe. Na duvida, nao apaga.
+  const SP = '046519b1-e111-44b4-8779-3e64366f9d8f', PIDP = '44444444-4444-4444-8444-444444444444';
+  const cfgT = { ...cfg, textos: { encaminhar_equipe: 'Vou passar para a equipe.' }, handoff: { setor_id: 106 } };
+  const doPacote = { idAgenda: 'a7', horaInicio: '2026-12-01T10:00:00', idProfissional: TESTE, profissional: 'ZZ TESTE ', recorrente: false, servicoPacote: { idServico: SP, descricaoServico: 'corte adulto' } };
+  const avulso = { idAgenda: 'a8', horaInicio: '2026-12-02T11:00:00', idServico: 's2', descricaoServico: 'barba design', idProfissional: TESTE, profissional: 'ZZ TESTE', recorrente: false };
+  const pm = g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), { opcoes: {}, pedido: { idCliente: 'c1' } }, cfgT);
+  const rm = g.bvGPasso(pm.st, [ok([doPacote, avulso])], cfgT).final;
+  assert.deepEqual(rm.efeitos.opcoes.itens.map((x) => !!x.valor.pacote), [true, false]); // a marca acompanha o agendamento (so para avisar o modelo)
+  assert.deepEqual(rm.efeitos.pedido.futuros.map((f) => !!f.pacote), [true, false]);
+  const ctxA = { opcoes: rm.efeitos.opcoes, pedido: { idCliente: 'c1', ...rm.efeitos.pedido } };
+  const [idP, idA] = rm.efeitos.opcoes.itens.map((x) => x.id);
+  // fase 1: a decisao "remarcar ou cancelar" continua igual; o modelo e avisado de que e do pacote
+  const f1 = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: idP }), ctxA, cfgT).final;
+  assert.deepEqual([f1.resultado.sugerir_remarcar, f1.efeitos.proposta_nova.acao], [true, 'cancelar']);
+  assert.match(f1.resultado.pacote, /remarcar mantém a sessão/);
+  // fase 2: sempre le a agenda do cliente antes de apagar
+  const fase2 = (acao, dados, ped) => g.bvGPlano(entrada({ operacao: acao.startsWith('cancelar') ? 'cancelar' : 'agendar', proposta_id: PIDP }), { pedido: ped === undefined ? { idCliente: 'c1' } : ped, proposta: { id: PIDP, acao, dados } }, cfgT);
+  const f2 = fase2('cancelar', f1.efeitos.proposta_nova.dados);
+  assert.deepEqual(f2.reqs, [{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: 'c1', proximos: true, pageSize: 200 } }]);
+  const t2 = g.bvGPasso(f2.st, [ok([doPacote, avulso])], cfgT).final; // a agenda diz que e de pacote: nenhum DELETE, vai para a equipe
+  assert.deepEqual([t2.resultado.code, t2.resultado.motivo], ['encaminhar_equipe', 'pacote']);
+  assert.equal(t2.resultado.texto, 'Como esse horário é do seu pacote, quem cancela é a equipe, para a sessão voltar para o seu pacote. Vou passar para a equipe.');
+  assert.deepEqual([t2.efeitos.pedido.handoff, t2.efeitos.handoff.queueId, t2.efeitos.falha.motivo, t2.efeitos.falha.operacao], [true, 106, 'encaminhar_equipe|pacote', 'cancelar']);
+  assert.deepEqual(t2.efeitos.proposta_upd, { id: PIDP, estado: 'falhou', resultado: { ok: false, code: 'pacote_equipe' } });
+  // proposta SEM marca nenhuma (nasceu do "Nao vou poder" do lembrete, ou antes desta versao) e pedido sem agendamentos lidos: a
+  // decisao e pela agenda lida agora, entao transfere do mesmo jeito
+  const doLembrete = { idAgenda: 'a7', horaInicio: '2026-12-01T10:00:00', recorrente: false, servico: 'horário', idCliente: 'c9' };
+  const fl = fase2('cancelar', doLembrete, {});
+  assert.deepEqual(fl.reqs[0].qs, { idCliente: 'c9', proximos: true, pageSize: 200 }); // o cliente vem da proposta do lembrete
+  assert.equal(g.bvGPasso(fl.st, [ok([doPacote])], cfgT).final.resultado.motivo, 'pacote');
+  // na duvida, nada e apagado: leitura que falha, agendamento que nao esta mais na agenda, cliente desconhecido
+  const naoLeu = g.bvGPasso(f2.st, [resp(500, {})], cfgT).final;
+  assert.deepEqual([naoLeu.resultado.code, naoLeu.efeitos.proposta_upd.estado, !!naoLeu.efeitos.handoff], ['nao_conferido', 'falhou', false]);
+  assert.equal(g.bvGPasso(f2.st, [resp(0, null)], cfgT).final.resultado.code, 'nao_conferido');
+  assert.equal(g.bvGPasso(f2.st, [ok({ nao: 'lista' })], cfgT).final.resultado.code, 'nao_conferido');
+  assert.equal(g.bvGPasso(f2.st, [ok([avulso])], cfgT).final.resultado.code, 'agendamento_nao_encontrado');
+  const semCliente = fase2('cancelar', { idAgenda: 'a7', horaInicio: '2026-12-01T10:00:00', servico: 'horário' }, {});
+  assert.ok(!semCliente.reqs && semCliente.final.resultado.code === 'encaminhar_equipe' && semCliente.final.resultado.motivo === 'nao_resolvi');
+  assert.equal(semCliente.final.resultado.texto, 'Vou passar para a equipe.'); // sem o texto do pacote: nao se sabe se e
+  assert.equal(semCliente.final.efeitos.proposta_upd.estado, 'falhou');
+  // avulso: conferido na agenda, cancela como sempre (DELETE)
+  const fa = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: idA }), ctxA, cfgT).final;
+  assert.ok(!fa.resultado.pacote);
+  const fa2 = g.bvGPasso(fase2('cancelar', fa.efeitos.proposta_nova.dados).st, [ok([doPacote, avulso])], cfgT);
+  assert.deepEqual([fa2.reqs[0].m, fa2.reqs[0].path], ['DELETE', '/agenda/a8']);
+  assert.equal(g.bvGPasso(fa2.st, [ok({ sucesso: true })], cfgT).final.efeitos.proposta_upd.estado, 'executada');
+  // revisao de 24/11: servicoPacote em formato nao medido (sem idServico, texto) tambem conta como pacote; serie recorrente vem em varias
+  // linhas com o mesmo idAgenda e basta uma delas ser de pacote; leitura que falha fica registrada
+  for (const sp of [{ descricaoServico: 'corte adulto' }, { id: 'x' }, 'p1']) assert.equal(g.bvGPasso(f2.st, [ok([{ idAgenda: 'a7', idServico: 's1', descricaoServico: 'corte adulto', servicoPacote: sp }])], cfgT).final.resultado.motivo, 'pacote', JSON.stringify(sp));
+  assert.equal(g.bvGPasso(f2.st, [ok([{ idAgenda: 'a7', idServico: 's1', descricaoServico: 'corte adulto', horaInicio: '2026-11-24T10:00:00' }, doPacote])], cfgT).final.resultado.motivo, 'pacote');
+  assert.match(naoLeu.efeitos.falha.motivo, /^graces\|/);
+  // DELETE sem resposta: a verificacao le a agenda DO CLIENTE e, se o agendamento continua la, repete o mesmo DELETE (antes saia uma chamada vazia)
+  const semResp = g.bvGPasso(fa2.st, [resp(500, {})], cfgT);
+  assert.deepEqual(semResp.reqs[0].qs, { idCliente: 'c1', proximos: true });
+  assert.deepEqual(g.bvGPasso(semResp.st, [ok([avulso])], cfgT).reqs, [{ m: 'DELETE', path: '/agenda/a8', qs: {} }]);
+  assert.equal(g.bvGPasso(semResp.st, [ok([doPacote])], cfgT).final.efeitos.proposta_upd.estado, 'executada'); // sumiu da agenda: cancelado, verificado
+  // id numerico na agenda e texto na proposta (ou o contrario) e o mesmo agendamento
+  assert.equal(g.bvGPasso(fase2('cancelar', { idAgenda: '77', horaInicio: '2026-12-01T10:00:00', servico: 'x' }).st, [ok([{ ...doPacote, idAgenda: 77 }])], cfgT).final.resultado.motivo, 'pacote');
+  // cancelar os dois de uma vez: basta um ser de pacote para nenhum DELETE sair, e o texto fala no plural
+  const fc = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcoes_agendamentos: [idP, idA] }), ctxA, cfgT).final;
+  assert.match(fc.resultado.pacote, /remarcar mantém a sessão/);
+  const fc2 = fase2('cancelar_conjunto', fc.efeitos.proposta_nova.dados);
+  assert.equal(fc2.reqs[0].path, '/agenda/agendamentos');
+  const tc = g.bvGPasso(fc2.st, [ok([doPacote, avulso])], cfgT).final;
+  assert.equal(tc.resultado.texto, 'Tem horário do seu pacote aí, então quem cancela é a equipe, para a sessão voltar para o seu pacote. Vou passar para a equipe.');
+  assert.equal(g.bvGPasso(fc2.st, [ok([avulso])], cfgT).final.resultado.code, 'agendamento_nao_encontrado'); // um dos dois sumiu: nenhum e apagado
+  const doisAvulsos = fase2('cancelar_conjunto', { itens: [{ ordem: 1, idAgenda: 'a8', horaInicio: '2026-12-02T11:00:00', servico: 'barba design' }, { ordem: 2, idAgenda: 'a9', horaInicio: '2026-12-03T11:00:00', servico: 'corte' }] });
+  assert.deepEqual(g.bvGPasso(doisAvulsos.st, [ok([avulso, { ...avulso, idAgenda: 'a9' }])], cfgT).reqs.map((q) => [q.m, q.path]), [['DELETE', '/agenda/a8']]); // conjunto sem pacote segue item a item
+  // remarcar o agendamento de pacote segue com o agente (a sessao e mantida, medido) e a marca nao se perde nos futuros
+  const hora = { tipo: 'horario', itens: [{ id: '1', rotulo: '15:00', valor: { idServico: SP, servico: 'corte adulto', idProfissional: 'b1', apelido: 'Kiel', data: '2026-12-03', hora: '15:00', preco: 90, minutos: 40 } }] }; // o horario e de barbeiro real (o de teste nunca e escolhido)
+  const fr = g.bvGPlano(entrada({ operacao: 'reagendar', id_opcao_agendamento: idP, id_opcao_horario: '1' }), { opcoes: hora, pedido: ctxA.pedido }, cfgT).final;
+  assert.equal(fr.efeitos.proposta_nova.acao, 'reagendar');
+  const pr = g.bvGPlano(entrada({ operacao: 'reagendar', proposta_id: PIDP }), { pedido: ctxA.pedido, proposta: { id: PIDP, acao: 'reagendar', dados: fr.efeitos.proposta_nova.dados } }, cfgT);
+  const pr2 = g.bvGPasso(pr.st, [ok({ horarios: ['15:00'] }), ok([doPacote, avulso]), ok({ horarios: [] })], cfgT);
+  assert.equal(pr2.reqs[0].m, 'PUT');
+  assert.deepEqual(g.bvGPasso(pr2.st, [ok({ sucesso: true })], cfgT).final.efeitos.pedido.futuros.find((f) => f.idAgenda === 'a7').pacote, true);
+  // trocar o servico de um agendamento de pacote apagaria o antigo: recusado na fase 1 (pela marca) e conferido na fase 2 (pela agenda)
+  const ft = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', substitui_id_opcao_agendamento: idP }), { opcoes: hora, pedido: ctxA.pedido }, cfgT).final;
+  assert.equal(ft.resultado.code, 'pacote_equipe');
+  assert.ok(!ft.efeitos.proposta_nova);
+  const troca = fase2('trocar_servico', { idCliente: 'c1', idServico: 's2', servico: 'barba design', idProfissional: 'b1', barbeiro: 'Kiel', data: '2026-12-03', hora: '15:00', antigo: { idAgenda: 'a7', horaInicio: '2026-12-01T10:00:00' } }); // proposta antiga, sem marca
+  const tt = g.bvGPasso(troca.st, [ok({ horarios: ['15:00'] }), ok([doPacote, avulso]), ok({ horarios: [] })], cfgT).final;
+  assert.deepEqual([tt.resultado.motivo, tt.efeitos.falha.operacao], ['pacote', 'agendar']);
+  assert.match(tt.resultado.texto, /^Como esse horário é do seu pacote, quem troca o serviço é a equipe, para você não perder a sessão do pacote\. /);
+  // trocar o servico de um avulso segue como sempre: POST do novo e so depois o DELETE do antigo
+  const ftA = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', substitui_id_opcao_agendamento: idA }), { opcoes: hora, pedido: ctxA.pedido }, cfgT).final;
+  assert.equal(ftA.efeitos.proposta_nova.acao, 'trocar_servico');
+  const trocaA = fase2('trocar_servico', ftA.efeitos.proposta_nova.dados);
+  assert.equal(g.bvGPasso(trocaA.st, [ok({ horarios: ['15:00'] }), ok([doPacote, avulso]), ok({ horarios: [] })], cfgT).reqs[0].m, 'POST');
+  console.log('graces.test.js cancelar agendamento de pacote ok');
 }
