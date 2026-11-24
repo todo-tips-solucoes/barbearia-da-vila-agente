@@ -37,7 +37,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\nconst ev = $input.first().json;\nif (ev.tokenHash !== '{{BV:TOKEN_SHA256}}') return [{ json: bvEncerradoSemToken(ev.body) ? { resultado: 'descartada', motivo: 'nao_mensagem' } : { resultado: 'nao_autenticada' } }];\nconst cfgM = { titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\" };\nconst rc = '{{BV:mensagens.ativo}}' === 'True' ? bvMReconhecer(ev.body, cfgM) : null;\n// selecao da lista de confirmacao (from_internal com selectedRowID bvc:<id>:<s|n>): nao e mensagem, vai para bv-confirmacao\nif (rc && rc.origem === 'id' && typeof ev.body.sender === 'string' && ev.body.sender) return [{ json: { resultado: 'selecao', telefone: ev.body.sender, rec: rc } }];\n// mensagem da equipe na fila humana (owner, 2026-11-16): nao e mensagem do cliente; marca a interacao e entra no historico\nconst eq = bvEquipe(ev.body, {{BV:handoff.setor_id}}, \"{{BV:textos.encaminhar_equipe}}\");\nif (eq) return [{ json: { resultado: 'descartada', motivo: 'enviada_pela_equipe', equipe: eq } }];\nconst r = bvNormalizar(ev, { maxKb: {{BV:payload.max_kb}}, liberados: {{BV:liberacao.contatos}} });\nif (r.status === 'aceita') return [{ json: { resultado: 'aceita', msg: { ...r.msg, confirmaTitulo: rc && rc.origem === 'titulo' ? (rc.confirmado ? 'sim' : 'nao') : '' } } }];\nreturn [{ json: { resultado: r.status === 'invalida' ? 'invalida' : 'descartada', motivo: r.motivo } }];"
+        "jsCode": "{{BV:INCLUDE:shared/rajada.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\nconst ev = $input.first().json;\nif (ev.tokenHash !== '{{BV:TOKEN_SHA256}}') return [{ json: bvEncerradoSemToken(ev.body) ? { resultado: 'descartada', motivo: 'nao_mensagem' } : { resultado: 'nao_autenticada' } }];\nconst cfgM = { titulo_sim: \"{{BV:mensagens.titulo_sim}}\", titulo_nao: \"{{BV:mensagens.titulo_nao}}\" };\nconst rc = '{{BV:mensagens.ativo}}' === 'True' ? bvMReconhecer(ev.body, cfgM) : null;\n// selecao da lista de confirmacao (from_internal com selectedRowID bvc:<id>:<s|n>): nao e mensagem, vai para bv-confirmacao\nif (rc && rc.origem === 'id' && typeof ev.body.sender === 'string' && ev.body.sender) return [{ json: { resultado: 'selecao', telefone: ev.body.sender, rec: rc } }];\n// mensagem da equipe na fila humana (owner, 2026-11-16): nao e mensagem do cliente; marca a interacao e entra no historico\nconst eq = bvEquipe(ev.body, {{BV:handoff.setor_id}}, \"{{BV:textos.encaminhar_equipe}}\");\nif (eq) return [{ json: { resultado: 'descartada', motivo: 'enviada_pela_equipe', equipe: eq } }];\nconst r = bvNormalizar(ev, { maxKb: {{BV:payload.max_kb}}, liberados: {{BV:liberacao.contatos}} });\nif (r.status === 'aceita') return [{ json: { resultado: 'aceita', msg: { ...r.msg, confirmaTitulo: rc && rc.origem === 'titulo' ? (rc.confirmado ? 'sim' : 'nao') : '', confirmaDigitado: !!(rc && rc.digitado) } } }];\nreturn [{ json: { resultado: r.status === 'invalida' ? 'invalida' : 'descartada', motivo: r.motivo } }];"
       },
       "id": "180eaef6-7e4d-597c-b04a-f89cb82f6315",
       "name": "Normalizar",
@@ -1391,7 +1391,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT $1::bigint AS contato_id, (SELECT count(*) FROM mensagens_agendadas m WHERE m.contato_id = $1::bigint AND m.tipo IN ('confirmacao','lembrete_dia') AND bv_respondivel(m.situacao, m.tipo, m.agendamento_canal_id, m.previsto_para) AND m.resposta IS NULL AND m.motivo IS NULL AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) AS abertas, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo IN ('confirmacao','lembrete_dia') AND resposta IS NOT NULL AND respondida_em > now() - make_interval(secs => $2::int)) + (SELECT count(*) FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' AND mensagem_id_canal LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes, (SELECT count(*) FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND criada_em > now() - make_interval(mins => $3::int)) AS propostas, COALESCE((SELECT tipo = 'lista' AND mensagem_id_canal LIKE 'agendada-%' FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' ORDER BY criado_em DESC, id DESC LIMIT 1), false) AS ultima_lista",
+        "query": "WITH ab AS (SELECT COALESCE(m.enviada_em, m.previsto_para) AS em FROM mensagens_agendadas m WHERE m.contato_id = $1::bigint AND m.tipo IN ('confirmacao','lembrete_dia') AND bv_respondivel(m.situacao, m.tipo, m.agendamento_canal_id, m.previsto_para) AND m.resposta IS NULL AND m.motivo IS NULL AND m.inicio > (now() AT TIME ZONE 'America/Sao_Paulo')) SELECT $1::bigint AS contato_id, (SELECT count(*) FROM ab) AS abertas, (SELECT count(*) FROM mensagens_agendadas WHERE contato_id = $1::bigint AND tipo IN ('confirmacao','lembrete_dia') AND resposta IS NOT NULL AND respondida_em > now() - make_interval(secs => $2::int)) + (SELECT count(*) FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' AND mensagem_id_canal LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes, (SELECT count(*) FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND criada_em > now() - make_interval(mins => $3::int)) AS propostas, COALESCE((SELECT tipo = 'lista' AND mensagem_id_canal LIKE 'agendada-%' FROM mensagens WHERE contato_id = $1::bigint AND direcao = 'saida' ORDER BY criado_em DESC, id DESC LIMIT 1), false) AS ultima_lista, (COALESCE((SELECT max(em) FROM ab) <= now(), false) AND NOT EXISTS (SELECT 1 FROM mensagens s WHERE s.contato_id = $1::bigint AND s.direcao = 'saida' AND s.criado_em > (SELECT max(em) FROM ab) - make_interval(mins => $3::int))) AS lembrete_ultimo",
         "options": {
           "queryReplacement": "={{ [$('Upsert contato').first().json.contato_id, {{BV:mensagens.espera_texto_s}} * 2, {{BV:proposta.validade_min}}] }}"
         }
@@ -1409,7 +1409,9 @@
           "id": "{{BV:postgres.credencial_id}}",
           "name": "Postgres Barbearia Vila"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -1463,7 +1465,7 @@
     {
       "parameters": {
         "resume": "timeInterval",
-        "amount": "={{ {{BV:mensagens.espera_texto_s}} }}",
+        "amount": "={{ $('Normalizar').first().json.msg.confirmaDigitado ? 1 : {{BV:mensagens.espera_texto_s}} }}",
         "unit": "seconds"
       },
       "id": "5254f858-9d7d-5698-b1ce-bf2a7154bd25",
@@ -1511,7 +1513,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// titulo da lista: consome (nunca vai ao agente) se o toque ja foi respondido pelo id ou se ha confirmacao aberta, a lista foi a ultima\n// saida e nao ha proposta pendente; senao e texto comum (\"Confirmo\" ao resumo do agente). Escolha da linha: so no bv-confirmacao.\nconst e = $input.first().json;\nreturn [{ json: { ...e, rota: bvMTituloRota(e) } }];"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// titulo da lista: consome (nunca vai ao agente) se o toque ja foi respondido pelo id ou se ha confirmacao aberta, a lista foi a ultima\n// saida e nao ha proposta pendente; senao e texto comum (\"Confirmo\" ao resumo do agente). Escolha da linha: so no bv-confirmacao.\n// \"sim\" ao lembrete de 24 h (digitado, ou o titulo escrito a mao): so e consumido se o lembrete foi a ultima coisa que a barbearia disse.\n// Consulta com erro (linha vazia): segue para o agente, com o contato_id que o Inserir mensagem le.\nconst m = $('Normalizar').first().json.msg;\nconst e = { ...$input.first().json, digitado: m.confirmaDigitado === true, sim: m.confirmaTitulo === 'sim' };\nif (!e.contato_id) e.contato_id = String($('Upsert contato').first().json.contato_id);\nreturn [{ json: { ...e, rota: bvMTituloRota(e) } }];"
       },
       "id": "6db7f5ba-2b80-5e00-a60e-515751128ac9",
       "name": "Rota do titulo",

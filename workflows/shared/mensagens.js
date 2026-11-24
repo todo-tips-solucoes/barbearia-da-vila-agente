@@ -93,8 +93,23 @@ function bvMResultadoEnvio(status, tentativas, cfg, agora) {
   return { situacao: 'pendente', tentativas: n, proxima_tentativa_em: new Date(new Date(agora).getTime() + esp[n - 1] * 60000).toISOString() };
 }
 
+// "Sim" digitado em resposta ao lembrete de 24 h, que e texto e pede "SIM para confirmar" (PROD 23/11: o "Sim" ia ao agente e, em
+// telefone com dois cadastros, virava "qual deles e voce?"). So a mensagem inteira, por palavras; qualquer coisa a mais ("sim, mas vou
+// atrasar") segue para o agente. O "nao" fica com o agente de proposito (revisao de 24/11): recusa por engano muda o status na
+// Graces e abre cancelamento, e o codigo nao ve a mensagem que a equipe manda pelo aparelho. Quem decide se o sim responde ao
+// lembrete e a rota (bvMTituloRota).
+const BVM_SIM_DIGITADO = ['sim', 'confirmo', 'confirmado', 'confirmada', 'sim confirmo', 'sim confirmado', 'confirmo sim', 'confirmado sim', 'pode confirmar', 'ta confirmado', 'esta confirmado'];
+function bvMSimDigitado(t) {
+  const cru = String(t == null ? '' : t);
+  if (cru.length > 40 || cru.includes('?') || /\d/.test(cru)) return false;
+  if (/[^\P{L}a-z]/u.test(cru.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase())) return false; // outro alfabeto: nao da para saber o que diz
+  if ([...cru].some((ch) => /\p{Extended_Pictographic}/u.test(ch) && !BVM_EMOJI_FECHO.has(ch))) return false; // "Sim 👍" vale; "Sim 😡" vai ao agente
+  const frase = bvMPalavras(cru).join(' ');
+  return BVM_SIM_DIGITADO.some((x) => bvMPalavras(x).join(' ') === frase);
+}
 // Evento do webhook (body). Caminho id (from_internal com selectedRowID, medido na sonda da lista): {origem:'id', mensagem_id,
-// confirmado, stanza}; caminho titulo (start, texto exato; fallback): {origem:'titulo', confirmado}. Qualquer outra coisa: null.
+// confirmado, stanza}; caminho titulo (start, texto exato; fallback): {origem:'titulo', confirmado}; resposta digitada ao lembrete:
+// {origem:'titulo', confirmado:true, digitado:true} (so o sim). Qualquer outra coisa: null.
 // O id so vem da estrutura da lista, nunca do texto do cliente. Idempotencia fica no claim do bv-confirmacao.
 function bvMReconhecer(ev, cfg) {
   if (!ev || ev.fromMe === true) return null;
@@ -113,6 +128,7 @@ function bvMReconhecer(ev, cfg) {
     const t = msg[0].text.trim();
     if (t === cfg.titulo_sim) return { origem: 'titulo', confirmado: true };
     if (t === cfg.titulo_nao) return { origem: 'titulo', confirmado: false };
+    if (bvMSimDigitado(t)) return { origem: 'titulo', confirmado: true, digitado: true };
   }
   return null;
 }
@@ -451,9 +467,15 @@ const bvMConfReq = (idAgenda, row, confirmado) => ({ idAgenda, confirmado, ...(r
 // Rota do texto igual a um titulo da lista (bv-recepcao). e = { abertas, recentes, propostas, ultima_lista }:
 // recentes > 0 => o from_internal do mesmo toque ja respondeu: consome (bv-confirmacao devolve repetida, sem texto);
 // com confirmacao aberta, sem proposta pendente e com a lista como ultima saida => consome (espera o id); senao vai ao agente.
+// "Sim" ao lembrete de 24 h (e.sim: digitado, ou o titulo "Confirmo" escrito a mao): consome com confirmacao aberta, sem proposta
+// pendente e com o lembrete como a ultima coisa dita pela barbearia (lembrete_ultimo): no meio de uma conversa o "sim" responde a
+// ultima pergunta do agente. O digitado nunca entra pelos atalhos do toque (recentes, ultima_lista).
 function bvMTituloRota(e) {
-  if (Number(e && e.recentes) > 0) return 'consumir';
-  if (Number(e && e.abertas) > 0 && !(Number(e.propostas) > 0) && (e.ultima_lista === true || e.ultima_lista === 'true')) return 'consumir';
+  const v = (x) => x === true || x === 'true';
+  const dig = !!e && v(e.digitado);
+  const aberta = Number(e && e.abertas) > 0 && !(Number(e.propostas) > 0);
+  if (!dig && Number(e && e.recentes) > 0) return 'consumir';
+  if (aberta && ((!dig && v(e.ultima_lista)) || (v(e.sim) && v(e.lembrete_ultimo)))) return 'consumir';
   return 'agente';
 }
 
@@ -495,6 +517,8 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax, atual) {
 // cumprimento sozinho, "sim", pergunta, numero ou horario ("ok 14:30" e escolha, nao despedida), letra fora de a-z e emoji que nao e
 // de fecho nao contam. Por palavras, sem regex com repeticao sobre texto do cliente.
 const bvMJunta = (w) => w.replace(/(.)\1+/g, '$1'); // "valeuu" = "valeu", "okk" = "ok"
+// Palavras de um texto do cliente: sem acento, minusculas, so a-z, letras repetidas juntas ("Simm!" -> ['sim'])
+const bvMPalavras = (t) => String(t == null ? '' : t).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().split(/[^a-z]+/).filter(Boolean).map(bvMJunta);
 const BVM_GRATO = new Set(['ok', 'okay', 'oki', 'blz', 'beleza', 'obrigado', 'obrigada', 'obrigados', 'obrigadao', 'obg', 'obgd', 'obgda', 'brigado', 'brigada', 'brigadao', 'valeu',
   'vlw', 'flw', 'falou', 'fechou', 'show', 'perfeito', 'otimo', 'otima', 'combinado', 'fechado', 'certo', 'certinho', 'joia', 'legal', 'maravilha', 'top', 'tmj', 'tranquilo', 'tchau',
   'abraco', 'abs', 'grato', 'grata', 'gratidao', 'agradeco', 'agradecido', 'agradecida', 'thanks', 'entendi', 'entendido', 'ciente', 'amem', 'igualmente'].map(bvMJunta));
@@ -511,7 +535,7 @@ function bvMSoAgradeceu(textos) {
     if (/[^\P{L}a-z]/u.test(txt)) return false; // outro alfabeto: nao da para saber o que diz
     const emojis = [...cru].filter((ch) => /\p{Extended_Pictographic}/u.test(ch));
     if (emojis.some((ch) => !BVM_EMOJI_FECHO.has(ch))) return false; // 😡, 👎, 🤔 pedem resposta
-    const ps = txt.split(/[^a-z]+/).filter(Boolean).map(bvMJunta);
+    const ps = bvMPalavras(cru);
     if (!ps.length) return emojis.length > 0; // so um joinha fecha a conversa; so pontuacao, nao
     return ps.some((w) => BVM_GRATO.has(w)) && ps.every((w) => BVM_GRATO.has(w) || BVM_GRATO_APOIO.has(w));
   });
@@ -525,5 +549,5 @@ function bvMAvisaFila(l) {
   return !bvMSoAgradeceu(d);
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };

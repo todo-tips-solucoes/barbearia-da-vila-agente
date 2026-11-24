@@ -182,6 +182,13 @@ class Recepcao(unittest.TestCase):
         self.assertEqual(self.norm(ev("Não vou poder"))["msg"]["confirmaTitulo"], "nao")
         r = self.norm(ev("oi, tudo bem?"))
         self.assertEqual((r["resultado"], r["msg"]["confirmaTitulo"]), ("aceita", ""))
+        # "sim" digitado ao lembrete de 24 h (23/11): marca a mensagem como titulo E como digitada; o "nao" digitado fica com o agente
+        for t in ("Sim", "Confirmado!"):
+            m = self.norm(ev(t))["msg"]
+            self.assertEqual((m["confirmaTitulo"], m["confirmaDigitado"]), ("sim", True), t)
+        self.assertEqual(self.norm(ev("Confirmo"))["msg"]["confirmaDigitado"], False)
+        for t in ("Não", "Não posso", "Sim, mas vou atrasar"):
+            self.assertEqual(self.norm(ev(t))["msg"]["confirmaTitulo"], "", t)
 
     def test_grafo(self):
         wf = json.load(open(os.path.join(RAIZ, self.ARQ), encoding="utf-8"))
@@ -393,15 +400,28 @@ class RevisaoOnda7(CodeNodes):
         self.assertEqual((d["enviar"], d["texto"]), (True, CFG["textos"]["confirmacao_escolher"]))  # pede para escolher
 
     def test_item1_e_5_rota_do_titulo_na_recepcao(self):
-        rota = lambda **o: rodar("workflows/bv-recepcao.json", "Rota do titulo", [{"contato_id": "1", "abertas": "1", "recentes": "0", "propostas": "0", "ultima_lista": True, **o}])[0]
+        rota = lambda dig=False, tit="sim", **o: rodar("workflows/bv-recepcao.json", "Rota do titulo", [{"contato_id": "1", "abertas": "1", "recentes": "0", "propostas": "0", "ultima_lista": True, **o}],
+                                                       refs={"Normalizar": [{"msg": {"confirmaTitulo": tit, "confirmaDigitado": dig}}], "Upsert contato": [{"contato_id": 77}]})[0]
         self.assertEqual(rota()["rota"], "consumir")
         self.assertEqual(rota()["contato_id"], "1")  # Inserir mensagem (ramo agente) le $json.contato_id
         self.assertEqual(rota(abertas="0", recentes="1", ultima_lista=False)["rota"], "consumir")  # gemeo do toque: nunca vai ao agente
         self.assertEqual(rota(propostas="1")["rota"], "agente")  # "Confirmo" ao resumo do agente
         self.assertEqual(rota(ultima_lista=False)["rota"], "agente")
+        # "sim" ao lembrete de 24 h (23/11): so se o lembrete foi a ultima coisa dita pela barbearia; vale para o titulo escrito a mao
+        self.assertEqual(rota(dig=True, ultima_lista=False, lembrete_ultimo=True)["rota"], "consumir")
+        self.assertEqual(rota(dig=True, ultima_lista=True, lembrete_ultimo=False)["rota"], "agente")
+        self.assertEqual(rota(dig=True, lembrete_ultimo=True, propostas="1")["rota"], "agente")
+        self.assertEqual(rota(dig=True, abertas="0", recentes="1", lembrete_ultimo=False)["rota"], "agente")
+        self.assertEqual(rota(ultima_lista=False, lembrete_ultimo=True)["rota"], "consumir")
+        self.assertEqual(rota(tit="nao", ultima_lista=False, lembrete_ultimo=True)["rota"], "agente")
+        # consulta com erro (o no segue com a linha vazia): vai ao agente, com o contato_id que o Inserir mensagem le
+        vazio = rodar("workflows/bv-recepcao.json", "Rota do titulo", [{}], refs={"Normalizar": [{"msg": {"confirmaTitulo": "sim", "confirmaDigitado": True}}], "Upsert contato": [{"contato_id": 77}]})[0]
+        self.assertEqual((vazio["rota"], vazio["contato_id"]), ("agente", "77"))
+        no = next(n for n in json.load(open(os.path.join(RAIZ, "workflows", "bv-recepcao.json"), encoding="utf-8"))["nodes"] if n["name"] == "Confirmacao aberta?")
+        self.assertEqual((no.get("onError"), no.get("alwaysOutputData")), ("continueRegularOutput", True))
         q = json.load(open(os.path.join(RAIZ, "workflows", "bv-recepcao.json"), encoding="utf-8"))
         q = next(n for n in q["nodes"] if n["name"] == "Confirmacao aberta?")["parameters"]["query"]
-        for t in ("AS abertas", "LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes", "AS propostas", "AS ultima_lista", "'agendada-%'", "motivo IS NULL", "estado = 'pendente'"):
+        for t in ("WITH ab AS (SELECT COALESCE(m.enviada_em, m.previsto_para) AS em", "COALESCE((SELECT max(em) FROM ab) <= now(), false) AND NOT EXISTS", "s.criado_em > (SELECT max(em) FROM ab) - make_interval(mins => $3::int))) AS lembrete_ultimo", "AS abertas", "LIKE 'conf-%' AND criado_em > now() - make_interval(secs => $2::int)) AS recentes", "AS propostas", "AS ultima_lista", "'agendada-%'", "motivo IS NULL", "estado = 'pendente'"):
             self.assertIn(t, q)
 
     def test_item2_confirmacoes_no_prompt_mesmo_em_sessao_nova(self):
