@@ -73,7 +73,8 @@ function bvMDecisaoCancelar(row, idAgenda) {
   if (!idAgenda || !r.inicio) return null;
   const servico = String(d.servico || 'horário');
   const resumo = `Cancelar ${servico} em ${bvMDia(r.inicio)} às ${String(r.inicio).slice(11, 16)}`;
-  return { dados: { idAgenda, horaInicio: String(r.inicio), recorrente: !!d.recorrente, servico, resumo }, opcoes: { tipo: 'decisao_cancelamento', itens: BVM_DECISAO } };
+  // idCliente: a fase 2 do cancelar le a agenda do cliente antes de apagar (agendamento de pacote vai para a equipe)
+  return { dados: { idAgenda, horaInicio: String(r.inicio), recorrente: !!d.recorrente, servico, resumo, ...(r.graces_cliente_id ? { idCliente: String(r.graces_cliente_id) } : {}) }, opcoes: { tipo: 'decisao_cancelamento', itens: BVM_DECISAO } };
 }
 function bvMTexto(m, contato, cfg) {
   const lid = /@lid$/.test(String(contato));
@@ -333,9 +334,9 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
 // Agendamento feito por pacote: em /agenda/agendamentos a Graces devolve o servico dentro de servicoPacote ({ idServico,
 // descricaoServico }), sem os campos de cima (medido em 23/11 com clientes de PROD: o agente listava o agendamento sem o nome do
 // servico, dizia "Cancelar undefined" e nao conseguia remarcar). Sobe os dois campos para o formato do agendamento avulso e marca
-// `pacote`; quem ja tem idServico fica como veio. Um lugar so, usado pelo agente (bvgResp) e pelos lembretes (bvMAgendaDe).
-const bvMComServico = (a) => (a && typeof a === 'object' && a.servicoPacote && typeof a.servicoPacote === 'object' && a.servicoPacote.idServico && !a.idServico
-  ? { ...a, idServico: a.servicoPacote.idServico, descricaoServico: a.descricaoServico || a.servicoPacote.descricaoServico, pacote: true } : a);
+// `pacote` (a marca vale sempre que servicoPacote traz o servico, mesmo que idServico tambem venha em cima). Um lugar so, usado pelo agente (bvgResp) e pelos lembretes (bvMAgendaDe).
+const bvMComServico = (a) => (a && typeof a === 'object' && a.servicoPacote && typeof a.servicoPacote === 'object' && a.servicoPacote.idServico
+  ? { ...a, idServico: a.idServico || a.servicoPacote.idServico, descricaoServico: a.descricaoServico || a.servicoPacote.descricaoServico, pacote: true } : a);
 
 // /agenda/completa ([{idProfissional, apelido, agendamentos:[...]}]) -> lista plana; /agenda/agendamentos (ja plana) passa igual.
 function bvMAgendaDe(body) {

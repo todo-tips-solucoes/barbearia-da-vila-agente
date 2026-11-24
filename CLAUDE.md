@@ -47,4 +47,4 @@ A lista completa, e as pendências, estão em **`docs/decisoes-pre-00c.md`**. O 
 - Datas no fuso de São Paulo, **sem offset**. O `POST /agenda` usa `data` + `horaInicio` (`HH:mm`); o `PUT` usa `AAAA-MM-DDTHH:mm:ss`.
 - `tempoPadrao` vem em minutos inteiros e `dia` vem por extenso (`"Segunda-Feira"`), ao contrário do portal. O `apelido` pode ter espaço no final.
 - Use `GET /agenda/horarios-livres` para oferecer horários: a grade já vem calculada.
-- Sem webhooks: o estado da agenda só se obtém consultando a API. Erros vêm em ProblemDetails; decida pelo campo `code`.
+- O agente não usa webhooks (o portal passou a documentá-los em 2026-11-24; em outubro eram "em breve"): o estado da agenda só se obtém consultando a API. Erros vêm em ProblemDetails; decida pelo campo `code`.
