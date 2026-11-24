@@ -57,6 +57,11 @@ O portal exige login com a chave de API. Esta pasta é autocontida e **não cont
 | `dia` em `/agenda/configuracao` | `1` (número) | `"Segunda-Feira"` (texto) |
 | Chave em staging | "a mesma chave vale para o ambiente correspondente" | `401` com a chave atual |
 | `apelido` do profissional | — | pode ter espaço no final (`"Rodrigo "`) |
+| Agendamento feito por pacote em `/agenda/agendamentos` (medido em 2026-11-23) | `idServico`, `descricaoServico` e `servicoPacote` no mesmo nível | o serviço vem só dentro de `servicoPacote: { idServico, descricaoServico }`; não há `idServico` nem `descricaoServico` em cima. No avulso é o contrário, e `servicoPacote` nem vem |
+| O mesmo agendamento em `/agenda/completa` (2026-11-23) | — | vem com `nomeServico`, sem `idServico` e sem `servicoPacote` |
+| Cancelar (`DELETE /agenda/{id}`) agendamento feito por pacote (2026-11-23) | — | a seção usada **não voltou** para `/agenda/pacotes`: medido três vezes no cliente de teste, até 90 s depois e de novo minutos depois (4 seções viraram 1 com três agendamentos cancelados) |
+| Remarcar (`PUT /agenda/{id}`) agendamento feito por pacote (2026-11-23) | — | move o mesmo agendamento, que continua por pacote, e as seções em aberto não mudam |
+| `idProdutoServico` da seção em `/agenda/pacotes` (2026-11-23) | — | é o `idServico` do serviço da loja |
 
 ## Lacunas da fonte (não presuma; valide antes de depender)
 
