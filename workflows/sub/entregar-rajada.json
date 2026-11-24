@@ -588,7 +588,8 @@
             "telefone": "={{ String($('Gatilho').first().json.telefone) }}",
             "turno_id": "={{ $('Gatilho').first().json.turno_id }}",
             "ambiente": "{{BV:ambiente}}",
-            "texto": "={{ $fromAI('texto', 'parte do nome do serviço, na palavra do cliente (ex.: cabelo, corte, barba, infantil); vazio para listar todos', 'string') }}"
+            "texto": "={{ $fromAI('texto', 'parte do nome do serviço, na palavra do cliente (ex.: cabelo, corte, barba, infantil); vazio para listar todos', 'string') }}",
+            "texto_cliente": "={{ $('Preparar').first().json.texto_cliente }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -640,6 +641,15 @@
             {
               "id": "texto",
               "displayName": "texto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "texto_cliente",
+              "displayName": "texto_cliente",
               "required": false,
               "defaultMatch": false,
               "display": true,

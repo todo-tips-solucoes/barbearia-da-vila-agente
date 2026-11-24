@@ -104,6 +104,7 @@ function bvGNormalizar(raw, cfg) {
   if (v.proposta_id !== undefined && v.texto_cliente !== undefined && !bvgConfirmou(v.texto_cliente, v.operacao)) {
     return { ok: false, resultado: bvgRecusa('cliente_nao_confirmou', 'a mensagem do cliente não confirma: nada foi feito na agenda. Responda ao que ele disse em uma frase e pergunte de novo se pode confirmar') };
   }
+  if (bvgCabeloEBarba(v.texto_cliente)) v.cabelo_barba = true; // derivado da fala: nao esta em BVG_CAMPOS, nao entra de fora
   delete v.texto_cliente;
   // Suite R18 (2026-11-16): depois de ver horarios o modelo nao tem mais o id do servico e manda o NOME; recusar fazia o
   // agente desistir ("a consulta nao aceitou o servico"). O nome vira servico_nome e e casado com o que foi ofertado/escolhido.
@@ -175,11 +176,46 @@ function bvgIdsDeServico(vistos, itens) {
 // Busca de servico (atendimentos de 2026-11-15): a Graces filtra por trecho do nome, e "cabelo" so achava os combos com barba
 // ("Cabelo adulto + barba"); quem pedia so o corte recebia as opcoes de R$ 150 e ia embora. Cabelo/cortar sem barba busca os
 // cortes (so os de cabelo: "Corte de unha" sai); cabelo (ou corte) com barba busca os combos.
+const bvgEhCombinado = (nome) => { const n = bvgNomeNorm(nome); return /\bbarbas?\b/.test(n) && /\b(?:cabelos?|cortes?)\b/.test(n); };
 const bvgSoCabelo = (t) => { const n = bvgNomeNorm(t); return /\b(cabelos?|cortar)\b/.test(n) && !/\bbarbas?\b/.test(n); };
 function bvgTermosServico(t) {
   const n = bvgNomeNorm(t);
-  if (/\b(cabelos?|cortar|cortes?)\b/.test(n) && /\bbarbas?\b/.test(n)) return ['cabelo'];
+  if (bvgEhCombinado(n.replace(/\bcortar\b/g, 'corte'))) return ['cabelo'];
   return bvgSoCabelo(t) ? ['corte'] : [t];
+}
+
+// Cabelo e barba na mesma visita (owner, 2026-11-24): o atendimento ocupa dois horarios seguidos, e quem marca os dois e o servico
+// combinado ("Cabelo adulto + barba", 80 min: a grade da Graces so traz inicio com os 80 min livres; 269 inicios de 4 barbeiros
+// conferidos em 24/11, nenhum furado). O modelo mandava a lista geral (18 de 18 conversas no TESTE), e quem tocava em "corte adulto"
+// ficava com um horario so. Decide o codigo, pela fala do cliente no turno (texto_cliente): so os dois ligados por "e", "mais",
+// "com", "+", "/", "&" ou virgula. Nao sao os dois: "cortar a barba", "corte de barba", "cabelo, sem barba", "hoje e barba" (o
+// verbo "e" vira "eh" antes de perder o acento), servico de outra pessoa ("corte do meu filho e barba"), bigode e os avulsos
+// ditos pelo nome ("corte adulto e barba express": o cliente escolheu).
+const BVG_CAB = '(?:cabelos?|cortes?|cortar|raspar|maquina|degrade)';
+const BVG_CABELO_E_BARBA = [
+  new RegExp(`\\b${BVG_CAB}\\b[^.!?;]{0,40}?(?:\\b(?:e|mais|com)\\b|[+,/&])\\s*(?:(?:fazer|tambem|a|as|da|minha|uma)\\s+){0,3}barbas?\\b`),
+  new RegExp(`\\bbarbas?\\s*(?:\\b(?:e|mais)\\b|[+,/&])\\s*(?:(?:fazer|cortar|tambem|o|a|os|um|uma|meu|no|na)\\s+){0,3}${BVG_CAB}\\b`)];
+const BVG_NAO_E_OS_DOIS = /\b(?:sem|nao|nem)\s+(?:(?:a|fazer|quero|precisa|vou)\s+){0,2}barbas?\b|\bbarbas?\s+nao\b(?=\s*(?:[,.!?;]|$))|\bso\s+(?:o\s+)?(?:cabelo|corte)\b(?!\s*(?:de\s+cabelo\s*)?(?:(?:e|mais|com)\b|[+,/&]))|\b(?:filh[oa]s?|sobrinh[oa]s?|net[oa]s?|criancas?|menin[oa]s?|infantil|juvenil|bigode|cavanhaque|express|design|lisa)\b|\b(?:pr[oa]|para|do|da)\s+(?:[oa]\s+)?(?:meu\s+|minha\s+)?(?:pai|irma[os]?|amig[oa]s?)\b/;
+const bvgCabeloEBarba = (t) => {
+  const n = bvgNomeNorm(String(t || '').slice(0, 600).replace(/(^|\s)(?:é|é)(?=\s|$)/gi, '$1eh'));
+  return !BVG_NAO_E_OS_DOIS.test(n) && BVG_CABELO_E_BARBA.some((re) => re.test(n));
+};
+// Lista de servicos so com os combinados: uma vez (se a oferta atual ja e essa, o cliente viu e quer outra coisa), so quando a busca
+// do modelo e de cabelo/barba ou geral ("sobrancelha" segue como pedida) e so para quem nao tem agendamento futuro (com um ja
+// marcado, "barba e cabelo" pode ser incluir o que falta: vale o horario colado do servico a mais).
+const BVG_BUSCA_DOS_DOIS = new RegExp(`\\b(?:${BVG_CAB}|barbas?)\\b`); // "maquina" tambem: "máquina e barba" virava busca por "maquina" (TESTE, 24/11)
+function bvgListarOsDois(i, ctx, t) {
+  const of = ctx.opcoes && ctx.opcoes.tipo === 'servico' && Array.isArray(ctx.opcoes.itens) ? ctx.opcoes.itens : [];
+  return !!i.cabelo_barba && !(Array.isArray(ctx.pedido.futuros) && ctx.pedido.futuros.length) && !(of.length && of.every((x) => bvgEhCombinado(x.rotulo)))
+    && (!t || BVG_BUSCA_DOS_DOIS.test(bvgNomeNorm(t)));
+}
+// Busca ou proposta de um servico avulso no turno em que ele pediu os dois: recusa uma vez por turno (pedido.dois_avisado; se o
+// modelo insistir e porque o cliente quer mesmo um so, e a marca errada custa uma chamada, nunca um laco). Com agendamento de outro
+// servico no dia, e servico a mais e segue.
+const BVG_SO_UM = 'o cliente falou em cabelo e barba e este serviço é só um dos dois: nada foi consultado. Os dois juntos ocupam dois horários seguidos e têm serviço próprio: chame listar_servicos com o texto "cabelo e barba" e pergunte qual dos combinados ele quer. Se ele quer mesmo só este serviço, ou pediu os dois avulsos (id_opcoes_servicos), chame de novo';
+function bvgSoUmDosDois(i, ctx, sv, data) {
+  if (!i.cabelo_barba || bvgEhCombinado(sv.nome) || ctx.pedido.dois_avisado === i.turno_id || bvgNoDia(ctx.pedido, data, sv.idServico).length) return null;
+  return bvgFim(bvgRecusa('pediu_dois_servicos', BVG_SO_UM), { pedido: { dois_avisado: i.turno_id } });
 }
 
 // Servico da chamada: pelo id ofertado; pelo nome (so entre o ofertado, o escolhido e o do ultimo atendimento); ou o ja escolhido.
@@ -391,7 +427,10 @@ function bvGPlano(i, ctx0, cfg) {
     {
       // FR-005: pedido pelo nome "2a vez" busca o regular, sem desconto.
       const t = i.texto ? i.texto.replace(/\b2\s*[ªaºo°]?\s*vez\b/gi, '').replace(/\s+/g, ' ').trim() : '';
-      return chamar(bvgTermosServico(t).map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: bvgSoCabelo(t), vistos: ctx.pedido.servicos_vistos || [] });
+      const dois = bvgListarOsDois(i, ctx, t);
+      const busca = bvgTermosServico(t); // a busca do modelo segue junto (loja sem combinado: vale a lista dela); termo curto ja traz o catalogo todo
+      const termos = dois && busca.every((x) => x.length >= 3) ? [...new Set(['cabelo', ...busca])] : busca;
+      return chamar(termos.map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: !dois && bvgSoCabelo(t), dois, vistos: ctx.pedido.servicos_vistos || [] });
     }
     case 'listar_barbeiros': {
       const s = bvgServicoDe(i, ctx, ctx.pedido.ultimo);
@@ -456,6 +495,8 @@ function bvGPlano(i, ctx0, cfg) {
       const ult = ctx.pedido.ultimo || {};
       const s = ag ? { idServico: ag.idServico, nome: ag.servico, opcao_id: 'ag' } : bvgServicoDe(i, ctx, ult);
       if (!s) return bvgFim(i.id_opcao_servico || i.servico_nome ? bvgOpcaoInvalida() : bvgRecusa('servico_nao_escolhido', 'escolha o serviço antes (listar_servicos)'));
+      const soUm = ag ? null : bvgSoUmDosDois(i, ctx, s, i.data);
+      if (soUm) return soUm;
       // Clausula petrea: servico a mais no dia de um agendamento com barbeiro so da equipe e cliente dele; quem atende e a equipe.
       if (!ag && bvgNoDia(ctx.pedido, i.data, s.idServico).some((f) => bvBarbeiroHumano({ idProfissional: f.idProfissional }, cfg.humanos))) return bvgEncaminhar('barbeiro_humano', 'horarios_livres', cfg);
       // Remarcar mantem o barbeiro (atendimentos de 2026-11-15): a busca ia a todos os barbeiros e a proposta trocava o barbeiro em
@@ -618,6 +659,8 @@ function bvgFase1(i, ctx, cfg, chamar) {
   if (i.operacao === 'agendar' && antigo && agAnt.pacote) return bvgFim(bvgRecusa('pacote_equipe', 'esse agendamento é do pacote do cliente e trocar o serviço por aqui faria ele perder a sessão: ofereça passar para a equipe e, se ele aceitar, chame transferir_atendimento com motivo pacote'));
   if (i.operacao === 'agendar') {
     if (!h || (i.substitui_id_opcao_agendamento && !antigo)) return bvgFim(bvgOpcaoInvalida());
+    const soUm = antigo ? null : bvgSoUmDosDois(i, ctx, { nome: h.servico, idServico: h.idServico }, h.data);
+    if (soUm) return soUm;
     const dados = { idCliente: ctx.pedido.idCliente, idServico: h.idServico, servico: h.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, valor: h.preco, minutos: h.minutos };
     // Substituir pelo MESMO servico nao troca servico (PROD, 23/11: "incluir cabelo" virou "Trocar servico: BARBA EXPRESS" com outro barbeiro)
     if (antigo && h.idServico === antigo.idServico) {
@@ -851,13 +894,16 @@ function bvgPassoUm(st, resps0, cfg) {
       // 55% da agenda, era o 13o. cfg.destaque = nomes na ordem medida; quem nao esta nela segue depois, na ordem da API.
       const dest = (cfg.destaque || []).map((x) => String(x).trim().toLowerCase());
       const peso = (s) => { const k = dest.indexOf(s.nome.trim().toLowerCase()); return k < 0 ? dest.length : k; };
-      const ss = bvFiltrarServicos(juntas.filter((s) => s.ativo !== false).map((s) => ({ ...s, nome: String(s.descricaoAgenda || '') })))
+      const todos = bvFiltrarServicos(juntas.filter((s) => s.ativo !== false).map((s) => ({ ...s, nome: String(s.descricaoAgenda || '') })))
         .filter((s) => !meta.soCabelo || !/\bunhas?\b/i.test(s.nome))
         .map((s, k) => [peso(s), k, s]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
+      const comb = meta.dois ? todos.filter((s) => bvgEhCombinado(s.nome)) : [];
+      const ss = comb.length ? comb : todos;
       const of0 = bvMontarOferta('servico', ss.map((s) => ({ rotulo: s.nome, valor: { idServico: s.idServico, nome: s.nome, preco: s.valorPadrao, minutos: s.tempoPadrao } })), cfg);
       const ids = bvgIdsDeServico(meta.vistos, of0.itens);
       const of = { ...of0, itens: ids.itens };
-      const orientacao = meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'a lista traz os serviços mais pedidos e há outros: se o cliente não achar o que quer, peça um termo para filtrar' : undefined;
+      const orientacao = comb.length ? 'o cliente pediu cabelo e barba: estes são os serviços que fazem os dois no mesmo atendimento, em dois horários seguidos com o mesmo barbeiro. Pergunte qual deles ele quer (a lista vai junto); não ofereça corte ou barba avulsos para este pedido, a não ser que ele peça ou diga que tem pacote de um dos dois (aí liste de novo e use id_opcoes_servicos com os dois)'
+        : meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'a lista traz os serviços mais pedidos e há outros: se o cliente não achar o que quer, peça um termo para filtrar' : undefined;
       return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of, pedido: { servicos_vistos: ids.lista } });
     }
     case 'listar_barbeiros': {
@@ -1258,4 +1304,4 @@ function bvGParams(i, efeitos, msg) {
     ...bvgMsgParams(e, msg), e.contato && e.contato.como_conheceu ? String(e.contato.como_conheceu) : null];
 }
 
-if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, BVG_ACOES };
+if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, bvgCabeloEBarba, BVG_ACOES };
