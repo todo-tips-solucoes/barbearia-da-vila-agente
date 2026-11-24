@@ -1847,5 +1847,82 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(ag(ofH('corte adulto', 'c1')).final.resultado.code, 'pediu_dois_servicos');
   assert.ok(ag(ofH('corte adulto', 'c1'), { dois_avisado: T2 }).reqs.length > 0);
   assert.ok(ag(ofH('Cabelo adulto + barba', 'k1')).reqs.length > 0);
+  // Cliente com pacote (24/11: 65 de 288 clientes ativos; todos de servico avulso): cabelo e barba vao pelo servico do pacote e o
+  // outro em sequencia, nunca pelo combinado (outro servico: nao abate a sessao)
+  const catP = [...cat, { idServico: 'b2', descricaoAgenda: 'BARBA EXPRESS', valorPadrao: 45 }, { idServico: 'b3', descricaoAgenda: 'Camuflagem Barba', valorPadrao: 50 }, { idServico: 'm1', descricaoAgenda: 'corte com maquina', valorPadrao: 70 },
+    { idServico: 'j1', descricaoAgenda: 'corte juvenil 12 a 17 anos', valorPadrao: 75 }, { idServico: 'u1', descricaoAgenda: 'Corte de unha', valorPadrao: 20 }, { idServico: 'c9', descricaoAgenda: 'corte adulto 2º vez', valorPadrao: 45 }];
+  const sec = (k) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(k).padStart(12, '0')}`;
+  const pacote = (...ids) => ok(ids.length ? [{ idClientePacote: 'p1', descricao: 'Pacote', dataValidade: null, secoes: ids.map((x, k) => ({ idClienteItemPacote: sec(k), idProdutoServico: x, descricaoAgendaOnline: x })) }] : []);
+  const ctxP = (pedido = {}, opcoes = {}) => ({ pedido: { idCliente: 'cli-1', ...pedido }, opcoes });
+  const listaP = (respPac, texto, respCat = ok(catP)) => {
+    const pp = g.bvGPlano(dois({ operacao: 'listar_servicos', texto }), ctxP(), cfg);
+    assert.deepEqual(pp.reqs.map((q) => [q.path, q.qs.texto, q.qs.idCliente, Object.keys(q.qs).length]), [['/agenda/servicos', undefined, undefined, 0], ['/agenda/pacotes', undefined, 'cli-1', 1]], String(texto)); // catalogo todo + pacotes, juntos
+    return g.bvGPasso(pp.st, [respCat, respPac], cfg).final;
+  };
+  const marcados = (r) => r.servicos.map((x) => [x.nome, !!x.pacote]);
+  const naLista = (fim) => fim.efeitos.opcoes.itens.map((x) => x.valor.nome);
+  // pacote so de corte: o corte do pacote vai ao modelo marcado; a lista do WhatsApp leva so as barbas (camuflagem nao e barba)
+  f = listaP(pacote('c1', 'c1'), 'barba');
+  assert.deepEqual(marcados(f.resultado), [['corte adulto', true], ['barba design', false], ['BARBA EXPRESS', false]]);
+  assert.deepEqual(naLista(f), ['barba design', 'BARBA EXPRESS']);
+  assert.match(f.resultado.orientacao, /tem pacote de corte adulto \(dado.*Não ofereça o serviço combinado.*pergunte qual serviço de barba ele quer.*exatamente dois ids, um de cabelo e um de barba/);
+  assert.doesNotMatch(JSON.stringify(f.resultado), /aaaaaaaa|Pacote/); // nada do pacote alem do nome do servico vai ao modelo
+  const idC1 = f.resultado.servicos[0].id, idB1 = f.resultado.servicos[1].id;
+  assert.deepEqual(f.efeitos.pedido.dois_pacote, { cabelo: idC1, barba: null });
+  const vistosP = f.efeitos.pedido.servicos_vistos, ofP = f.efeitos.opcoes;
+  // a sequencia pedida pelo modelo resolve os dois ids (o do pacote nao esta na lista do WhatsApp)
+  const hlP = (o, pedido = { dois_pacote: f.efeitos.pedido.dois_pacote }, opcoes = ofP, texto = 'barba design') => g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-11-25', texto_cliente: texto, ...o }), ctxP({ servicos_vistos: vistosP, ...pedido }, opcoes), cfg);
+  assert.deepEqual(hlP({ id_opcoes_servicos: `${idC1},${idB1}` }).reqs.map((q) => q.qs.idServico), ['c1', 'b1']);
+  // turno da escolha: o modelo busca SO a barba (a fala e "barba design", sem a marca) e o codigo monta o par, cabelo primeiro
+  let par = hlP({ id_opcao_servico: idB1, qualquer: true });
+  assert.deepEqual([par.reqs.map((q) => [q.path, q.qs.idServico]), par.st.meta.enc], [[['/servicos/profissionais', 'c1'], ['/servicos/profissionais', 'b1']], true]);
+  // depois da lista de servicos (oferta de horario, de sequencia...) quem busca um so e atendido; sem a marca do pacote, tambem
+  assert.deepEqual(hlP({ id_opcao_servico: idB1, qualquer: true }, undefined, { tipo: 'sequencia', itens: [] }).reqs.map((q) => q.qs.idServico), ['b1']);
+  assert.deepEqual(hlP({ id_opcao_servico: idB1, qualquer: true }, {}).reqs.map((q) => q.qs.idServico), ['b1']);
+  // pacote so de barba: falta o cabelo (unha, infantil, juvenil e 2a vez nao entram); a busca so do corte vira o par
+  f = listaP(pacote('b1'));
+  assert.deepEqual([marcados(f.resultado), naLista(f)], [[['barba design', true], ['corte adulto', false], ['corte com maquina', false]], ['corte adulto', 'corte com maquina']]);
+  assert.match(f.resultado.orientacao, /pergunte qual serviço de cabelo ele quer/);
+  par = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-11-25', id_opcao_servico: f.resultado.servicos[1].id, qualquer: true, texto_cliente: 'corte adulto' }), ctxP({ servicos_vistos: f.efeitos.pedido.servicos_vistos, dois_pacote: f.efeitos.pedido.dois_pacote }, f.efeitos.opcoes), cfg);
+  assert.deepEqual(par.reqs.map((q) => q.qs.idServico), ['c1', 'b1']);
+  // pacotes de corte e de barba: nada a perguntar e nenhuma lista de avulsos pendurada (a oferta fica como estava)
+  f = listaP(pacote('c1', 'b1'));
+  assert.deepEqual(marcados(f.resultado), [['corte adulto', true], ['barba design', true]]);
+  assert.match(f.resultado.orientacao, /Sem perguntar o serviço, chame horarios_livres com id_opcoes_servicos com exatamente dois ids/);
+  assert.equal(f.efeitos.opcoes, undefined);
+  assert.deepEqual(Object.values(f.efeitos.pedido.dois_pacote).every(Boolean), true);
+  // dois servicos de cabelo no pacote: o cliente escolhe entre eles (a lista leva so esses) e depois a barba
+  f = listaP(pacote('c1', 'm1'));
+  assert.deepEqual([naLista(f), f.efeitos.pedido.dois_pacote], [['corte adulto', 'corte com maquina'], { cabelo: null, barba: null }]);
+  assert.match(f.resultado.orientacao, /pergunte qual serviço de cabelo ele quer.*depois pergunte qual de barba.*exatamente dois ids/);
+  f = listaP(pacote('c1', 'm1', 'b1'));
+  assert.deepEqual([naLista(f), f.efeitos.pedido.dois_pacote.cabelo, !!f.efeitos.pedido.dois_pacote.barba], [['corte adulto', 'corte com maquina'], null, true]);
+  // sem pacote, pacote so do filho (juvenil), de camuflagem, de unha, de servico fora do catalogo ou "2a vez", secao sem id valido,
+  // pacote vencido ou leitura com falha: seguem os combinados, e a marca do pacote de uma listagem anterior cai
+  const vencido = ok([{ idClientePacote: 'p1', dataValidade: '2020-01-01T00:00:00', secoes: [{ idClienteItemPacote: sec(1), idProdutoServico: 'c1' }] }]);
+  const semId = ok([{ idClientePacote: 'p1', secoes: [{ idClienteItemPacote: 'sec0', idProdutoServico: 'c1' }] }]);
+  for (const rp of [pacote(), pacote('j1'), pacote('b3'), pacote('u1'), pacote('zz'), pacote('c9'), semId, resp(500, {}), resp(200, { erro: 1 }), undefined]) {
+    f = listaP(rp);
+    assert.deepEqual(f.resultado.servicos.map((x) => x.nome), ['Cabelo adulto + barba', 'Cabelo máquina + barba']);
+    assert.match(f.resultado.orientacao, /dois horários seguidos/);
+    assert.equal(f.efeitos.pedido.dois_pacote, null);
+  }
+  void vencido; // validade: a listagem nao tem dia; quem decide e a proposta (bvgSecoes com a data)
+  // id da secao em maiusculas: os dois leitores concordam (o pacote vale)
+  assert.deepEqual(marcados(listaP(ok([{ idClientePacote: 'p1', secoes: [{ idClienteItemPacote: sec(2), idProdutoServico: 'C1' }] }])).resultado)[0], ['corte adulto', true]);
+  // catalogo com falha e pacotes ok: erro de infraestrutura, nunca "ok, zero servicos"
+  f = listaP(pacote('c1'), undefined, resp(500, {}));
+  assert.equal(f.resultado.ok, false);
+  assert.equal(f.efeitos.opcoes, undefined);
+  // turno seguinte sem a fala ("barba design") em que o modelo lista "cabelo e barba" de novo: quem tem pacote continua no caminho
+  // do pacote (pedido.dois_pacote), nao cai nos combinados (TESTE, 24/11)
+  const de2 = (texto, pedido) => g.bvGPlano(entrada({ operacao: 'listar_servicos', texto, texto_cliente: 'barba design' }), ctxP(pedido, ofP), cfg);
+  const p2 = de2('cabelo e barba', { dois_pacote: { cabelo: idC1, barba: null } });
+  assert.deepEqual(p2.reqs.map((q) => q.path), ['/agenda/servicos', '/agenda/pacotes']);
+  assert.deepEqual(marcados(g.bvGPasso(p2.st, [ok(catP), pacote('c1')], cfg).final.resultado), [['corte adulto', true], ['barba design', false], ['BARBA EXPRESS', false]]);
+  assert.deepEqual(de2('cabelo e barba', {}).reqs.map((q) => [q.path, q.qs.texto]), [['/agenda/servicos', 'cabelo']]); // sem pacote: a busca de sempre (combinados)
+  assert.deepEqual(de2('barba', { dois_pacote: { cabelo: idC1, barba: null } }).reqs.map((q) => [q.path, q.qs.texto]), [['/agenda/servicos', 'barba']]); // outra busca segue como pedida
+  // sem a fala dos dois e sem a marca do pacote ninguem le pacote na listagem
+  assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: 'quero fazer a barba' }), ctxP(), cfg).reqs.map((q) => q.path), ['/agenda/servicos']);
   console.log('graces.test.js cabelo e barba ok');
 }

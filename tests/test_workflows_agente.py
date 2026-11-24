@@ -73,7 +73,7 @@ class BvGraces(unittest.TestCase):
     def test_filtros_aplicados_antes_da_saida(self):  # FR-012 / FR-013
         def corpo(caso):
             a = self.js.rindex(f"case '{caso}':")
-            return self.js[a:a + 1500]
+            return self.js[a:a + 2500]  # o passo de listar_servicos cresceu com cabelo e barba (24/11)
         b = corpo("listar_barbeiros")
         self.assertLess(b.index("bvFiltrarBarbeiros"), b.index("bvMontarOferta"))
         s = corpo("listar_servicos")
@@ -128,7 +128,8 @@ class BvGraces(unittest.TestCase):
         self.assertNotIn("acote", self.js[i:self.js.index("];", i)])
         self.assertNotIn("acote", json.dumps(self.nos["Gatilho"]["parameters"]))
         self.assertEqual(self.js.count("path: '/agenda/pacotes'"), 1)
-        self.assertIn("({ m: 'GET', path: '/agenda/pacotes', qs: { idCliente, idServico } })", self.js)
+        # um construtor so; sem servico le todos os pacotes do cliente (cabelo e barba de quem tem pacote, 24/11)
+        self.assertIn("({ m: 'GET', path: '/agenda/pacotes', qs: idServico ? { idCliente, idServico } : { idCliente } })", self.js)
 
     def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
         rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
