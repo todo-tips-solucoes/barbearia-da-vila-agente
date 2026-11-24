@@ -698,6 +698,32 @@ Suíte no TESTE com a mudança: R1, R2, R5, R18 e R23 aprovados (p95 de 24,8 s).
 - **Cliente com pacote de um dos serviços.** O combinado é outro serviço na Graces: a sessão do pacote não é abatida e o resumo sai pelo valor avulso. A orientação manda usar os avulsos em sequência quando o cliente diz que tem pacote, e a transferência por `pacote` continua valendo. Falta o owner dizer quais pacotes existem.
 - **Barbeiro de teste:** como o combinado dura 40 min para ele, não há como provar no TESTE, com escrita, que o agendamento ocupa 80 min; a prova é a leitura da grade dos barbeiros reais.
 
+### Cliente com pacote (24/11)
+
+O serviço combinado é outro serviço na Graces: quem tem pacote de corte ou de barba e é levado ao combinado não abate a sessão e vê o resumo pelo valor avulso.
+
+- **Medido na Graces:** dos 288 clientes com agendamento entre 17/11 e 01/12, 65 (23%) tinham pacote em aberto, e cerca de 15 tinham dois. Todos os pacotes são de serviço avulso (corte adulto, barba design, máquina, juvenil, infantil, barba express); nenhum é do combinado. O owner confirmou pela lista de pacotes do sistema. A API só lista pacote por cliente (`idCliente` obrigatório), então a leitura partiu da agenda da loja.
+- **Como funciona:** com a fala dos dois e cliente com cadastro, `listar_servicos` lê o catálogo e, em paralelo, os pacotes do cliente (`bvgDoPacote`, com o mesmo leitor de seções da proposta). Se há pacote de cabelo ou de barba de adulto, o agente não oferece o combinado: diz que o pacote entra, pergunta só o que falta (a lista leva só essas opções) e busca os dois em sequência (`id_opcoes_servicos`), que também ocupa dois horários seguidos e abate a sessão no resumo.
+- **O código monta o par.** No turno em que o cliente escolhe ("barba design"), a busca de um serviço só vira a sequência do serviço do pacote com o escolhido (`pedido.dois_pacote` guarda o id do serviço do pacote de cada tipo). Vale enquanto a oferta é a lista de serviços; depois dela, quem pede um só é atendido.
+- **Ficam nos combinados:** cliente sem pacote, pacote só infantil ou juvenil (no cadastro, é do filho), camuflagem, serviço fora do catálogo e leitura de pacote com falha. Catálogo com falha devolve erro, não lista vazia.
+- **Custo:** só na listagem com a fala dos dois e cadastro: uma leitura de pacotes em paralelo e o catálogo inteiro no lugar da busca filtrada. Para quem tem pacote, a busca de horário é a da sequência (mais chamadas que a do combinado).
+
+Medição no TESTE com o cliente de teste do pacote de corte, até o resumo e sem confirmar (nenhuma sessão consumida: 4 antes, 4 depois):
+
+| Caso | Resultado |
+|---|---|
+| Cliente com pacote pede "cabelo e barba", responde "barba design" e escolhe um horário | 4 de 4: pergunta só a barba, oferece a sequência corte adulto + barba design e o resumo sai "corte adulto (abatido do seu pacote) + barba design (R$ 70,00)" |
+| Cliente sem pacote pede "cabelo e barba" | 3 de 3 com os combinados, como antes |
+
+Na primeira versão, 2 de 2 conversas voltaram aos combinados no turno da escolha (o modelo listava "cabelo e barba" de novo, sem a fala no turno); corrigido com `pedido.dois_pacote`. A revisão independente achou ainda que a busca só da barba passava sem barreira nesse turno (corrigido: o código monta o par), a lista de avulsos pendurada quando o pacote cobre os dois tipos, dois serviços do mesmo tipo no pacote e o leitor de seções mais frouxo que o da proposta. Tudo corrigido e com teste.
+
+Limites:
+
+- **A sequência não respeita o barbeiro nem o período pedidos** (já era assim): "cabelo e barba amanhã de manhã com o Pedro", para quem tem pacote, traz os inícios do dia inteiro de todos os barbeiros. Com este ajuste, cerca de um quarto dos clientes passa por esse caminho no pedido mais comum. Fica como decisão do owner.
+- **Pacote que vence antes do dia marcado:** a listagem não tem data; o agente diz que o pacote entra e o resumo sai pelo valor avulso.
+- **Cliente com pacote que quer o combinado mesmo assim:** a listagem de "cabelo e barba" volta ao caminho do pacote; a saída é pedir o serviço pelo nome.
+- **Prova com escrita não feita:** confirmar o agendamento consumiria uma sessão do pacote de teste, que a API não devolve. O abatimento na escrita é o do item 12, já provado em 23/11.
+
 ## Laço: na terceira vez transfere direto (24/11)
 
 Decisão do owner (24/11). Até aqui, na terceira vez da mesma pergunta o agente só oferecia a equipe ("Quer que eu passe para a equipe te ajudar por aqui?"). Em PROD (23/11) um cliente não respondeu a essa oferta e a conversa ficou na fila de ninguém.

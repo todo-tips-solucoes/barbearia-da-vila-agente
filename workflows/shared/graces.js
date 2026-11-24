@@ -177,10 +177,11 @@ function bvgIdsDeServico(vistos, itens) {
 // ("Cabelo adulto + barba"); quem pedia so o corte recebia as opcoes de R$ 150 e ia embora. Cabelo/cortar sem barba busca os
 // cortes (so os de cabelo: "Corte de unha" sai); cabelo (ou corte) com barba busca os combos.
 const bvgEhCombinado = (nome) => { const n = bvgNomeNorm(nome); return /\bbarbas?\b/.test(n) && /\b(?:cabelos?|cortes?)\b/.test(n); };
+const bvgBuscaOsDois = (t) => bvgEhCombinado(bvgNomeNorm(t).replace(/\bcortar\b/g, 'corte')); // a busca junta cabelo (ou cortar) e barba
 const bvgSoCabelo = (t) => { const n = bvgNomeNorm(t); return /\b(cabelos?|cortar)\b/.test(n) && !/\bbarbas?\b/.test(n); };
 function bvgTermosServico(t) {
   const n = bvgNomeNorm(t);
-  if (bvgEhCombinado(n.replace(/\bcortar\b/g, 'corte'))) return ['cabelo'];
+  if (bvgBuscaOsDois(t)) return ['cabelo'];
   return bvgSoCabelo(t) ? ['corte'] : [t];
 }
 
@@ -206,13 +207,30 @@ const bvgCabeloEBarba = (t) => {
 const BVG_BUSCA_DOS_DOIS = new RegExp(`\\b(?:${BVG_CAB}|barbas?)\\b`); // "maquina" tambem: "máquina e barba" virava busca por "maquina" (TESTE, 24/11)
 function bvgListarOsDois(i, ctx, t) {
   const of = ctx.opcoes && ctx.opcoes.tipo === 'servico' && Array.isArray(ctx.opcoes.itens) ? ctx.opcoes.itens : [];
-  return !!i.cabelo_barba && !(Array.isArray(ctx.pedido.futuros) && ctx.pedido.futuros.length) && !(of.length && of.every((x) => bvgEhCombinado(x.rotulo)))
+  // quem tem pacote (pedido.dois_pacote, da listagem anterior) segue no mesmo caminho quando o modelo lista "cabelo e barba" de novo
+  // num turno sem a fala (TESTE, 24/11: depois de "barba design" ele listava outra vez e saiam os combinados)
+  return (!!i.cabelo_barba || (!!ctx.pedido.dois_pacote && bvgBuscaOsDois(t))) && !(Array.isArray(ctx.pedido.futuros) && ctx.pedido.futuros.length) && !(of.length && of.every((x) => bvgEhCombinado(x.rotulo)))
     && (!t || BVG_BUSCA_DOS_DOIS.test(bvgNomeNorm(t)));
+}
+// Cliente com pacote (24/11: 65 de 288 clientes com agendamento em duas semanas tinham pacote em aberto, todos de servico avulso e
+// nenhum do combinado; lista de pacotes conferida pelo owner): cabelo e barba saem pelo servico do pacote e o outro, em sequencia
+// (id_opcoes_servicos), que tambem ocupa dois horarios seguidos e abate a sessao. So servicos de adulto: pacote infantil ou
+// juvenil no cadastro e do filho. Leitura do pacote com falha = sem pacote (segue pelos combinados).
+const bvgTipoDosDois = (nome) => { const n = bvgNomeNorm(nome); return bvgEhCombinado(n) || /\b(?:unhas?|infantil|juvenil|camuflagem)\b/.test(n) ? null : /\bbarbas?\b/.test(n) ? 'barba' : /\b(?:cabelos?|cortes?|maquina)\b/.test(n) ? 'cabelo' : null; };
+// `todos` = catalogo ja filtrado e ordenado. Devolve null sem pacote de cabelo ou de barba. fixo[tipo] = o servico do pacote quando
+// ha um so desse tipo; escolher = o que o cliente ainda decide: o tipo sem pacote (os avulsos dele) ou com mais de um servico no
+// pacote (so os do pacote). A secao e lida por bvgSecoes, o mesmo leitor da proposta (os dois nao podem discordar).
+function bvgDoPacote(todos, resp) {
+  const dele = todos.filter((s) => bvgTipoDosDois(s.nome) && bvgSecoes(resp, s.idServico, '').length);
+  if (!dele.length) return null;
+  const tipos = ['cabelo', 'barba'].map((t) => ({ tipo: t, ds: dele.filter((s) => bvgTipoDosDois(s.nome) === t) }));
+  const escolher = tipos.map(({ tipo, ds }) => ({ tipo, opcoes: ds.length === 1 ? [] : ds.length ? ds : todos.filter((s) => bvgTipoDosDois(s.nome) === tipo) })).filter((x) => x.opcoes.length);
+  return { dele, ids: new Set(dele.map((s) => s.idServico)), fixo: Object.fromEntries(tipos.map(({ tipo, ds }) => [tipo, ds.length === 1 ? ds[0] : null])), escolher };
 }
 // Busca ou proposta de um servico avulso no turno em que ele pediu os dois: recusa uma vez por turno (pedido.dois_avisado; se o
 // modelo insistir e porque o cliente quer mesmo um so, e a marca errada custa uma chamada, nunca um laco). Com agendamento de outro
 // servico no dia, e servico a mais e segue.
-const BVG_SO_UM = 'o cliente falou em cabelo e barba e este serviço é só um dos dois: nada foi consultado. Os dois juntos ocupam dois horários seguidos e têm serviço próprio: chame listar_servicos com o texto "cabelo e barba" e pergunte qual dos combinados ele quer. Se ele quer mesmo só este serviço, ou pediu os dois avulsos (id_opcoes_servicos), chame de novo';
+const BVG_SO_UM = 'o cliente falou em cabelo e barba e este serviço é só um dos dois: nada foi consultado. Os dois juntos ocupam dois horários seguidos: chame listar_servicos com o texto "cabelo e barba" e siga a orientação que ela devolver (serviço combinado, ou os dois avulsos em sequência para quem tem pacote). Se ele quer mesmo só este serviço, chame de novo';
 function bvgSoUmDosDois(i, ctx, sv, data) {
   if (!i.cabelo_barba || bvgEhCombinado(sv.nome) || ctx.pedido.dois_avisado === i.turno_id || bvgNoDia(ctx.pedido, data, sv.idServico).length) return null;
   return bvgFim(bvgRecusa('pediu_dois_servicos', BVG_SO_UM), { pedido: { dois_avisado: i.turno_id } });
@@ -335,7 +353,7 @@ const BVG_PACOTE_FORA = 'não deu para conferir o pacote do cliente agora e nada
 const BVG_SEM_SECAO = 'o pacote do cliente não tem mais sessão livre para esse serviço: avise e pergunte se ele quer marcar pelo valor avulso; se quiser, chame agendar de novo com a mesma opção de horário para mandar o novo resumo; se preferir, ofereça a equipe';
 const bvgValor = (x) => (x.pacote ? ' (abatido do seu pacote)' : bvgReais(x.valor));
 const bvgServicosDe = (itens) => [...new Set(itens.map((x) => x.idServico))];
-const bvgReqPacote = (idCliente, idServico) => ({ m: 'GET', path: '/agenda/pacotes', qs: { idCliente, idServico } });
+const bvgReqPacote = (idCliente, idServico) => ({ m: 'GET', path: '/agenda/pacotes', qs: idServico ? { idCliente, idServico } : { idCliente } }); // sem servico: todos os pacotes do cliente
 const bvgPacoteLido = (r) => !!r && r.status === 200 && Array.isArray(r.body);
 // Secoes que servem para o servico `sv` no dia `data` (AAAA-MM-DD). Defesa sobre o que a Graces devolve (revisoes de 23/11): so
 // secao do proprio servico (o filtro da consulta nao e tomado como garantia: o POST agenda "o servico da secao"), so pacote que
@@ -429,8 +447,12 @@ function bvGPlano(i, ctx0, cfg) {
       const t = i.texto ? i.texto.replace(/\b2\s*[ªaºo°]?\s*vez\b/gi, '').replace(/\s+/g, ' ').trim() : '';
       const dois = bvgListarOsDois(i, ctx, t);
       const busca = bvgTermosServico(t); // a busca do modelo segue junto (loja sem combinado: vale a lista dela); termo curto ja traz o catalogo todo
-      const termos = dois && busca.every((x) => x.length >= 3) ? [...new Set(['cabelo', ...busca])] : busca;
-      return chamar(termos.map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} })), { limpou2v: !!i.texto && t !== i.texto, soCabelo: !dois && bvgSoCabelo(t), dois, vistos: ctx.pedido.servicos_vistos || [] });
+      // Com cadastro, le tambem os pacotes do cliente (uma chamada, em paralelo) e o catalogo todo: quem tem pacote de corte ou de
+      // barba nao vai para o combinado, que e outro servico e nao abate a sessao (bvgDoPacote).
+      const pac = dois && !!idCliente;
+      const termos = pac ? [''] : dois && busca.every((x) => x.length >= 3) ? [...new Set(['cabelo', ...busca])] : busca;
+      const reqs = termos.map((x) => ({ m: 'GET', path: '/agenda/servicos', qs: x.length >= 3 ? { texto: x } : {} }));
+      return chamar(pac ? [...reqs, bvgReqPacote(idCliente)] : reqs, { limpou2v: !!i.texto && t !== i.texto, soCabelo: !dois && bvgSoCabelo(t), dois, pac, vistos: ctx.pedido.servicos_vistos || [] });
     }
     case 'listar_barbeiros': {
       const s = bvgServicoDe(i, ctx, ctx.pedido.ultimo);
@@ -445,6 +467,17 @@ function bvGPlano(i, ctx0, cfg) {
       // para descrever: a que o cliente recebe. As chamadas de um passo rodam em serie (medido), entao o contexto ja traz a anterior.
       // Servico informado diferente do do agendamento (PROD, 23/11): o servico era ignorado em silencio e a busca saia do servico antigo.
       // E busca do servico novo (incluir ou trocar), nao remarcacao; sem barbeiro escolhido vale o do agendamento. Antes da chave da busca.
+      // Cabelo e barba de quem tem pacote: a busca de UM servico, na resposta a lista do que faltava escolher, vira a sequencia do
+      // servico do pacote com o escolhido (revisao de 24/11: no turno da escolha a fala e so "barba design" e nada segurava a busca
+      // so da barba). So enquanto a oferta e a lista de servicos: depois dela, quem pede um so e atendido.
+      const dpc = ctx.pedido.dois_pacote;
+      if (dpc && ctx.opcoes.tipo === 'servico' && i.id_opcao_servico && !i.id_opcoes_servicos && !i.id_opcao && !i.id_opcao_agendamento) {
+        const sv = bvgResolver(i.id_opcao_servico, 'servico', ctx), t = sv && bvgTipoDosDois(sv.nome), par = t && dpc[t === 'cabelo' ? 'barba' : 'cabelo'];
+        if (par && String(par) !== String(i.id_opcao_servico)) {
+          i.id_opcoes_servicos = t === 'cabelo' ? [String(i.id_opcao_servico), String(par)] : [String(par), String(i.id_opcao_servico)];
+          delete i.id_opcao_servico; delete i.id_opcao_barbeiro; i.qualquer = false;
+        }
+      }
       let bAg = null;
       if (i.id_opcao_agendamento && !i.id_opcoes_servicos && !i.id_opcao && (i.id_opcao_servico || i.servico_nome)) {
         const a = bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx), sv = bvgServicoDe(i, ctx, ctx.pedido.ultimo);
@@ -888,8 +921,9 @@ function bvgPassoUm(st, resps0, cfg) {
       return r0.body && r0.body.idCliente ? bvgCadastrado(meta.cad, r0.body.idCliente) : falha(op, { status: 500 });
     }
     case 'listar_servicos': {
+      if (meta.pac && !ok200(r0)) return falha(op, r0); // o 200 dos pacotes nao esconde a falha do catalogo
       const vistos = new Set(); // uma busca por termo: junta sem repetir
-      const juntas = resps.filter(ok200).flatMap((r) => (Array.isArray(r.body) ? r.body : [])).filter((s) => s && !vistos.has(s.idServico) && vistos.add(s.idServico));
+      const juntas = (meta.pac ? resps.slice(0, -1) : resps).filter(ok200).flatMap((r) => (Array.isArray(r.body) ? r.body : [])).filter((s) => s && !vistos.has(s.idServico) && vistos.add(s.idServico));
       // Mais pedidos primeiro (owner, 2026-11-16): a API devolve em ordem alfabetica e a lista do WhatsApp so cabe 10; o corte adulto,
       // 55% da agenda, era o 13o. cfg.destaque = nomes na ordem medida; quem nao esta nela segue depois, na ordem da API.
       const dest = (cfg.destaque || []).map((x) => String(x).trim().toLowerCase());
@@ -897,14 +931,27 @@ function bvgPassoUm(st, resps0, cfg) {
       const todos = bvFiltrarServicos(juntas.filter((s) => s.ativo !== false).map((s) => ({ ...s, nome: String(s.descricaoAgenda || '') })))
         .filter((s) => !meta.soCabelo || !/\bunhas?\b/i.test(s.nome))
         .map((s, k) => [peso(s), k, s]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
-      const comb = meta.dois ? todos.filter((s) => bvgEhCombinado(s.nome)) : [];
-      const ss = comb.length ? comb : todos;
+      const dp = meta.pac ? bvgDoPacote(todos, resps[resps.length - 1]) : null;
+      const comb = meta.dois && !dp ? todos.filter((s) => bvgEhCombinado(s.nome)) : [];
+      const ss = dp ? [...dp.dele, ...dp.escolher.flatMap((x) => x.opcoes).filter((x) => !dp.ids.has(x.idServico))] : comb.length ? comb : todos;
       const of0 = bvMontarOferta('servico', ss.map((s) => ({ rotulo: s.nome, valor: { idServico: s.idServico, nome: s.nome, preco: s.valorPadrao, minutos: s.tempoPadrao } })), cfg);
       const ids = bvgIdsDeServico(meta.vistos, of0.itens);
       const of = { ...of0, itens: ids.itens };
+      if (dp) {
+        // A lista do WhatsApp leva so o que falta escolher (o primeiro tipo em aberto); o servico do pacote vai ao modelo com o id
+        // (os ids valem para a conversa: servicos_vistos). Nada a escolher: a oferta fica como estava (uma lista de avulsos pendurada
+        // deixaria o cliente tocar em um so). pedido.dois_pacote guarda o id do servico fixo de cada tipo: horarios_livres monta o par.
+        const idDe = (sv) => (sv ? (ids.itens.find((x) => x.valor.idServico === sv.idServico) || {}).id || null : null);
+        const e0 = dp.escolher[0], doTipo = e0 ? new Set(e0.opcoes.map((x) => x.idServico)) : null;
+        const pede = !e0 ? 'Sem perguntar o serviço, chame' : `Diga que o pacote dele entra e pergunte qual serviço de ${e0.tipo} ele quer (as opções vão em lista junto)${dp.escolher[1] ? `; depois pergunte qual de ${dp.escolher[1].tipo}` : ''}; com a resposta, chame`;
+        return bvgFim({ ok: true, total: ss.length, servicos: ids.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco, ...(dp.ids.has(x.valor.idServico) ? { pacote: true } : {}) })),
+          orientacao: `o cliente pediu cabelo e barba e tem pacote de ${dp.dele.map((x) => x.nome).join(' e ')} (dado; marcado com pacote). Não ofereça o serviço combinado de cabelo e barba: é outro serviço e não abate do pacote. ${pede} horarios_livres com id_opcoes_servicos com exatamente dois ids, um de cabelo e um de barba: os dois saem em horários seguidos com o mesmo barbeiro` },
+        { ...(e0 ? { opcoes: { ...of, itens: ids.itens.filter((x) => doTipo.has(x.valor.idServico)) } } : {}), pedido: { servicos_vistos: ids.lista, dois_pacote: { cabelo: idDe(dp.fixo.cabelo), barba: idDe(dp.fixo.barba) } } });
+      }
       const orientacao = comb.length ? 'o cliente pediu cabelo e barba: estes são os serviços que fazem os dois no mesmo atendimento, em dois horários seguidos com o mesmo barbeiro. Pergunte qual deles ele quer (a lista vai junto); não ofereça corte ou barba avulsos para este pedido, a não ser que ele peça ou diga que tem pacote de um dos dois (aí liste de novo e use id_opcoes_servicos com os dois)'
         : meta.limpou2v ? 'ofereça o serviço regular, sem falar em desconto' : ss.length > of.itens.length ? 'a lista traz os serviços mais pedidos e há outros: se o cliente não achar o que quer, peça um termo para filtrar' : undefined;
-      return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of, pedido: { servicos_vistos: ids.lista } });
+      // listagem dos dois sem pacote (ou com a leitura falha): a marca do pacote de uma listagem anterior nao vale mais
+      return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { opcoes: of, pedido: { servicos_vistos: ids.lista, ...(meta.dois ? { dois_pacote: null } : {}) } });
     }
     case 'listar_barbeiros': {
       const bs = bvFiltrarBarbeiros(lista.map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos);
