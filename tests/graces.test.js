@@ -1261,3 +1261,33 @@ console.log('graces.test.js segunda analise ok');
   assert.deepEqual(g.bvGPlano(entrada({ operacao: 'listar_barbeiros' }), ctx5, cfg).reqs[0].qs, { idServico: 'c1' }); // sem id nem nome: o servico ja escolhido, como antes
   console.log('graces.test.js ids de servico da conversa ok');
 }
+
+{ // Agendamento feito por pacote (formato real medido em 23/11): o servico vem dentro de servicoPacote, sem idServico nem
+  // descricaoServico em cima. Antes: lista sem o nome do servico, "Cancelar undefined" e remarcacao impossivel.
+  const SP = '046519b1-e111-44b4-8779-3e64366f9d8f';
+  const doPacote = { idAgenda: 'a7', horaInicio: '2026-12-01T10:00:00', horaFim: '2026-12-01T10:40:00', idProfissional: TESTE, profissional: 'ZZ TESTE ', idStatusAgenda: 2, status: 'A Confirmar', recorrente: false, excluido: false, servicoPacote: { idServico: SP, descricaoServico: 'corte adulto' } };
+  const avulso = { idAgenda: 'a8', horaInicio: '2026-12-02T11:00:00', idServico: 's2', descricaoServico: 'barba design', idProfissional: TESTE, profissional: 'ZZ TESTE', recorrente: false };
+  const pm = g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), { opcoes: {}, pedido: { idCliente: 'c1' } }, cfg);
+  const rm = g.bvGPasso(pm.st, [ok([doPacote, avulso])], cfg).final;
+  assert.deepEqual(rm.efeitos.opcoes.itens.map((x) => x.rotulo), ['01/12 10:00 corte adulto', '02/12 11:00 barba design']); // o do pacote aparece com o servico
+  assert.deepEqual([rm.efeitos.opcoes.itens[0].valor.idServico, rm.efeitos.opcoes.itens[0].valor.servico], [SP, 'corte adulto']);
+  assert.deepEqual(rm.efeitos.pedido.futuros.map((f) => [f.idServico, f.servico]), [[SP, 'corte adulto'], ['s2', 'barba design']]);
+  // cancelar: o resumo traz o nome do servico (nunca "undefined")
+  const ctxA = { opcoes: rm.efeitos.opcoes, pedido: { idCliente: 'c1', ...rm.efeitos.pedido } };
+  const pc = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: rm.efeitos.opcoes.itens[0].id }), ctxA, cfg).final;
+  assert.match(pc.resultado.resumo, /^Cancelar corte adulto em terça-feira, 01\/12 às 10:00$/);
+  assert.ok(!/undefined/.test(JSON.stringify(pc)));
+  // remarcar: a busca de horarios usa o servico do pacote
+  const ph = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcao_agendamento: rm.efeitos.opcoes.itens[0].id, data: '2026-12-03' }), ctxA, cfg);
+  assert.ok(JSON.stringify(ph.reqs || ph.final).includes(SP));
+  // a identificacao tambem le os futuros com o servico do pacote
+  const pid = g.bvGPlano(entrada({ operacao: 'identificar_cliente' }), { pedido: {} }, cfg);
+  const ph1 = g.bvGPasso(pid.st, [ok([{ idCliente: 'c1', nomeCliente: 'Ana' }])], cfg);
+  const fut = g.bvGPasso(ph1.st, [ok([]), ok([doPacote])], cfg).final;
+  assert.deepEqual(fut.efeitos.pedido.futuros.map((f) => [f.idServico, f.servico]), [[SP, 'corte adulto']]);
+  // agendamento que chega sem servico nenhum (formato inesperado): o resumo diz "agendamento", nunca "undefined"
+  const semServ = g.bvGPasso(pm.st, [ok([{ idAgenda: 'a9', horaInicio: '2026-12-04T09:00:00', idProfissional: TESTE, profissional: 'ZZ TESTE', recorrente: false, servicoPacote: {} }])], cfg).final;
+  const pcs = g.bvGPlano(entrada({ operacao: 'cancelar', id_opcao_agendamento: semServ.efeitos.opcoes.itens[0].id }), { opcoes: semServ.efeitos.opcoes, pedido: { idCliente: 'c1', ...semServ.efeitos.pedido } }, cfg).final;
+  assert.match(pcs.resultado.resumo, /^Cancelar agendamento em /);
+  console.log('graces.test.js agendamento por pacote com servico ok');
+}
