@@ -73,7 +73,7 @@ class BvGraces(unittest.TestCase):
     def test_filtros_aplicados_antes_da_saida(self):  # FR-012 / FR-013
         def corpo(caso):
             a = self.js.rindex(f"case '{caso}':")
-            return self.js[a:a + 1500]
+            return self.js[a:a + 2500]  # o passo de listar_servicos cresceu com cabelo e barba (24/11)
         b = corpo("listar_barbeiros")
         self.assertLess(b.index("bvFiltrarBarbeiros"), b.index("bvMontarOferta"))
         s = corpo("listar_servicos")
@@ -128,7 +128,8 @@ class BvGraces(unittest.TestCase):
         self.assertNotIn("acote", self.js[i:self.js.index("];", i)])
         self.assertNotIn("acote", json.dumps(self.nos["Gatilho"]["parameters"]))
         self.assertEqual(self.js.count("path: '/agenda/pacotes'"), 1)
-        self.assertIn("({ m: 'GET', path: '/agenda/pacotes', qs: { idCliente, idServico } })", self.js)
+        # um construtor so; sem servico le todos os pacotes do cliente (cabelo e barba de quem tem pacote, 24/11)
+        self.assertIn("({ m: 'GET', path: '/agenda/pacotes', qs: idServico ? { idCliente, idServico } : { idCliente } })", self.js)
 
     def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
         rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
@@ -433,9 +434,11 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         # horarios de segunda no mesmo turno, e a lista deles tem de sair (suite R8, 18/11)
         self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid AND p.acao NOT LIKE 'cancelar%') AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
         self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova, repete)", self.nos["Compor"]["parameters"]["jsCode"])
-        self.assertIn("bvTerceiraVez(out, histC, antes, ofertaNova, composta.some((x) => x.tipo === 'lista')) ? [{ n: 1, tipo: 'texto', texto: \"{{BV:textos.laco}}\" }] : composta;", self.nos["Compor"]["parameters"]["jsCode"])
+        # terceira vez (owner, 24/11): nao sai mais a oferta da equipe; o Compor so marca o laco e o ramo Laco? transfere
+        self.assertIn("const laco = bvTerceiraVez(out, histC, antes, ofertaNova, composta.some((x) => x.tipo === 'lista')) && !bvCorrida(($('Gatilho').first().json || {}).itens, histC);", self.nos["Compor"]["parameters"]["jsCode"])
+        self.assertIn("return [{ json: { saida, laco } }];", self.nos["Compor"]["parameters"]["jsCode"])  # so esses campos seguem para o sub-workflow
         for amb in ("producao", "integracao"):
-            self.assertIn("passe para a equipe", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"]["laco"])
+            self.assertNotIn("laco", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"])
         # etapa 4: a mesma pergunta pela segunda vez leva a lista junto; a terceira nao sai (o contexto manda oferecer a equipe)
         self.assertIn("const repete = !ofertaNova && bvVezesDaLista(histC, antes) === 1 && bvRepetePergunta(out, histC);", self.nos["Compor"]["parameters"]["jsCode"])
         self.assertIn("bvLaco(hist, rec.opcoes)", self.nos["Preparar"]["parameters"]["jsCode"])
@@ -444,6 +447,25 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertEqual(qp.count("WHEN ($2::jsonb -> 'itens') IS NOT NULL THEN $2::jsonb || jsonb_build_object('em',"), 2)
         # a mesma lista buscada de novo guarda a hora em que nasceu: chamar a ferramenta outra vez nao zera a contagem (suite R38)
         self.assertIn("CASE WHEN conversas.opcoes - 'em' = $2::jsonb AND conversas.opcoes->>'em' IS NOT NULL THEN conversas.opcoes->>'em' ELSE", qp)
+
+    def test_laco_transfere_direto_sem_ciclo(self):
+        # owner, 24/11: na terceira vez transfere de uma vez. Ramo linear que reaproveita o Transferir por limite; nada volta ao Agente
+        self.assertEqual([x["node"] for x in self.con["Compor"]["main"][0]], ["Laco?"])
+        self.assertEqual([[x["node"] for x in saida] for saida in self.con["Laco?"]["main"]], [["Transferir por limite"], ["Saidas"]])
+        c = self.nos["Laco?"]["parameters"]["conditions"]["conditions"][0]
+        self.assertEqual([c["leftValue"], c["rightValue"], c["operator"]["operation"]], ["={{ String($json.laco) }}", "true", "equals"])
+        t = self.nos["Transferir por limite"]
+        self.assertEqual([t.get("retryOnFail"), t.get("maxTries"), t.get("onError")], [True, 2, "continueRegularOutput"])  # repetir e inofensivo: handoff_ativo
+        visto, fila = set(), ["Laco?"]
+        while fila:
+            n = fila.pop()
+            if n in visto:
+                continue
+            visto.add(n)
+            fila += [x["node"] for saida in self.con.get(n, {}).get("main", []) for x in (saida or [])]
+        self.assertNotIn("Agente", visto)
+        self.assertNotIn("Compor", visto)
+        self.assertIn("Concluir turno", visto)
 
     def test_limite_de_turnos_transfere_de_verdade(self):
         self.assertEqual(self.con["Limite?"]["main"][0][0]["node"], "Transferir por limite")
@@ -455,7 +477,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertEqual([v["operacao"], v["motivo"]], ["transferir_atendimento", "={{ $('Preparar').first().json.motivo_limite }}"])
         prep = self.nos["Preparar"]["parameters"]["jsCode"]
         self.assertIn("const estourou = Number(reg.turnos_hora) >= {{BV:agente.turnos_max_contato_hora}};", prep)
-        self.assertIn("limite: estourou || bvPediuPessoa(fala), motivo_limite: estourou ? 'nao_resolvi' : 'pediu_pessoa',", prep)  # o estouro guarda o motivo dele
+        self.assertIn("limite: estourou || bvPediuPessoa(fala), motivo_limite: !estourou && bvPediuPessoa(fala) ? 'pediu_pessoa' : 'nao_resolvi',", prep)  # estouro e laco: nao_resolvi
         self.assertIn("{{BV:INCLUDE:shared/agente.js}}", prep)
         self.assertNotIn("$fromAI", json.dumps(v))  # contato, telefone e turno vem do Gatilho, nunca do modelo
         self.assertIn("($input.first().json || {}).texto", self.nos["Compor humano"]["parameters"]["jsCode"])
@@ -523,7 +545,7 @@ class Etapa6(unittest.TestCase):  # pendencias da leitura de 17/11: decisao no c
 
     def test_pergunta_em_aberto_so_quando_nao_ha_laco(self):
         p = self.nos["Preparar"]["parameters"]["jsCode"]
-        self.assertIn("+ (bvLaco(hist, rec.opcoes) || (bvCorrida(itens, hist) ? '' : bvPerguntaAberta(hist, fala, Date.now())))", p)
+        self.assertIn("+ (bvCorrida(itens, hist) ? '' : (bvLaco(hist, rec.opcoes) || bvPerguntaAberta(hist, fala, Date.now())))", p)  # em corrida nem a linha do laco sai
         # a fala do turno: descricao de imagem nao e fala, e turno sem fala manda a marca (nao confirma nada na fase 2)
         self.assertIn("const fala = tm.linhas.filter((l) => !String(l).startsWith('[imagem descrita]')).join(' ').slice(0, 600);", p)
         self.assertIn("texto_cliente: fala || '(sem texto)',", p)

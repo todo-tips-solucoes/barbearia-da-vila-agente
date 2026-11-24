@@ -157,7 +157,7 @@ A lista de 11 conflitos da primeira revisão não ficou guardada; o levantamento
 | # | Conflito | Como ficou | Roteiros |
 |---|---|---|---|
 | 1 | "Nunca escolha um serviço que ele não disse" contra "proponha repetir o último atendimento" | A regra geral ganhou a exceção do último atendimento; a proposta sai em afirmação, com uma pergunta só (dia e horário) | R20 |
-| 2 | "Sem laço" contra "mande a lista de novo" | A mesma pergunta sai no máximo duas vezes, inclusive em lista; na terceira, oferece a equipe; não sugere uma opção no lugar do cliente | R30, R38 |
+| 2 | "Sem laço" contra "mande a lista de novo" | A mesma pergunta sai no máximo duas vezes, inclusive em lista; na terceira, transfere para a equipe (era "oferece a equipe" até 24/11); não sugere uma opção no lugar do cliente | R30, R38 |
 | 3 | Perguntar o horário preferido contra "chame a ferramenta e mande as opções" | A única pergunta antes da busca é a do horário preferido; vale também para o toque em "Remarcar" | R19, R33 |
 | 4 | `meus_agendamentos`: chamar sempre contra "uma vez por pedido" | Com os agendamentos já listados no contexto, usa o id e não chama de novo | sem roteiro |
 | 5 | Cancelar com mais de um agendamento | Com um só, vai direto à fase 1; com mais de um e sem dizer qual, manda a lista deles antes | R33 |
@@ -191,7 +191,7 @@ O que os roteiros de cobertura acharam (e que os 32 anteriores não pegavam), j�
 |---|---|
 | Confirmação do cancelamento saía só "Prontinho!": a frase com o nome do barbeiro de teste (ou do barbeiro só da equipe) era cortada na saída | O resumo do cancelamento e a lista de `meus_agendamentos` não levam mais esses nomes ao modelo; o agendamento com barbeiro da equipe vai marcado como `so_equipe` (fecha o item 21) |
 | Depois de cancelar, o agente não oferecia outro horário, e o "sim" a essa oferta virava "já está cancelado" | A oferta vem na orientação da ferramenta; o contexto da ação concluída cita a pergunta que o agente fez depois dela (`bvContextoFeita`) |
-| Laço em lista: a mesma pergunta saía três vezes, sem oferecer a equipe | Cada oferta nasce com a hora (`opcoes.em`); a lista volta junto na segunda vez (`bvRepetePergunta`) e, na terceira, a resposta é trocada pelo texto fixo que oferece a equipe (`bvTerceiraVez`, `textos.laco`) |
+| Laço em lista: a mesma pergunta saía três vezes, sem oferecer a equipe | Cada oferta nasce com a hora (`opcoes.em`); a lista volta junto na segunda vez (`bvRepetePergunta`) e, na terceira, a conversa é transferida para a equipe (`bvTerceiraVez`, ramo `Laco?`; até 24/11 saía o texto fixo `textos.laco`, que só oferecia) |
 | No toque em "Remarcar" o agente perguntava "qual opção prefere?": a orientação da ferramenta só existe no turno em que ela é chamada | A decisão do cancelamento leva o significado das opções no contexto enquanto estiver aberta (`bvContextoOferta`) |
 | Quem dizia ser cliente do barbeiro só da equipe, em número sem cadastro, recebia pedido de cadastro | A regra diz que quem já é cliente (da loja ou do barbeiro) não é cadastrado, nem para transferir |
 | Diante de "tanto faz, você que sabe", o agente afirmava qual opção era "a mais procurada" | A regra do laço proíbe escolher pelo cliente e afirmar preferência sem dado |
@@ -224,7 +224,7 @@ O que a agenda tinha no caso do lembrete desatualizado (leitura do owner em 19/1
 
 Vistos na leitura das conversas da rodada 41/41 de 19/11 (a avaliadora aprovou os dois) e corrigidos:
 
-- **Terceira lista com a pergunta reescrita (R38):** "Qual deles quer mudar?" escapava da comparação de texto e a mesma lista saía pela terceira vez. Agora basta a resposta levar a mesma lista de novo: sai o texto fixo que oferece a equipe.
+- **Terceira lista com a pergunta reescrita (R38):** "Qual deles quer mudar?" escapava da comparação de texto e a mesma lista saía pela terceira vez. Agora basta a resposta levar a mesma lista de novo: a terceira não sai (desde 24/11 a conversa é transferida; antes saía o texto fixo que oferecia a equipe).
 - **Linha de opção que sobra no texto (R40):** quando a oferta guardada não tem o id que o modelo escreveu, a linha "1 | 10:00 — Kiel" saía crua. Agora sai sem o número e a barra. A causa de fundo fica aberta: com duas buscas de horário no mesmo turno, a lista guardada é a da última busca, e o texto pode falar da outra (visto também no R37, que citou um dia e mandou a lista de outro).
 - **Campo novo na ferramenta travava a chamada ao modelo (R18):** a primeira versão desta etapa deu à ferramenta `horarios_livres` um campo `a_partir`. Na conversa do R18 (corte infantil, depois "O Pedro tem?"), a chamada ao modelo passou a estourar os 45 s ou a ser recusada pela OpenAI ("prompt sinalizado por possível violação da política de uso"): 4 de 12 conversas com o campo, 0 de 6 sem ele, 0 de 7 na etapa 4 e 0 de 12 na versão final. A suíte mostrava isso como `erro_infra` ("turno sem fim em 60 s"). O mecanismo não foi entendido; a medição foi por versão, com as execuções salvas. O campo saiu e a hora mínima passou a ser decidida no código. A frase do prompt "você mostra e pergunta se serve" também foi reescrita: com ela, as recusas apareciam mais. **Para a próxima mudança de ferramenta ou de prompt:** `erro_infra` repetido no mesmo roteiro é para investigar, e vale medir a conversa do R18 antes e depois.
 - **Frase que termina no verbo (R40):** tirada a lista do meio do texto, sobrava "o mais próximo disponível é.". A frase passa a apontar para a lista ("é este.", "são estes.").
@@ -697,3 +697,60 @@ Suíte no TESTE com a mudança: R1, R2, R5, R18 e R23 aprovados (p95 de 24,8 s).
 - **Erro de digitação, frase muito longa e áudio com ponto entre as duas partes** ("Quero cortar o cabelo. E fazer a barba também.") não são detectados; vale o comportamento anterior.
 - **Cliente com pacote de um dos serviços.** O combinado é outro serviço na Graces: a sessão do pacote não é abatida e o resumo sai pelo valor avulso. A orientação manda usar os avulsos em sequência quando o cliente diz que tem pacote, e a transferência por `pacote` continua valendo. Falta o owner dizer quais pacotes existem.
 - **Barbeiro de teste:** como o combinado dura 40 min para ele, não há como provar no TESTE, com escrita, que o agendamento ocupa 80 min; a prova é a leitura da grade dos barbeiros reais.
+
+### Cliente com pacote (24/11)
+
+O serviço combinado é outro serviço na Graces: quem tem pacote de corte ou de barba e é levado ao combinado não abate a sessão e vê o resumo pelo valor avulso.
+
+- **Medido na Graces:** dos 288 clientes com agendamento entre 17/11 e 01/12, 65 (23%) tinham pacote em aberto, e cerca de 15 tinham dois. Todos os pacotes são de serviço avulso (corte adulto, barba design, máquina, juvenil, infantil, barba express); nenhum é do combinado. O owner confirmou pela lista de pacotes do sistema. A API só lista pacote por cliente (`idCliente` obrigatório), então a leitura partiu da agenda da loja.
+- **Como funciona:** com a fala dos dois e cliente com cadastro, `listar_servicos` lê o catálogo e, em paralelo, os pacotes do cliente (`bvgDoPacote`, com o mesmo leitor de seções da proposta). Se há pacote de cabelo ou de barba de adulto, o agente não oferece o combinado: diz que o pacote entra, pergunta só o que falta (a lista leva só essas opções) e busca os dois em sequência (`id_opcoes_servicos`), que também ocupa dois horários seguidos e abate a sessão no resumo.
+- **O código monta o par.** No turno em que o cliente escolhe ("barba design"), a busca de um serviço só vira a sequência do serviço do pacote com o escolhido (`pedido.dois_pacote` guarda o id do serviço do pacote de cada tipo). Vale enquanto a oferta é a lista de serviços; depois dela, quem pede um só é atendido.
+- **Ficam nos combinados:** cliente sem pacote, pacote só infantil ou juvenil (no cadastro, é do filho), camuflagem, serviço fora do catálogo e leitura de pacote com falha. Catálogo com falha devolve erro, não lista vazia.
+- **Custo:** só na listagem com a fala dos dois e cadastro: uma leitura de pacotes em paralelo e o catálogo inteiro no lugar da busca filtrada. Para quem tem pacote, a busca de horário é a da sequência (mais chamadas que a do combinado).
+
+Medição no TESTE com o cliente de teste do pacote de corte, até o resumo e sem confirmar (nenhuma sessão consumida: 4 antes, 4 depois):
+
+| Caso | Resultado |
+|---|---|
+| Cliente com pacote pede "cabelo e barba", responde "barba design" e escolhe um horário | 4 de 4: pergunta só a barba, oferece a sequência corte adulto + barba design e o resumo sai "corte adulto (abatido do seu pacote) + barba design (R$ 70,00)" |
+| Cliente sem pacote pede "cabelo e barba" | 3 de 3 com os combinados, como antes |
+
+Na primeira versão, 2 de 2 conversas voltaram aos combinados no turno da escolha (o modelo listava "cabelo e barba" de novo, sem a fala no turno); corrigido com `pedido.dois_pacote`. A revisão independente achou ainda que a busca só da barba passava sem barreira nesse turno (corrigido: o código monta o par), a lista de avulsos pendurada quando o pacote cobre os dois tipos, dois serviços do mesmo tipo no pacote e o leitor de seções mais frouxo que o da proposta. Tudo corrigido e com teste.
+
+Limites:
+
+- **A sequência não respeita o barbeiro nem o período pedidos** (já era assim): "cabelo e barba amanhã de manhã com o Pedro", para quem tem pacote, traz os inícios do dia inteiro de todos os barbeiros. Com este ajuste, cerca de um quarto dos clientes passa por esse caminho no pedido mais comum. Fica como decisão do owner.
+- **Pacote que vence antes do dia marcado:** a listagem não tem data; o agente diz que o pacote entra e o resumo sai pelo valor avulso.
+- **Cliente com pacote que quer o combinado mesmo assim:** a listagem de "cabelo e barba" volta ao caminho do pacote; a saída é pedir o serviço pelo nome.
+- **Prova com escrita não feita:** confirmar o agendamento consumiria uma sessão do pacote de teste, que a API não devolve. O abatimento na escrita é o do item 12, já provado em 23/11.
+
+## Laço: na terceira vez transfere direto (24/11)
+
+Decisão do owner (24/11). Até aqui, na terceira vez da mesma pergunta o agente só oferecia a equipe ("Quer que eu passe para a equipe te ajudar por aqui?"). Em PROD (23/11) um cliente não respondeu a essa oferta e a conversa ficou na fila de ninguém.
+
+### Como funciona
+
+- **Contexto (`bvLaco`).** Com a mesma lista ou a mesma pergunta já enviada duas vezes, a linha manda seguir normalmente se a mensagem nova responde (escolhe, diz sim ou não, traz dado novo, muda de assunto) e, só se a resposta do modelo fosse repetir, chamar `transferir_atendimento` com `nao_resolvi` no próprio turno. A linha deixou de afirmar que "o cliente não respondeu": a contagem não sabe disso.
+- **Rede em código (`bvTerceiraVez`, nó `Compor`).** Se o modelo ainda assim devolve a mesma lista, repete a pergunta ou só oferece a equipe em pergunta, o `Compor` marca `laco` e o nó novo `Laco?` leva ao `Transferir por limite`, que já existia, e ao `Compor humano`. É um ramo linear: dele não se volta ao `Agente` (teste `test_laco_transfere_direto_sem_ciclo`).
+- **Corrida não transfere.** Mensagem escrita antes de o cliente ler a segunda lista não conta: ele só viu a lista uma vez.
+- **Motivo.** `motivo_limite` passa a ser `pediu_pessoa` só quando o limite veio do pedido de pessoa; estouro de turnos e laço vão como `nao_resolvi`.
+- **Repetição da transferência.** `Transferir por limite` ganhou uma segunda tentativa; repetir é inofensivo (a segunda chamada é recusada com `handoff_ativo`).
+- O texto `textos.laco` deixou de existir nos dois ambientes.
+
+### Pareceres
+
+- **Desenho (especialista de backend).** Não há como dar a mesma garantia sem nó novo: a decisão depende da resposta do modelo e a transferência é banco e HTTP no `bv-graces`. Alertas: falso positivo passa a custar a conversa (antes custava uma pergunta estranha); a pergunta em texto, sem lista, não tem rede em código.
+- **Chat Master.** A chamada usada (`POST /api/tickets/updateAPI` com `ticketId` e `queueId`) é a documentada para mover um ticket. Não há recurso nativo do painel que transfira quem parou de responder num setor conduzido por integração. O aviso à equipe é configuração: **Avise-me** no setor humano (Setores & Chatbot › editar o Setor › Notificar Operador no WhatsApp).
+
+### Medição no TESTE (24/11, com o ok do owner para o nó `Laco?`)
+
+- **Transfere na terceira vez:** 3 de 3 conversas ("Quero marcar um horário", "sei lá", "ah, não sei mesmo"). Na terceira mensagem saiu só o texto de encaminhamento, com a conversa marcada como transferida; nenhuma pergunta "quer que eu passe para a equipe?".
+- **Contraprova:** 3 de 3. Com a lista enviada duas vezes, o cliente escolheu na terceira mensagem ("corte adulto"): não houve transferência e a conversa seguiu para a escolha do barbeiro.
+- **Suíte:** R38 aprovado (transferência conferida no estado) e R30 aprovado. O R30 foi reestruturado: a irritação vinha na terceira mensagem, que agora já é transferência; passou a vir na segunda, e o roteiro cobre só "desculpas, oferta e aceite". R1, R5, R18 e R23 aprovados na mesma integração (p95 de 24,6 s; o R18 teve um `erro_infra` de turno sem fim em 67 s e passou na repetição).
+- **n8n depois de publicar o nó:** `healthz` 200 e uso de CPU normal.
+
+### O que falta
+
+- **Ler em PROD quantas vezes o texto antigo do laço saiu e quantas eram legítimas.** A pergunta em texto, sem lista, não tem rede em código; a leitura do dia seguinte ao deploy mostra se alguém foi transferido sem motivo.
+- **Aviso à equipe:** conferir se o **Avise-me** está ligado no setor humano; a transferência por API não avisa ninguém sozinha.
+- Contraprova como roteiro permanente da suíte: não foi criado; a medição ficou no registro acima.
