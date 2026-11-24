@@ -2956,7 +2956,7 @@
     {
       "parameters": {
         "name": "transferir_atendimento",
-        "description": "Transfere a conversa para a equipe humana da loja, que continua por esta mesma conversa. Informe o motivo: barbeiro_equipe (o cliente quer agendar com um barbeiro que só a equipe agenda), ja_cliente (cliente sem cadastro neste número diz que já é cliente), pediu_pessoa (pediu para falar com uma pessoa), atraso (vai chegar atrasado e ainda quer ser atendido), outra_pessoa (o atendimento é para outra pessoa, com cadastro em outro número, e ele não pode chamar por aquele número), pacote (tem pacote ou plano: só depois de agendar) ou nao_resolvi (você não conseguiu resolver e ele aceitou falar com a equipe). Depois, responda com o texto devolvido e não continue o atendimento.",
+        "description": "Transfere a conversa para a equipe humana da loja, que continua por esta mesma conversa. Informe o motivo: barbeiro_equipe (o cliente quer agendar com um barbeiro que só a equipe agenda), ja_cliente (cliente sem cadastro neste número diz que já é cliente), pediu_pessoa (pediu para falar com uma pessoa), atraso (vai chegar atrasado e ainda quer ser atendido), outra_pessoa (o atendimento é para outra pessoa, com cadastro em outro número, e ele não pode chamar por aquele número), pacote (diz ter pacote ou plano e o resumo veio com valor em reais: só depois de agendar) ou nao_resolvi (você não conseguiu resolver e ele aceitou falar com a equipe). Depois, responda com o texto devolvido e não continue o atendimento.",
         "source": "database",
         "workflowId": {
           "__rl": true,

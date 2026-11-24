@@ -56,7 +56,7 @@ O que já se vê funcionando: a lista de serviços abre com o corte adulto, a re
 | 17 | Mensagens da equipe no histórico (parcial) | O que a equipe escreve na fila humana entra no histórico da conversa. Mensagem escrita pela equipe fora da fila humana ainda não é registrada |
 | 19 | Respostas a lembrete | Resposta no primeiro minuto é reconhecida; erro 400 da Graces tenta de novo com a data da ocorrência (hipótese: agendamento recorrente); "combinado" e "estarei aí" contam como confirmação; depois do NÃO, o pedido de cancelar não volta à pergunta |
 | 20 | Retomada no contexto | Resposta até 12 h depois continua a conversa; proposta vencida não é retomada; horário para as próximas 6 h é retomado em 20 min |
-| 12 | Pacote ou plano (provisório) | O agente agenda normalmente, avisa que o valor é o avulso e passa para a equipe abater o pacote. Falta agendar pelo pacote na API da Graces, o que depende de um pacote de teste no cliente de teste |
+| 12 | Pacote ou plano | Provisório até 23/11: o agente agendava pelo valor avulso e passava para a equipe abater. Desde o item 12 (ver "Item 12: agendar pelo pacote (23/11)") ele consulta o pacote na Graces e agenda abatendo dele; falta a prova ao vivo com um pacote de teste |
 
 ## Pendente, por prioridade
 
@@ -483,7 +483,7 @@ Primeiras 2 h 30 de atendimento depois da volta da conexão (12:42 às 15:00), l
 | 17 | Cliente antigo do barbeiro que só a equipe agenda, escrevendo de um número sem cadastro: o pedido de cadastro saiu duas vezes e ele não foi transferido | 1 | **Corrigido** (abaixo) |
 | 18 | "Sim" ao lembrete num celular com dois cadastros: o agente perguntou "qual deles é você?" em vez de confirmar a presença | 1 | Aberto |
 | 19 | Agendamento feito por pacote (no balcão) aparece para o agente sem o serviço: lista sem o nome, resumo "Cancelar undefined" e remarcação impossível | achado na prova do item 12; 12 clientes com agendamento assim nos 7 dias seguintes | **Corrigido** (abaixo) |
-| 20 | Cancelar pela API um agendamento feito por pacote não devolve a sessão ao pacote | medido 2 vezes no cliente de teste | Aberto: decisão do owner |
+| 20 | Cancelar pela API um agendamento feito por pacote não devolve a sessão ao pacote | medido 3 vezes no cliente de teste e conferido pelo owner no sistema da Graces | **Corrigido**: o cancelamento vai para a equipe (abaixo) |
 
 As causas dos pontos 4, 8 e 14 são hipóteses: as conversas foram lidas, não a execução de cada turno. A do ponto 2 (serviço trocado) foi reproduzida no TESTE.
 
@@ -555,5 +555,69 @@ Continuam em código, segundo o mesmo levantamento: o silêncio do agente pelo s
 **Pontos 19 e 20: agendamento feito por pacote (achados na prova ao vivo do item 12, 23/11).**
 
 - **Ponto 19, corrigido.** Para o agendamento feito por pacote, `/agenda/agendamentos` devolve o serviço dentro de `servicoPacote` e não traz `idServico` nem `descricaoServico` no nível de cima. O agente lia só o nível de cima: listava o agendamento sem o nome do serviço, montava o resumo "Cancelar undefined em ..." e a busca de horários para remarcar ia sem serviço. Vale para PROD desde sempre, sem depender do item 12: é o caso de quem tem pacote e foi agendado pela equipe. Na agenda da loja, de 565 agendamentos em 15 dias, 58 são por pacote. A correção sobe os dois campos num lugar só (`bvMComServico`, em `workflows/shared/mensagens.js`), usado pelo agente (`bvgResp`) e pelos lembretes (`bvMAgendaDe`). Conferido no TESTE, só em leitura, com 4 clientes reais: 5 de 5 agendamentos por pacote listados com o serviço. Na prova com o cliente de teste, pelas ferramentas do agente: listou "24/11 08:00 corte adulto", remarcou das 08:00 para as 08:40 (mesmo agendamento, ainda por pacote) e o resumo do cancelamento saiu "Cancelar corte adulto em terça-feira, 24/11 às 08:40". Revisão independente do diff, em leitura, sem achado crítico.
-- **Ponto 20, aberto.** No cliente de teste, o agendamento pelo pacote reservou a sessão (de 4 para 3) e o cancelamento pela API não a devolveu: `/agenda/pacotes` continuou com 3, depois com 2 na segunda rodada e com 1 na terceira, até 90 s depois e de novo minutos depois. O owner havia informado que cancelar devolve a sessão; pela API não foi o que se mediu (pode valer só para o cancelamento feito no sistema da Graces). Enquanto isso não se resolve, o cliente que cancela pelo agente um agendamento feito por pacote pode perder a sessão. Opções: o agente passar para a equipe o cancelamento e a remarcação de agendamento por pacote; ou confirmar com a Graces como a API devolve a sessão. **Remarcar mantém a sessão** (medido na terceira rodada: o `PUT` moveu o mesmo agendamento e as seções em aberto não mudaram). Com o ponto 19 corrigido, a remarcação de agendamento por pacote pelo agente, que antes falhava, passa a funcionar.
+- **Ponto 20.** No cliente de teste, o agendamento pelo pacote reservou a sessão (de 4 para 3) e o cancelamento pela API não a devolveu: `/agenda/pacotes` continuou com 3, depois com 2 na segunda rodada e com 1 na terceira, até 90 s depois e de novo minutos depois. O owner havia informado que cancelar devolve a sessão; pela API não foi o que se mediu (pode valer só para o cancelamento feito no sistema da Graces). Enquanto isso não se resolve, o cliente que cancela pelo agente um agendamento feito por pacote pode perder a sessão. Opções: o agente passar para a equipe o cancelamento e a remarcação de agendamento por pacote; ou confirmar com a Graces como a API devolve a sessão. **Remarcar mantém a sessão** (medido na terceira rodada: o `PUT` moveu o mesmo agendamento e as seções em aberto não mudaram). Com o ponto 19 corrigido, a remarcação de agendamento por pacote pelo agente, que antes falhava, passa a funcionar.
 
+**Ponto 20, corrigido em 24/11: o agente não cancela agendamento de pacote.** O owner conferiu no sistema da Graces o pacote do cliente de teste: as três sessões usadas nas provas continuavam como "Agendado" depois de os agendamentos terem sido cancelados pela API, e só a quarta estava "Em Aberto". A sessão só volta quando a equipe a libera no sistema. Regra adotada:
+
+- **Remarcar segue com o agente.** O `PUT` move o mesmo agendamento e a sessão é mantida (medido).
+- **Cancelar vai para a equipe.** O pedido de cancelamento continua igual até a escolha do cliente: o agente mostra o agendamento e oferece "Remarcar / Cancelar mesmo". Se ele escolhe cancelar mesmo, a ferramenta não manda o `DELETE`: transfere a conversa com o texto "Como esse horário é do seu pacote, quem cancela é a equipe, para a sessão voltar para o seu pacote." O mesmo vale quando ele pede para cancelar vários de uma vez e um deles é de pacote, e para a troca de serviço de um agendamento de pacote (que apagaria o antigo).
+- **A decisão é pela agenda lida na hora.** Antes de qualquer `DELETE` (cancelar um, cancelar vários, ou o antigo da troca de serviço), a fase 2 lê `GET /agenda/agendamentos` do cliente e confere cada agendamento que seria apagado: se a Graces diz que é de pacote (`servicoPacote`), transfere. Vale para a proposta criada pelo "Não vou poder" do lembrete e para a criada antes desta versão, que não trazem marca nenhuma (a proposta do lembrete passou a guardar o `idCliente`). A marca que acompanha a opção e os agendamentos da conversa serve só para avisar o modelo na fase 1.
+- **Na dúvida, nada é apagado.** Leitura que falha: o agente pede desculpas e oferece tentar de novo ou a equipe (`nao_conferido`). Agendamento que não está mais na agenda do cliente: confere de novo com `meus_agendamentos` (`agendamento_nao_encontrado`). Cliente desconhecido na proposta e na conversa: transfere. Custo: uma leitura a mais por cancelamento (o reagendar e a troca já faziam essa leitura).
+- Provado no TESTE com o cliente de teste do pacote e o barbeiro de teste: agendou pelo pacote, listou com o serviço, o pedido de cancelamento ofereceu remarcar e avisou que é do pacote, o "cancelar mesmo" transferiu com o texto próprio, o agendamento continuou de pé e a transferência ficou aberta com o motivo `pacote`.
+
+Revisão especialista do desenho final (24/11): todos os pontos do código que montam `DELETE /agenda/...` passam pela conferência (cancelar, cada item do conjunto, e o antigo da troca, inclusive depois de `POST` sem resposta); nenhum workflow chama o `DELETE` da Graces por fora da ferramenta. Dela entraram: `servicoPacote` em qualquer formato conta como pacote; série recorrente (várias linhas com o mesmo `idAgenda`) vai para a equipe se qualquer ocorrência for de pacote; a troca confere com página de 200; leitura que falha fica em `falhas_agente`; e um defeito antigo corrigido de passagem (depois de um `DELETE` sem resposta, a verificação lia a agenda sem o cliente e a repetição saía vazia). Medido no TESTE na mesma data: depois de remarcado pelo agente, o agendamento de pacote continua vindo com `servicoPacote` em `/agenda/agendamentos` (a conferência segue valendo) e a sessão é mantida. Limite conhecido: lembrete de agendamento feito pela equipe, em telefone com mais de um cadastro, quando a conversa está no outro cadastro, dá `agendamento_nao_encontrado` e o agente passa para a equipe se o cliente confirmar que o horário existe.
+
+Documentação da Graces relida em 24/11 (portal `api.gracesonline.com.br/docs/agendamentos`, indicado pelo owner): agendar por seção **reserva a seção no mesmo instante** e ela sai da consulta de disponíveis; o `DELETE` é descrito só como "cancelamento simples", sem nada sobre a seção; `GET /agenda/pacotes` lista só seções "em aberto, não vencidas e não reservadas"; **não há endpoint nem parâmetro para liberar a seção**. O portal bate com o que se mediu, e a devolução da sessão no cancelamento continua sem caminho pela API. Em aberto com a Graces: uma forma de a API devolver a sessão no cancelamento. Novidade do portal: a página de **webhooks** saiu do "em breve" (eventos de agendamento criado, alterado, status, executado e cancelado, com `packageItemId` na sessão de pacote); o agente ainda não usa.
+
+
+
+
+## Item 12: agendar pelo pacote (23/11)
+
+Pedido do owner em 23/11. Revê a decisão de 19/10 (o agente não tratava de pacote): a constituição passou à versão 4.0.0, com o princípio XI redefinido.
+
+### Como funciona
+
+| Momento | O que o agente faz |
+|---|---|
+| Antes do resumo | `agendar` consulta `GET /agenda/pacotes` para o cliente e o serviço (um GET por serviço distinto, no conjunto). Com sessão em aberto, o item é marcado e o resumo diz "(abatido do seu pacote)" no lugar do valor |
+| Depois do "sim" | A sessão é relida junto da revalidação do horário e o `POST /agenda` leva `idClienteItemPacote` no lugar de `idServico` |
+| Agendado pelo pacote | Não transfere para a equipe |
+| Cliente diz ter pacote e a Graces não mostra | Como antes: agenda pelo valor avulso, avisa e passa para a equipe conferir (motivo `pacote`) |
+
+Vale para agendar, trocar de serviço e conjunto de serviços (cada serviço consulta o seu pacote; um resumo pode ter um item do pacote e outro com valor). Remarcar e cancelar não mudam.
+
+### Barreiras em código
+
+- O identificador da sessão só sai da leitura da Graces, relida na hora de gravar. Não vem do modelo e não fica guardado na proposta, que leva só a marca `pacote`.
+- Um lugar só monta o corpo do `POST /agenda` (`bvgCorpoAgendar`), sempre com exatamente um entre o serviço e a sessão.
+- Só conta sessão do próprio serviço pedido, de pacote que não vence antes do dia do agendamento, com identificador no formato; repetida conta uma vez. Nada do texto que a Graces devolve sobre o pacote chega ao modelo ou ao cliente.
+- Resumo e gravação nunca divergem: resumo com pacote não vira cobrança avulsa (sem sessão na hora de gravar, nada é gravado e o agente oferece o valor avulso num resumo novo), e resumo com valor não consome sessão.
+- Leitura do pacote com falha antes do resumo: a proposta sai pelo valor avulso, como era antes, e a falha fica em `falhas_agente` (`pacotes`). Na hora de gravar: nada é gravado, a proposta falha (`pacote_nao_conferido`) e a oferta de horário continua valendo.
+- Escrita sem resposta: a conferência acha o agendamento novo pelo barbeiro e pelo início; pelo pacote, o serviço não entra na comparação. A repetição reusa a mesma sessão.
+
+### Custo
+
+Uma chamada a mais antes de cada resumo (0,05 a 0,15 s medidos) e, só quando o item sai do pacote, uma a mais no estágio de revalidação que já existia. O workflow `bv-graces` não mudou: os nós já executam qualquer chamada do plano.
+
+### Revisões independentes do diff
+
+Duas, em leitura, antes do PR: segurança; correção, performance, escala e duplicação. Nenhum achado crítico ou alto. Delas saíram: conferir o serviço da sessão, descartar pacote que vence antes do dia, tirar sessão repetida, tratar resposta `200` fora do formato como falha, não depender do serviço na conferência depois de escrita sem resposta, não deixar a proposta "incerta" quando só a leitura do pacote falhou, e a frase da orientação para resumo misto.
+
+### Testes
+
+- `tests/graces.test.js` (bloco "Item 12" e o do conjunto): proposta com e sem pacote, defesas sobre a resposta, falhas de leitura nas duas fases, corpo do POST, repetição, conferência, troca de serviço, conjunto misto, mesmo serviço duas vezes, estado depois da ida e volta por JSON.
+- `tests/test_workflows_agente.py`: um só lugar monta o POST e nenhum campo de entrada carrega a sessão.
+- TESTE: R1, R27 e R29 aprovados com o código novo, sem falha gravada. São caminhos sem pacote: provam que a consulta nova não quebra o agendamento comum.
+
+### O que falta e limites
+
+- **Prova ao vivo, feita em 23/11** com o cliente de teste do pacote (cadastro nº 3700, "Pacote Corte Adulto 20%", 4 sessões) e o barbeiro de teste. O resumo saiu "corte adulto com Kiel em terça-feira, 24/11 às 08:00 (abatido do seu pacote)", sem valor; a fase 2 agendou pela sessão e a sessão saiu de `/agenda/pacotes` (de 4 para 3). `idProdutoServico` é o `idServico` da loja. O agendamento volta de `/agenda/agendamentos` com o serviço dentro de `servicoPacote` (ponto 19 da leitura de 23/11, já corrigido em PROD). Remarcar pelo agente move o mesmo agendamento e mantém a sessão. Não medido: a recusa por validade e por sessão já usada.
+- **Cancelar pela API não devolve a sessão** (ponto 20 da leitura de 23/11): resolvido em 24/11 com a barreira do ponto 20. O agente não cancela agendamento de pacote; remarca normalmente e, se o cliente quer cancelar mesmo, passa para a equipe. Com isso o item 12 pode ir para PROD.
+- **Remarcar agendamento de pacote não exige sessão em aberto** (24/11). Na proposta de remarcar, `pacote` quer dizer "o agendamento remarcado é de pacote"; na de agendar, "abater uma sessão". Ao juntar o item 12 com a barreira, a remarcação passava a ler o pacote e a exigir uma sessão livre, e recusaria o cliente com todas as sessões já agendadas. Corrigido: só agendar e trocar de serviço leem a sessão. Provado no TESTE com o pacote de teste em zero sessões livres: remarcou, a sessão foi mantida e o agendamento continuou vindo com `servicoPacote`.
+- **Roteiro `r11` do smoke.** Faz a prova inteira (agenda pelo pacote, confere o resumo e a sessão, cancela direto pela API para limpar). Cada rodada gasta uma sessão do pacote de teste; não entra nas rodadas de rotina. Em 24/11 o pacote de teste ficou com 0 sessões em aberto: para rodar de novo, a equipe precisa liberar as sessões no sistema da Graces.
+- **Consentimento depende de o modelo repassar o resumo**, como já era com o valor. Não há barreira em código que garanta a frase do abatimento no texto enviado.
+- **Identidade é o telefone.** Dependente agendado no cadastro do titular consome o pacote do titular, e o resumo diz "seu pacote".
+- **No TESTE a sessão é de verdade.** O redirecionamento troca só o barbeiro: contato de teste com pacote real tem a sessão reservada pelo teste, e ela não volta com o cancelamento (medido).
+- **Volta de versão.** Proposta com pacote ainda pendente, lida pelo código antigo, seria gravada pelo valor avulso. Em caso de volta, as pendentes com `pacote` devem ser marcadas como substituídas.
+- **Confirmação antes da transferência (R29).** No caminho em que a Graces não mostra pacote, o modelo às vezes manda só o texto da transferência, sem a frase do agendamento feito (visto em 18/11 e em 23/11). Não é novo e não foi tratado aqui.

@@ -424,6 +424,7 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.deepEqual(d.dados, { idAgenda: 'ag-1', horaInicio: '2026-11-19T15:00:00', recorrente: true, servico: 'corte adulto', resumo: 'Cancelar corte adulto em quinta-feira (19/11) às 15:00' });
   assert.deepEqual(d.opcoes, { tipo: 'decisao_cancelamento', itens: [{ id: '1', rotulo: 'Remarcar', valor: 'remarcar' }, { id: '2', rotulo: 'Cancelar mesmo', valor: 'cancelar' }] });
   assert.ok(!JSON.stringify(d).includes('Pedro')); // o resumo nao leva o barbeiro (pode ser um que o agente nunca mostra)
+  assert.equal(m.bvMDecisaoCancelar({ ...row, graces_cliente_id: 'c9' }, 'ag-1').dados.idCliente, 'c9'); // 24/11: a fase 2 do cancelar le a agenda desse cliente antes de apagar
   assert.equal(m.bvMDecisaoCancelar(row, null), null);
   assert.equal(m.bvMDecisaoCancelar({ dados: {} }, 'ag-1'), null);
   const l = m.bvMListaDecisao({ texto: 'Você prefere remarcar ou cancelar mesmo?' }, '+55 11 99999-8888', { wid: '145', fila: '7', botao: 'Responder', topo: 'Opções' });
@@ -486,7 +487,7 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   const av = { idAgenda: 'a8', idServico: 's2', descricaoServico: 'barba', servicoPacote: null };
   assert.equal(bvMComServico(av), av); // avulso (servicoPacote nulo ou ausente) fica como veio
   const jaTem = { idAgenda: 'a9', idServico: 's3', servicoPacote: { idServico: 'outro', descricaoServico: 'x' } };
-  assert.equal(bvMComServico(jaTem), jaTem); // quem ja traz idServico nao e tocado
+  assert.deepEqual(bvMComServico(jaTem), { ...jaTem, descricaoServico: 'x', pacote: true }); // quem ja traz idServico fica com o dele, mas e marcado como pacote (24/11: a marca decide quem cancela)
   for (const x of [null, undefined, 'x', 7, { servicoPacote: 'texto' }, { idAgenda: 'a', servicoPacote: {} }, { idAgenda: 'a', servicoPacote: [] }]) assert.equal(bvMComServico(x), x); // sem idServico dentro, nao ha o que subir
   assert.deepEqual(bvMAgendaDe([p, av]).map((a) => [a.idServico, a.descricaoServico, !!a.pacote]), [['sp', 'corte adulto', true], ['s2', 'barba', false]]);
   // /agenda/completa: o item por pacote ja vem com nomeServico e sem servicoPacote; segue igual, com o barbeiro do grupo
