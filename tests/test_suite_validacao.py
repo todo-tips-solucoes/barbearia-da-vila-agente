@@ -36,7 +36,7 @@ class Roteiros(unittest.TestCase):
         m = {r["id"]: r for r in roteiros()}
         self.assertEqual([m[i].get("preparo") for i in ("R7", "R8", "R9", "R10", "R31", "R33", "R34", "R35", "R38")], ["agendamento_previo"] * 3 + ["coleta_abandonada"] + ["agendamento_previo"] * 5)
         self.assertEqual(m["R16"]["delegado"], "smoke-mensagens:m2,m3,m7,m8")
-        self.assertEqual({r["id"] for r in m.values() if r.get("handoff")}, {"R15", "R17", "R24", "R29", "R30", "R36", "R39"})  # transferencia conferida no estado
+        self.assertEqual({r["id"] for r in m.values() if r.get("handoff")}, {"R15", "R17", "R24", "R29", "R30", "R36", "R38", "R39"})  # transferencia conferida no estado
         self.assertEqual({r["id"] for r in m.values() if r.get("handoff") is False}, {"R3", "R13", "R25", "R26", "R28", "R32", "R35"})
         # revisao de 17/11: passos que nao sao fala comum do cliente e escritas conferidas no estado
         passos = {k for r in m.values() for f in r["falas"] if isinstance(f, dict) for k in f}

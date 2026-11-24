@@ -412,7 +412,7 @@ console.log('agente.test.js itens 7 a 9 ok');
   assert.match(inf, /não presuma; pergunte para quem é o atendimento/);
   assert.doesNotMatch(a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'corte adulto', barbeiro: 'Kiel' } }, String), /não presuma/);
   const p = a.bvPrompt({ saida: { max_mensagens: 4 }, loja: {} });
-  for (const re of [/Quem escolhe é o cliente/, /nunca peça confirmação de algo que ele não escolheu/, /Sem laço: a mesma pergunta sai no máximo duas vezes, e isso vale para listas.*não escolha no lugar dele, mesmo que ele peça.*não diga que uma opção é a mais procurada.*Na terceira, ofereça passar para a equipe/, /Sinal de irritação/,
+  for (const re of [/Quem escolhe é o cliente/, /nunca peça confirmação de algo que ele não escolheu/, /Sem laço: a mesma pergunta sai no máximo duas vezes, e isso vale para listas.*não escolha no lugar dele, mesmo que ele peça.*não diga que uma opção é a mais procurada.*Na terceira, não pergunte de novo nem ofereça a equipe: chame transferir_atendimento com motivo nao_resolvi/, /Sinal de irritação/,
     /Pacote, plano ou combo já pago.*motivo pacote/, /Outra pessoa \(owner, 2026-11-16\).*motivo outra_pessoa/, /Ação já concluída/,
     /chame meus_agendamentos antes de qualquer outra coisa/, /nunca diga que vai passar, está passando ou passou para a equipe sem ter chamado transferir_atendimento neste turno/, /mostre a lista em vez de perguntar a preferência/, /o texto precisa pedir exatamente essa escolha/]) assert.match(p, re);
   // frase que ficava pela metade quando as opcoes viravam lista
@@ -554,7 +554,8 @@ console.log('agente.test.js retomada longa ok');
   assert.equal(a.bvVezesDaPergunta(h1), 1);
   assert.equal(a.bvVezesDaPergunta(h2), 2);
   assert.equal(a.bvLaco(h1), '');
-  assert.match(a.bvLaco(h2), /Laço \(dado\): você já fez a mesma pergunta duas vezes seguidas \("Qual dos seus horários você quer mudar\?"\).*ofereça passar para a equipe/);
+  assert.match(a.bvLaco(h2), /Laço \(dado\): a sua pergunta "Qual dos seus horários você quer mudar\?" já saiu duas vezes seguidas\..*siga normalmente.*chame transferir_atendimento com motivo nao_resolvi neste turno, sem perguntar antes/);
+  assert.doesNotMatch(a.bvLaco(h2), /não respondeu|não escolheu|ofereça/); // a contagem nao sabe se ele respondeu; e na terceira transfere direto (owner, 24/11)
   // pergunta diferente no meio zera a contagem; mensagem da equipe nao e pergunta do agente
   assert.equal(a.bvVezesDaPergunta([...h1, e('x'), s('Qual serviço você quer?'), e('y'), s(q)]), 1);
   assert.equal(a.bvVezesDaPergunta([...h1, e('o meu'), { direcao: 'saida', equipe: true, tipo: 'texto', conteudo: q }]), 1);
@@ -583,7 +584,8 @@ console.log('agente.test.js retomada longa ok');
   assert.equal(a.bvVezesDaLista(h, of), 2); // a continuacao "Seguem mais opções:" nao conta
   assert.equal(a.bvVezesDaLista(h, { tipo: 'x', itens: [] }), 0); // oferta sem carimbo (antiga): nao afirma nada
   assert.equal(a.bvVezesDaLista(h, null), 0);
-  assert.match(a.bvLaco(h, of), /Laço \(dado\): a lista de opções atual já foi enviada duas vezes e o cliente não escolheu\..*ofereça passar para a equipe/);
+  assert.match(a.bvLaco(h, of), /Laço \(dado\): a lista de opções atual já foi enviada duas vezes\. Se a mensagem nova escolhe uma opção, responde.*siga normalmente.*chame transferir_atendimento com motivo nao_resolvi neste turno/);
+  assert.doesNotMatch(a.bvLaco(h, of), /não respondeu|não escolheu|ofereça/);
   assert.equal(a.bvLaco(h.slice(0, 2), of), '');
   assert.equal(a.bvLaco(h, { ...of, em: '2026-11-18T21:00:39.000Z' }), ''); // oferta nova depois: a lista dela saiu uma vez so
   console.log('agente.test.js laco em lista ok');
@@ -617,7 +619,9 @@ console.log('agente.test.js retomada longa ok');
   assert.equal(a.bvTerceiraVez('Desculpa 😅 Você tem estes horários agendados. Qual deles quer mudar?', h2, of, false, true), true); // pergunta reescrita, mesma lista (R38, 19/11)
   assert.equal(a.bvTerceiraVez('Desculpa 😅 Você tem estes horários agendados. Qual deles quer mudar?', h1, of, false, true), false); // segunda vez
   assert.equal(a.bvTerceiraVez('Desculpa 😅 Você tem estes horários agendados. Qual deles quer mudar?', h2, of, true, true), false); // oferta nova
-  assert.equal(a.bvTerceiraVez('Desculpa! Quer que eu passe para a equipe te ajudar?', h2, of, false), false); // o modelo ja ofereceu a equipe
+  assert.equal(a.bvTerceiraVez('Desculpa! Quer que eu passe para a equipe te ajudar?', h2, of, false), true); // oferta da equipe na terceira vez tambem transfere (sem resposta, a conversa ficava na fila de ninguem)
+  assert.equal(a.bvTerceiraVez('Desculpa! Quer que eu passe para a equipe te ajudar?', h1, of, false), false); // antes da terceira vez a oferta segue sendo pergunta
+  assert.equal(a.bvTerceiraVez('Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?', h2, of, false), false); // o modelo ja transferiu: nao transfere de novo
   assert.equal(a.bvTerceiraVez('Perfeito, vou remarcar o de 19/11. Qual dia e horário você prefere?', h2, of, false), false); // o cliente escolheu: a conversa andou
   console.log('agente.test.js terceira vez ok');
 }
