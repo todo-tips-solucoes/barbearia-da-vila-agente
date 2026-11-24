@@ -406,6 +406,8 @@ console.log('agente.test.js itens 7 a 9 ok');
     assert.match(cv, /fez mais de um serviço \(dado\): corte adulto; orelha\. Não proponha repetir um só deles/);
     assert.doesNotMatch(cv, /Último atendimento do cliente \(dado\)/);
   }
+  // 23/11: com varios cadastros, o pedido do barbeiro da equipe (e de pessoa, e o atraso) transfere sem esperar a escolha; vale tambem no turno seguinte (contexto vindo do pedido)
+  for (const cv of [a.bvContextoCliente({ nome: 'Ana', varios: true, opcoes: [{ id: '1', nome: 'Ana' }] }, String), a.bvContextoCliente(a.bvClienteDoPedido({ identificado: true, idCliente: null, cliente_sem_cadastro: false }), String)]) assert.match(cv, /ela não segura a transferência nem a resposta a uma confirmação de presença\. Se ele pedir um barbeiro que só a equipe agenda.*chame transferir_atendimento na hora, sem perguntar de novo qual é o cadastro\. Se há confirmação de presença aberta.*chame confirmar_presenca na hora/);
   const inf = a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'Corte Infantil ate 11 anos', barbeiro: 'Kiel' } }, String);
   assert.match(inf, /não presuma; pergunte para quem é o atendimento/);
   assert.doesNotMatch(a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'corte adulto', barbeiro: 'Kiel' } }, String), /não presuma/);
