@@ -493,7 +493,7 @@ class Etapa6(unittest.TestCase):  # pendencias da leitura de 17/11: decisao no c
         cls.nos = {n["name"]: n for n in json.loads(ler("workflows/sub/entregar-rajada.json"))["nodes"]}
 
     def test_texto_do_cliente_vai_do_fluxo_para_as_ferramentas_sem_passar_pelo_modelo(self):
-        for nome in ("horarios_livres", "agendar", "reagendar", "cancelar"):
+        for nome in ("listar_servicos", "horarios_livres", "agendar", "reagendar", "cancelar"):  # listar_servicos: cabelo e barba (24/11)
             wi = self.nos["Ferramenta " + nome]["parameters"]["workflowInputs"]
             self.assertEqual(wi["value"]["texto_cliente"], "={{ $('Preparar').first().json.texto_cliente }}", nome)
             self.assertIn("texto_cliente", [s["id"] for s in wi["schema"]], nome)

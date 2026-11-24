@@ -1772,3 +1772,80 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(rt.final.resultado.code, 'barbeiro_nao_escolhido');
   console.log('graces.test.js incluir servico ok');
 }
+
+// Cabelo e barba (owner, 2026-11-24): os dois juntos ocupam dois horarios seguidos; a fala do cliente no turno decide em codigo
+{
+  const sim = ['Gostaria de agendar cabelo e barba amanhã', 'corte e barba pra quinta', 'Barba e cabelo né?', 'Raspar na navalha e barba', 'quero cortar o cabelo e fazer a barba',
+    'máquina e barba amanhã', 'corte + barba', 'cabelo, barba', 'cabelo com barba', 'barba e corte na máquina', 'quanto custa cabelo e barba?', 'barba mais o cabelo',
+    'só cabelo e barba', 'é só cabelo e barba mesmo', 'Fala amigo, quero cabelo e barba amanhã', 'Bom dia irmão, cabelo e barba amanhã às 10?', 'cabelo e barba não tem horário amanhã?',
+    'cabelo/barba', 'cabelo & barba', 'um corte e uma barba', 'degradê e barba', 'Cabelo adulto + barba', 'Cabelo máquina + barba']; // os dois ultimos: o toque no item da lista
+  const nao = ['quero cortar a barba amanhã', 'corte de barba', 'só o corte de cabelo, sem barba', 'cabelo, barba não', 'quero fazer a barba', 'raspar a barba', 'passar a máquina na barba',
+    'fazer a barba com máquina', 'cabelo pro meu filho e barba pra mim', 'cabelo e sobrancelha', 'não quero barba, só cabelo', '', null, undefined,
+    'cortei o cabelo semana passada, hoje é barba', 'cortar o bigode e a barba', 'corte infantil pro pequeno e barba pra mim', 'corte do menino e barba pra mim',
+    'corte adulto e barba express', 'corte pro meu pai e barba pra mim', 'corte adulto', 'barba design'];
+  for (const t of sim) assert.equal(g.bvgCabeloEBarba(t), true, t);
+  for (const t of nao) assert.equal(g.bvgCabeloEBarba(t), false, String(t));
+  const t0 = Date.now();
+  for (const t of ['cabelo ' + 'e '.repeat(296), 'corte'.repeat(120), 'barba e '.repeat(75), 'so cabelo '.repeat(60)]) g.bvgCabeloEBarba(t);
+  assert.ok(Date.now() - t0 < 50); // regex limitadas: 600 caracteres hostis nao seguram o turno
+  // a marca nasce da fala (nunca de fora) e a fala nao segue adiante
+  const dois = (o) => entrada({ texto_cliente: 'quero cabelo e barba amanhã de manhã', ...o });
+  assert.deepEqual([dois({ operacao: 'listar_servicos' }).cabelo_barba, dois({ operacao: 'listar_servicos' }).texto_cliente], [true, undefined]);
+  assert.equal(entrada({ operacao: 'listar_servicos', texto_cliente: 'quero cortar a barba' }).cabelo_barba, undefined);
+  assert.equal(g.bvGNormalizar({ ...base, operacao: 'listar_servicos', cabelo_barba: true }, cfg).resultado.code, 'campo_desconhecido');
+  // listar_servicos: o modelo pediu a lista geral (ou so "barba") e saem so os combinados, com a orientacao
+  const cat = [{ idServico: 'c1', descricaoAgenda: 'corte adulto', valorPadrao: 90 }, { idServico: 'b1', descricaoAgenda: 'barba design', valorPadrao: 70 },
+    { idServico: 'k1', descricaoAgenda: 'Cabelo adulto + barba', valorPadrao: 150 }, { idServico: 'k2', descricaoAgenda: 'Cabelo máquina + barba', valorPadrao: 130 }];
+  for (const texto of [undefined, 'barba', 'cabelo e barba', 'corte']) {
+    const p = g.bvGPlano(dois({ operacao: 'listar_servicos', texto }), null, cfg);
+    assert.equal(p.reqs.length, texto === 'barba' || texto === 'corte' ? 2 : 1, String(texto)); // lista geral ja traz os combinados: nenhuma chamada a mais
+    const f = g.bvGPasso(p.st, p.reqs.map(() => ok(cat)), cfg).final;
+    assert.deepEqual(f.resultado.servicos.map((x) => x.nome), ['Cabelo adulto + barba', 'Cabelo máquina + barba'], String(texto));
+    assert.match(f.resultado.orientacao, /dois horários seguidos/);
+    assert.deepEqual(f.efeitos.opcoes.itens.map((x) => x.valor.idServico), ['k1', 'k2']);
+  }
+  const lista = (o, ctx) => { const p = g.bvGPlano(entrada({ operacao: 'listar_servicos', ...o }), ctx || null, cfg); return g.bvGPasso(p.st, p.reqs.map(() => ok(cat)), cfg).final.resultado; };
+  const nomes = (r) => r.servicos.map((x) => x.nome);
+  assert.deepEqual(nomes(lista({ texto: 'maquina', texto_cliente: 'máquina e barba amanhã' })), ['Cabelo adulto + barba', 'Cabelo máquina + barba']); // busca pela palavra do cabelo (TESTE, 24/11)
+  // loja sem servico combinado: vale a lista que o modelo pediu, sem a orientacao
+  let p = g.bvGPlano(dois({ operacao: 'listar_servicos', texto: 'barba' }), null, cfg);
+  let f = g.bvGPasso(p.st, p.reqs.map(() => ok(cat.slice(0, 2))), cfg).final;
+  assert.deepEqual([f.resultado.servicos.map((x) => x.nome), f.resultado.orientacao], [['corte adulto', 'barba design'], undefined]);
+  // busca de outro servico no mesmo turno ("cabelo, barba e sobrancelha") segue como o modelo pediu
+  assert.equal(nomes(lista({ texto: 'sobrancelha', texto_cliente: 'cabelo, barba e sobrancelha' })).length, 4);
+  // so uma vez: se a oferta atual ja e a dos combinados, o cliente viu e quer outra coisa (avulsos, pacote)
+  const ofComb = { tipo: 'servico', itens: [{ id: '1', rotulo: 'Cabelo adulto + barba', valor: { idServico: 'k1', nome: 'Cabelo adulto + barba' } }, { id: '2', rotulo: 'Cabelo máquina + barba', valor: { idServico: 'k2', nome: 'Cabelo máquina + barba' } }] };
+  assert.equal(nomes(lista({ texto: 'corte', texto_cliente: 'tenho pacote de corte, quero corte e barba separados' }, { opcoes: ofComb, pedido: {} })).length, 4);
+  // quem ja tem agendamento futuro pode estar incluindo o que falta (servico a mais): a lista do modelo fica como e
+  const fut = (dia) => [{ idAgenda: 'a1', idServico: 'b1', servico: 'barba design', horaInicio: `${dia}T11:20:00`, hora: '11:20', fim: '12:00', idProfissional: 'p1' }];
+  p = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'corte', texto_cliente: 'Barba e cabelo né?' }), { pedido: { futuros: fut('2026-11-26') }, opcoes: {} }, cfg);
+  assert.deepEqual(p.reqs.map((q) => q.qs.texto), ['corte']);
+  // sem a fala dos dois nada muda
+  p = g.bvGPlano(entrada({ operacao: 'listar_servicos', texto: 'barba', texto_cliente: 'quero fazer a barba' }), null, cfg);
+  assert.deepEqual(p.reqs.map((q) => q.qs.texto), ['barba']);
+  // horarios_livres: servico avulso para quem pediu os dois e recusado antes de qualquer chamada; o combinado e a sequencia passam
+  const ofS = { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte adulto', valor: { idServico: 'c1', nome: 'corte adulto', preco: 90, minutos: 40 } },
+    { id: '2', rotulo: 'Cabelo adulto + barba', valor: { idServico: 'k1', nome: 'Cabelo adulto + barba', preco: 150, minutos: 80 } }, { id: '3', rotulo: 'barba design', valor: { idServico: 'b1', nome: 'barba design', preco: 70, minutos: 40 } }] };
+  const hl = (o, ctx = { opcoes: ofS, pedido: {} }) => g.bvGPlano(dois({ operacao: 'horarios_livres', qualquer: true, data: '2026-11-25', ...o }), ctx, cfg);
+  f = hl({ id_opcao_servico: '1' }).final;
+  assert.equal(f.resultado.code, 'pediu_dois_servicos');
+  assert.match(f.resultado.orientacao, /listar_servicos/);
+  assert.deepEqual(f.efeitos, { pedido: { dois_avisado: T2 } }); // so a marca do aviso: a oferta e o resto do pedido ficam como estavam
+  assert.equal(hl({}, { opcoes: {}, pedido: { servico: { idServico: 'c1', nome: 'corte adulto' } } }).final.resultado.code, 'pediu_dois_servicos'); // servico ja escolhido antes
+  // uma vez por turno: se o modelo insiste, o cliente quer mesmo um so (marca errada custa uma chamada, nunca um laco); turno novo avisa de novo
+  assert.ok(hl({ id_opcao_servico: '1' }, { opcoes: ofS, pedido: { dois_avisado: T2 } }).reqs.length > 0);
+  assert.equal(hl({ id_opcao_servico: '1' }, { opcoes: ofS, pedido: { dois_avisado: T1 } }).final.resultado.code, 'pediu_dois_servicos');
+  assert.ok(hl({ id_opcao_servico: '2' }).reqs.length > 0);
+  assert.ok(hl({ id_opcoes_servicos: '1,3', qualquer: undefined }).reqs.length > 0);
+  assert.ok(g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: '2026-11-25', id_opcao_servico: '1', texto_cliente: 'quero cortar o cabelo amanhã' }), { opcoes: ofS, pedido: {} }, cfg).reqs.length > 0);
+  // servico a mais: com agendamento de outro servico NO DIA da busca segue (horario colado); agendamento em outro dia nao isenta
+  assert.ok(hl({ id_opcao_servico: '1' }, { opcoes: ofS, pedido: { futuros: fut('2026-11-25') } }).reqs.length > 0);
+  assert.equal(hl({ id_opcao_servico: '1' }, { opcoes: ofS, pedido: { futuros: fut('2026-12-20') } }).final.resultado.code, 'pediu_dois_servicos');
+  // agendar (fase 1): horario de servico avulso no turno em que ele pede os dois nao vira proposta
+  const ofH = (servico, idServico) => ({ tipo: 'horario', itens: [{ id: '1', rotulo: '10:00', valor: { data: '2026-11-25', hora: '10:00', idProfissional: 'p1', apelido: 'Pedro', idServico, servico, preco: 90, minutos: 40 } }] });
+  const ag = (of, pedido = {}) => g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', texto_cliente: 'esse das 10h, é cabelo e barba tá' }), { opcoes: of, pedido: { idCliente: 'cli-1', ...pedido } }, cfg);
+  assert.equal(ag(ofH('corte adulto', 'c1')).final.resultado.code, 'pediu_dois_servicos');
+  assert.ok(ag(ofH('corte adulto', 'c1'), { dois_avisado: T2 }).reqs.length > 0);
+  assert.ok(ag(ofH('Cabelo adulto + barba', 'k1')).reqs.length > 0);
+  console.log('graces.test.js cabelo e barba ok');
+}
