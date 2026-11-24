@@ -183,6 +183,7 @@
     "lista_continua": "Seguem mais opções:",
     "modo_diferentes": "Vou marcar cada serviço com um barbeiro diferente, no melhor horário de cada um.",
     "modo_separados": "Vou marcar cada serviço separado, em horários independentes.",
+    "aviso_equipe": "Aviso automático, não precisa responder. Atendimento passado para a equipe pelo agente. Cliente: {nome}. WhatsApp: {telefone}",
     "encaminhar_equipe": "Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?",
     "confirmacao": "Oi! Passando pra confirmar seu horário: {servico} com {barbeiro}, {dia} às {hora}. Você consegue vir?",
     "lembrete": "Oi! Só lembrando que hoje, às {hora}, tem {servico} com {barbeiro} aqui na Barbearia da Vila. Te esperamos!",
@@ -220,7 +221,8 @@
     "encerrar_apos_min": 30,
     "encerrar_so_respondido": false,
     "silencio_por_fila": true,
-    "segurar_lembretes": false
+    "segurar_lembretes": false,
+    "avisar_numeros": []
   },
   "mensagens": {
     "ativo": true,
