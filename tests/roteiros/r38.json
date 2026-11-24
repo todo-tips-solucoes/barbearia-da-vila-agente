@@ -1,6 +1,6 @@
 {
   "id": "R38",
-  "situacao": "Laço em lista (conflito 2): com mais de um agendamento, o cliente responde sem escolher; a lista volta uma vez e depois o agente oferece a equipe, sem escolher por ele",
+  "situacao": "Laço em lista (conflito 2): com mais de um agendamento, o cliente responde sem escolher; a lista volta uma vez e, na terceira vez, o agente transfere para a equipe, sem escolher por ele",
   "falas": [
     "Quero mudar o meu horário",
     "o meu",
@@ -9,7 +9,7 @@
   "expectativas": [
     "Com mais de um agendamento, manda a lista deles e pergunta qual",
     "Na resposta que não escolhe, manda a lista de novo uma única vez, dizendo com outras palavras o que falta",
-    "Na terceira vez sem escolha, oferece passar para a equipe; em nenhum momento escolhe um agendamento pelo cliente nem afirma qual é"
+    "Na terceira vez sem escolha, transfere para a equipe de uma vez (responde com o texto de encaminhamento, sem perguntar se o cliente quer); em nenhum momento escolhe um agendamento pelo cliente nem afirma qual é"
   ],
   "criterios": [
     "K1",
@@ -21,6 +21,7 @@
   "agenda": true,
   "preparo": "agendamento_previo",
   "escritas": [],
+  "handoff": true,
   "cobre": [
     2
   ]
