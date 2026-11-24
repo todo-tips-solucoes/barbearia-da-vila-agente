@@ -646,3 +646,54 @@ Duas, em leitura, antes do PR: segurança; correção, performance, escala e dup
 - **No TESTE a sessão é de verdade.** O redirecionamento troca só o barbeiro: contato de teste com pacote real tem a sessão reservada pelo teste, e ela não volta com o cancelamento (medido).
 - **Volta de versão.** Proposta com pacote ainda pendente, lida pelo código antigo, seria gravada pelo valor avulso. Em caso de volta, as pendentes com `pacote` devem ser marcadas como substituídas.
 - **Confirmação antes da transferência (R29).** No caminho em que a Graces não mostra pacote, o modelo às vezes manda só o texto da transferência, sem a frase do agendamento feito (visto em 18/11 e em 23/11). Não é novo e não foi tratado aqui.
+
+## Cabelo e barba: dois horários seguidos (24/11)
+
+Pedido do owner (24/11): quando o cliente quer cabelo e barba, o atendimento ocupa dois horários, então só vale início com dois horários livres em seguida.
+
+### O que foi medido antes de mexer
+
+- **A grade da Graces está certa.** Os serviços combinados ("Cabelo adulto + barba" e "Cabelo máquina + barba") têm 80 min para os barbeiros reais, e `GET /agenda/horarios-livres` só devolve início com os 80 min livres: 269 inícios de 4 barbeiros em 7 dias conferidos contra as ocupações, nenhum furado; 44 inícios que o corte de 40 min tinha ficaram fora da grade do combinado. O barbeiro de teste é exceção: para ele o combinado dura 40 min.
+- **O defeito era a escolha do serviço.** Em 18 de 18 conversas no TESTE ("cabelo e barba", "corte e barba", "barba e cabelo", "raspar na navalha e barba", "cortar o cabelo e fazer a barba", "máquina e barba"), o agente mandou a lista geral de serviços, só os cortes, ou barbas e combinados misturados. Quem toca em "corte adulto" ou "barba design" fica com um horário só. Em PROD (23/11) um cliente pediu "raspar na navalha e barba" e saiu com só a barba agendada.
+
+### Como funciona
+
+A decisão é do código, pela fala do cliente no turno (`texto_cliente`, que o fluxo entrega às ferramentas sem passar pelo modelo). `listar_servicos` passou a receber esse campo, como `horarios_livres`, `agendar`, `reagendar` e `cancelar` já recebiam.
+
+- **Detecção (`bvgCabeloEBarba`).** Cabelo, corte, cortar, raspar, máquina ou degradê ligados a barba por "e", "mais", "com", "+", "/", "&" ou vírgula, nas duas ordens. Não contam: "cortar a barba", "corte de barba", "cabelo, sem barba", "hoje é barba", serviço de outra pessoa ("corte do meu filho e barba"), bigode e avulsos ditos pelo nome ("corte adulto e barba express").
+- **Lista só com os combinados (`bvgListarOsDois`).** Com a fala dos dois, `listar_servicos` devolve só os serviços combinados, com a orientação de perguntar qual deles. Vale uma vez (se a oferta atual já é a dos combinados, segue a busca do modelo), só quando a busca do modelo é geral ou de cabelo e barba, e só para quem não tem agendamento futuro. Loja sem serviço combinado: segue a lista que o modelo pediu.
+- **Barreira no avulso (`bvgSoUmDosDois`).** `horarios_livres` de um serviço avulso e `agendar` (fase 1) de horário de serviço avulso, no turno em que o cliente falou dos dois, são recusados com `pediu_dois_servicos`. A recusa sai uma vez por turno (`pedido.dois_avisado`): se o modelo insiste, é porque o cliente quer mesmo um só, e a detecção errada custa uma chamada, nunca um laço. Com agendamento de outro serviço no dia da busca, é serviço a mais e segue pelo horário colado.
+- **Passam sem barreira:** o próprio combinado, a sequência (`id_opcoes_servicos`), remarcar, trocar de serviço e a confirmação (fase 2).
+- **Prompt:** uma frase manda buscar os combinados para cabelo e barba e nunca agendar só um dos dois sem o cliente pedir.
+
+Custo: nenhuma chamada a mais no caminho comum; com a fala dos dois e busca do modelo por um termo, um `GET /agenda/servicos` a mais, em paralelo.
+
+### Revisões
+
+- **Revisão independente do diff (especialista de backend).** Achou que `listar_servicos` não recebia `texto_cliente` no fluxo (o filtro nunca rodaria), que a detecção disparava em pedido de um serviço só ("hoje é barba", "cortar o bigode e a barba", pai e filho) sem saída no turno, que frases comuns escapavam ("só cabelo e barba", "Fala amigo, …", "um corte e uma barba") e que a isenção por qualquer agendamento futuro era larga demais. Tudo corrigido e coberto por teste.
+- **Especialista do Chat Master.** Lista de 2 itens não tem mínimo documentado que impeça, e o projeto já manda listas de 2 itens; os dois títulos (21 e 22 caracteres) cabem no corte de 24.
+
+### Medição no TESTE (conversa simulada, sem escrita na Graces)
+
+| Caso | Antes | Depois |
+|---|---|---|
+| "cabelo e barba", "corte e barba", "barba e cabelo" (9 conversas) | 0 de 9 | 9 de 9 |
+| "raspar na navalha e barba", depois da pergunta do serviço (PROD, 23/11) | 0 de 3 | 3 de 3 |
+| "cortar o cabelo e fazer a barba" | 0 de 3 | 3 de 3 |
+| "máquina e barba" | 0 de 3 | 3 de 3 (na primeira rodada, 2 de 3: a busca do modelo por "maquina" escapava do filtro; corrigido e medido de novo) |
+| "um corte e uma barba", "Fala amigo, só cabelo e barba" (casos da revisão) | não medido | 6 de 6 |
+
+| Controles de um serviço só: "cortar a barba", "só o corte de cabelo, sem barba", "fazer a barba", "hoje é barba" (12 conversas) | lista de barbas ou de cortes | 12 de 12 com a mesma lista de antes |
+| Controle "corte adulto e barba express" (avulsos ditos pelo nome) | não medido | 3 de 3: sequência dos dois serviços, em horários seguidos |
+
+"Certo" = a lista leva só os combinados, ou a busca de horário já é do combinado.
+
+Suíte no TESTE com a mudança: R1, R2, R5, R18 e R23 aprovados (p95 de 24,8 s). O R5 ("Quero cortar e fazer a barba sábado de manhã") foi ajustado: esperava um agendamento por serviço e agora aceita o serviço combinado, que é o que o agente oferece.
+
+### O que falta e limites
+
+- **Período na sequência de serviços (já existia).** No controle "corte adulto e barba express amanhã à tarde", a lista de sequências trouxe inícios de manhã: a busca encadeada não aplica o período pedido. Não é desta mudança e não foi tratado.
+- **A marca vale só no turno da fala.** "Cabelo e barba amanhã", pergunta do agente, "de manhã": a busca desse último turno roda sem a marca; aí valem a lista dos combinados, que já saiu, e a frase do prompt.
+- **Erro de digitação, frase muito longa e áudio com ponto entre as duas partes** ("Quero cortar o cabelo. E fazer a barba também.") não são detectados; vale o comportamento anterior.
+- **Cliente com pacote de um dos serviços.** O combinado é outro serviço na Graces: a sessão do pacote não é abatida e o resumo sai pelo valor avulso. A orientação manda usar os avulsos em sequência quando o cliente diz que tem pacote, e a transferência por `pacote` continua valendo. Falta o owner dizer quais pacotes existem.
+- **Barbeiro de teste:** como o combinado dura 40 min para ele, não há como provar no TESTE, com escrita, que o agendamento ocupa 80 min; a prova é a leitura da grade dos barbeiros reais.

@@ -5,8 +5,8 @@
     "Quero cortar e fazer a barba sábado de manhã"
   ],
   "expectativas": [
-    "Encadeia os serviços (um agendamento por serviço)",
-    "Horários em sequência",
+    "Trata os dois serviços juntos: oferece o serviço combinado de cabelo e barba (um agendamento só, que já ocupa os dois horários) ou, se o cliente pedir os avulsos, encadeia um agendamento por serviço; nunca segue com só um dos dois",
+    "Dois horários seguidos, com o mesmo barbeiro",
     "Resumo único"
   ],
   "criterios": [
