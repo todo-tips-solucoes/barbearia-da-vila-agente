@@ -220,7 +220,7 @@ function bvClienteDoPedido(p) {
   if (!p || !p.identificado) return {};
   const u = p.ultimo;
   return { nome: p.cliente_nome || '', sem_cadastro: !!p.cliente_sem_cadastro, varios: !p.idCliente && !p.cliente_sem_cadastro, opcoes: [], futuros: Array.isArray(p.futuros) ? p.futuros : [],
-    ultimo: u && u.humano ? { humano: u.humano } : u && u.servico ? { servico: u.servico.nome, barbeiro: u.barbeiro ? u.barbeiro.apelido : null } : null };
+    ultimo: u && u.humano ? { humano: u.humano } : u && Array.isArray(u.servicos) ? { servicos: u.servicos } : u && u.servico ? { servico: u.servico.nome, barbeiro: u.barbeiro ? u.barbeiro.apelido : null } : null };
 }
 function bvContextoCliente(c, neutralizar, agora) {
   const n = (x) => neutralizar(String(x));
@@ -245,6 +245,9 @@ function bvContextoCliente(c, neutralizar, agora) {
   }
   if (c.ultimo && c.ultimo.humano) {
     t += '\nO último atendimento do cliente foi com ' + n(c.ultimo.humano) + ', que só a equipe agenda (dado). Num pedido de agendamento, chame transferir_atendimento (a resposta é só o texto que ela devolve); não ofereça horários: para ele, o convite depois de uma dúvida é passar para a equipe marcar.';
+  }
+  if (c.ultimo && Array.isArray(c.ultimo.servicos) && c.ultimo.servicos.length > 1) {
+    t += '\nNo último atendimento o cliente fez mais de um serviço (dado): ' + c.ultimo.servicos.map(n).join('; ') + '. Não proponha repetir um só deles nem escolha por ele: num pedido de agendamento em que ele não disse o serviço, chame listar_servicos e pergunte, em uma frase que cite o que ele fez da última vez, se quer repetir os mesmos ou qual serviço quer desta vez (a lista de serviços vai junto; sem resumo e sem "posso confirmar?"). Com a resposta, siga o fluxo normal (um serviço, ou vários com listar_servicos para cada um).';
   }
   if (c.ultimo && c.ultimo.servico) {
     const com = c.ultimo.barbeiro ? ' com ' + n(c.ultimo.barbeiro) : '';

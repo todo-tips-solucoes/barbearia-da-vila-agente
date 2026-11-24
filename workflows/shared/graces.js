@@ -740,10 +740,23 @@ function bvgPassoUltimo(st, resps, cfg) {
   const so = (ult) => bvgFim({ ok: true, encontrado: true, nome: ped.cliente_nome, futuros: fut, ...(ult ? { ultimo: { servico: ult.servico.nome, barbeiro: ult.barbeiro ? ult.barbeiro.apelido : null } } : {}) },
     { pedido: { ...ped, ultimo: ult || null, futuros: fut } });
   if (meta.etapa === 'hist') {
-    const h = ok(resps[0]) ? resps[0].body.find((x) => x && BVG_UUID.test(String(x.idServico || ''))) : null;
+    const itens = ok(resps[0]) ? resps[0].body.filter((x) => x && BVG_UUID.test(String(x.idServico || ''))) : [];
+    const h = itens[0];
     if (!h) return so(null);
-    const hum = bvBarbeiroHumano({ idProfissional: h.idProfissional, apelido: String(h.profissional || '') }, cfg.humanos);
+    // A ultima visita pode ter varios servicos (uma linha do historico por servico). PROD 23/11: cliente que fez corte + duas
+    // depilacoes perguntou so por um horario e recebeu a proposta de DEPILACAO DE ORELHA, a primeira linha. Visita = mesma comanda ou mesmo dia.
+    const dia = (x) => String(x.dataAbertura || '').slice(0, 10);
+    const visita = itens.filter((x) => x === h || (h.idComanda && x.idComanda === h.idComanda) || (dia(h) && dia(x) === dia(h)));
+    const hum = visita.map((x) => bvBarbeiroHumano({ idProfissional: x.idProfissional, apelido: String(x.profissional || '') }, cfg.humanos)).find(Boolean);
     if (hum) return bvgFim({ ok: true, encontrado: true, nome: ped.cliente_nome, futuros: fut, ultimo: { humano: hum.nome } }, { pedido: { ...ped, ultimo: { humano: hum.nome }, futuros: fut } });
+    // mais de um servico na ultima visita: nao ha "o servico de sempre" para repetir sozinho; o agente pergunta (so os nomes vao adiante)
+    const distintos = visita.filter((x, k, a) => a.findIndex((y) => y.idServico === x.idServico) === k);
+    if (distintos.length > 1) {
+      const nomes = distintos.map((x) => String(x.descricaoServico || '').trim().slice(0, 60)).filter(Boolean).slice(0, 5);
+      // sem nome para citar, ou com servico "2a vez" (FR-013: o agente nao fala em segunda vez), nao ha sugestao: o agente pergunta o servico
+      const u = nomes.length > 1 && !nomes.some(bvSegundaVez) ? { servicos: nomes } : null;
+      return bvgFim({ ok: true, encontrado: true, nome: ped.cliente_nome, futuros: fut, ...(u ? { ultimo: u } : {}) }, { pedido: { ...ped, ultimo: u, futuros: fut } });
+    }
     return { reqs: [{ m: 'GET', path: '/agenda/servicos', qs: {} }, { m: 'GET', path: '/servicos/profissionais', qs: { idServico: h.idServico } }], st: { ...st, meta: { ...meta, etapa: 'ult', h, fut } } };
   }
   const s = ok(resps[0]) ? bvFiltrarServicos(resps[0].body.filter((x) => x && x.ativo !== false).map((x) => ({ ...x, nome: String(x.descricaoAgenda || '') })))

@@ -401,6 +401,11 @@ console.log('agente.test.js itens 7 a 9 ok');
   assert.match(c, /não cadastre de novo.*motivo ja_cliente: na primeira vez a ferramenta não transfere e devolve o texto.*chame de novo com o mesmo motivo e ela transfere/);
   assert.doesNotMatch(c, /Antes do cadastro não responda preço/);
   assert.match(a.bvContextoCliente({ nome: 'Ana', varios: true, opcoes: [{ id: '1', nome: 'Ana' }] }, String), /a lista deles vai junto com a sua primeira resposta/);
+  // 23/11 (ponto 14): ultima visita com varios servicos -> pergunta, nao propoe um so; vale no primeiro turno e nos seguintes
+  for (const cv of [a.bvContextoCliente(a.bvClienteDoResultado({ ok: true, nome: 'Ana', ultimo: { servicos: ['corte adulto', 'orelha'] } }), String), a.bvContextoCliente(a.bvClienteDoPedido({ identificado: true, idCliente: 'c1', ultimo: { servicos: ['corte adulto', 'orelha'] } }), String)]) {
+    assert.match(cv, /fez mais de um serviço \(dado\): corte adulto; orelha\. Não proponha repetir um só deles/);
+    assert.doesNotMatch(cv, /Último atendimento do cliente \(dado\)/);
+  }
   const inf = a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'Corte Infantil ate 11 anos', barbeiro: 'Kiel' } }, String);
   assert.match(inf, /não presuma; pergunte para quem é o atendimento/);
   assert.doesNotMatch(a.bvContextoCliente({ nome: 'Rui', ultimo: { servico: 'corte adulto', barbeiro: 'Kiel' } }, String), /não presuma/);

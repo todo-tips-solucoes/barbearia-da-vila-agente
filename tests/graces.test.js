@@ -753,6 +753,29 @@ console.log('graces.test.js ultimo atendimento ok');
   rj = g.bvGPasso({ in: entrada({ operacao: 'identificar_cliente' }), ctx: { pedido: {}, opcoes: {} }, meta: { op: 'identificar_cliente', etapa: 'hist', ped } }, [ok([{ idServico: S, idProfissional: JAY, profissional: 'jayme ' }])], cj).final;
   assert.deepEqual(rj.efeitos.pedido.ultimo, { humano: 'Jayme' });
   assert.deepEqual(rj.resultado.ultimo, { humano: 'Jayme' });
+  { // 23/11 (ponto 14): ultima visita com varios servicos -> nao ha "o de sempre" para repetir sozinho; so os nomes vao adiante
+    const S2 = '22222222-2222-4222-8222-222222222222', S3 = '33333333-3333-4333-8333-333333333333';
+    const hist = (linhas) => g.bvGPasso({ in: entrada({ operacao: 'identificar_cliente' }), ctx: { pedido: {}, opcoes: {} }, meta: { op: 'identificar_cliente', etapa: 'hist', ped } }, [ok(linhas), ok([])], cfg);
+    const l = (idServico, descricaoServico, extra) => ({ idServico, descricaoServico, idProfissional: 'b1', profissional: 'Pedro ', idComanda: 'k1', dataAbertura: '2026-11-10T14:00:00', ...extra });
+    const v = hist([l(S3, 'DEPILAÇÃO DE ORELHA '), l(S2, 'DEPILAÇÃO DE NARIZ'), l(S, 'corte adulto'), l(S, 'corte adulto', { idComanda: 'k0', dataAbertura: '2026-10-01T10:00:00' })]).final;
+    assert.deepEqual(v.efeitos.pedido.ultimo, { servicos: ['DEPILAÇÃO DE ORELHA', 'DEPILAÇÃO DE NARIZ', 'corte adulto'] });
+    assert.deepEqual(v.resultado.ultimo, { servicos: ['DEPILAÇÃO DE ORELHA', 'DEPILAÇÃO DE NARIZ', 'corte adulto'] });
+    // comandas diferentes no mesmo dia tambem sao a mesma visita; o mesmo servico duas vezes conta uma
+    assert.deepEqual(hist([l(S3, 'orelha', { idComanda: 'ka' }), l(S, 'corte adulto', { idComanda: 'kb' })]).final.resultado.ultimo, { servicos: ['orelha', 'corte adulto'] });
+    assert.ok(hist([l(S, 'corte adulto'), l(S, 'corte adulto')]).reqs); // um servico so: segue para o estagio ult, como sempre
+    assert.ok(hist([l(S, 'corte adulto'), l(S3, 'orelha', { idComanda: 'k0', dataAbertura: '2026-10-01T10:00:00' })]).reqs); // o outro servico e de visita anterior
+    assert.ok(hist([{ idServico: S, idProfissional: 'b1', profissional: 'Pedro' }, { idServico: S3, idProfissional: 'b1', profissional: 'Pedro' }]).reqs); // sem comanda nem data: so a primeira linha conta
+    // barbeiro que so a equipe agenda em QUALQUER linha da ultima visita -> equipe (clausula petrea)
+    assert.deepEqual(g.bvGPasso({ in: entrada({ operacao: 'identificar_cliente' }), ctx: { pedido: {}, opcoes: {} }, meta: { op: 'identificar_cliente', etapa: 'hist', ped } }, [ok([l(S3, 'orelha'), l(S, 'corte adulto', { idProfissional: JAY, profissional: 'jayme ' })])], cj).final.resultado.ultimo, { humano: 'Jayme' });
+    // o atalho do servico unico nao e usado com a forma nova: horarios_livres sem servico pede o servico
+    assert.equal(g.bvGPlano(entrada({ operacao: 'horarios_livres', data: '2026-12-01' }), { opcoes: {}, pedido: { idCliente: 'c1', identificado: true, ultimo: { servicos: ['a', 'b'] } } }, cfg).final.resultado.code, 'servico_nao_escolhido');
+    // revisao de 24/11: servico "2a vez" na visita, ou servico sem nome, nao vira sugestao nenhuma (nem a do servico unico): o agente pergunta
+    const v2 = hist([l(S, 'CORTE ADULTO 2ª VEZ'), l(S3, 'barba')]).final;
+    assert.deepEqual([v2.resultado.ultimo, v2.efeitos.pedido.ultimo], [undefined, null]);
+    const v3 = hist([l(S3, ''), l(S, 'corte adulto')]).final;
+    assert.deepEqual([v3.resultado.ultimo, v3.efeitos.pedido.ultimo], [undefined, null]);
+    assert.equal(hist([l(S3, 'x'.repeat(90)), l(S, 'corte adulto')]).final.resultado.ultimo.servicos[0].length, 60);
+  }
   // fase 1: horario, sequencia ou remarcacao com o Jayme -> encaminha; cancelar o agendamento dele segue
   const hJ = { tipo: 'horario', itens: [{ id: '1', rotulo: '10:00', valor: { data: '2026-10-20', hora: '10:00', idProfissional: JAY, apelido: 'jayme', idServico: S, servico: 'corte adulto' } }] };
   assert.equal(semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), { opcoes: hJ, pedido: { idCliente: 'c1' } }, cj)).final.resultado.code, 'encaminhar_equipe');
