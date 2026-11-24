@@ -235,7 +235,10 @@ function bvContextoCliente(c, neutralizar, agora) {
   }
   if (c.varios) {
     t += '\nHá mais de um cadastro neste telefone (dado) e a lista deles vai junto com a sua primeira resposta: nela, cumprimente e pergunte qual deles é o cliente; com a resposta, use escolher_cliente'
-      + (c.opcoes && c.opcoes.length ? ' (' + c.opcoes.map((o) => n(o.id) + ' = ' + n(o.nome)).join('; ') + ')' : '') + '.';
+      + (c.opcoes && c.opcoes.length ? ' (' + c.opcoes.map((o) => n(o.id) + ' = ' + n(o.nome)).join('; ') + ')' : '') + '.'
+      // PROD 23/11: cliente com dois cadastros pediu o barbeiro da equipe, ouviu "qual cadastro e o seu?" duas vezes e ficou sem atendimento
+      // e o "Sim" ao lembrete de 24 h virou "qual deles e voce?" (o lembrete e do telefone, nao do cadastro)
+      + ' A escolha do cadastro só é necessária para agendar por aqui; ela não segura a transferência nem a resposta a uma confirmação de presença. Se ele pedir um barbeiro que só a equipe agenda, pedir para falar com uma pessoa ou avisar atraso, chame transferir_atendimento na hora, sem perguntar de novo qual é o cadastro. Se há confirmação de presença aberta e a mensagem responde a ela (sim, não, vou, não vou poder), chame confirmar_presenca na hora, sem perguntar qual é o cadastro.';
   }
   // Agendamentos futuros (revisao de 17/11): sem eles "muda pra quarta" virava um segundo agendamento
   const fut = (c.futuros || []).filter((a) => a && a.horaInicio && (!agora || String(a.horaInicio).replace('T', ' ') > String(agora)));
