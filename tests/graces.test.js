@@ -39,8 +39,11 @@ assert.equal(g.bvGPasso(st1.st, [ok([])], cfg).final.resultado.nome, 'Ana');
 assert.deepEqual(r.efeitos.pedido.futuros, []);
 const FUT = [{ idAgenda: 'ag1', idServico: 's1', horaInicio: '2026-11-20T15:00:00', descricaoServico: 'corte adulto', idProfissional: 'b1', profissional: 'Pedro' }];
 r = g.bvGPasso(st1.st, [ok([]), ok(FUT)], cfg).final;
-assert.deepEqual(r.efeitos.pedido.futuros, [{ idAgenda: 'ag1', idServico: 's1', horaInicio: '2026-11-20T15:00:00', servico: 'corte adulto' }]);
-assert.deepEqual(r.resultado.futuros, r.efeitos.pedido.futuros);
+// o barbeiro vai so pelo id (o nome nunca entra nos futuros); sem horaFim na resposta, sem a chave `fim`
+assert.deepEqual(r.efeitos.pedido.futuros, [{ idAgenda: 'ag1', idServico: 's1', horaInicio: '2026-11-20T15:00:00', servico: 'corte adulto', idProfissional: 'b1' }]);
+assert.deepEqual(g.bvGPasso(st1.st, [ok([]), ok([{ ...FUT[0], horaFim: '2026-11-20T15:40:00' }])], cfg).final.efeitos.pedido.futuros[0].fim, '15:40');
+assert.ok(!JSON.stringify(r.efeitos.pedido.futuros).includes('Pedro'));
+assert.deepEqual(r.resultado.futuros, [{ servico: 'corte adulto', horaInicio: '2026-11-20T15:00:00' }]); // ao modelo so o servico e o inicio; ids e barbeiro ficam no pedido
 // em PROD o agendamento com o barbeiro de teste nao aparece para cliente comum
 assert.deepEqual(g.bvGPasso(st1.st, [ok([]), ok([{ ...FUT[0], idProfissional: TESTE }])], { ...cfg, ambiente: 'producao' }).final.efeitos.pedido.futuros, []);
 // historico: mais recente primeiro; confere servico no catalogo e barbeiro do servico
@@ -327,7 +330,7 @@ assert.equal(r.efeitos.proposta_upd.estado, 'executada');
 { // Revisao de 17/11: resumo com dia da semana, texto final e agendamentos futuros saem do codigo, nao da memoria do modelo
   assert.match(dadosAg.resumo, /em (domingo|sábado|(segunda|terça|quarta|quinta|sexta)-feira), \d{2}\/\d{2} às 14:00/);
   assert.equal(r.resultado.feito, `Agendado: ${dadosAg.resumo}`);
-  assert.deepEqual(r.efeitos.pedido.futuros, [{ idAgenda: 'n1', idServico: dadosAg.idServico, horaInicio: `${dadosAg.data}T14:00:00`, servico: dadosAg.servico }]);
+  assert.deepEqual(r.efeitos.pedido.futuros, [{ idAgenda: 'n1', idServico: dadosAg.idServico, horaInicio: `${dadosAg.data}T14:00:00`, servico: dadosAg.servico, fim: '14:40', idProfissional: dadosAg.idProfissional }]); // fim = inicio + minutos da proposta
   assert.equal(r.efeitos.pedido.agendamentos, null); // a lista com ids segue apagada: reagendar pede meus_agendamentos de novo
   // proposta antiga, sem resumo nos dados: escreve igual, so nao devolve o texto
   const semResumo = { ...dadosAg }; delete semResumo.resumo;
@@ -349,7 +352,7 @@ assert.equal(r.efeitos.proposta_upd.estado, 'executada');
   assert.match(rc.resultado.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00$/); // o barbeiro de teste nao entra no resumo
   assert.deepEqual(rc.efeitos.pedido.futuros.map((x) => x.idAgenda), ['fica']);
   // meus_agendamentos atualiza os futuros
-  assert.deepEqual(g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg).st, [ok(agBruto)], cfg).final.efeitos.pedido.futuros, [{ idAgenda: 'a1', idServico: 's1', horaInicio: '2026-10-20T14:00:00', servico: 'corte adulto' }]);
+  assert.deepEqual(g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg).st, [ok(agBruto)], cfg).final.efeitos.pedido.futuros, [{ idAgenda: 'a1', idServico: 's1', horaInicio: '2026-10-20T14:00:00', servico: 'corte adulto', idProfissional: TESTE }]);
 }
 // erro de escrita nao repete: 409 -> falhou; timeout/5xx -> incerta, com orientacao de conferir antes
 r = g.bvGPasso(s2.st, [resp(409, { code: 'CONFLITO', traceId: '00-abc-01' })], cfg).final;
@@ -1542,4 +1545,230 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(wt.reqs[0].body.idClienteItemPacote, S1);
   assert.deepEqual(g.bvGPasso(wt.st, [ok({ sucesso: true, idAgenda: 'n10' })], cfg).reqs.map((q) => [q.m, q.path]), [['DELETE', '/agenda/ant1']]);
   console.log('graces.test.js pacote ok');
+}
+
+// Incluir um servico num agendamento que ja existe (PROD, 23/11: "barba e cabelo, ne?" terminou em "Trocar servico: BARBA EXPRESS"
+// com outro barbeiro, e o cabelo sumiu). A busca e do servico novo, o horario colado sai marcado e nada do que existe e apagado.
+{
+  const JAY = 'b623cd84-6068-4a57-9ce6-2f7d9a37a11e', D = '2026-11-26';
+  const cfgI = { ...cfg, ambiente: 'producao', redirecionar: false, escritaLiberada: true, testeLiberado: false, humanos: [{ id: JAY, nome: 'Jayme' }], agendamentosMaxDia: 3 };
+  const T = (n) => `${String(n).repeat(8)}-1111-4111-8111-111111111111`;
+  const ent = (o, c = cfgI) => { const n = g.bvGNormalizar({ ...base, ambiente: c.ambiente, ...o }, c); assert.ok(n.ok, JSON.stringify(n)); return n.in; };
+  const grade = (hs, min = 40) => ok({ minutos: min, funcionamento: { horaInicio: '08:00', horaFim: '20:00' }, horarios: hs });
+  const ocup = (...os) => ok({ horarios: os.map(([horaInicio, horaFim]) => ({ horaInicio, horaFim, tipo: 1 })) });
+  const BARBA = ['11:20', '12:00'];
+  const agBarba = { opcao_id: '1', idAgenda: 'a1', horaInicio: `${D}T11:20:00`, idServico: 'sBarba', servico: 'BARBA EXPRESS', idProfissional: 'bB', profissional: 'Beto', recorrente: false };
+  const fut = (x = {}) => ({ idAgenda: 'a1', idServico: 'sBarba', horaInicio: `${D}T11:20:00`, servico: 'BARBA EXPRESS', fim: '12:00', idProfissional: 'bB', ...x });
+  const vistos = [{ id: 's1', idServico: 'sCorte', nome: 'CORTE MAQUINA SIMPLES (1 PENTE)', preco: 55, minutos: 40 }, { id: 's2', idServico: 'sBarba', nome: 'BARBA EXPRESS', preco: 40, minutos: 40 }];
+  const ped = (fs = [fut()], extra = {}) => ({ idCliente: 'c1', barbeiro: { idProfissional: 'bB', apelido: 'Beto' }, futuros: fs, agendamentos: [agBarba], servicos_vistos: vistos, ...extra });
+  const plano = (o, pd, opcoes = {}, c = cfgI) => g.bvGPlano(ent({ operacao: 'horarios_livres', turno_id: T(2), data: D, ...o }, c), { pedido: pd, opcoes }, c);
+  const busca = (o, pd, resps) => g.bvGPasso(plano(o, pd).st, resps, cfgI).final;
+  const horas = (r) => r.resultado.opcoes.map((x) => `${x.hora}${x.junto ? '*' : ''}`);
+  const agendar = (o, pd, opcoes, turno = T(3)) => { const pl = g.bvGPlano(ent({ operacao: 'agendar', turno_id: turno, ...o }), { pedido: pd, opcoes }, cfgI); return pl.reqs ? g.bvGPasso(pl.st, pl.reqs.map(() => ok([])), cfgI).final : pl.final; };
+  const ofH = (idServico, servico, hora, data = D) => ({ tipo: 'horario', itens: [{ id: '1', rotulo: `${hora} Outro`, valor: { data, hora, idProfissional: 'bO', apelido: 'Outro', idServico, servico, preco: 40, minutos: 40 } }] });
+
+  // 1. meus_agendamentos guarda o fim (HH:MM) e o barbeiro so pelo id
+  const lidos = g.bvGPasso(g.bvGPlano(entrada({ operacao: 'meus_agendamentos' }), ctxOp({}, { idCliente: 'c1' }), cfg).st, [ok([{ ...agBruto[0], horaFim: '2026-10-20T14:40:00' }])], cfg).final.efeitos.pedido.futuros;
+  assert.deepEqual(lidos, [{ idAgenda: 'a1', idServico: 's1', horaInicio: '2026-10-20T14:00:00', servico: 'corte adulto', fim: '14:40', idProfissional: TESTE }]);
+
+  // 2. as escritas da conversa guardam o mesmo formato (fim = inicio + minutos); proposta sem minutos fica sem `fim`
+  const escrita = (acao, dados, agenda) => {
+    const pl = f2({ operacao: acao === 'reagendar' ? 'reagendar' : 'agendar' }, { pedido: { idCliente: 'c1', futuros: [fut()] }, proposta: { id: PID, acao, dados } });
+    let s = g.bvGPasso(pl.st, [ok({ horarios: [dados.hora] }), ok(agenda), ok({ horarios: [] })], cfg);
+    s = g.bvGPasso(s.st, [ok({ sucesso: true, idAgenda: 'n5' })], cfg);
+    return (s.reqs ? g.bvGPasso(s.st, [ok({ sucesso: true })], cfg) : s).final; // trocar_servico: o DELETE do antigo vem depois do POST
+  };
+  const novoD = { idCliente: 'c1', idServico: 'sCorte', servico: 'CORTE', idProfissional: 'bB', barbeiro: 'Beto', data: D, hora: '15:00', minutos: 40 };
+  const antigoD = { idAgenda: 'a1', horaInicio: `${D}T11:20:00`, recorrente: false };
+  assert.deepEqual(escrita('reagendar', { ...antigoD, ...novoD, idServico: 'sBarba', servico: 'BARBA EXPRESS' }, []).efeitos.pedido.futuros,
+    [{ idAgenda: 'a1', idServico: 'sBarba', horaInicio: `${D}T15:00:00`, servico: 'BARBA EXPRESS', fim: '15:40', idProfissional: 'bB' }]);
+  const trocado = escrita('trocar_servico', { ...novoD, antigo: { ...antigoD, servico: 'BARBA EXPRESS' }, resumo: 'Trocar serviço: CORTE com Beto em quinta-feira, 26/11 às 15:00, no lugar de BARBA EXPRESS das 11:20' }, [{ idAgenda: 'a1', idServico: 'sBarba', descricaoServico: 'BARBA EXPRESS' }]);
+  assert.deepEqual(trocado.efeitos.pedido.futuros, [{ idAgenda: 'n5', idServico: 'sCorte', horaInicio: `${D}T15:00:00`, servico: 'CORTE', fim: '15:40', idProfissional: 'bB' }]);
+  assert.equal(trocado.resultado.feito, 'Serviço trocado: CORTE com Beto em quinta-feira, 26/11 às 15:00, no lugar de BARBA EXPRESS das 11:20'); // o texto final diz o que saiu
+  const { minutos: _m, ...semMin } = novoD;
+  assert.ok(!('fim' in escrita('agendar', semMin, []).efeitos.pedido.futuros[1]));
+
+  // 3. colado antes e depois: marcados, e o "logo depois" (12:00) entra mesmo com o cliente pedindo manha
+  let ri = busca({ periodo: 'manha', id_opcao_servico: 's1' }, ped(), [grade(['08:00', '10:40', '12:00', '14:00']), ocup(BARBA)]);
+  assert.deepEqual(horas(ri), ['08:00', '10:40*', '12:00*']);
+  assert.equal(ri.resultado.orientacao, 'para ficar junto do que ele já tem, sem intervalo: 10:40 (logo antes de BARBA EXPRESS) ou 12:00 (logo depois de BARBA EXPRESS). Diga isso em uma frase e pergunte qual horário ele prefere; os outros horários do dia seguem na lista');
+  assert.equal(ri.efeitos.pedido.busca.outros, true); // o 12:00 entrou de fora do periodo pedido
+  assert.match(ri.resultado.ja_tem_no_dia, /^BARBA EXPRESS às 11:20\. Estes horários são de CORTE MAQUINA SIMPLES \(1 PENTE\), um serviço a mais: .*sem substitui_id_opcao_agendamento/);
+  assert.deepEqual(Object.keys(ri.efeitos.opcoes.itens[1].valor), ['data', 'hora', 'idProfissional', 'apelido', 'idServico', 'servico', 'preco', 'minutos']); // a oferta guardada nao ganha campo
+  assert.equal(ri.efeitos.pedido.servico.idServico, 'sCorte');
+  assert.ok(!JSON.stringify(ri.resultado).includes('bB')); // o id do barbeiro do agendamento nao vai ao modelo
+
+  // 4. fim de ocupacao fora da grade (agendamento de 30 min): o inicio 11:50 e o colado
+  ri = busca({ id_opcao_servico: 's1' }, ped([fut({ fim: '11:50' })]), [grade(['10:40', '12:40'], 30), ocup(['11:20', '11:50'])]);
+  assert.deepEqual(horas(ri), ['10:40', '11:50*', '12:40']);
+
+  // 5. nenhum colado: a lista segue inteira e a orientacao diz isso (a marca nunca cria horario)
+  ri = busca({ id_opcao_servico: 's1' }, ped(), [grade(['08:00', '14:00']), ocup(['10:40', '11:20'], BARBA, ['12:00', '12:40'])]);
+  assert.deepEqual(horas(ri), ['08:00', '12:40', '14:00']);
+  assert.match(ri.resultado.orientacao, /^nenhum horário da lista fica junto do que ele já tem: /);
+
+  // 6. sem horario no periodo: a decisao em lista segue como era, sem amarrar "Ver outros barbeiros" ao agendamento
+  // (os dois lados do agendamento estao ocupados: nao ha colado, e nao e o piso da grade que tira o 12:00)
+  const cheio = ocup(['10:40', '11:20'], BARBA, ['12:00', '12:40']);
+  ri = busca({ periodo: 'noite', id_opcao_agendamento: '1', id_opcao_servico: 's1' }, ped(), [grade(['08:00', '14:00']), cheio]);
+  assert.equal(ri.efeitos.opcoes.tipo, 'decisao_sem_horario');
+  assert.deepEqual(ri.efeitos.opcoes.itens.map((x) => x.rotulo), ['Outro horário no dia', 'Outro dia com ele', 'Ver outros barbeiros']);
+  assert.equal(ri.efeitos.opcoes.itens.find((x) => x.valor.acao === 'outros_barbeiros').valor.ag, null);
+  assert.match(ri.resultado.orientacao, /^Beto não tem horário de noite nesse dia/);
+  assert.match(ri.resultado.ja_tem_no_dia, /^BARBA EXPRESS às 11:20\./);
+  assert.equal(ri.efeitos.pedido.busca.outros, false);
+  // com o colado existindo (12:00 livre) e nada no periodo pedido: a lista e so o colado, o texto diz que no periodo nao ha, e o
+  // horario nao vai ao resumo no mesmo turno (nao e o que o cliente pediu: ele escolhe)
+  ri = busca({ periodo: 'noite', id_opcao_servico: 's1' }, ped(), [grade(['08:00', '14:00']), ocup(['10:40', '11:20'], BARBA)]);
+  assert.deepEqual([ri.efeitos.opcoes.tipo, horas(ri)], ['horario', ['12:00*']]);
+  assert.equal(ri.resultado.orientacao, 'para ficar junto do que ele já tem, sem intervalo: 12:00 (logo depois de BARBA EXPRESS). No período ou na hora que ele pediu não há horário: diga isso, ofereça o horário junto e pergunte se esse horário serve');
+  assert.deepEqual([ri.efeitos.pedido.busca.n, ri.efeitos.pedido.busca.outros], [1, true]);
+  assert.equal(agendar({ id_opcao_horario: '1' }, { ...ped(), ...ri.efeitos.pedido }, ri.efeitos.opcoes, T(2)).resultado.code, 'cliente_nao_escolheu');
+  assert.equal(agendar({ id_opcao_horario: '1' }, { ...ped(), ...ri.efeitos.pedido }, ri.efeitos.opcoes, T(3)).efeitos.proposta_nova.acao, 'agendar'); // no turno seguinte, com a escolha dele
+  // colado dentro do pedido e sozinho na lista: segue valendo a regra do horario unico (nada veio de fora do que ele pediu)
+  ri = busca({ periodo: 'tarde', id_opcao_servico: 's1' }, ped(), [grade(['08:00']), ocup(BARBA)]);
+  assert.deepEqual([horas(ri), ri.efeitos.pedido.busca.outros], [['12:00*'], false]);
+  assert.match(ri.resultado.orientacao, /^para ficar junto do que ele já tem, sem intervalo: 12:00 \(logo depois de BARBA EXPRESS\)\. Diga isso em uma frase e pergunte se esse horário serve$/);
+
+  // 7. qualquer barbeiro: no horario colado vale o barbeiro do agendamento; futuro antigo (sem idProfissional) fica com o primeiro
+  const comLista = (fs) => ped(fs, { servico: { idServico: 'sCorte', nome: 'CORTE MAQUINA SIMPLES (1 PENTE)' }, barbeiros: [{ opcao_id: '1', idProfissional: 'bO', apelido: 'Outro' }, { opcao_id: '2', idProfissional: 'bB', apelido: 'Beto' }] });
+  const doisB = [grade(['10:40', '14:00']), grade(['10:40']), ocup(), ocup(BARBA)];
+  ri = busca({ qualquer: true, id_opcao_servico: 's1' }, comLista([fut()]), doisB);
+  assert.deepEqual(ri.resultado.opcoes.map((x) => `${x.hora} ${x.barbeiro}${x.junto ? '*' : ''}`), ['10:40 Beto*', '12:00 Beto*', '14:00 Outro']);
+  assert.match(ri.resultado.orientacao, /10:40 com Beto \(logo antes de BARBA EXPRESS\) ou 12:00 com Beto \(logo depois de BARBA EXPRESS\)/);
+  const { idProfissional: _p, fim: _f, ...futAntigo } = fut();
+  ri = busca({ qualquer: true, id_opcao_servico: 's1' }, comLista([futAntigo]), doisB);
+  assert.deepEqual(ri.resultado.opcoes.map((x) => `${x.hora} ${x.barbeiro}${x.junto ? '*' : ''}`), ['10:40 Outro*', '12:00 Beto', '14:00 Outro']); // sem `fim` so da para marcar o "antes"
+
+  // 8. agendamento + servico diferente: a busca e do servico novo, com o barbeiro do agendamento, e deixa de ser remarcacao
+  const semBarb = ped([fut()], { barbeiro: undefined });
+  let pi8 = plano({ periodo: 'manha', id_opcao_agendamento: '1', id_opcao_servico: 's1' }, semBarb);
+  assert.deepEqual([pi8.reqs[0].qs.idServico, pi8.reqs[0].qs.idProfissional, pi8.st.in.id_opcao_agendamento, pi8.st.meta.agId], ['sCorte', 'bB', undefined, null]);
+  ri = g.bvGPasso(pi8.st, [grade(['08:00', '10:40']), ocup(BARBA)], cfgI).final;
+  assert.deepEqual(horas(ri), ['08:00', '10:40*', '12:00*']); // 12:00 = fim da ocupacao do proprio agendamento
+  // a mesma chamada repetida no turno roda de novo (a chave da busca e calculada depois de tirar o agendamento)
+  assert.ok(plano({ periodo: 'manha', id_opcao_agendamento: '1', id_opcao_servico: 's1' }, { ...semBarb, ...ri.efeitos.pedido }, ri.efeitos.opcoes).reqs);
+  // o titulo cortado do item da lista tambem vale como o servico novo
+  const ofServ = { tipo: 'servico', itens: [{ id: 's1', rotulo: 'CORTE MAQUINA SIMPLES (1', valor: { idServico: 'sCorte', nome: 'CORTE MAQUINA SIMPLES (1 PENTE)', preco: 55, minutos: 40 } }] };
+  assert.equal(plano({ id_opcao_agendamento: '1', id_opcao_servico: 'CORTE MAQUINA SIMPLES (1' }, ped(), ofServ).reqs[0].qs.idServico, 'sCorte');
+
+  // 9. agendamento + o mesmo servico, ou um nome que nao resolve: remarcacao, como sempre
+  for (const sv of ['s2', 'servico que nao existe']) {
+    const pr = plano({ id_opcao_agendamento: '1', id_opcao_servico: sv }, ped());
+    assert.deepEqual([pr.reqs[0].qs.idServico, pr.reqs[0].qs.idProfissional, pr.st.in.id_opcao_agendamento, pr.st.meta.agId], ['sBarba', 'bB', '1', 'a1']);
+  }
+
+  // 10. remarcacao com outro servico no mesmo dia: sem marca (o horario e do proprio agendamento)
+  const corteCedo = { idAgenda: 'a0', idServico: 'sCorte', horaInicio: `${D}T09:20:00`, servico: 'CORTE', fim: '10:00', idProfissional: 'bB' };
+  ri = busca({ id_opcao_agendamento: '1' }, ped([corteCedo, fut()]), [grade(['10:00', '14:00']), ocup(['09:20', '10:00'], BARBA)]);
+  assert.deepEqual([horas(ri), ri.resultado.ja_tem_no_dia], [['10:00', '12:00', '14:00'], undefined]); // 10:00 encosta no corte e 12:00 e fim de ocupacao: nenhum sai marcado
+
+  // 11. o mesmo servico no dia, sem agendamento informado: sem marca (duplicidade e do bvgJaTem, na proposta)
+  ri = busca({ id_opcao_servico: 's1' }, ped([fut({ idServico: 'sCorte', servico: 'CORTE' })]), [grade(['10:40', '12:00']), ocup(BARBA)]);
+  assert.deepEqual([horas(ri), ri.resultado.ja_tem_no_dia], [['10:40', '12:00'], undefined]);
+
+  // 12. clausula petrea: o agendamento do dia e com barbeiro so da equipe -> equipe, sem consultar a agenda; futuro antigo segue como era
+  const pj = plano({ id_opcao_servico: 's1' }, ped([fut({ idProfissional: JAY })]));
+  assert.deepEqual([pj.reqs, pj.final.resultado.code, pj.final.efeitos.pedido.handoff, pj.final.efeitos.falha.motivo], [undefined, 'encaminhar_equipe', true, 'encaminhar_equipe|barbeiro_humano']);
+  assert.ok(plano({ id_opcao_servico: 's1' }, ped([futAntigo])).reqs);
+  assert.ok(plano({ id_opcao_servico: 's1' }, ped([fut({ idProfissional: JAY, horaInicio: '2026-11-27T11:20:00' })])).reqs); // outro dia: nao e servico a mais
+
+  // 13. agendamento do pacote no dia: incluir nao apaga nada, entao segue como agendar normal, com o aviso de que ele ja tem
+  ri = busca({ id_opcao_servico: 's1' }, ped([fut({ pacote: true })]), [grade(['10:40']), ocup(BARBA)]);
+  assert.deepEqual(horas(ri), ['10:40*', '12:00*']);
+  let fi = agendar({ id_opcao_horario: '1' }, { ...ped([fut({ pacote: true })]), ...ri.efeitos.pedido }, ri.efeitos.opcoes);
+  assert.deepEqual([fi.efeitos.proposta_nova.acao, fi.efeitos.proposta_nova.dados.antigo, fi.resultado.ja_tem], ['agendar', undefined, 'BARBA EXPRESS em quinta-feira, 26/11 às 11:20']);
+
+  // 14. substituir pelo MESMO servico e recusado (era o "Trocar servico: BARBA EXPRESS" do incidente); a troca de verdade diz o que sai
+  fi = agendar({ id_opcao_horario: '1', substitui_id_opcao_agendamento: '1' }, ped(), ofH('sBarba', 'BARBA EXPRESS', '09:20'));
+  assert.deepEqual([fi.resultado.code, fi.efeitos.proposta_nova, fi.efeitos.falha.motivo], ['mesmo_servico', undefined, 'graces|troca_mesmo_servico']);
+  assert.match(fi.resultado.orientacao, /chame horarios_livres com o id_opcao_servico do serviço novo; se ele só quer mudar o horário, chame reagendar/);
+  fi = agendar({ id_opcao_horario: '1', substitui_id_opcao_agendamento: '1' }, ped(), ofH('sCorte', 'CORTE', '12:00'));
+  assert.equal(fi.efeitos.proposta_nova.acao, 'trocar_servico');
+  assert.equal(fi.resultado.resumo, 'Trocar serviço: CORTE com Outro em quinta-feira, 26/11 às 12:00 (R$ 40,00), no lugar de BARBA EXPRESS das 11:20');
+  assert.equal(fi.efeitos.proposta_nova.dados.antigo.servico, 'BARBA EXPRESS');
+  assert.match(agendar({ id_opcao_horario: '1', substitui_id_opcao_agendamento: '1' }, ped(), ofH('sCorte', 'CORTE', '12:00', '2026-11-27')).resultado.resumo, /em sexta-feira, 27\/11 às 12:00 \(R\$ 40,00\), no lugar de BARBA EXPRESS de 26\/11 às 11:20$/); // troca para outro dia: diz o dia do que sai
+  // reagendar com horario de outro servico: a recusa manda refazer a busca so com o agendamento
+  const rd = g.bvGPlano(ent({ operacao: 'reagendar', turno_id: T(3), id_opcao_agendamento: '1', id_opcao_horario: '1' }), { pedido: ped(), opcoes: ofH('sCorte', 'CORTE', '12:00') }, cfgI).final.resultado;
+  assert.deepEqual([rd.code, /só com id_opcao_agendamento \(sem id_opcao_servico\)/.test(rd.orientacao)], ['servico_diferente', true]);
+
+  // 15. dois agendamentos no dia: colado a qualquer um deles, e os dois aparecem em ja_tem_no_dia
+  const sobr = { idAgenda: 'a0', idServico: 'sSobr', horaInicio: `${D}T09:20:00`, servico: 'SOBRANCELHA', fim: '10:00', idProfissional: 'bB' };
+  ri = busca({ id_opcao_servico: 's1' }, ped([sobr, fut()]), [grade(['08:00', '10:00', '10:40', '14:00']), ocup(['09:20', '10:00'], BARBA)]);
+  assert.deepEqual(horas(ri), ['08:00', '10:00*', '10:40*', '12:00*', '14:00']);
+  assert.match(ri.resultado.ja_tem_no_dia, /^SOBRANCELHA às 09:20 e BARBA EXPRESS às 11:20\. /);
+  assert.match(ri.resultado.orientacao, /10:00 \(logo depois de SOBRANCELHA\) ou 10:40 \(logo antes de BARBA EXPRESS\) ou 12:00 \(logo depois de BARBA EXPRESS\)/);
+
+  // 16. a hora pedida e o proprio horario colado e esta livre: vai direto ao resumo, no mesmo turno, e o aviso de servico a mais fica
+  ri = busca({ hora: '12:00', id_opcao_servico: 's1' }, ped(), [grade(['08:00', '10:40']), ocup(BARBA)]);
+  const id12 = ri.resultado.opcoes.find((x) => x.hora === '12:00').id;
+  assert.equal(ri.resultado.horario_pedido_livre, id12);
+  assert.match(ri.resultado.orientacao, /^o horário pedido está livre: chame agendar com id_opcao_horario /);
+  assert.match(ri.resultado.ja_tem_no_dia, /sem substitui_id_opcao_agendamento/);
+  assert.equal(agendar({ id_opcao_horario: id12 }, { ...ped(), ...ri.efeitos.pedido }, ri.efeitos.opcoes, T(2)).efeitos.proposta_nova.acao, 'agendar');
+
+  // 17. o incidente, de ponta a ponta. A manha do barbeiro dele esta cheia (08:00-11:20) e a barba vai ate 12:00.
+  // (a) 12:00 livre: a lista e o colado com o mesmo barbeiro, dito como fora do periodo pedido; o fim e um agendar novo de CORTE
+  const manhaCheia = ['08:00', '11:20'];
+  let pedC = ped();
+  ri = busca({ periodo: 'manha', id_opcao_agendamento: '1', id_opcao_servico: 's1' }, pedC, [grade(['12:00', '14:00']), ocup(manhaCheia, BARBA)]);
+  assert.deepEqual([ri.efeitos.opcoes.tipo, horas(ri), ri.efeitos.pedido.busca.outros], ['horario', ['12:00*'], true]);
+  assert.match(ri.resultado.orientacao, /^para ficar junto do que ele já tem, sem intervalo: 12:00 \(logo depois de BARBA EXPRESS\)\. No período ou na hora que ele pediu não há horário: /);
+  fi = agendar({ id_opcao_horario: '1' }, { ...pedC, ...ri.efeitos.pedido }, ri.efeitos.opcoes);
+  assert.deepEqual([fi.efeitos.proposta_nova.acao, fi.resultado.resumo, fi.resultado.ja_tem],
+    ['agendar', 'CORTE MAQUINA SIMPLES (1 PENTE) com Beto em quinta-feira, 26/11 às 12:00 (R$ 55,00)', 'BARBA EXPRESS em quinta-feira, 26/11 às 11:20']);
+  // (b) 12:00 tambem ocupado (nao ha colado com ele: e a ocupacao, nao o piso da grade, que tira o horario): a decisao sai sem
+  // amarrar ao agendamento, "Ver outros barbeiros" segue com o CORTE e o fim e um agendar novo, colado, com outro barbeiro
+  const betoCheio = [grade(['13:20', '14:00']), ocup(manhaCheia, BARBA, ['12:00', '13:20'])];
+  ri = busca({ periodo: 'manha', id_opcao_agendamento: '1', id_opcao_servico: 's1' }, pedC, betoCheio);
+  assert.deepEqual(ri.efeitos.opcoes.itens.map((x) => [x.rotulo, x.valor.ag || null]), [['Outro horário no dia', null], ['Outro dia com ele', null], ['Ver outros barbeiros', null]]);
+  pedC = { ...pedC, ...ri.efeitos.pedido };
+  let pv = g.bvGPlano(ent({ operacao: 'horarios_livres', turno_id: T(3), data: D, periodo: 'manha', qualquer: true }), { pedido: pedC, opcoes: ri.efeitos.opcoes }, cfgI);
+  assert.deepEqual(pv.reqs.map((q) => [q.path, q.qs.idServico]), [['/servicos/profissionais', 'sCorte']]);
+  pv = g.bvGPasso(pv.st, [ok([{ idProfissional: 'bB', apelido: 'Beto' }, { idProfissional: 'bO', apelido: 'Outro' }])], cfgI);
+  ri = g.bvGPasso(pv.st, [betoCheio[0], grade(['09:20', '10:40']), betoCheio[1], ocup()], cfgI).final;
+  assert.deepEqual(ri.resultado.opcoes.map((x) => `${x.hora} ${x.barbeiro}${x.junto ? '*' : ''}`), ['09:20 Outro', '10:40 Outro*']);
+  assert.match(ri.resultado.orientacao, /^para ficar junto do que ele já tem, sem intervalo: 10:40 com Outro \(logo antes de BARBA EXPRESS\)\. Diga isso em uma frase e pergunte qual horário ele prefere; os outros horários do dia seguem na lista; /);
+  pedC = { ...pedC, ...ri.efeitos.pedido };
+  fi = agendar({ id_opcao_horario: '2' }, pedC, ri.efeitos.opcoes, T(4));
+  assert.deepEqual([fi.efeitos.proposta_nova.acao, fi.resultado.resumo, fi.resultado.ja_tem],
+    ['agendar', 'CORTE MAQUINA SIMPLES (1 PENTE) com Outro em quinta-feira, 26/11 às 10:40 (R$ 55,00)', 'BARBA EXPRESS em quinta-feira, 26/11 às 11:20']);
+
+  // Revisao (A1): agendamento com barbeiro so da equipe + servico novo -> equipe, mesmo sem os futuros, com futuros antigos (sem o id
+  // do barbeiro), em outro dia e quando so o nome identifica o barbeiro (na develop a remarcacao ja encaminhava; soltar o agendamento nao pode pular isso)
+  const pedJ = (fs, a = {}) => ({ idCliente: 'c1', futuros: fs, agendamentos: [{ ...agBarba, idProfissional: JAY, profissional: 'Jayme', ...a }], servicos_vistos: vistos });
+  for (const [fs, data, a] of [[[], D], [[futAntigo], D], [[], '2026-11-27'], [[fut({ idProfissional: JAY })], '2026-11-27'], [[], D, { idProfissional: 'outro-id', profissional: 'Jayme ' }]]) {
+    const pj1 = plano({ id_opcao_agendamento: '1', id_opcao_servico: 's1', data }, pedJ(fs, a));
+    assert.deepEqual([pj1.reqs, pj1.final.resultado.code, pj1.final.efeitos.pedido.handoff, pj1.final.efeitos.falha.motivo], [undefined, 'encaminhar_equipe', true, 'encaminhar_equipe|barbeiro_humano']);
+    assert.ok(!JSON.stringify(pj1.final.resultado).includes('Jayme'));
+  }
+
+  // Revisao (A2): agendamento + servico diferente em OUTRO dia nao e servico a mais (remarcacao com id de servico velho virava um
+  // agendamento novo do outro servico): recusa sem consultar a agenda; no dia do agendamento segue sendo a busca do servico novo
+  const outroDia = plano({ id_opcao_agendamento: '1', id_opcao_servico: 's1', data: '2026-11-27' }, ped());
+  assert.deepEqual([outroDia.reqs, outroDia.final.resultado.code, outroDia.final.efeitos], [undefined, 'servico_diferente', {}]);
+  assert.match(outroDia.final.resultado.orientacao, /para remarcar o agendamento, chame de novo só com id_opcao_agendamento \(sem id_opcao_servico\); para um agendamento novo desse serviço, chame sem id_opcao_agendamento$/);
+  assert.equal(plano({ id_opcao_agendamento: '1', id_opcao_servico: 's1' }, ped()).reqs[0].qs.idServico, 'sCorte');
+  assert.equal(plano({ id_opcao_agendamento: '1', data: '2026-11-27' }, ped()).reqs[0].qs.idServico, 'sBarba'); // so o agendamento: remarcacao para outro dia, como sempre
+
+  // Revisao (A5): o horario colado e com um barbeiro que nao e o do agendamento (escolhido antes na conversa): a orientacao diz com quem
+  ri = busca({ id_opcao_servico: 's1' }, ped([fut()], { barbeiro: { idProfissional: 'bO', apelido: 'Outro' } }), [grade(['10:40', '14:00']), ocup()]);
+  assert.deepEqual(horas(ri), ['10:40*', '14:00']);
+  assert.match(ri.resultado.orientacao, /^para ficar junto do que ele já tem, sem intervalo: 10:40 com Outro \(logo antes de BARBA EXPRESS\)\. /);
+
+  // Revisao (A6): o barbeiro padrao veio do agendamento e nao tem horario: o texto fala do "barbeiro do agendamento", nao do ultimo atendimento
+  let pa6 = plano({ periodo: 'manha', id_opcao_agendamento: '1', id_opcao_servico: 's1' }, semBarb);
+  assert.equal(pa6.st.meta.doAg, true);
+  pa6 = g.bvGPasso(pa6.st, betoCheio, cfgI);
+  assert.deepEqual(pa6.reqs.map((q) => q.path), ['/servicos/profissionais']);
+  pa6 = g.bvGPasso(pa6.st, [ok([{ idProfissional: 'bB', apelido: 'Beto' }, { idProfissional: 'bO', apelido: 'Outro' }])], cfgI);
+  ri = g.bvGPasso(pa6.st, [grade(['09:20']), ocup()], cfgI).final;
+  assert.match(ri.resultado.orientacao, /Beto, o barbeiro do agendamento, não tem horário de manha nesse dia: diga isso ao cliente e que os horários da lista são de outros barbeiros/);
+  assert.doesNotMatch(ri.resultado.orientacao, /último atendimento/);
+
+  // TESTE: o agendamento esta no barbeiro de teste, que nao e ofertado; sem barbeiro escolhido o agente pergunta (nunca "opcao desconhecida")
+  const agT = { ...agBarba, idProfissional: TESTE, profissional: 'ZZ TESTE' };
+  const rt = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: D, id_opcao_agendamento: '1', id_opcao_servico: 's1' }), { pedido: { idCliente: 'c1', futuros: [fut({ idProfissional: TESTE })], agendamentos: [agT], servicos_vistos: vistos }, opcoes: {} }, cfg);
+  assert.equal(rt.final.resultado.code, 'barbeiro_nao_escolhido');
+  console.log('graces.test.js incluir servico ok');
 }
