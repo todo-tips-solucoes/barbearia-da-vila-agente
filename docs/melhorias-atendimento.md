@@ -912,6 +912,26 @@ Desenho com dois especialistas em leitura (comportamento do agente e arquitetura
 
 Revisão independente do diff (especialista de backend, em leitura), com quatro achados corrigidos: item sem turno chegando ao sub-workflow quando não há mensagem a retomar (nó `Tem retorno?`); vários retornos reivindicados antes do primeiro rodar, com a guarda de concorrência envelhecendo minutos (um por rodada); a marca `pedido.retorno` e o histórico perdidos em sessão nova (janela da sessão no `Montar retorno`); e lembrete gravado depois da mensagem do cliente contando como resposta. Da mesma revisão: a linha do laço não entra no turno de retorno (contradizia a de retorno), "Pode marcar" não conta como confirmação, e um teste confere que o item montado pelo vigia tem os mesmos campos do da recepção.
 
+### Testes
+
+- Unidade: `tests/mensagens.test.js` (confirmação e decisão calado × retorno), `tests/agente.test.js` (linha de contexto), `tests/graces.test.js` (trava contra nova transferência) e `tests/test_workflows_*.py` (nós, ligações, chamada terminal e contrato do item).
+- As consultas do vigia rodaram no banco do TESTE dentro de transação desfeita: o encerramento devolve a linha uma vez só; o retorno pega só as mensagens sem resposta; lembrete gravado depois não esconde a mensagem; turno em andamento ou mensagem fora da janela não monta retorno; de três contatos com o cliente por último, sai um por rodada.
+- TESTE (25/11, com o ok do owner para a ligação nova): agente e ferramentas publicados da branch e uma cópia temporária do vigia, só com o ramo da fila humana, a cada minuto, restrita a 7 contatos simulados e sem tocar no Chat Master. O n8n respondeu saudável em todas as conferências e a cópia foi apagada no fim.
+
+| Caso | Resultado |
+|---|---|
+| Equipe resolveu e o cliente agradeceu | Calado |
+| Equipe propôs "Pode ser às 12h? Perdão, às 12h40" e o cliente disse "Pode ser sim" | Calado |
+| Equipe falou por último | Calado |
+| Cliente pediu o barbeiro que só a equipe agenda, foi transferido, ninguém respondeu e ele disse "ok" | "Por aqui não consigo agendar com esse barbeiro. Posso verificar horários com outro barbeiro hoje à tarde, se você quiser." |
+| Equipe disse que não havia horário com um barbeiro; cliente perguntou por outro, hoje ou amanhã | O agente consultou a agenda e mandou a lista de horários do dia seguinte |
+| Equipe mandou um áudio; cliente pediu de novo "a mensagem com as informações e o pix" | "Não consigo ver o áudio nem recuperar a mensagem ou o Pix que foram apagados por aqui. Posso ajudar com serviços, preços, horários e agendamentos da barbearia." |
+| Cliente atrasado, equipe ofereceu outro dia, cliente insistiu e pediu um atendente de novo | O modelo tentou transferir e a trava recusou (`retorno_sem_transferir`): "Por aqui não consigo chamar um atendente neste momento. Posso verificar um horário para você amanhã ou remarcar seu agendamento." |
+
+Em nenhum dos quatro turnos de retorno a conversa voltou para a fila humana, o agente disse que a equipe não respondeu, ou saiu o nome do barbeiro.
+
+Caminho normal do agente, com o mesmo código: roteiros R1 (primeiro contato, agenda direto) e R28 (ida e volta da fila humana) aprovados, p50 de 20,0 s e p95 de 21,1 s. A suíte completa (45 roteiros) não rodou: o saldo da OpenAI do TESTE é o mesmo de PROD e o token próprio de testes ainda não existe.
+
 ### O que falta e limites
 
 - **Cliente escreve durante o turno de retorno** (uns 20 segundos, depois de 30 minutos de silêncio): a recepção roda outro turno em paralelo e as duas respostas podem se cruzar. O vigia não toma a posse do Redis: seriam seis nós copiados da recepção e o vigia passaria a depender do Redis, que é a falha que ele cobre. A guarda é em SQL (não monta o retorno se há turno em andamento ou mensagem nova ainda não processada). Não há escrita em dobro na agenda: a proposta é reivindicada de forma atômica no `bv-graces`. Se aparecer em PROD, a correção é extrair posse e turno para um sub-workflow comum à recepção e ao vigia.
