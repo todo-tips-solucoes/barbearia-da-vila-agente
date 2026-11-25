@@ -560,7 +560,9 @@ class FilaHumana(unittest.TestCase):
         up = nos["Upsert contato"]["parameters"]
         self.assertIn("fila_id = $4::int", up["query"])
         self.assertTrue(up["options"]["queryReplacement"].endswith("msg.filaId ?? null, {{BV:handoff.setor_id}}] }}"))
-        self.assertIn('bvEquipe(ev.body, {{BV:handoff.setor_id}}, "{{BV:textos.encaminhar_equipe}}")', nos["Normalizar"]["parameters"]["jsCode"])
+        self.assertIn('bvEquipe(ev.body, {{BV:handoff.setor_id}}, "{{BV:textos.encaminhar_equipe}}", {{BV:chatmaster.user_id}})', nos["Normalizar"]["parameters"]["jsCode"])
+        # chamado assumido por um atendente vale como fila humana (owner, 2026-11-25): o no passa a fila humana e o usuario do agente
+        self.assertIn("bvNormalizar(ev, { filaHumana: {{BV:handoff.setor_id}}, usuarioAgente: {{BV:chatmaster.user_id}}, maxKb:", nos["Normalizar"]["parameters"]["jsCode"])
         self.assertEqual(con["Responder 200 descartada"], [["Registrar equipe"]])
         q = nos["Registrar equipe"]["parameters"]["query"]
         self.assertIn("fila_ultima_de = 'equipe'", q)

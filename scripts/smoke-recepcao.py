@@ -37,14 +37,14 @@ def fixture(nome):
 
 
 def evento_texto(n, texto):
-    b = fixture("evento-02.json")
+    b = _smoke.chamado_do_agente(fixture("evento-02.json"))
     b.update(sender=tel(n), token_origin=TOKEN)
     b["mensagem"][0]["text"] = texto
     return b
 
 
 def evento_imagem(n, url):
-    b = fixture("evento-13.json")
+    b = _smoke.chamado_do_agente(fixture("evento-13.json"))
     b.update(sender=tel(n), token_origin=TOKEN)
     b["mensagem"][0]["fileUrl"] = url
     return b
