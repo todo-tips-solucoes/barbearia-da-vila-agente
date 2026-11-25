@@ -436,7 +436,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova, repete)", self.nos["Compor"]["parameters"]["jsCode"])
         # terceira vez (owner, 24/11): nao sai mais a oferta da equipe; o Compor so marca o laco e o ramo Laco? transfere
         self.assertIn("const laco = bvTerceiraVez(out, histC, antes, ofertaNova, composta.some((x) => x.tipo === 'lista')) && !bvCorrida(($('Gatilho').first().json || {}).itens, histC) && !($('Preparar').first().json.escolheu_opcao && !bvOfereceEquipe(out));", self.nos["Compor"]["parameters"]["jsCode"])  # quem tocou numa opcao nao e transferido pelo laco (PROD, 24/11)
-        self.assertIn("return [{ json: { saida, laco } }];", self.nos["Compor"]["parameters"]["jsCode"])  # so esses campos seguem para o sub-workflow
+        self.assertIn("return [{ json: { saida, laco: laco && !$('Preparar').first().json.retorno } }];", self.nos["Compor"]["parameters"]["jsCode"])  # so esses campos seguem para o sub-workflow
         for amb in ("producao", "integracao"):
             self.assertNotIn("laco", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"])
         # etapa 4: a mesma pergunta pela segunda vez leva a lista junto; a terceira nao sai (o contexto manda oferecer a equipe)
@@ -477,7 +477,10 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertEqual([v["operacao"], v["motivo"]], ["transferir_atendimento", "={{ $('Preparar').first().json.motivo_limite }}"])
         prep = self.nos["Preparar"]["parameters"]["jsCode"]
         self.assertIn("const estourou = Number(reg.turnos_hora) >= {{BV:agente.turnos_max_contato_hora}};", prep)
-        self.assertIn("limite: estourou || bvPediuPessoa(fala), motivo_limite: !estourou && bvPediuPessoa(fala) ? 'pediu_pessoa' : 'nao_resolvi',", prep)  # estouro e laco: nao_resolvi
+        self.assertIn("retorno, limite: !retorno && (estourou || bvPediuPessoa(fala)), motivo_limite: !estourou && bvPediuPessoa(fala) ? 'pediu_pessoa' : 'nao_resolvi',", prep)
+        # turno de retorno do atendimento humano (owner, 2026-11-25): a marca e do estado (pedido.retorno = este turno), nao do gatilho
+        self.assertIn("const retorno = !!g.turno_id && (ctx.pedido || {}).retorno === g.turno_id;", prep)
+        self.assertIn("+ (retorno ? bvContextoRetorno(itens, hist, Date.now()) : '')", prep)  # estouro e laco: nao_resolvi
         self.assertIn("{{BV:INCLUDE:shared/agente.js}}", prep)
         self.assertNotIn("$fromAI", json.dumps(v))  # contato, telefone e turno vem do Gatilho, nunca do modelo
         self.assertIn("($input.first().json || {}).texto", self.nos["Compor humano"]["parameters"]["jsCode"])
@@ -545,7 +548,7 @@ class Etapa6(unittest.TestCase):  # pendencias da leitura de 17/11: decisao no c
 
     def test_pergunta_em_aberto_so_quando_nao_ha_laco(self):
         p = self.nos["Preparar"]["parameters"]["jsCode"]
-        self.assertIn("+ (bvCorrida(itens, hist) ? '' : ((poupa ? '' : bvLaco(hist, rec.opcoes)) || bvPerguntaAberta(hist, fala, Date.now())))", p)  # em corrida ou com toque na lista a linha do laco nao sai
+        self.assertIn("+ (bvCorrida(itens, hist) ? '' : ((poupa || retorno ? '' : bvLaco(hist, rec.opcoes)) || bvPerguntaAberta(hist, fala, Date.now())))", p)  # em corrida ou com toque na lista a linha do laco nao sai
         self.assertIn("const toque = bvEscolhaNaLista(itens, rec.opcoes);", p)
         self.assertIn("const poupa = !!toque && bvVezesDaLista(hist, rec.opcoes) < 3;", p)  # o toque poupa so a terceira vez; na quarta transfere
         self.assertIn("+ bvContextoOferta(rec.opcoes) + (toque ? toque.linha : '');", p)

@@ -71,7 +71,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/config.js}}\n// Turno que estourou o tempo sem resposta (PROD, 2026-11-15: a mensagem de um cliente ficou 2h25 parada): o cliente recebe o texto\n// de contingencia e, quando escrever de novo, a mensagem antiga e reprocessada junto. TESTE: so envia para teste.contatos_escrita.\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}' };\nconst contingencia = \"{{BV:textos.contingencia}}\"; // o encerramento da fila humana traz o proprio texto; se a equipe respondeu e o cliente so agradeceu, encerra calado\nreturn $input.all().map((x) => x.json).filter((l) => l.contato_id != null && bvMAvisaFila(l)).map((l, k) => ({ json: { contato_id: l.contato_id, texto: l.texto || contingencia,\n  req: bvMTexto({ texto: l.texto || contingencia }, l.telefone, cfg), simulado: bvSimulado(l.telefone) }, pairedItem: k }));"
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/config.js}}\n// Turno que estourou o tempo sem resposta (PROD, 2026-11-15: a mensagem de um cliente ficou 2h25 parada): o cliente recebe o texto\n// de contingencia e, quando escrever de novo, a mensagem antiga e reprocessada junto. TESTE: so envia para teste.contatos_escrita.\nconst cfg = { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}' };\nconst contingencia = \"{{BV:textos.contingencia}}\"; // o encerramento da fila humana nao passa mais por aqui (25/11): o agente retoma a conversa (Decidir retorno)\nreturn $input.all().map((x) => x.json).filter((l) => l.contato_id != null).map((l, k) => ({ json: { contato_id: l.contato_id, texto: contingencia,\n  req: bvMTexto({ texto: contingencia }, l.telefone, cfg), simulado: bvSimulado(l.telefone) }, pairedItem: k }));"
       },
       "id": "ec4a7ca8-4613-5306-b42d-29861712c1a1",
       "name": "Montar aviso",
@@ -192,7 +192,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT c.id AS contato_id, c.ticket_id, coalesce(c.fila_ultima_de, '') AS ultima_de, (e.em IS NOT NULL AND NOT e.pendente) AS equipe_respondeu, coalesce((SELECT json_agg(d.t) FROM (SELECT CASE WHEN m.tipo = 'texto' AND length(coalesce(m.conteudo, '')) <= 80 AND coalesce(m.conteudo, '') !~ '[?0-9@]' THEN coalesce(m.conteudo, '') ELSE '?' END AS t FROM mensagens m WHERE m.contato_id = c.id AND m.direcao = 'entrada' AND m.criado_em > e.em ORDER BY m.criado_em DESC LIMIT 7) d), '[]'::json)::text AS depois FROM contatos c LEFT JOIN LATERAL (SELECT m.criado_em AS em, lower(coalesce(m.conteudo, '')) ~ '[?]|(vou|vamos) (ver|verificar|conferir|checar|olhar|confirmar|consultar)|j[aá] te |te retorn|te aviso|um moment|um instant|um minut|aguarde|j[aá] volto' AS pendente FROM mensagens m WHERE m.contato_id = c.id AND m.direcao = 'saida' AND m.mensagem_id_canal LIKE 'equipe-%' AND m.criado_em > now() - interval '24 hours' ORDER BY m.criado_em DESC LIMIT 1) e ON true WHERE $1::boolean AND c.fila_id = $2::int AND c.ticket_id IS NOT NULL AND c.fila_interacao_em < now() - make_interval(mins => $3::int) AND (NOT $4::boolean OR c.fila_ultima_de = 'equipe') ORDER BY c.fila_interacao_em LIMIT 20",
+        "query": "SELECT z.contato_id, z.ticket_id, z.ultima_de, z.equipe_respondeu, z.depois FROM (SELECT c.id AS contato_id, c.ticket_id, coalesce(c.fila_ultima_de, '') AS ultima_de, (e.em IS NOT NULL AND NOT e.pendente) AS equipe_respondeu, coalesce((SELECT json_agg(d.t) FROM (SELECT CASE WHEN m.tipo = 'texto' AND length(coalesce(m.conteudo, '')) <= 80 AND coalesce(m.conteudo, '') !~ '[?0-9@]' THEN coalesce(m.conteudo, '') ELSE '?' END AS t FROM mensagens m WHERE m.contato_id = c.id AND m.direcao = 'entrada' AND m.criado_em > e.em ORDER BY m.criado_em DESC LIMIT 7) d), '[]'::json)::text AS depois, row_number() OVER (PARTITION BY coalesce(c.fila_ultima_de, '') = 'cliente' ORDER BY c.fila_interacao_em) AS ordem FROM contatos c LEFT JOIN LATERAL (SELECT m.criado_em AS em, (lower(coalesce(m.conteudo, '')) ~ '(vou|vamos) (ver|verificar|conferir|checar|olhar|confirmar|consultar)|j[aá] te |te retorn|te aviso|um moment|um instant|um minut|aguarde|j[aá] volto' OR (coalesce(m.conteudo, '') ~ '[?]' AND coalesce(m.conteudo, '') !~* '[0-9]{1,2} ?(h|:[0-9]{2})')) AS pendente FROM mensagens m WHERE m.contato_id = c.id AND m.direcao = 'saida' AND m.mensagem_id_canal LIKE 'equipe-%' AND m.criado_em > now() - interval '24 hours' ORDER BY m.criado_em DESC LIMIT 1) e ON true WHERE $1::boolean AND c.fila_id = $2::int AND c.ticket_id IS NOT NULL AND c.fila_interacao_em < now() - make_interval(mins => $3::int) AND (NOT $4::boolean OR c.fila_ultima_de = 'equipe')) z WHERE z.ordem <= CASE WHEN z.ultima_de = 'cliente' THEN 1 ELSE 5 END ORDER BY z.ordem",
         "options": {
           "queryReplacement": "={{ ['{{BV:handoff.encerrar_ativo}}' === 'True', {{BV:handoff.setor_id}}, {{BV:handoff.encerrar_apos_min}}, '{{BV:handoff.encerrar_so_respondido}}' === 'True'] }}"
         }
@@ -252,9 +252,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH ok AS (UPDATE contatos SET fila_id = NULL, fila_interacao_em = NULL, fila_ultima_de = NULL, atualizado_em = now() WHERE id = $1::bigint RETURNING id, telefone), cv AS (UPDATE conversas SET pedido = pedido - 'handoff', atualizado_em = now() FROM ok WHERE conversas.contato_id = ok.id RETURNING 1), hf AS (UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'vigia' FROM ok WHERE handoffs.contato_id = ok.id AND handoffs.situacao = 'aberto' RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'fila_humana|encerrar', 'updateAPI', 'encerrar_falhou', $2::int, $1::bigint WHERE $2::int NOT BETWEEN 200 AND 299 RETURNING 1) SELECT ok.id AS contato_id, ok.telefone, $4::text AS texto, $5::boolean AS equipe_respondeu, $6::text AS depois FROM ok WHERE $2::int BETWEEN 200 AND 299 AND $3::text = 'cliente'",
+        "query": "WITH ok AS (UPDATE contatos SET fila_id = NULL, fila_interacao_em = NULL, fila_ultima_de = NULL, atualizado_em = now() WHERE id = $1::bigint AND fila_id = $4::int RETURNING id, telefone), cv AS (UPDATE conversas SET pedido = pedido - 'handoff', atualizado_em = now() FROM ok WHERE conversas.contato_id = ok.id RETURNING 1), hf AS (UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'vigia' FROM ok WHERE handoffs.contato_id = ok.id AND handoffs.situacao = 'aberto' RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'chatmaster', 'fila_humana|encerrar', 'updateAPI', 'encerrar_falhou', $2::int, ok.id FROM ok WHERE $2::int NOT BETWEEN 200 AND 299 RETURNING 1) SELECT ok.id AS contato_id, ok.telefone, $5::boolean AS equipe_respondeu, $6::text AS depois FROM ok WHERE $2::int BETWEEN 200 AND 299 AND $3::text = 'cliente'",
         "options": {
-          "queryReplacement": "={{ [$('Filas paradas').item.json.contato_id, Number($json.statusCode || 0), $('Filas paradas').item.json.ultima_de, \"{{BV:textos.fila_sem_resposta}}\", $('Filas paradas').item.json.equipe_respondeu === true, $('Filas paradas').item.json.depois || '[]'] }}"
+          "queryReplacement": "={{ [$('Filas paradas').item.json.contato_id, Number($json.statusCode || 0), $('Filas paradas').item.json.ultima_de, {{BV:handoff.setor_id}}, $('Filas paradas').item.json.equipe_respondeu === true, $('Filas paradas').item.json.depois || '[]'] }}"
         }
       },
       "id": "5f644a7f-84ba-5000-85e6-647d366ad003",
@@ -271,6 +271,97 @@
           "name": "Postgres Barbearia Vila"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/mensagens.js}}\n// Encerramento da fila humana com o cliente por ultimo (owner, 2026-11-25): o texto fixo \"a equipe nao conseguiu te responder\" saiu.\n// Se a equipe respondeu e o cliente so agradeceu, se despediu ou confirmou, encerra calado; senao o agente retoma a conversa pelas\n// mensagens que ficaram sem resposta (Montar retorno -> Chamar retorno). So contato e telefone seguem adiante.\nreturn $input.all().map((x, k) => ({ l: x.json, k })).filter((x) => x.l && x.l.contato_id != null && bvMRetomaFila(x.l))\n  .map((x) => ({ json: { contato_id: x.l.contato_id, telefone: x.l.telefone }, pairedItem: x.k }));"
+      },
+      "id": "807c0c35-bfd9-5655-a024-4148b987badb",
+      "name": "Decidir retorno",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH t AS (SELECT gen_random_uuid() AS u), alvo AS (SELECT m.id FROM mensagens m WHERE m.contato_id = $1::bigint AND m.direcao = 'entrada' AND m.processada_em IS NOT NULL AND m.criado_em > now() - make_interval(mins => $4::int - 10) AND m.criado_em > coalesce((SELECT max(s.criado_em) FROM mensagens s WHERE s.contato_id = $1::bigint AND s.direcao = 'saida' AND (s.mensagem_id_canal LIKE 'equipe-%' OR s.mensagem_id_canal LIKE 'out-%')), '-infinity'::timestamptz) AND NOT EXISTS (SELECT 1 FROM mensagens p WHERE p.contato_id = $1::bigint AND p.direcao = 'entrada' AND p.processada_em IS NULL) AND NOT EXISTS (SELECT 1 FROM turnos x WHERE x.contato_id = $1::bigint AND x.estado = 'em_andamento' AND x.iniciado_em > now() - make_interval(secs => $3::int)) ORDER BY m.criado_em DESC, m.id DESC LIMIT 10 FOR UPDATE SKIP LOCKED), u AS (UPDATE mensagens m SET turno_id = t.u, turno_em = now() FROM alvo, t WHERE m.id = alvo.id RETURNING m.id, m.tipo, m.conteudo, m.midia_url, m.midia_mime, m.midia_segundos, m.midia_bytes, m.criado_em), cv AS (UPDATE conversas SET pedido = coalesce(pedido, '{}'::jsonb) || jsonb_build_object('retorno', (SELECT u::text FROM t)), atualizado_em = now() WHERE contato_id = $1::bigint AND EXISTS (SELECT 1 FROM u) RETURNING 1) SELECT (SELECT u FROM t) AS turno_id, $1::bigint AS contato_id, $2::text AS telefone, count(*)::int AS total, json_agg(json_build_object('mensagem_id', u.id, 'tipo', u.tipo, 'conteudo', u.conteudo, 'midia_url', u.midia_url, 'midia_mime', u.midia_mime, 'midia_segundos', u.midia_segundos, 'midia_bytes', u.midia_bytes, 'recebida_em', to_char(u.criado_em AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')) ORDER BY u.criado_em, u.id) AS itens FROM u HAVING count(*) > 0",
+        "options": {
+          "queryReplacement": "={{ [$json.contato_id, $json.telefone, {{BV:execucao.timeout_s}}, {{BV:conversa.janela_recencia_min}}] }}"
+        }
+      },
+      "id": "16ec4739-d34e-5799-a115-075c86c42523",
+      "name": "Montar retorno",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1160,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "{{BV:workflows_sub.entregar_rajada}}",
+          "mode": "id"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "26a1dec0-b3f1-5967-94e0-cf9cd6a95238",
+      "name": "Chamar retorno",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1600,
+        400
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "564f808a-53ed-540a-87a1-00bb51f99d8c",
+              "leftValue": "={{ String($json.turno_id != null && $json.contato_id != null) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f6e38db-aaf4-5546-8034-e10277b79879",
+      "name": "Tem retorno?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1380,
+        400
+      ]
     }
   ],
   "connections": {
@@ -383,7 +474,40 @@
       "main": [
         [
           {
-            "node": "Montar aviso",
+            "node": "Decidir retorno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir retorno": {
+      "main": [
+        [
+          {
+            "node": "Montar retorno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar retorno": {
+      "main": [
+        [
+          {
+            "node": "Tem retorno?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem retorno?": {
+      "main": [
+        [
+          {
+            "node": "Chamar retorno",
             "type": "main",
             "index": 0
           }

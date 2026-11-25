@@ -2176,3 +2176,26 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(seq({}, {}, AG, TODOS, cfg, 2).fim.resultado.ok, false); // sem barbeiro escolhido: como antes
   console.log('graces.test.js sequencia com barbeiro e periodo ok');
 }
+
+// Turno de retorno do atendimento humano (owner, 2026-11-25): a conversa acabou de voltar da equipe e nada a devolve neste turno
+{
+  const assert = require('assert');
+  const ent = entrada({ operacao: 'transferir_atendimento', motivo: 'pediu_pessoa' });
+  const comum = g.bvGPlano(ent, { pedido: { idCliente: 'c1' } }, cfg).final;
+  assert.deepEqual([comum.resultado.code, !!comum.efeitos.handoff, comum.efeitos.pedido.handoff], ['encaminhar_equipe', true, true]);
+  const outro = g.bvGPlano(ent, { pedido: { idCliente: 'c1', retorno: '99999999-9999-4999-8999-999999999999' } }, cfg).final;
+  assert.equal(outro.resultado.code, 'encaminhar_equipe'); // marca de outro turno: vale a regra normal
+  const r = g.bvGPlano(ent, { pedido: { idCliente: 'c1', retorno: ent.turno_id } }, cfg).final;
+  assert.deepEqual([r.resultado.ok, r.resultado.code, r.efeitos.handoff, r.efeitos.pedido.handoff, r.resultado.texto], [false, 'equipe_neste_turno', undefined, undefined, undefined]);
+  assert.match(r.resultado.orientacao, /sem dizer nome de barbeiro e sem prometer retorno da equipe/);
+  assert.deepEqual([r.efeitos.falha.motivo, r.efeitos.falha.code], ['retorno_sem_transferir|pediu_pessoa', 'equipe_neste_turno']);
+  // fim de estagio (bvGPasso) que passaria para a equipe: sai a transferencia, fica o resto dos efeitos (proposta fechada)
+  const fimEquipe = { final: { resultado: { ok: false, code: 'encaminhar_equipe', motivo: 'pacote', texto: 'x' }, efeitos: { pedido: { handoff: true }, handoff: { queueId: 78 }, falha: { operacao: 'cancelar' }, proposta_upd: { id: 'p1', estado: 'falhou' } } } };
+  const s = g.bvgSemRetransferir(fimEquipe, { retorno: 't1' }, 't1').final;
+  assert.deepEqual([s.resultado.code, s.efeitos.handoff, s.efeitos.pedido, s.efeitos.proposta_upd, s.efeitos.falha.operacao], ['equipe_neste_turno', undefined, {}, { id: 'p1', estado: 'falhou' }, 'cancelar']);
+  assert.equal(g.bvgSemRetransferir(fimEquipe, { retorno: 't1' }, 't2'), fimEquipe);
+  assert.equal(g.bvgSemRetransferir(fimEquipe, {}, undefined), fimEquipe); // sem turno nao ha marca que valha
+  const semEfeito = { final: { resultado: { ok: true }, efeitos: {} } };
+  assert.equal(g.bvgSemRetransferir(semEfeito, { retorno: 't1' }, 't1'), semEfeito);
+  console.log('graces.test.js retorno sem nova transferencia ok');
+}

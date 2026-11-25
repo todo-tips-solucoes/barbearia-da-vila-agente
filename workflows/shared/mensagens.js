@@ -524,8 +524,8 @@ function bvMConfTexto(code, row, origem, textos, repetidaMax, atual) {
   return ''; // fora_do_teste: sem texto
 }
 
-// Vigia da fila humana: o aviso "a equipe nao conseguiu te responder" nao sai quando a equipe respondeu e, depois dela, o cliente so
-// agradeceu ou se despediu (PROD, 23/11: 2 de 3 avisos sairam depois de "Obrigado" a um atendimento ja resolvido). Na duvida, avisa:
+// Vigia da fila humana: o encerramento e calado quando a equipe respondeu e, depois dela, o cliente so agradeceu ou se despediu
+// (PROD, 23/11: 2 de 3 avisos sairam depois de "Obrigado" a um atendimento ja resolvido). Na duvida, o agente retoma (bvMRetomaFila):
 // cumprimento sozinho, "sim", pergunta, numero ou horario ("ok 14:30" e escolha, nao despedida), letra fora de a-z e emoji que nao e
 // de fecho nao contam. Por palavras, sem regex com repeticao sobre texto do cliente.
 const bvMJunta = (w) => w.replace(/(.)\1+/g, '$1'); // "valeuu" = "valeu", "okk" = "ok"
@@ -538,7 +538,12 @@ const BVM_GRATO_APOIO = new Set(['muito', 'mesmo', 'isso', 'sim', 'ss', 'ta', 'e
   'mais', 'logo', 'la', 'amanha', 'deus', 'abencoe', 'tudo', 'pela', 'pelo', 'atencao', 'ajuda', 'atendimento', 'irmao', 'mano', 'amigo', 'pessoal', 'galera',
   'k', 'rs', 'rsrs', 'ha', 'haha', 'he', 'hehe'].map(bvMJunta));
 const BVM_EMOJI_FECHO = new Set([...'👍👌🙏🤝✅😊😉😀😁🙂🙌👏💪🤗😄😃🫡🤙'].concat(['❤', '♥']));
-function bvMSoAgradeceu(textos) {
+// Confirmacao (owner, 2026-11-25): "sim", "pode ser", "confirmo" ao que a equipe resolveu ou propos tambem fecha a conversa. Apoio
+// proprio: o do agradecimento tem dia, tarde e amanha, e "Pode ser amanha" ou "Sim, a tarde" pedem resposta. "nao" fica fora, e
+// "pode marcar" tambem: e pedido esperando a acao de alguem.
+const BVM_CONFIRMA = new Set(['sim', 'ss', 'isso', 'pode', 'claro', 'certeza', 'confirmo', 'confirmado', 'confirmada', 'aceito', 'positivo', 'uhum', 'aham', 'bora', 'ta'].map(bvMJunta));
+const BVM_CONFIRMA_APOIO = new Set(['ser', 'por', 'mim', 'pra', 'com', 'mesmo', 'entao', 'bom', 'esse', 'essa', 'assim'].map(bvMJunta));
+function bvMSoAgradeceu(textos, confirma) { // confirma: confirmacao tambem conta (encerramento da fila humana)
   const l = Array.isArray(textos) ? textos : [];
   return l.length > 0 && l.length <= 6 && l.every((t) => {
     const cru = String(t == null ? '' : t);
@@ -549,17 +554,21 @@ function bvMSoAgradeceu(textos) {
     if (emojis.some((ch) => !BVM_EMOJI_FECHO.has(ch))) return false; // 😡, 👎, 🤔 pedem resposta
     const ps = bvMPalavras(cru);
     if (!ps.length) return emojis.length > 0; // so um joinha fecha a conversa; so pontuacao, nao
-    return ps.some((w) => BVM_GRATO.has(w)) && ps.every((w) => BVM_GRATO.has(w) || BVM_GRATO_APOIO.has(w));
+    return (ps.some((w) => BVM_GRATO.has(w)) && ps.every((w) => BVM_GRATO.has(w) || BVM_GRATO_APOIO.has(w)))
+      || (!!confirma && ps.some((w) => BVM_GRATO.has(w) || BVM_CONFIRMA.has(w)) && ps.every((w) => BVM_GRATO.has(w) || BVM_CONFIRMA.has(w) || BVM_CONFIRMA_APOIO.has(w)));
   });
 }
-// Linha do encerramento da fila humana ({equipe_respondeu, depois: mensagens do cliente depois da ultima da equipe}) -> o aviso sai?
-// Linha sem esses campos (turno que estourou o tempo) sempre avisa.
-function bvMAvisaFila(l) {
-  if (!l || l.equipe_respondeu !== true) return true;
+// Encerramento da fila humana com o cliente por ultimo ({equipe_respondeu, depois: mensagens dele depois da ultima da equipe}) -> o
+// agente retoma a conversa? (owner, 2026-11-25: o texto fixo "a equipe nao conseguiu te responder" saiu.) Encerra calado quando a
+// equipe respondeu e, depois dela, o cliente so agradeceu, se despediu ou confirmou. Na duvida retoma: equipe que nunca respondeu
+// (o pedido dele ficou sem atendimento), pergunta, pedido, numero, midia.
+function bvMRetomaFila(l) {
+  if (!l) return false;
+  if (l.equipe_respondeu !== true) return true;
   let d = l.depois;
   try { if (typeof d === 'string') d = JSON.parse(d); } catch (e) { return true; }
-  return !bvMSoAgradeceu(d);
+  return !bvMSoAgradeceu(d, true);
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMAvisoEquipe, bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMAvisaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMAvisoEquipe, bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMRetomaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };
