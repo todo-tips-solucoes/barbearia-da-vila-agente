@@ -509,6 +509,34 @@ function bvVezesDaLista(historico, oferta) {
   return (Array.isArray(historico) ? historico : []).filter((h) => h && h.direcao === 'saida' && !h.equipe && h.tipo === 'lista'
     && String(h.conteudo || '').includes('?') && Date.parse(h.criado_em) >= em).length;
 }
+// Toque na lista (PROD, 24/11, 20:56: lista de horarios enviada duas vezes; o cliente tocou em "18:00 Black" e, 11 s depois, em
+// "18:40 Black", e a conversa foi transferida pelo laco). Quem tocou numa opcao escolheu: o laco nao transfere na terceira vez. O
+// toque volta como texto igual ao titulo do item (a oferta guardada ja traz o titulo cortado); frase solta nao conta, e mensagem
+// longa nem e normalizada. itens: mensagens do turno ({tipo, conteudo}); opcoes: a oferta atual.
+// -> [{ k, o }]: posicao no turno e a opcao tocada (o = null quando o titulo e de mais de uma opcao: escolheu, mas sem id certo).
+function bvToques(itens, opcoes) {
+  const titulos = new Map();
+  for (const o of (opcoes && Array.isArray(opcoes.itens) ? opcoes.itens : [])) {
+    const k = bvNomeBarb(String((o && o.rotulo) || ''));
+    if (k) titulos.set(k, titulos.has(k) && String((titulos.get(k) || {}).id) !== String(o.id) ? null : o);
+  }
+  return (Array.isArray(itens) ? itens : []).map((i, k) => {
+    const t = i && i.tipo === 'texto' ? String(i.conteudo == null ? '' : i.conteudo) : '';
+    return { k, o: t && t.length <= 64 ? titulos.get(bvNomeBarb(t)) : undefined };
+  }).filter((x) => x.o !== undefined);
+}
+// -> null (ninguem tocou) ou { linha }. De toques em opcoes diferentes vale o ultimo (owner, 24/11), mas a linha so sai onde as
+// opcoes se excluem (horario, sequencia: em servico ou agendamento dois toques podem ser os dois, e na decisao do cancelamento o
+// toque e a propria confirmacao), com id certo e quando o ultimo toque e a ultima mensagem do turno (um "ops, e o das 18" depois
+// dele vale mais). Nos demais casos o modelo decide como antes; o resumo sempre pede a confirmacao.
+function bvEscolhaNaLista(itens, opcoes) {
+  const ts = bvToques(itens, opcoes);
+  if (!ts.length) return null;
+  const ult = ts[ts.length - 1];
+  const varias = new Set(ts.map((x) => (x.o ? String(x.o.id) : ''))).size > 1;
+  const vale = varias && !!ult.o && ['horario', 'sequencia'].includes(opcoes.tipo) && ult.k === itens.length - 1;
+  return { linha: vale ? `\nO cliente tocou em mais de uma opção da lista neste turno (dado): vale a última, "${bvNeutralizar(String(ult.o.rotulo))}" (id ${ult.o.id}). Siga com ela, sem perguntar de novo qual ele quer.` : '' };
+}
 // Linha do contexto quando a mesma lista ou a mesma pergunta ja saiu duas vezes: a terceira nao sai. Owner (2026-11-24): na terceira
 // vez transfere direto; a oferta "quer que eu passe para a equipe?" sem resposta deixava a conversa na fila de ninguem (PROD, 23/11).
 // A linha nao afirma que o cliente nao respondeu (a contagem nao sabe disso: resumo, mudanca e resumo tambem repetem "Posso
@@ -524,8 +552,9 @@ function bvLaco(historico, oferta) {
 // contexto). Quem chama transfere em codigo (ramo Laco? do entregar-rajada; owner, 24/11). comLista: a resposta composta levaria a
 // mesma lista de novo; vale mesmo com a pergunta reescrita ("Qual deles quer mudar?" escapou da comparacao de texto em 19/11).
 // Oferta da equipe em pergunta tambem conta: sem resposta do cliente ela deixava a conversa na fila de ninguem.
+const bvOfereceEquipe = (t) => /\b(?:quer|posso|prefere|gostaria)\b[^?]{0,80}\bequipe\b[^?]{0,40}\?/i.test(String(t || '')); // a oferta da equipe em pergunta
 function bvTerceiraVez(textoModelo, historico, oferta, ofertaNova, comLista) {
-  return !ofertaNova && bvVezesDaLista(historico, oferta) >= 2 && (!!comLista || bvRepetePergunta(textoModelo, historico) || /\b(?:quer|posso|prefere|gostaria)\b[^?]{0,80}\bequipe\b[^?]{0,40}\?/i.test(String(textoModelo || '')));
+  return !ofertaNova && bvVezesDaLista(historico, oferta) >= 2 && (!!comLista || bvRepetePergunta(textoModelo, historico) || bvOfereceEquipe(textoModelo));
 }
 // A resposta nova repete a ultima pergunta do agente? (a lista daquela pergunta volta junto, uma vez)
 function bvRepetePergunta(textoModelo, historico) {
@@ -590,5 +619,5 @@ function bvPediuPessoa(texto) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvPediuPessoa, bvNegou, bvPrometeu, bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvToques, bvEscolhaNaLista, bvOfereceEquipe, bvPediuPessoa, bvNegou, bvPrometeu, bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }

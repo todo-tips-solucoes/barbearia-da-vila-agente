@@ -435,7 +435,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertIn("p.estado = 'pendente' AND p.turno_id = $2::uuid AND p.acao NOT LIKE 'cancelar%') AS proposta_nova", self.nos["Reler opcoes"]["parameters"]["query"])
         self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova, repete)", self.nos["Compor"]["parameters"]["jsCode"])
         # terceira vez (owner, 24/11): nao sai mais a oferta da equipe; o Compor so marca o laco e o ramo Laco? transfere
-        self.assertIn("const laco = bvTerceiraVez(out, histC, antes, ofertaNova, composta.some((x) => x.tipo === 'lista')) && !bvCorrida(($('Gatilho').first().json || {}).itens, histC);", self.nos["Compor"]["parameters"]["jsCode"])
+        self.assertIn("const laco = bvTerceiraVez(out, histC, antes, ofertaNova, composta.some((x) => x.tipo === 'lista')) && !bvCorrida(($('Gatilho').first().json || {}).itens, histC) && !($('Preparar').first().json.escolheu_opcao && !bvOfereceEquipe(out));", self.nos["Compor"]["parameters"]["jsCode"])  # quem tocou numa opcao nao e transferido pelo laco (PROD, 24/11)
         self.assertIn("return [{ json: { saida, laco } }];", self.nos["Compor"]["parameters"]["jsCode"])  # so esses campos seguem para o sub-workflow
         for amb in ("producao", "integracao"):
             self.assertNotIn("laco", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"])
@@ -545,10 +545,14 @@ class Etapa6(unittest.TestCase):  # pendencias da leitura de 17/11: decisao no c
 
     def test_pergunta_em_aberto_so_quando_nao_ha_laco(self):
         p = self.nos["Preparar"]["parameters"]["jsCode"]
-        self.assertIn("+ (bvCorrida(itens, hist) ? '' : (bvLaco(hist, rec.opcoes) || bvPerguntaAberta(hist, fala, Date.now())))", p)  # em corrida nem a linha do laco sai
+        self.assertIn("+ (bvCorrida(itens, hist) ? '' : ((poupa ? '' : bvLaco(hist, rec.opcoes)) || bvPerguntaAberta(hist, fala, Date.now())))", p)  # em corrida ou com toque na lista a linha do laco nao sai
+        self.assertIn("const toque = bvEscolhaNaLista(itens, rec.opcoes);", p)
+        self.assertIn("const poupa = !!toque && bvVezesDaLista(hist, rec.opcoes) < 3;", p)  # o toque poupa so a terceira vez; na quarta transfere
+        self.assertIn("+ bvContextoOferta(rec.opcoes) + (toque ? toque.linha : '');", p)
+        self.assertIn("escolheu_opcao: poupa,", p)
         # a fala do turno: descricao de imagem nao e fala, e turno sem fala manda a marca (nao confirma nada na fase 2)
         self.assertIn("const fala = tm.linhas.filter((l) => !String(l).startsWith('[imagem descrita]')).join(' ').slice(0, 600);", p)
-        self.assertIn("texto_cliente: fala || '(sem texto)',", p)
+        self.assertIn("texto_cliente: fala || '(sem texto)', escolheu_opcao: poupa,", p)
         self.assertLess(p.index("const fala = "), p.index("bvPerguntaAberta(hist, fala"))
 
 
@@ -635,6 +639,33 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
         com_numero = json.loads(json.dumps(self.cfgs["integracao"]))
         com_numero["handoff"]["avisar_numeros"] = ["5511971634416"]
         self.assertEqual(rodar("integracao", {"cliente_nome": "joao"}, com_numero), [{"enviar": False}])
+
+    def test_laco_nao_transfere_quem_tocou_numa_opcao(self):
+        # PROD, 24/11: lista de horarios enviada duas vezes, o cliente tocou em duas opcoes e foi transferido. Executa o Compor renderizado.
+        if not shutil.which("node"):
+            self.skipTest("node ausente")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("deploy_n8n_laco", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
+        dep = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(dep)
+        nos = {n["name"]: n for n in self.rajada["nodes"]}
+        cod = json.loads(dep.renderizar(json.dumps({"js": nos["Compor"]["parameters"]["jsCode"]}), self.cfgs["integracao"], RAIZ))["js"]
+        oferta = {"tipo": "horario", "em": "2026-11-24T23:00:00.000Z", "completa": True, "itens": [{"id": "1", "rotulo": "18:00 Black", "valor": {"hora": "18:00", "apelido": "Black"}}, {"id": "2", "rotulo": "18:40 Black", "valor": {"hora": "18:40", "apelido": "Black"}}]}
+        lista = lambda em: {"direcao": "saida", "tipo": "lista", "conteudo": "Qual desses horários você prefere?", "criado_em": em}
+        hist = [lista("2026-11-24T23:01:00.000Z"), {"direcao": "entrada", "tipo": "texto", "conteudo": "Show", "criado_em": "2026-11-24T23:50:00.000Z"}, lista("2026-11-24T23:51:00.000Z")]
+
+        def compor(saida_modelo, escolheu, historico=hist):
+            refs = {"Agente": [{"output": saida_modelo}], "Ler contexto": [{"opcoes": oferta, "historico": historico}], "Preparar": [{"sessao_nova": False, "primeira_da_sessao": False, "escolheu_opcao": escolheu}],
+                    "Gatilho": [{"telefone": "+5500000000500", "itens": [{"tipo": "texto", "conteudo": "18:40 Black", "recebida_em": "2026-11-24T23:56:27.000Z"}]}]}
+            r = subprocess.run(["node", os.path.join(RAIZ, "tests", "harness_code_node.js")], capture_output=True, text=True, input=json.dumps({"js": cod, "input": [{"opcoes": oferta, "proposta_nova": False}], "refs": refs}))
+            self.assertEqual(r.returncode, 0, r.stderr[:500])
+            return json.loads(r.stdout)[0]
+        repete = "Qual desses horários você prefere?"
+        self.assertIs(compor(repete, False)["laco"], True)   # terceira vez sem escolha: transfere (decisao do owner)
+        self.assertIs(compor(repete, True)["laco"], False)   # o cliente tocou numa opcao: nao transfere
+        self.assertIs(compor("Quer que eu passe para a equipe te ajudar?", True)["laco"], True)  # a oferta da equipe em pergunta segue virando transferencia
+        self.assertIs(compor("Vou marcar corte adulto com Black amanhã às 18:40. Posso confirmar?", True)["laco"], False)
+        self.assertEqual(set(compor(repete, True).keys()), {"saida", "laco"})
 
     def test_teto_de_agendamentos_por_contato(self):
         q = self.graces["Contexto"]["parameters"]["query"]

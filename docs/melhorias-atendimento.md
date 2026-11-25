@@ -785,6 +785,26 @@ Decisão do owner (24/11). Até aqui, na terceira vez da mesma pergunta o agente
 - **Suíte:** R38 aprovado (transferência conferida no estado) e R30 aprovado. O R30 foi reestruturado: a irritação vinha na terceira mensagem, que agora já é transferência; passou a vir na segunda, e o roteiro cobre só "desculpas, oferta e aceite". R1, R5, R18 e R23 aprovados na mesma integração (p95 de 24,6 s; o R18 teve um `erro_infra` de turno sem fim em 67 s e passou na repetição).
 - **n8n depois de publicar o nó:** `healthz` 200 e uso de CPU normal.
 
+### Quem tocou numa opção não é transferido (correção de 24/11, depois do primeiro dia em PROD)
+
+Caso real, 24/11 às 20:56, poucas horas depois do deploy: a lista de horários já tinha ido duas vezes; no terceiro turno o cliente mandou "Esse" e tocou em duas opções seguidas ("18:00 …" e, 11 s depois, "18:40 …"). Em vez de seguir com uma delas, a conversa foi transferida. Era um cliente novo, sem cadastro, que tinha escolhido.
+
+- **Toque na lista (`bvToques`, `bvEscolhaNaLista`):** mensagem de texto do turno igual ao título de um item da oferta atual (sem diferença de caixa, acento ou pontuação). Frase solta, parte do título, áudio e mensagem longa não contam.
+- **O laço poupa quem tocou:** no `Preparar`, com toque, a linha do laço não entra no contexto e `escolheu_opcao` desliga a rede do `Compor`. Vale só para a terceira vez (`bvVezesDaLista < 3`): lista que já saiu três vezes com o cliente escolhendo e o agente sem andar (Graces fora, ferramenta recusando) transfere na quarta.
+- **A oferta da equipe em pergunta continua virando transferência**, mesmo com toque (`bvOfereceEquipe`).
+- **De toques em opções diferentes vale o último** (decisão do owner, 24/11), com uma linha no contexto. Só onde as opções se excluem (`horario`, `sequencia`), com id certo e quando o último toque é a última mensagem do turno. Em serviço ou agendamento dois toques podem ser os dois; na decisão do cancelamento o toque é a própria confirmação: nesses tipos não há linha e o modelo decide como antes. O resumo continua pedindo a confirmação antes de agendar.
+- **Revisão independente:** a primeira versão mandava "vale a última" em qualquer lista (inclusive a do cancelamento) e desligava a rede sem teto enquanto o cliente tocasse; os dois defeitos foram corrigidos antes de publicar no TESTE.
+
+| Medição no TESTE (lista enviada duas vezes; terceiro turno com toques) | Antes | Depois |
+|---|---|---|
+| Cliente sem cadastro, "Esse" e dois toques seguidos (o caso de PROD) | 4 de 5 transferidos | 0 de 5 transferidos; segue para o cadastro com o último horário tocado |
+| Cliente com cadastro, dois toques seguidos | 0 de 4 transferidos; perguntava "12:00 ou 12:40?" | 0 de 3 transferidos; resumo do último horário tocado |
+| Um toque só | 3 de 3 com o resumo | 3 de 3 com o resumo |
+| Laço sem escolha ("sei lá", "ah, não sei mesmo") | transfere na terceira vez | 3 de 3 transferem na terceira vez |
+| Contraprova (escolhe por texto na terceira mensagem) | não transfere | 3 de 3 sem transferência |
+
+Limites: o toque com emoji, "por favor" ou só a hora ("18:40" com título "18:40 Black") não é reconhecido como toque, e nesses casos vale o comportamento anterior; se o cliente queria os dois horários tocados, recebe o resumo de um só e precisa dizer isso na confirmação.
+
 ### O que falta
 
 - **Ler em PROD quantas vezes o texto antigo do laço saiu e quantas eram legítimas.** A pergunta em texto, sem lista, não tem rede em código; a leitura do dia seguinte ao deploy mostra se alguém foi transferido sem motivo.
