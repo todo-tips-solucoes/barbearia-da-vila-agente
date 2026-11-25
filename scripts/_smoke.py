@@ -66,3 +66,10 @@ def sql(banco, q):
 
 def tel(prefixo, n, largura):
     return f"{prefixo}{n:0{largura}d}"
+
+
+def chamado_do_agente(b):
+    """Evento de chamado que esta com o agente, como em PROD: aguardando e sem atendente. As fixtures vieram de chamados
+    assumidos pelo owner no painel, e chamado assumido vale como fila humana (owner, 2026-11-25): o agente ficaria calado."""
+    b["ticketData"].update(status="pending", userId=None)
+    return b

@@ -52,7 +52,7 @@ O que já se vê funcionando: a lista de serviços abre com o corte adulto, a re
 | 23 | Ação já concluída | A escrita dos últimos 10 minutos entra no contexto: repetir o pedido recebe "já está feito" |
 | 24 | Confirmação antes da pergunta | A proposta só é executada por mensagem que chegou depois do pedido de confirmação |
 | 25 | Texto quebrado e lista de cadastros (parcial) | Frase que ficava pela metade quando as opções viravam lista é descartada; com vários cadastros no telefone, a pergunta vai junto com a lista |
-| 16 | Agente calado na fila humana | O silêncio segue o ticket: enquanto ele está na fila de atendimento humano o agente não responde, mesmo horas depois. Atendimento humano sem interação há 30 min é encerrado, desde que a equipe já tenha respondido |
+| 16 | Agente calado na fila humana | O silêncio segue o ticket: enquanto ele está na fila de atendimento humano, ou assumido por alguém da equipe em qualquer fila (25/11), o agente não responde, mesmo horas depois. Atendimento humano sem interação há 30 min é encerrado, desde que a equipe já tenha respondido |
 | 17 | Mensagens da equipe no histórico (parcial) | O que a equipe escreve na fila humana entra no histórico da conversa. Mensagem escrita pela equipe fora da fila humana ainda não é registrada |
 | 19 | Respostas a lembrete | Resposta no primeiro minuto é reconhecida; erro 400 da Graces tenta de novo com a data da ocorrência (hipótese: agendamento recorrente); "combinado" e "estarei aí" contam como confirmação; depois do NÃO, o pedido de cancelar não volta à pergunta |
 | 20 | Retomada no contexto | Resposta até 12 h depois continua a conversa; proposta vencida não é retomada; horário para as próximas 6 h é retomado em 20 min |
@@ -835,3 +835,47 @@ Pedido do owner (24/11): quando a conversa é passada para a equipe, mandar do W
 - **Envio real não provado no TESTE:** lá o destino é simulado; a primeira mensagem de verdade sai em PROD. O construtor e a chamada são os mesmos do `bv-alerta`, que já envia em PROD.
 - **Falha no envio não é registrada** em `falhas_agente`: o aviso se perde em silêncio se o Chat Master recusar.
 - Se a equipe responder ao aviso, o agente responde como a um cliente.
+
+## Chamado assumido pela equipe cala o agente (25/11)
+
+Pedido do owner em 25/11: a equipe reclama que, depois de assumir o atendimento, o agente continua respondendo junto.
+
+### O que estava acontecendo
+
+O agente só ficava calado com o chamado na fila de atendimento humano (106 em PROD). Leitura do Chat Master de PROD em 25/11 (`GET /api/tickets/get` e as mensagens de cada chamado, só leitura): os dois chamados em atendimento estavam `open`, com o atendente em `userId` (usuário 233), e **continuavam na fila do agente (107)**. Assumir o chamado pelo painel, portanto, não muda a fila em PROD, ao contrário do que se supunha em 23/11.
+
+| Chamado | O que se vê nas mensagens |
+|---|---|
+| 173283 (25/11) | A equipe escreve pelo painel às 13:16:46; o cliente responde às 13:16:50 e o agente responde às 13:17:19. A equipe escreve de novo (painel e aparelho) e, às 13:24:15, o agente manda uma lista de serviços |
+| 173902 (23 a 25/11) | Equipe (painel e aparelho) e agente se alternam nos três dias; em 25/11 a equipe pergunta "Qual valor?" às 09:38:38 e o agente responde ao cliente às 09:42:05 |
+
+Nenhuma mensagem da equipe nesses chamados entrou no histórico da conversa: a gravação também dependia da fila 106.
+
+### Como ficou
+
+- **Chamado assumido vale como fila humana.** Assumido é o chamado `open` com `ticketData.userId` de uma pessoa (diferente de `chatmaster.user_id`, o usuário do agente). A regra mora em `bvAssumido` e `bvFilaDe` (`workflows/shared/rajada.js`), usada pelo nó `Normalizar` da recepção: a fila gravada em `contatos.fila_id` passa a ser a humana, e o resto segue como já era na fila humana (`bvTransferido` cala o agente, a mídia não é interpretada, o vigia conta os 30 minutos).
+- **A mensagem da equipe nesse chamado entra no histórico**, desde que escrita por gente (painel, com `userId`; aparelho, com `fromApp`). O eco de uma mensagem enviada pela API não entra.
+- **O agente volta sozinho** quando o chamado deixa de estar assumido (devolvido para "aguardando" ou encerrado e reaberto pelo cliente), ou quando o vigia o encerra depois de 30 minutos sem interação; nesse caso, se o cliente falou por último, ele recebe o aviso de sempre (`textos.fila_sem_resposta`).
+- Os simuladores do TESTE (`_smoke.chamado_do_agente`) passam a mandar o chamado como ele fica em PROD com o agente (`pending`, sem atendente): as fixtures vieram de chamados que o owner tinha assumido no painel.
+
+### Testes
+
+- Unidade: `tests/rajada.test.js` (chamado assumido, usuário do agente, chamado não assumido, mensagem do painel, do aparelho e eco da API) e `tests/test_workflows_mensagens.py` (o nó passa a fila humana e o usuário do agente).
+- TESTE (25/11, contato simulado, só a recepção publicada): com o chamado do agente ele responde; com o chamado assumido na fila do agente fica calado e a fila gravada é a humana; a mensagem da equipe pelo painel e pelo aparelho entra no histórico e o eco da API não; o cliente responde à equipe e o agente segue calado; devolvido o chamado, o agente volta a responder. 8 de 8 conferências.
+
+### O que falta e limites
+
+- **Chamado esquecido aberto:** se alguém assume e não encerra, a próxima mensagem do cliente fica com a equipe; sem resposta em 30 minutos o vigia encerra o chamado e avisa o cliente, e só então o agente volta. Em 25/11 havia dois chamados assumidos, um deles criado em 19/11.
+- **Resposta digitada no aparelho sem assumir o chamado** continua fora: o chamado fica "aguardando" na fila do agente, o agente não vê a mensagem e responde. Em 15 a 17/11 foram 20 mensagens assim.
+- Abrir o chamado no painel só para ler também cala o agente, se o painel o marcar como assumido.
+
+## Remarcação recusada pela Graces com HTTP 200 (contato 1374, 24/11)
+
+O cliente pediu para remarcar o corte de 24/11 às 19:20 (Pedro Henrique) para 25/11 às 20:00 com o Black. O agente fez o resumo às 18:19 e o cliente confirmou às 18:27.
+
+- A conferência antes da escrita (`GET /agenda/horarios-livres`, etapa `reval`) ainda mostrava 20:00 livre com o Black: se não mostrasse, o resultado seria `horario_indisponivel`.
+- O `PUT /agenda/{idAgenda}` respondeu **HTTP 200 com `sucesso: false`** e sem `code`. O código trata isso como falha (`code_desconhecido`, registrado como `HTTP_200`), não repete a escrita e oferece a equipe. Foi o que aconteceu: o agente disse que não conseguiu, transferiu às 18:29 e a equipe respondeu às 18:40 que o Black estaria de folga.
+- **A causa da recusa não ficou gravada**: a `mensagem` que a Graces devolve nesse caso não é lida nem guardada. Em 25/11 a agenda do Black está toda como "Prof. Ausente" (status 7), em blocos picados em volta de um agendamento, e a grade dele volta vazia. A leitura mais provável é que a folga já valia para a escrita e ainda não para a grade, ou foi lançada entre a oferta e a confirmação; não dá para provar com o que foi gravado.
+- É o único `HTTP_200` de remarcação nas leituras de PROD (15 a 24/11). As outras 6 remarcações executadas passaram.
+- O agendamento antigo (24/11 19:20 com o Pedro Henrique) não está mais na agenda. A equipe combinou 25/11 às 20:40 com o Rodrigo; na leitura de 25/11 às 14:00 esse horário do Rodrigo aparecia livre, e o único agendamento às 20:40 é com outro barbeiro. Vale a equipe conferir.
+- **Aberto:** guardar a `mensagem` da Graces quando ela recusa com `sucesso: false` (hoje não há coluna para isso em `falhas_agente`), para a próxima recusa ser explicável.

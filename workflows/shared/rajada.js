@@ -4,15 +4,31 @@
 // queueId do evento do Chat Master (numero, texto numerico, 'null' ou ausente) -> inteiro ou null
 function bvFila(b) { return b && /^\d+$/.test(String(b.queueId)) ? Number(b.queueId) : null; }
 
+// Chamado assumido por um atendente (owner, 2026-11-25): em PROD quem assume pelo painel deixa o chamado `open` com o seu userId e
+// ele continua na fila do agente (medido em 25/11: fila 107, usuario 233, agente respondendo junto). Vale como fila humana: o
+// agente cala, a mensagem da equipe entra no historico e o vigia encerra depois do prazo sem interacao.
+function bvAssumido(b, usuarioAgente) {
+  const t = b && b.ticketData;
+  return !!t && t.status === 'open' && Number.isInteger(t.userId) && t.userId > 0 && t.userId !== Number(usuarioAgente);
+}
+// Fila que vale para o agente: a humana quando o chamado esta assumido; senao a do evento. Sem filaHumana, so a do evento.
+function bvFilaDe(b, filaHumana, usuarioAgente) {
+  return filaHumana != null && bvAssumido(b, usuarioAgente) ? Number(filaHumana) : bvFila(b);
+}
+
 // Aviso de chamado encerrado: o Chat Master manda sem token_origin (fixture 24). Nao e mensagem e nada e processado; a
 // recepcao responde 200 para o painel nao gravar "HTTP 401" no chamado. Com token_origin presente vale a checagem normal.
 function bvEncerradoSemToken(b) { return !!b && typeof b === 'object' && b.acao === 'closed' && b.token_origin === undefined; }
 
 // Mensagem enviada pela equipe na fila humana (from_internal, fromMe) -> { telefone, fila, id, texto, ticket } ou null. O texto de
 // encaminhamento do proprio agente chega como eco ja na fila humana: nao conta como resposta da equipe.
-function bvEquipe(b, filaHumana, textoAgente) { // ticket: chamadoId do evento (e ele que o vigia encerra)
-  if (!b || b.acao !== 'from_internal' || b.fromMe !== true || bvFila(b) !== Number(filaHumana)) return null;
+// Fora da fila humana so conta o chamado assumido, e so a mensagem escrita por gente (painel: userId; aparelho: fromApp): o eco
+// de uma resposta do agente que saiu enquanto alguem assumia nao vira fala da equipe.
+function bvEquipe(b, filaHumana, textoAgente, usuarioAgente) { // ticket: chamadoId do evento (e ele que o vigia encerra)
+  if (!b || b.acao !== 'from_internal' || b.fromMe !== true) return null;
   const m = b.mensagem && !Array.isArray(b.mensagem) && typeof b.mensagem === 'object' ? b.mensagem : null;
+  const deGente = !!m && (m.fromApp === true || (Number.isInteger(m.userId) && m.userId > 0 && m.userId !== Number(usuarioAgente)));
+  if (bvFila(b) !== Number(filaHumana) && !(bvAssumido(b, usuarioAgente) && deGente)) return null;
   if (!m || typeof b.sender !== 'string' || !b.sender || b.isGroup === true) return null;
   let texto = typeof m.body === 'string' && m.body.trim() ? m.body.slice(0, 4000) : null;
   // Midia da equipe: o body traz o nome do arquivo ("<uuid>_<n>.mp3"), que entrava no historico como se fosse a fala (17/11).
@@ -23,7 +39,7 @@ function bvEquipe(b, filaHumana, textoAgente) { // ticket: chamadoId do evento (
     texto = texto && !/\.(?:mp3|ogg|oga|opus|m4a|aac|wav|mp4|mov|webm|jpe?g|png|webp|gif|pdf|docx?|xlsx?|csv|txt|zip)$/i.test(texto.trim()) ? `${marca} ${texto}` : marca;
   }
   if (texto && textoAgente && texto.includes(String(textoAgente))) return null;
-  return { telefone: b.sender, fila: bvFila(b), id: m.id === undefined || m.id === null ? null : String(m.id), texto, ticket: /^\d+$/.test(String(b.chamadoId)) ? Number(b.chamadoId) : null };
+  return { telefone: b.sender, fila: Number(filaHumana), id: m.id === undefined || m.id === null ? null : String(m.id), texto, ticket: /^\d+$/.test(String(b.chamadoId)) ? Number(b.chamadoId) : null };
 }
 
 function bvNormalizar(evento, opcoes) {
@@ -58,7 +74,8 @@ function bvNormalizar(evento, opcoes) {
     msg: {
       telefone: b.sender,
       ticketId: Number.isInteger(b.chamadoId) ? b.chamadoId : null,
-      filaId: bvFila(b), // fila do ticket neste evento (owner, 2026-11-16): na fila humana o agente nao interage
+      // fila do ticket neste evento (owner, 2026-11-16): na fila humana, ou com o chamado assumido, o agente nao interage
+      filaId: bvFilaDe(b, opcoes && opcoes.filaHumana, opcoes && opcoes.usuarioAgente),
       // id do contato no Chat Master (lembretes, owner 2026-11-15): poupa a busca pelo numero na hora de agendar
       contatoCanalId: b.ticketData && Number.isInteger(b.ticketData.contactId) && b.ticketData.contactId > 0 ? b.ticketData.contactId : null,
       tipo,
@@ -88,4 +105,4 @@ function consolidar(linhas) {
   });
 }
 
-if (typeof module !== 'undefined') module.exports = { bvFila, bvEncerradoSemToken, bvEquipe, bvNormalizar, deveEntregar, consolidar };
+if (typeof module !== 'undefined') module.exports = { bvFila, bvAssumido, bvFilaDe, bvEncerradoSemToken, bvEquipe, bvNormalizar, deveEntregar, consolidar };
