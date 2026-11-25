@@ -54,14 +54,14 @@ def cid(n):
 
 
 def evento(n, texto):
-    b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-02.json"), encoding="utf-8"))["body"]
+    b = _smoke.chamado_do_agente(json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-02.json"), encoding="utf-8"))["body"])
     b.update(sender=tel(n), token_origin=TOKEN, queueId=1)  # fila 1: a 78 da fixture e a fila humana do TESTE (owner, 2026-11-16)
     b["mensagem"][0]["text"] = texto
     return b
 
 
 def evento_audio(n):
-    b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-13.json"), encoding="utf-8"))["body"]
+    b = _smoke.chamado_do_agente(json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-13.json"), encoding="utf-8"))["body"])
     b.update(sender=tel(n), token_origin=TOKEN)
     m = b["mensagem"][0]
     m.update(type="audio", fileUrl=f"https://exemplo.invalid/smoke-audio-{uuid.uuid4().hex[:8]}.ogg", fileMimeType="audio/ogg; codecs=opus")
@@ -978,7 +978,7 @@ def _midia_real(tipo, longo=False):
 
 def evento_midia(n, url, segundos=5, legenda=None):
     """Payload real de nota de voz (evento-20) com o fileUrl trocado; ?smoke= deixa o mensagem_id_canal unico (o storage ignora a query)."""
-    b = json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-20.json"), encoding="utf-8"))["body"]
+    b = _smoke.chamado_do_agente(json.load(open(os.path.join(RAIZ, "tests", "fixtures", "chatmaster", "evento-20.json"), encoding="utf-8"))["body"])
     b.update(sender=tel(n), token_origin=TOKEN, queueId=1)  # fila 1: a 78 da fixture e a fila humana do TESTE
     m = b["mensagem"][0]
     m["fileUrl"] = url if "smoke=" in url else f"{url}?smoke={uuid.uuid4().hex[:10]}"

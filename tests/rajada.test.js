@@ -92,7 +92,24 @@ console.log('rajada.test.js ok');
   const eq = r.bvEquipe(cel.body, 78, 'texto do agente'); // o texto anonimizado da fixture e so 'x'
   assert.deepEqual([eq.fila, eq.id, eq.ticket, eq.telefone === cel.body.sender, !!eq.texto, cel.body.mensagem.fromApp, aviso.body.fromApp],
     [78, String(cel.body.mensagem.id), cel.body.chamadoId, true, true, true, true]);
-  assert.equal(r.bvEquipe(cel.body, 106, 'texto do agente'), null); // chamado fora da fila humana: nao grava
+  assert.equal(r.bvEquipe(cel.body, 106, 'texto do agente', cel.body.ticketData.userId), null); // fora da fila humana, com o chamado no usuario do agente: nao grava
+
+  // Chamado assumido por um atendente (owner, 2026-11-25; medido em PROD: fila 107 do agente, `open`, usuario 233; agente 234)
+  const td = (o) => ({ ticketData: { status: 'open', userId: 233, queueId: 107, ...o } });
+  assert.deepEqual([r.bvAssumido(td(), 234), r.bvAssumido(td({ userId: 234 }), 234), r.bvAssumido(td({ userId: '234' }), 234), r.bvAssumido(td({ status: 'pending', userId: null }), 234),
+    r.bvAssumido(td({ status: 'pending' }), 234), r.bvAssumido(td({ userId: null }), 234), r.bvAssumido({}, 234), r.bvAssumido(null, 234)], [true, false, false, false, false, false, false, false]);
+  assert.deepEqual([r.bvFilaDe({ queueId: 107, ...td() }, 106, 234), r.bvFilaDe({ queueId: 107, ...td({ status: 'pending', userId: null }) }, 106, 234), r.bvFilaDe({ queueId: 106, ...td({ userId: 234 }) }, 106, 234),
+    r.bvFilaDe({ queueId: 107, ...td() }, undefined, 234)], [106, 107, 106, 107]);
+  // mensagem do cliente com o chamado assumido: a fila gravada e a humana (o agente cala e o vigia conta o prazo)
+  const cli = (o) => { const e = fx('07'); Object.assign(e.body, { queueId: 107 }, o); return bvNormalizar(e, { filaHumana: 106, usuarioAgente: 234 }); };
+  assert.deepEqual([cli(td()).msg.filaId, cli(td({ status: 'pending', userId: null })).msg.filaId, cli(td({ userId: 234 })).msg.filaId], [106, 107, 107]);
+  // mensagem da equipe com o chamado assumido na fila do agente: entra como fala da equipe se foi gente que escreveu
+  const as = (m, o) => r.bvEquipe(ev({ queueId: 107, ...td(o), mensagem: { id: 5, body: 'Qual valor?', ...m } }), 106, 'x', 234);
+  assert.deepEqual(as({ userId: 233 }), { telefone: '5511999990000', fila: 106, id: '5', texto: 'Qual valor?', ticket: null }); // painel
+  assert.equal(as({ fromApp: true }).fila, 106); // aparelho
+  assert.equal(as({}), null); // eco de mensagem do agente (API: sem userId nem fromApp)
+  assert.equal(as({ userId: 234 }), null); // mensagem agendada pelo usuario do agente
+  assert.equal(as({ userId: 233 }, { status: 'pending', userId: null }), null); // chamado nao assumido: como antes
 }
 console.log('rajada.test.js fila humana ok');
 
