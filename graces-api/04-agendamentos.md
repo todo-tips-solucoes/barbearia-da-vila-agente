@@ -181,7 +181,7 @@ Execuções do cliente (serviços, sessões de pacote, retornos), da mais recent
     "idServico": "8f3a9c2d-...", "descricaoServico": "Corte feminino", "valorTotal": 90.00, "profissional": "Júlia" } ]
 ```
 
-Útil para sugerir "o de sempre": último serviço e barbeiro. A resposta real (medida em 2026-11-14) também traz `idItemComanda`, `idProfissional` e `profissional` com espaço no fim (`"Pedro Henrique "`). O agente usa o primeiro item com `idServico`, confere o serviço no catálogo (`/agenda/servicos`) e o barbeiro em `/servicos/profissionais` antes de sugerir.
+Útil para sugerir "o de sempre": último serviço e barbeiro. A resposta real (medida em 2026-11-14) também traz `idItemComanda`, `idProfissional` e `profissional` com espaço no fim (`"Pedro Henrique "`). O agente usa o primeiro item com `idServico` para o serviço (a última visita) e conta os barbeiros das últimas visitas (`pageSize` de 10 por visita, até 200) para o habitual; confere o serviço no catálogo (`/agenda/servicos`) e o barbeiro em `/servicos/profissionais` antes de sugerir.
 
 ## GET `/public/v1/agenda/completa` — agenda da loja
 

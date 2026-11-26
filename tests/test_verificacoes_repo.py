@@ -30,7 +30,7 @@ TXT_M = {k: "x" for k in vr.TEXTOS_MENSAGENS}
 def cfg(prefixo, banco, db=2, **extra):
     base = {"redis": {"prefixo": prefixo, "db": db}, "postgres": {"database": banco, "credencial_id": ""},
             "midia": dict(MIDIA), "workflows_sub": {"interpretar_midia": ""},
-            "textos": {"midia_nao_entendida": "x", "midia_grande": "y", **TXT_M}, "mensagens": {**MENS, "ativo": banco.endswith("_teste")}, "graces": {"timeout_ms": 15000, "rodizio": {"ligado": True, "janela_dias": 30}}}
+            "textos": {"midia_nao_entendida": "x", "midia_grande": "y", **TXT_M}, "mensagens": {**MENS, "ativo": banco.endswith("_teste")}, "graces": {"timeout_ms": 15000, "rodizio": {"ligado": True, "janela_dias": 30}, "habitual": {"visitas": 5}}}
     return {**base, **extra}
 
 
@@ -51,6 +51,15 @@ class T(unittest.TestCase):
         for ruim in (0, 366, "30", 3.5, True):
             self.assertIn("janela_dias", erros(janela_dias=ruim))
         self.assertIn("rodizio ausente", "\n".join(vr.regras_rodizio("producao", {"graces": {}})))
+
+    def test_regras_do_habitual(self):  # barbeiro habitual pelos ultimos atendimentos, 26/11/2026
+        def erros(v):
+            return vr.regras_habitual("integracao", {"graces": {"habitual": {"visitas": v}}})
+        for bom in (1, 5, 20):
+            self.assertEqual(erros(bom), [])
+        for ruim in (0, 21, "5", 2.5, True, None):
+            self.assertIn("graces.habitual.visitas", "\n".join(erros(ruim)))
+        self.assertTrue(vr.regras_habitual("producao", {"graces": {}}))
 
     def test_regras_de_mensagens(self):  # 5.1.3
         import copy

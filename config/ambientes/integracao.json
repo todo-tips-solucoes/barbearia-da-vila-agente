@@ -174,6 +174,9 @@
     "rodizio": {
       "ligado": true,
       "janela_dias": 30
+    },
+    "habitual": {
+      "visitas": 5
     }
   },
   "textos": {

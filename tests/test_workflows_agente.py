@@ -688,6 +688,9 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
         self.assertTrue(rep.endswith("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}' === 'True' ? Math.min(365, Math.max(1, parseInt('{{BV:graces.rodizio.janela_dias}}', 10) || 30)) : 0] }}"))
         self.assertIn("rodizio: { ligado: '{{BV:graces.rodizio.ligado}}' === 'True' }", ler("workflows/shared/config.js"))
         self.assertEqual([c["graces"]["rodizio"] for c in self.cfgs.values()], [{"ligado": True, "janela_dias": 30}] * 2)
+        # barbeiro habitual (26/11/2026): a chave chega ao no pelo config.js e vale 5 nos dois ambientes
+        self.assertIn("habitual: { visitas: parseInt('{{BV:graces.habitual.visitas}}', 10) || 5 }", ler("workflows/shared/config.js"))
+        self.assertEqual([c["graces"]["habitual"] for c in self.cfgs.values()], [{"visitas": 5}] * 2)
         # o Contexto tem 7 parametros, na ordem certa: o 7o e a janela (0 = desligado), calculada no no e nunca concatenada no SQL
         self.assertEqual(sorted({int(n) for n in re.findall(r"\$(\d+)", q)}), list(range(1, 8)))
         self.assertIn("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}'", rep)
