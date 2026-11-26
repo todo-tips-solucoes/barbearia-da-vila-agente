@@ -101,6 +101,20 @@ def regras_mensagens(amb, c):
     return erros
 
 
+def regras_rodizio(amb, c):
+    """Fila da vez (26/11/2026): graces.rodizio.ligado (boolean) e janela_dias (inteiro 1..365) nos dois ambientes."""
+    r = c.get("graces", {}).get("rodizio")
+    if not isinstance(r, dict):
+        return [f"{amb}: graces.rodizio ausente"]
+    erros = []
+    if not isinstance(r.get("ligado"), bool):
+        erros.append(f"{amb}: graces.rodizio.ligado deve ser boolean")
+    j = r.get("janela_dias")
+    if isinstance(j, bool) or not isinstance(j, int) or not 1 <= j <= 365:
+        erros.append(f"{amb}: graces.rodizio.janela_dias deve ser inteiro entre 1 e 365")
+    return erros
+
+
 def verificar_workflows(raiz):
     """FR-008/FR-015: sem execucao salva com conteudo de midia e sem errorWorkflow nos workflows que a tocam."""
     erros = []
@@ -135,6 +149,7 @@ def verificar(cfgs, infra):
     for amb, c in cfgs.items():
         erros += regras_midia(amb, c)
         erros += regras_mensagens(amb, c)
+        erros += regras_rodizio(amb, c)
     lk = {a: c.get("lock", {}) for a, c in cfgs.items()}
     for a, l in lk.items():
         if l and l.get("espera_s", 0) * l.get("tentativas", 0) < l.get("ttl_s", 0):

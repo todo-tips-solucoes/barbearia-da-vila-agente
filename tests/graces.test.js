@@ -2176,3 +2176,187 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(seq({}, {}, AG, TODOS, cfg, 2).fim.resultado.ok, false); // sem barbeiro escolhido: como antes
   console.log('graces.test.js sequencia com barbeiro e periodo ok');
 }
+
+// ---- Fila da vez (26/11/2026): quando o sistema indica o barbeiro, vem primeiro quem ha mais tempo nao recebe um agendamento indicado ----
+{
+  const D = '2026-12-01', SV = { idServico: 's1', nome: 'corte adulto', preco: 85, minutos: 40, opcao_id: '1' };
+  const cfgR = { ...cfg, rodizio: { ligado: true, janela_dias: 30 } }, cfgOff = { ...cfg, rodizio: { ligado: false, janela_dias: 30 } };
+  const BS = ['K', 'B', 'P', 'R'].map((n) => ({ idProfissional: `id-${n}`, apelido: n }));
+  const ped = (extra = {}) => ({ idCliente: 'c1', servico: SV, barbeiros: BS.map((b, k) => ({ opcao_id: String(k + 1), ...b })), qualquer_opcao: '5', ...extra });
+  const HS = ['09:00', '09:40', '10:20', '11:00', '11:40'];
+  const t = (n) => `2026-11-${String(n).padStart(2, '0')}T12:00:00.000Z`;
+  // roda a busca de horarios; livres = { apelido: [horas] } (sem a chave, o barbeiro tem todas); devolve o resultado, os efeitos e a ordem consultada
+  const busca = (o, ctx0, c = cfgR, livres = {}) => {
+    const p = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: D, ...o }), { opcoes: {}, pedido: ped(), ...ctx0 }, c);
+    const ordem = p.reqs.filter((q) => q.path === '/agenda/horarios-livres').map((q) => q.qs.idProfissional.slice(3));
+    const grade = (q) => (q.path === '/agenda/horarios' ? resp(500, {}) : ok({ minutos: 40, horarios: livres[q.qs.idProfissional.slice(3)] || HS }));
+    const f = g.bvGPasso(p.st, p.reqs.map(grade), c).final;
+    return { f, ordem, lista: f.efeitos.opcoes.itens.map((x) => `${x.valor.hora} ${x.valor.apelido}`), marcas: f.efeitos.opcoes.itens.map((x) => x.valor.indicado) };
+  };
+
+  // funcao da fila: sem historico, com historico, empate, desligado
+  const ids = (bs) => bs.map((b) => b.apelido).join('');
+  assert.equal(ids(g.bvgFila(BS, {})), 'KBPR'); // ninguem tem registro: a ordem recebida
+  assert.equal(ids(g.bvgFila(BS, { 'id-K': t(20), 'id-P': t(18) })), 'BRPK'); // sem registro primeiro (B, R); depois o mais antigo (P) e o mais novo (K)
+  assert.equal(ids(g.bvgFila(BS, { 'id-K': t(20), 'id-B': t(20), 'id-P': t(20), 'id-R': t(20) })), 'KBPR'); // empate: a ordem recebida
+  assert.equal(ids(g.bvgFila(BS, { 'id-B': t(20), 'id-X': t(1) })), 'KPRB'); // registro de quem nao esta na lista nao muda nada
+  assert.equal(ids(g.bvgFila(BS, { 'id-K': 'lixo', 'id-B': t(2) })), 'KPRB'); // data ilegivel vale como sem registro
+  assert.equal(g.bvgFila(BS, null), BS); // desligado: a mesma lista, a ordem da Graces
+  assert.equal(ids(BS), 'KBPR'); // a funcao nao muda a lista recebida
+
+  // funcao da reparticao: em roda; quem nao tem o horario e pulado; o fixo (colado) ganha sem mexer na fila
+  const cand = (livres) => (hh) => BS.filter((b) => (livres[b.apelido] || HS).includes(hh)).map((b) => ({ b }));
+  const rep = (horas, livres, fila, fixo) => [...g.bvgRepartir(horas, cand(livres), fila, fixo).entries()].map(([hh, c]) => `${hh}${c.b.apelido}`).join(' ');
+  assert.equal(rep(HS, {}, BS), '09:00K 09:40B 10:20P 11:00R 11:40K');
+  assert.equal(rep(HS, { B: ['09:00', '11:00'] }, BS), '09:00K 09:40P 10:20R 11:00B 11:40K'); // B nao tem 09:40 nem 10:20: nao e sorteado nelas
+  assert.equal(rep(HS, {}, [BS[1], BS[3], BS[0], BS[2]]), '09:00B 09:40R 10:20K 11:00P 11:40B');
+  assert.equal(rep(HS, {}, null), '09:00K 09:40K 10:20K 11:00K 11:40K'); // desligado: o primeiro vence, como antes
+  assert.equal(rep(HS, {}, BS, (hh) => (hh === '09:40' ? { b: BS[3] } : null)), '09:00K 09:40R 10:20B 11:00P 11:40R'); // o fixo (R as 09:40) nao gasta a vez dele: o R ainda e o proximo da fila no fim
+  assert.equal(ids(BS), 'KBPR');
+
+  // listar_barbeiros: a ordem da lista e a da fila; "Qualquer barbeiro" continua por ultimo; Jayme e o de teste nunca entram
+  const lb = (rodizio, c = cfgR) => {
+    const p = g.bvGPlano(entrada({ operacao: 'listar_barbeiros', id_opcao_servico: '1' }), { opcoes: { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte', valor: SV }] }, pedido: {}, rodizio }, c);
+    return g.bvGPasso(p.st, [ok([...BS, { idProfissional: TESTE, apelido: 'ZZ TESTE' }, { idProfissional: 'id-J', apelido: 'Jayme' }])], { ...c, humanos: [{ id: 'id-J', nome: 'Jayme' }] }).final;
+  };
+  assert.deepEqual(lb({}).resultado.barbeiros.map((b) => b.nome), ['K', 'B', 'P', 'R', 'Qualquer barbeiro']);
+  assert.deepEqual(lb({ 'id-K': t(20), 'id-B': t(19) }).resultado.barbeiros.map((b) => b.nome), ['P', 'R', 'B', 'K', 'Qualquer barbeiro']);
+  assert.deepEqual(lb({ 'id-K': t(20) }, cfgOff).resultado.barbeiros.map((b) => b.nome), ['K', 'B', 'P', 'R', 'Qualquer barbeiro']); // desligado: ordem da Graces
+  assert.doesNotMatch(JSON.stringify(lb({ 'id-K': t(20) })), /Jayme|TESTE|indicado/);
+
+  // horarios_livres com qualquer barbeiro: repartidos em roda, na ordem da fila; a ordem da consulta (e do corte de 10) tambem
+  let x = busca({ qualquer: true }, { rodizio: {} });
+  assert.deepEqual([x.ordem.join(''), x.lista], ['KBPR', ['09:00 K', '09:40 B', '10:20 P', '11:00 R', '11:40 K']]);
+  assert.equal(x.f.resultado.quem_tem_horario, 'K a partir de 09:00; B a partir de 09:00; P a partir de 09:00; R a partir de 09:00');
+  x = busca({ qualquer: true }, { rodizio: { 'id-K': t(20), 'id-P': t(18) } }); // fila: B, R, P, K
+  assert.deepEqual([x.ordem.join(''), x.lista], ['BRPK', ['09:00 B', '09:40 R', '10:20 P', '11:00 K', '11:40 B']]);
+  assert.deepEqual(x.f.resultado.por_barbeiro.map((b) => b.barbeiro), ['B', 'R', 'P', 'K']);
+  assert.match(x.f.resultado.quem_tem_horario, /^B a partir de 09:00; R a partir/);
+  x = busca({ qualquer: true }, { rodizio: { 'id-K': t(20) } }, cfgR, { B: ['09:00', '11:00'] }); // B so tem duas horas
+  assert.deepEqual(x.lista, ['09:00 B', '09:40 P', '10:20 R', '11:00 K', '11:40 P']);
+  // com a chave desligada: como antes (a ordem da Graces e o primeiro vence), mesmo com historico
+  x = busca({ qualquer: true }, { rodizio: { 'id-K': t(20) } }, cfgOff);
+  assert.deepEqual([x.ordem.join(''), x.lista.every((l) => l.endsWith(' K'))], ['KBPR', true]);
+  x = busca({ qualquer: true }, {}, { ...cfg }); // config sem o bloco: tambem desligado
+  assert.deepEqual([x.ordem.join(''), x.lista.every((l) => l.endsWith(' K'))], ['KBPR', true]);
+  // valor que nao e objeto vale vazio
+  for (const lixo of ['x', 7, [1], null]) assert.equal(busca({ qualquer: true }, { rodizio: lixo }).lista[1], '09:40 B');
+  // horario colado: o barbeiro do agendamento que o cliente ja tem ganha o horario, sem gastar a vez de ninguem e sem marca
+  const colado = { idAgenda: 'a1', idServico: 's9', horaInicio: `${D}T09:40:00`, servico: 'barba', fim: '10:20', idProfissional: 'id-R' };
+  x = busca({ qualquer: true }, { rodizio: {}, pedido: ped({ futuros: [colado] }) });
+  assert.deepEqual(x.lista, ['09:00 R', '09:40 K', '10:20 R', '11:00 B', '11:40 P']); // 09:00 (termina onde a barba comeca) e 10:20 (comeca onde ela termina) sao do R; o resto segue a roda, sem o R ter gasto a vez
+  assert.deepEqual(x.marcas, [undefined, true, undefined, true, true]);
+
+  // marca `indicado`: so quando o sistema escolheu o barbeiro
+  x = busca({ qualquer: true }, { rodizio: {} });
+  assert.deepEqual(x.marcas, [true, true, true, true, true]);
+  x = busca({ qualquer: true }, { rodizio: {} }, cfgOff); // a marca nao depende da chave: o historico ja existe quando ela liga
+  assert.ok(x.marcas.every((m) => m === true));
+  x = busca({ id_opcao_barbeiro: '2' }, { rodizio: {} }); // o cliente pediu o B
+  assert.deepEqual([x.ordem.join(''), x.marcas.every((m) => m === undefined), x.lista[0]], ['B', true, '09:00 B']);
+  x = busca({}, { rodizio: {}, pedido: ped({ barbeiro: BS[2] }) }); // o da conversa
+  assert.deepEqual([x.ordem.join(''), x.marcas.every((m) => m === undefined)], ['P', true]);
+  const habitual = { ...ped({ barbeiros: undefined, servico: undefined }), ultimo: { servico: SV, barbeiro: BS[3] } }; // o habitual (ultimo atendimento)
+  x = busca({ id_opcao_servico: '1' }, { rodizio: {}, pedido: habitual, opcoes: { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte', valor: SV }] } });
+  assert.deepEqual([x.ordem.join(''), x.marcas.every((m) => m === undefined)], ['R', true]);
+  // habitual sem horario: o passo mostra os outros por indicacao (a marca vale, a fila tambem)
+  let ph = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: D, id_opcao_servico: '1' }), { opcoes: { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte', valor: SV }] }, pedido: habitual, rodizio: { 'id-K': t(20) } }, cfgR);
+  let sh = g.bvGPasso(ph.st, [ok({ minutos: 40, horarios: [] }), resp(500, {})], cfgR);
+  assert.equal(sh.reqs[0].path, '/servicos/profissionais');
+  sh = g.bvGPasso(sh.st, [ok(BS)], cfgR);
+  assert.equal(sh.reqs.filter((q) => q.path === '/agenda/horarios-livres').map((q) => q.qs.idProfissional.slice(3)).join(''), 'BPK'); // sem o habitual (R); K, o ultimo da fila, por ultimo
+  // remarcacao: no mesmo barbeiro nao ha marca; com qualquer barbeiro ha
+  const ag = { opcao_id: '1', idAgenda: 'ag1', horaInicio: `${D}T15:00:00`, idServico: 's1', servico: 'corte adulto', idProfissional: 'id-B', profissional: 'B' };
+  let pr = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: D, id_opcao_agendamento: '1' }), { opcoes: {}, pedido: ped({ agendamentos: [ag] }), rodizio: {} }, cfgR);
+  let fr = g.bvGPasso(pr.st, [ok({ minutos: 40, horarios: HS }), resp(500, {})], cfgR).final;
+  assert.ok(fr.efeitos.opcoes.itens.every((y) => y.valor.idProfissional === 'id-B' && y.valor.indicado === undefined));
+  pr = g.bvGPlano(entrada({ operacao: 'horarios_livres', data: D, id_opcao_agendamento: '1', qualquer: true }), { opcoes: {}, pedido: ped({ agendamentos: [ag] }), rodizio: { 'id-K': t(20) } }, cfgR);
+  assert.equal(pr.st.meta.etapa, 'ag_prof');
+  let sr = g.bvGPasso(pr.st, [ok(BS)], cfgR);
+  assert.equal(sr.reqs.filter((q) => q.path === '/agenda/horarios-livres').map((q) => q.qs.idProfissional.slice(3)).join(''), 'BPRK'); // a fila vale antes do corte de 10
+  fr = g.bvGPasso(sr.st, sr.reqs.map((q) => (q.path === '/agenda/horarios' ? resp(500, {}) : ok({ minutos: 40, horarios: HS }))), cfgR).final;
+  assert.ok(fr.efeitos.opcoes.itens.every((y) => y.valor.indicado === true));
+  assert.equal(fr.efeitos.opcoes.itens[0].valor.apelido, 'B');
+
+  // a marca chega a propostas.dados (agendar, remarcar) e nunca ao modelo nem ao cliente
+  x = busca({ qualquer: true }, { rodizio: {} });
+  const ctxF = (extra = {}) => ({ opcoes: x.f.efeitos.opcoes, pedido: { ...ped(), ...x.f.efeitos.pedido, ...extra } });
+  const ag1 = g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '2', turno_id: T1 }), ctxF(), cfgR);
+  const prop = semPacote(ag1).final.efeitos.proposta_nova;
+  assert.deepEqual([prop.acao, prop.dados.idProfissional, prop.dados.indicado], ['agendar', 'id-B', true]);
+  assert.equal(JSON.parse(g.bvGParams(base, semPacote(ag1).final.efeitos)[5]).indicado, true); // o que o Persistir grava em propostas.dados
+  const aoModelo = JSON.stringify([x.f.resultado, semPacote(ag1).final.resultado]);
+  assert.doesNotMatch(aoModelo, /indicado/);
+  assert.doesNotMatch(JSON.stringify(x.f.efeitos.opcoes.itens.map((y) => y.rotulo)), /indicado/); // o que o cliente le na lista
+  assert.ok(g.bvGParams(base, { opcoes: x.f.efeitos.opcoes })[1].includes('indicado')); // so a oferta guardada, que ninguem le, a leva
+  const re = g.bvGPlano(entrada({ operacao: 'reagendar', id_opcao_agendamento: '1', id_opcao_horario: '2', turno_id: T1 }), { opcoes: fr.efeitos.opcoes, pedido: { ...ped({ agendamentos: [ag] }), ...fr.efeitos.pedido } }, { ...cfgR, ambiente: 'producao', redirecionar: false, escritaLiberada: true }); // PROD liberada: a agenda real de todos (no TESTE a escrita so vai ao barbeiro de teste)
+  assert.deepEqual([re.final.efeitos.proposta_nova.acao, re.final.efeitos.proposta_nova.dados.indicado], ['reagendar', true]);
+  // pedido pelo cliente: o agendamento sai sem a marca
+  const xp = busca({ id_opcao_barbeiro: '2' }, { rodizio: {} });
+  const pp = semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', turno_id: T1 }), { opcoes: xp.f.efeitos.opcoes, pedido: { ...ped(), ...xp.f.efeitos.pedido } }, cfgR)).final.efeitos.proposta_nova;
+  assert.deepEqual(['indicado' in pp.dados, pp.dados.idProfissional], [false, 'id-B']);
+
+  // de ponta a ponta: depois de uma proposta executada e indicada para o primeiro da fila, a lista seguinte comeca pelo segundo
+  // (o Contexto devolve, por barbeiro, o instante da ultima proposta executada com item indicado: aqui, o que o agendamento gravou)
+  const contexto = (propostas) => Object.fromEntries(propostas.filter((q) => q.dados.indicado).map((q) => [q.dados.idProfissional, q.em]));
+  const gravadas = [];
+  for (const rodada of [1, 2, 3, 4, 5]) {
+    const lst = busca({ qualquer: true }, { rodizio: contexto(gravadas) });
+    assert.equal(lst.ordem[0], 'KBPR'[(rodada - 1) % 4], `rodada ${rodada}`); // K, B, P, R, K
+    assert.equal(lst.lista[0].split(' ')[1], 'KBPR'[(rodada - 1) % 4]);
+    const a = semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', turno_id: T1 }), { opcoes: lst.f.efeitos.opcoes, pedido: { ...ped(), ...lst.f.efeitos.pedido } }, cfgR)).final.efeitos.proposta_nova;
+    gravadas.push({ dados: a.dados, em: t(10 + rodada) }); // executada em t(10 + rodada)
+  }
+  // um barbeiro pedido pelo cliente nao gasta a vez dele
+  const pedidoB = semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1', turno_id: T1 }), { opcoes: xp.f.efeitos.opcoes, pedido: { ...ped(), ...xp.f.efeitos.pedido } }, cfgR)).final.efeitos.proposta_nova;
+  assert.equal(busca({ qualquer: true }, { rodizio: contexto([{ dados: pedidoB.dados, em: t(25) }]) }).ordem.join(''), 'KBPR');
+
+  // sequencia (dois servicos, mesmo barbeiro): candidatos na ordem da fila; o escolhido segue primeiro; so os do sistema levam a marca
+  const ofS = { tipo: 'servico', itens: [{ id: '1', rotulo: 'corte', valor: { idServico: 's1', nome: 'corte adulto', preco: 85, minutos: 40 } }, { id: '2', rotulo: 'barba', valor: { idServico: 's2', nome: 'barba', preco: 40, minutos: 30 } }] };
+  const seq = (o, rodizio, c = cfgR, ctxP = {}) => {
+    const p = g.bvGPlano(entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: D, ...o }), { opcoes: ofS, pedido: { idCliente: 'c1', ...ctxP }, rodizio }, c);
+    let y = g.bvGPasso(p.st, [ok(BS), ok(BS)], c);
+    const consultados = [];
+    while (y.reqs) {
+      consultados.push(...new Set(y.reqs.map((q) => q.qs.idProfissional.slice(3))));
+      y = g.bvGPasso(y.st, y.reqs.map((q) => (q.path === '/agenda/horarios' ? ok({ horarios: [] }) : q.qs.idServico === 's1' ? ok({ minutos: 40, horarios: ['09:00'] }) : ok({ minutos: 30, horarios: ['09:40'] }))), c);
+    }
+    return { f: y.final, consultados: consultados.join(''), lista: y.final.resultado.opcoes.map((q) => `${q.hora} ${q.barbeiro}`), itens: y.final.efeitos.opcoes.itens.map((q) => q.valor.itens) };
+  };
+  let sq = seq({}, { 'id-K': t(20) });
+  assert.deepEqual([sq.consultados, sq.lista], ['BPRK', ['09:00 B', '09:00 P', '09:00 R', '09:00 K']]);
+  assert.ok(sq.itens.every((its) => its.every((it) => it.indicado === true)));
+  sq = seq({}, { 'id-K': t(20) }, { ...cfgR, graces: { max_consultas_estagio: 9 } }); // teto de 3 barbeiros por estagio: o corte cai depois da fila
+  assert.equal(sq.consultados.slice(0, 3), 'BPR');
+  assert.deepEqual(seq({}, {}, cfgOff).lista.map((l) => l.split(' ')[1]).join(''), 'KBPR');
+  sq = seq({ id_opcao_barbeiro: '4' }, { 'id-R': t(20) }, cfgR, { barbeiros: ped().barbeiros }); // o cliente escolheu o R: segue primeiro, sem marca; os outros ficam na fila
+  assert.equal(sq.consultados[0], 'R');
+  assert.ok(sq.itens.filter((its) => its[0].idProfissional === 'id-R').every((its) => its.every((it) => it.indicado === undefined)));
+  // barbeiros diferentes por servico: o primeiro da fila que cabe
+  const dif = (rodizio, c = cfgR) => {
+    const st0 = { in: entrada({ operacao: 'horarios_livres', id_opcoes_servicos: ['1', '2'], data: D }), ctx: { pedido: {}, opcoes: {}, dia: {}, rodizio: c.rodizio.ligado ? rodizio : null /* o que bvGPlano poe no ctx */ }, meta: { op: 'horarios_livres', enc: true, etapa: 'dif_prof', servicos: [{ idServico: 's1', nome: 'corte adulto', preco: 85, opcao_id: '1' }, { idServico: 's2', nome: 'barba', preco: 40, opcao_id: '2' }], data: D } };
+    const a = g.bvGPasso(st0, [ok(BS), ok(BS)], c);
+    return g.bvGPasso(a.st, a.reqs.map((q) => (q.path === '/agenda/horarios' ? ok({ horarios: [] }) : q.qs.idServico === 's1' ? ok({ minutos: 40, horarios: ['09:00'] }) : ok({ minutos: 30, horarios: ['09:40'] }))), c);
+  };
+  assert.equal(dif({ 'id-K': t(20) }).final.efeitos.opcoes.itens[0].valor.itens.map((q) => q.apelido).join(''), 'BB');
+  assert.equal(dif({ 'id-K': t(20) }, cfgOff).final.efeitos.opcoes.itens[0].valor.itens.map((q) => q.apelido).join(''), 'KK');
+  assert.ok(dif({}).final.efeitos.opcoes.itens[0].valor.itens.every((q) => q.indicado === true));
+
+  // reoferta (horario tomado na revalidacao): a oferta refeita do mesmo barbeiro guarda a marca; a proposta nova sai com ela
+  for (const indicado of [true, false]) {
+    const dados = { idCliente: 'c1', idServico: 's1', servico: 'corte adulto', idProfissional: 'id-B', barbeiro: 'B', data: D, hora: '09:40', valor: 85, minutos: 40, ...(indicado ? { indicado } : {}) };
+    const PID = '33333333-3333-4333-8333-333333333333';
+    const f2 = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: PID, turno_id: T2 }), { opcoes: {}, pedido: { idCliente: 'c1' }, proposta: { id: PID, acao: 'agendar', dados } }, cfgR);
+    const rv = g.bvGPasso(f2.st, [ok({ minutos: 40, horarios: ['10:20', '11:00'] }), ok([]), resp(500, {})], cfgR).final; // 09:40 foi tomado
+    assert.equal(rv.resultado.code, 'horario_indisponivel');
+    assert.deepEqual(rv.efeitos.opcoes.itens.map((y) => y.valor.indicado), [indicado || undefined, indicado || undefined]);
+    const nova = semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '2', turno_id: T1 }), { opcoes: rv.efeitos.opcoes, pedido: { ...ped() } }, cfgR)).final.efeitos.proposta_nova;
+    assert.deepEqual([nova.dados.idProfissional, nova.dados.hora, nova.dados.indicado], ['id-B', '11:00', indicado || undefined]);
+  }
+
+  // clausula petrea: o Jayme e o barbeiro de teste nao entram na fila nem com historico (filtrados antes de ordenar)
+  const hum = [{ id: 'id-J', nome: 'Jayme' }];
+  const pj = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: D }), { opcoes: {}, pedido: ped({ barbeiros: [...ped().barbeiros, { opcao_id: '9', idProfissional: 'id-J', apelido: 'Jayme' }, { opcao_id: '8', idProfissional: TESTE, apelido: 'ZZ TESTE' }] }), rodizio: { 'id-K': t(20) } }, { ...cfgR, humanos: hum });
+  assert.deepEqual(pj.reqs.filter((q) => q.path === '/agenda/horarios-livres').map((q) => q.qs.idProfissional.slice(3)), ['B', 'P', 'R', 'K']);
+  console.log('graces.test.js fila da vez ok');
+}
