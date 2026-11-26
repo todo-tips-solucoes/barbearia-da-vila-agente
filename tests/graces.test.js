@@ -26,7 +26,8 @@ assert.equal(r.resultado.encontrado, false);
 assert.equal(r.efeitos.pedido.cliente_sem_cadastro, true);
 // 1 cliente: identificado ja no 1o estagio do pedido; o nome do cliente e so a 1a palavra do nomeCliente
 let st1 = g.bvGPasso(p.st, [ok([{ idCliente: 'c1', nomeCliente: 'Ana Paula', sobrenomeCliente: 'Souza' }])], cfg);
-assert.deepEqual(st1.reqs, [{ m: 'GET', path: '/agenda/historico', qs: { idCliente: 'c1', pageSize: 10 } }, { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: 'c1', proximos: true } }]);
+// 26/11/2026: o historico cobre as 5 visitas do habitual (10 linhas por visita; antes 10 no total, so a ultima visita)
+assert.deepEqual(st1.reqs, [{ m: 'GET', path: '/agenda/historico', qs: { idCliente: 'c1', pageSize: 50 } }, { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: 'c1', proximos: true } }]);
 // historico com falha ou vazio: segue identificado, sem sugestao
 r = g.bvGPasso(st1.st, [resp(500, { code: 'ERRO_INTERNO' })], cfg).final;
 assert.equal(r.efeitos.pedido.idCliente, 'c1');
@@ -927,7 +928,7 @@ console.log('graces.test.js nome normal ok');
   assert.deepEqual(st2.reqs.map((q) => q.qs.idProfissional), ['b2', 'b2']); // nao consulta o Black de novo
   r = g.bvGPasso(st2.st, [ok({ minutos: 40, horarios: ['09:20', '10:00'] }), resp(500, {})], cfg).final;
   assert.deepEqual(r.resultado.opcoes.map((o) => [o.hora, o.barbeiro]), [['09:20', 'Kiel'], ['10:00', 'Kiel']]);
-  assert.match(r.resultado.orientacao, /^Black, o barbeiro do último atendimento, não tem horário de manha nesse dia: diga isso ao cliente e que os horários da lista são de outros barbeiros/);
+  assert.match(r.resultado.orientacao, /^Black, o barbeiro de costume do cliente, não tem horário de manha nesse dia: diga isso ao cliente e que os horários da lista são de outros barbeiros/);
   assert.equal(r.efeitos.pedido.barbeiro, undefined); // nao vira escolha do cliente
   // 17/11: pediu o barbeiro de sempre as 9h; ele nao tem e outro barbeiro tem as 9h. O horario pedido NAO vai direto ao resumo:
   // a lista e de outro barbeiro, e o cliente tem de aceitar (antes saia "corte com outro barbeiro, posso confirmar?")
@@ -2359,4 +2360,66 @@ console.log('graces.test.js segunda analise ok');
   const pj = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: D }), { opcoes: {}, pedido: ped({ barbeiros: [...ped().barbeiros, { opcao_id: '9', idProfissional: 'id-J', apelido: 'Jayme' }, { opcao_id: '8', idProfissional: TESTE, apelido: 'ZZ TESTE' }] }), rodizio: { 'id-K': t(20) } }, { ...cfgR, humanos: hum });
   assert.deepEqual(pj.reqs.filter((q) => q.path === '/agenda/horarios-livres').map((q) => q.qs.idProfissional.slice(3)), ['B', 'P', 'R', 'K']);
   console.log('graces.test.js fila da vez ok');
+}
+
+// Barbeiro habitual pelos ultimos atendimentos (owner, 2026-11-26): vence quem mais atendeu nas ultimas N visitas; empate, o mais recente.
+{
+  const S = '046519b1-e111-44b4-8779-3e64366f9d8f', S2 = '22222222-2222-4222-8222-222222222222', JAY = 'b623cd84-6068-4a57-9ce6-2f7d9a37a11e';
+  const cj = { ...cfg, humanos: [{ id: JAY, nome: 'Jayme' }] };
+  const ped = { idCliente: 'c1', cliente_sem_cadastro: false, cliente_nome: 'Ana', identificado: true };
+  const NOMES = { P: 'Pedro', B: 'Black', K: 'Kiel', R: 'Rodrigo', J: 'jayme ', T: 'ZZ TESTE' }, IDS = { P: 'bp', B: 'bb', K: 'bk', R: 'br', J: JAY, T: TESTE };
+  // visita: dia (idComanda propria) e uma letra de barbeiro por servico; as visitas vao da mais recente para a mais antiga
+  const vis = (dia, ...bs) => bs.map((b) => ({ idServico: S, descricaoServico: 'corte adulto', idComanda: `k${dia}`, dataAbertura: `2026-11-${String(dia).padStart(2, '0')}T14:00:00`, idProfissional: IDS[b], profissional: NOMES[b] }));
+  const catalogo = ok([{ idServico: S, descricaoAgenda: 'corte adulto', valorPadrao: 85, tempoPadrao: 40, ativo: true }]);
+  const quem = (letras) => ok(letras.split('').map((b) => ({ idProfissional: IDS[b], apelido: NOMES[b].trim() })));
+  // le o historico e, se houver, o catalogo (faz o servico: `faz`); devolve o `ultimo` do pedido
+  const rodar = (linhas, faz = 'PBKR', c = cj) => {
+    const h = g.bvGPasso({ in: entrada({ operacao: 'identificar_cliente' }), ctx: { pedido: {}, opcoes: {} }, meta: { op: 'identificar_cliente', etapa: 'hist', ped } }, [ok(linhas), ok([])], c);
+    return (h.reqs ? g.bvGPasso(h.st, [catalogo, quem(faz)], c).final : h.final).efeitos.pedido.ultimo;
+  };
+  const barb = (u) => (u.barbeiro ? u.barbeiro.apelido : null);
+  const hist = (...v) => v.flat();
+  // o exemplo do dono: quatro com o Pedro e a mais recente com o Black -> Pedro
+  assert.equal(barb(rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'P'), vis(5, 'P'), vis(1, 'P')))), 'Pedro');
+  // 2, 2, 1: empate entre Black e Pedro, vence quem atendeu mais recentemente
+  assert.equal(barb(rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'B'), vis(5, 'P'), vis(1, 'K')))), 'Black');
+  assert.equal(barb(rodar(hist(vis(20, 'P'), vis(15, 'B'), vis(10, 'B'), vis(5, 'P'), vis(1, 'K')))), 'Pedro');
+  // so as 5 mais recentes contam: a sexta (Kiel, 3 vezes antigas) nao entra
+  assert.equal(barb(rodar(hist(vis(20, 'P'), vis(19, 'B'), vis(18, 'B'), vis(17, 'P'), vis(16, 'P'), vis(3, 'K'), vis(2, 'K'), vis(1, 'K')))), 'Pedro');
+  // menos de 5 visitas: a maioria do que houver; uma so: o barbeiro dela, como antes
+  assert.equal(barb(rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'P')))), 'Pedro');
+  assert.deepEqual(rodar(vis(20, 'K')), { servico: { idServico: S, nome: 'corte adulto', preco: 85, minutos: 40, opcao_id: 'ult' }, barbeiro: { idProfissional: 'bk', apelido: 'Kiel' } }); // formato de sempre
+  // dois servicos do mesmo barbeiro na mesma visita contam uma vez (Pedro 1 visita com 2 linhas, Black 2 visitas)
+  assert.equal(barb(rodar(hist(vis(20, 'P', 'P'), vis(15, 'B'), vis(10, 'B')), 'PB')), 'Black');
+  // visita com dois barbeiros conta para os dois (e o empate vai para o primeiro da visita mais recente)
+  assert.equal(barb(rodar(hist(vis(20, 'B', 'P'), vis(15, 'P'), vis(10, 'K')), 'PB')), 'Pedro');
+  // o vencedor nao faz o servico (ou nao esta na lista dele) -> o seguinte do ranking
+  assert.equal(barb(rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'P')), 'BK')), 'Black');
+  // o vencedor e o de teste -> o seguinte (cliente comum nunca recebe o de teste)
+  assert.equal(barb(rodar(hist(vis(20, 'B'), vis(15, 'T'), vis(10, 'T')), 'TBP')), 'Black');
+  // ninguem do ranking serve -> sem habitual, o servico segue (o agente pergunta o barbeiro)
+  assert.deepEqual(rodar(hist(vis(20, 'B'), vis(15, 'P')), 'KR').barbeiro, null);
+  assert.equal(rodar(hist(vis(20, 'B'), vis(15, 'P')), 'KR').servico.nome, 'corte adulto');
+  // clausula petrea: a ultima visita com o Jayme -> equipe, mesmo com outro barbeiro nas demais (como hoje)
+  assert.deepEqual(rodar(hist(vis(20, 'J'), vis(15, 'P'), vis(10, 'P'), vis(5, 'P'))), { humano: 'Jayme' });
+  // o Jayme e o mais frequente e a ultima foi com outro -> equipe (so aumenta as transferencias)
+  assert.deepEqual(rodar(hist(vis(20, 'P'), vis(15, 'J'), vis(10, 'J'), vis(5, 'J'), vis(1, 'P'))), { humano: 'Jayme' });
+  // o Jayme numa visita antiga, nem o mais frequente nem o ultimo -> nao transfere e nunca e proposto
+  assert.equal(barb(rodar(hist(vis(20, 'P'), vis(15, 'P'), vis(10, 'J'), vis(5, 'B'), vis(1, 'K')), 'PJB')), 'Pedro');
+  assert.equal(barb(rodar(hist(vis(20, 'P'), vis(15, 'P'), vis(10, 'B'), vis(5, 'J'), vis(1, 'K')), 'JBK')), 'Black'); // o Pedro nao faz: segue o ranking, sem o Jayme no meio
+  // visitas: 1 (e valor invalido -> 5) reproduz o de hoje: so a ultima visita decide
+  const c1 = { ...cj, habitual: { visitas: 1 } };
+  assert.equal(barb(rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'P'), vis(5, 'P')), 'PB', c1)), 'Black');
+  assert.deepEqual(rodar(hist(vis(20, 'P'), vis(15, 'J'), vis(10, 'J')), 'PB', c1).barbeiro.apelido, 'Pedro'); // o Jayme frequente, mas a ultima foi com outro: com 1 visita nao transfere
+  for (const lixo of [0, 21, 'x', null, -3]) assert.equal(barb(rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'P')), 'PB', { ...cj, habitual: { visitas: lixo } })), 'Pedro');
+  // pageSize: 10 por visita, ate 200
+  const pg = (c) => g.bvGPasso(g.bvGPlano(entrada({ operacao: 'identificar_cliente' }), null, c).st, [ok([{ idCliente: 'c1', nomeCliente: 'Ana' }])], c).reqs[0].qs.pageSize;
+  assert.deepEqual([pg(cj), pg(c1), pg({ ...cj, habitual: { visitas: 20 } }), pg({ ...cj, habitual: { visitas: 99 } })], [50, 10, 200, 50]);
+  // linhas sem idProfissional ou com servico invalido sao ignoradas, sem quebrar
+  const lixo = [{ idServico: 'x', idProfissional: 'bb', profissional: 'Black', dataAbertura: '2026-11-25T10:00:00' }, { descricaoServico: 'sem id', dataAbertura: '2026-11-24T10:00:00' }, null, 7];
+  assert.equal(barb(rodar(hist(lixo, vis(20, 'P'), [{ ...vis(15, 'B')[0], idProfissional: undefined }], vis(10, 'P')), 'PB')), 'Pedro');
+  assert.equal(rodar(lixo), null);
+  // o barbeiro habitual nao anda a fila: nenhuma marca no ultimo
+  assert.ok(!('indicado' in rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'P')), 'PB').barbeiro));
+  console.log('graces.test.js habitual ok');
 }

@@ -79,7 +79,8 @@ assert.ok(/não informado/.test(p)); // sem loja na config nao inventa endereco
   const ident = bvClienteDoResultado({ ok: true, encontrado: true, nome: 'Paulo', ultimo: { servico: 'corte adulto', barbeiro: 'Pedro Henrique' } });
   const t1 = ctx(ident);
   assert.match(t1, /Nome do cliente \(dado\): Paulo\. Cliente já identificado/);
-  assert.match(t1, /Último atendimento do cliente \(dado\): corte adulto com Pedro Henrique/);
+  assert.match(t1, /Último atendimento do cliente \(dado\): corte adulto; o barbeiro de costume dele \(o que mais o atendeu nos últimos atendimentos\) é Pedro Henrique/); // 26/11: o barbeiro vem da contagem, nao so do ultimo
+  assert.match(t1, /proponha, em afirmação, repetir corte adulto com Pedro Henrique /);
   assert.match(t1, /proponha, em afirmação, repetir .* e faça uma única pergunta, o dia e o horário que ele prefere/); // etapa 4: proposta e pergunta nao sao duas perguntas
   assert.match(t1, /sem id_opcao_servico e sem id_opcao_barbeiro/);
   // o mesmo cliente lido do pedido gravado (turnos seguintes) da o mesmo contexto
