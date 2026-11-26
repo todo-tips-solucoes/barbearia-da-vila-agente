@@ -344,6 +344,37 @@ const bvgNoDia = (ped, data, idServico) => (Array.isArray(ped.futuros) ? ped.fut
 // Agendamento de `ancs` em que o inicio `hh` encosta: comeca quando ele termina, ou termina quando ele comeca. So marca horario que a
 // grade ja ofereceu, nunca cria um (futuros desatualizados nao geram oferta errada).
 const bvgColado = (ancs, hh, minutos) => ancs.find((f) => f.fim === hh || bvgSomaMin(hh, minutos) === f.hora) || null;
+// Fila da vez (owner, 2026-11-26): a Graces devolve os barbeiros sempre na mesma ordem e o primeiro levava quase tudo (simulacao com a
+// agenda real: 54 de 55 horarios do Kiel; PROD de 25 e 26/11: 83% das ofertas sem barbeiro escolhido). Quando QUEM indica e o sistema,
+// vem primeiro quem esta ha mais tempo sem receber um agendamento indicado pelo agente; quem recebe vai para o fim. `rod` =
+// ctx.rodizio ({ idProfissional: instante ISO da ultima proposta executada e indicada }, do Contexto); null = desligado (ordem da
+// Graces). A lista chega ja filtrada (bvFiltrarBarbeiros): o Jayme e o de teste nao entram aqui. Sem registro vem antes, na ordem
+// recebida; empate tambem (ordenacao estavel). Sem estado: duas conversas ao mesmo tempo nao disputam nada.
+const bvgId = (b) => String((b && (b.idProfissional || b.id)) || '');
+function bvgFila(bs, rod) {
+  if (!rod || typeof rod !== 'object') return bs;
+  const t = (b) => { const v = Date.parse(rod[bvgId(b)]); return Number.isNaN(v) ? -1 : v; };
+  return bs.map((b, k) => [t(b), k, b]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
+}
+// Barbeiros de uma lista, sempre nesta ordem: o filtro (Jayme, teste) ANTES da fila. `chave` ('id' ou 'idProfissional') = a lista e a
+// resposta crua de /servicos/profissionais e vira { [chave], apelido, nome }; sem ela, a lista ja vem montada.
+const bvgBarbeiros = (lista, cfg, rod, chave) => bvgFila(bvFiltrarBarbeiros(chave ? (Array.isArray(lista) ? lista : []).map((b) => ({ [chave]: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })) : lista, cfg.testeId, cfg.testeLiberado, cfg.humanos), rod);
+// Um barbeiro por horario, em roda: `cand(hh)` = candidatos ({ b, ... }) do horario, `fila` = barbeiros na ordem da fila (null =
+// desligado: o primeiro candidato vence, como antes). Cada hora vai ao candidato mais a frente na fila LOCAL, que passa para o fim
+// dela. `fixo(hh)` (o barbeiro do agendamento colado) ganha o horario e nao mexe na fila local. Devolve Map hora -> candidato.
+function bvgRepartir(horas, cand, fila, fixo = () => null) {
+  const q = fila ? fila.map(bvgId) : null, out = new Map();
+  horas.forEach((hh) => {
+    const cs = cand(hh), f = fixo(hh);
+    if (f) return out.set(hh, f);
+    if (!cs.length) return null;
+    if (!q) return out.set(hh, cs[0]);
+    const c = cs.reduce((m, x) => (q.indexOf(bvgId(x.b)) < q.indexOf(bvgId(m.b)) ? x : m));
+    q.push(q.splice(q.indexOf(bvgId(c.b)), 1)[0]);
+    return out.set(hh, c);
+  });
+  return out;
+}
 // Texto final da escrita (revisao de 17/11): o modelo montava a confirmacao de memoria e trocava o dia ou o horario.
 function bvgFeito(p) {
   const r = String((p.dados || {}).resumo || '').replace(/^(Trocar serviço: |Remarcar |Cancelar )/, '');
@@ -420,8 +451,10 @@ const bvgEncaminhar = (motivo, operacao, cfg) => bvgFim(
   { ok: false, code: 'encaminhar_equipe', motivo, orientacao: 'a conversa foi transferida para a equipe, que continua por aqui: responda com o texto de encaminhamento (texto), sem dar nomes, detalhes nem outro contato', texto: cfg.textos && cfg.textos.encaminhar_equipe },
   { pedido: { handoff: true }, handoff: { queueId: (cfg.handoff && cfg.handoff.setor_id) || 78 } /* setor do config (TESTE 78, PROD 106) */, falha: { motivo: `encaminhar_equipe|${motivo}`, operacao, code: 'encaminhar_equipe', status: 0, trace: null } });
 
+// ctx.rodizio: o do Contexto quando a chave esta ligada (valor que nao e objeto vale vazio: todos sem registro); null = desligado.
+const bvgRodizio = (ctx0, cfg) => (cfg.rodizio && cfg.rodizio.ligado ? (ctx0 && ctx0.rodizio && typeof ctx0.rodizio === 'object' && !Array.isArray(ctx0.rodizio) ? ctx0.rodizio : {}) : null);
 function bvGPlano(i, ctx0, cfg) {
-  const ctx = { pedido: (ctx0 && ctx0.pedido) || {}, opcoes: (ctx0 && ctx0.opcoes) || {}, proposta: ctx0 && ctx0.proposta, info: ctx0 && ctx0.info, dia: (ctx0 && ctx0.dia) || {} };
+  const ctx = { pedido: (ctx0 && ctx0.pedido) || {}, opcoes: (ctx0 && ctx0.opcoes) || {}, proposta: ctx0 && ctx0.proposta, info: ctx0 && ctx0.info, dia: (ctx0 && ctx0.dia) || {}, rodizio: bvgRodizio(ctx0, cfg) };
   const st = { in: i, ctx, meta: { op: i.operacao } };
   const chamar = (reqs, meta = {}) => ({ reqs, st: { ...st, meta: { ...st.meta, ...meta } } });
   const idCliente = ctx.pedido.idCliente;
@@ -572,13 +605,13 @@ function bvGPlano(i, ctx0, cfg) {
       // "Qualquer barbeiro" sem a lista de barbeiros deste servico (ex.: servico do ultimo atendimento): busca os barbeiros neste passo
       const listados = (ctx.pedido.barbeiros || []).length && ctx.pedido.servico && ctx.pedido.servico.idServico === s.idServico;
       if (i.qualquer && !i.id_opcao_barbeiro && !listados) return chamar([{ m: 'GET', path: '/servicos/profissionais', qs: { idServico: s.idServico } }], { etapa: 'ag_prof', servico: s, qualquer: true, data: i.data, periodo: i.periodo, hora: i.hora, aPartir: i.a_partir });
-      // O barbeiro do ultimo atendimento so vale para o servico dele
+      // O barbeiro habitual (de costume) so vale para o servico do ultimo atendimento
       const padrao = ctx.pedido.barbeiro || bAg || (ult.barbeiro && ult.servico && ult.servico.idServico === s.idServico ? ult.barbeiro : null);
       if (!i.qualquer && !i.id_opcao_barbeiro && !padrao) return bvgFim(bvgRecusa('barbeiro_nao_escolhido', 'pergunte com qual barbeiro (listar_barbeiros) ou use qualquer'));
-      const bs = bvFiltrarBarbeiros(i.qualquer ? (ctx.pedido.barbeiros || []) : [bvgBarbeiroDe(i, ctx, padrao)].filter(Boolean), cfg.testeId, cfg.testeLiberado, cfg.humanos);
+      const bs = bvgBarbeiros(i.qualquer ? (ctx.pedido.barbeiros || []) : [bvgBarbeiroDe(i, ctx, padrao)].filter(Boolean), cfg, ctx.rodizio); // a fila vale antes do corte de 10
       if (!bs.length) return bvgFim(i.qualquer ? bvgRecusa('barbeiros_nao_listados', 'chame listar_barbeiros antes') : bvgOpcaoInvalida());
       const reqs = bvgReqsLivre(bs.slice(0, 10).map((b) => ({ idServico: s.idServico, idProfissional: b.idProfissional, data: i.data })));
-      // habitual: o barbeiro veio do ultimo atendimento, nao de uma escolha nesta conversa (sem horario com ele, o passo mostra os outros)
+      // habitual: o barbeiro veio do historico (os mais frequentes), nao de uma escolha nesta conversa (sem horario com ele, o passo mostra os outros)
       const habitual = !i.qualquer && !i.id_opcao_barbeiro && !ctx.pedido.barbeiro && !!padrao;
       return chamar(reqs, { servico: s, barbeiros: bs.slice(0, 10), qualquer: !!i.qualquer, data: i.data, periodo: i.periodo, hora: i.hora, aPartir: i.a_partir, habitual, agId: ag ? ag.idAgenda : null, doAg: !!bAg && padrao === bAg });
     }
@@ -683,7 +716,7 @@ function bvgFase1(i, ctx, cfg, chamar) {
     if (i.substitui_id_opcao_agendamento || sq.itens.some((x) => x.idProfissional === cfg.testeId) !== soTeste) return bvgFim(bvgOpcaoInvalida());
     if (soTeste && sq.itens.some((x) => x.idProfissional !== cfg.testeId)) return bvgFim(fora);
     if (sq.itens.some((x) => bvSegundaVez(x.servico))) return bvgFim(bvgNaoOferecido());
-    const itens = sq.itens.map((x, k) => ({ ordem: k + 1, idServico: x.idServico, servico: x.servico, idProfissional: x.idProfissional, barbeiro: x.apelido, data: sq.data, hora: x.hora, minutos: x.minutos, valor: x.valor }));
+    const itens = sq.itens.map((x, k) => ({ ordem: k + 1, idServico: x.idServico, servico: x.servico, idProfissional: x.idProfissional, barbeiro: x.apelido, data: sq.data, hora: x.hora, minutos: x.minutos, valor: x.valor, ...(x.indicado ? { indicado: true } : {}) }));
     return bvgProporPacote(chamar, 'agendar_conjunto', { idCliente: ctx.pedido.idCliente, itens }, bvgJaTem(ctx.pedido, itens));
   }
   if (i.operacao === 'cancelar' && i.id_opcoes_agendamentos) {
@@ -716,7 +749,8 @@ function bvgFase1(i, ctx, cfg, chamar) {
     if (!h || (i.substitui_id_opcao_agendamento && !antigo)) return bvgFim(bvgOpcaoInvalida());
     const soUm = antigo ? null : bvgSoUmDosDois(i, ctx, { nome: h.servico, idServico: h.idServico }, h.data);
     if (soUm) return soUm;
-    const dados = { idCliente: ctx.pedido.idCliente, idServico: h.idServico, servico: h.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, valor: h.preco, minutos: h.minutos };
+    // indicado: o barbeiro foi posto pelo sistema (fila da vez); vai a propostas.dados e dali ao Contexto (rodizio), nunca ao cliente nem ao modelo
+    const dados = { idCliente: ctx.pedido.idCliente, idServico: h.idServico, servico: h.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, valor: h.preco, minutos: h.minutos, ...(h.indicado ? { indicado: true } : {}) };
     // Substituir pelo MESMO servico nao troca servico (PROD, 23/11: "incluir cabelo" virou "Trocar servico: BARBA EXPRESS" com outro barbeiro)
     if (antigo && h.idServico === antigo.idServico) {
       return bvgFim(bvgRecusa('mesmo_servico', 'o horário escolhido é do mesmo serviço do agendamento: isso não troca serviço e nada foi proposto. Se o cliente quer outro serviço (a mais ou no lugar), a busca foi do serviço errado: chame horarios_livres com o id_opcao_servico do serviço novo; se ele só quer mudar o horário, chame reagendar com id_opcao_agendamento e este id_opcao_horario'),
@@ -729,7 +763,7 @@ function bvgFase1(i, ctx, cfg, chamar) {
   if (i.operacao === 'reagendar') {
     if (!h) return bvgFim(bvgOpcaoInvalida());
     if (h.idServico !== ag.idServico) return bvgFim(bvgRecusa('servico_diferente', 'os horários da lista são de outro serviço, não do agendamento: para remarcar, chame horarios_livres só com id_opcao_agendamento (sem id_opcao_servico); se é um serviço a mais, chame agendar com o horário, sem substitui_id_opcao_agendamento'));
-    const dados = { ...agAnt, idServico: ag.idServico, servico: ag.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, minutos: h.minutos };
+    const dados = { ...agAnt, idServico: ag.idServico, servico: ag.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, minutos: h.minutos, ...(h.indicado ? { indicado: true } : {}) };
     const resumo = `Remarcar ${ag.servico} de ${bvgDia(ag.horaInicio)} ${ag.horaInicio.slice(11, 16)} para ${bvgDiaSem(h.data)} às ${h.hora} com ${h.apelido}`;
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo }, { proposta_nova: { acao: 'reagendar', dados: { ...dados, resumo }, resumo } });
   }
@@ -862,6 +896,38 @@ const bvgCadastrado = (cad, idCliente) => bvgFim(
   { ok: true, cadastrado: true, nome: cad.ns.nome, orientacao: 'cadastro feito: agradeça em poucas palavras e, nesta mesma resposta, chame agendar com o horário que ele já tinha escolhido e mande o resumo (se o cadastro foi para transferir, chame transferir_atendimento; sem horário escolhido, continue de onde o agendamento parou); não pergunte como pode ajudar' },
   { pedido: { idCliente, cliente_sem_cadastro: false, cliente_nome: cad.ns.nome, identificado: true }, ...(cad.como ? { contato: { como_conheceu: cad.como } } : {}) });
 
+// Barbeiro habitual (owner, 2026-11-26): vale quem mais atendeu nas ultimas `n` visitas (graces.habitual.visitas), nao so o da ultima.
+// Visita = mesma comanda ou mesmo dia (PROD 23/11: uma linha do historico por servico). `itens` vem da mais recente para a mais antiga.
+const bvgDaVisita = (itens, h) => {
+  const dia = (x) => String(x.dataAbertura || '').slice(0, 10);
+  return itens.filter((x) => x === h || (h.idComanda && x.idComanda === h.idComanda) || (dia(h) && dia(x) === dia(h)));
+};
+function bvgVisitas(itens) {
+  const v = [];
+  for (let r = itens; r.length;) { const vis = new Set(bvgDaVisita(r, r[0])); v.push([...vis]); r = r.filter((x) => !vis.has(x)); }
+  return v;
+}
+// Criterio unico do que conta como atendimento do barbeiro (hoje qualquer servico; dono ainda confirma: so cortes = trocar aqui).
+// Devolve a chave do barbeiro: o da equipe humana e visto tambem pelo nome (linha sem id), numa chave so; os demais, so pelo id.
+const bvgConta = (x, humDe) => { const h = humDe(x); return h ? `h:${h.nome}` : x.idProfissional || null; };
+const bvgVisitasN = (cfg) => { const v = parseInt(cfg && cfg.habitual && cfg.habitual.visitas, 10); return v >= 1 && v <= 20 ? v : 5; };
+// Ranking: mais visitas primeiro (cada visita conta uma vez por barbeiro, mesmo com dois servicos dele); empate, o que atendeu mais
+// recentemente. Considera as `n` visitas mais recentes com barbeiro conhecido; a ordem de chegada das linhas decide o resto.
+// `humano` = o da equipe humana empatado no topo (o desempate pelo recente nao o esconde: na duvida, transfere).
+function bvgHabituais(visitas, n, humDe) {
+  const m = new Map();
+  visitas.filter((v) => v.some((x) => bvgConta(x, humDe))).slice(0, n).forEach((v, k) => v.forEach((x) => {
+    const c = bvgConta(x, humDe);
+    if (!c) return;
+    const e = m.get(c) || { idProfissional: x.idProfissional, apelido: String(x.profissional || '').trim(), humano: humDe(x), n: 0, k, v: -1 };
+    if (e.v !== k) e.n++;
+    e.v = k;
+    m.set(c, e);
+  }));
+  const rank = [...m.values()].sort((a, b) => b.n - a.n || a.k - b.k);
+  return { rank, humano: (rank.filter((e) => e.n === (rank[0] || {}).n).find((e) => e.humano) || {}).humano || null };
+}
+
 // Ultimo atendimento (owner, 2026-11-14): agendar "pelo ultimo corte dele". Estagio hist: GET /agenda/historico (mais recente
 // primeiro); estagio ult: o servico tem de seguir no catalogo (ativo, sem "2a vez") e o barbeiro, fazer o servico e nao ser o de
 // teste. Qualquer falha ou ausencia so tira a sugestao: o cliente continua identificado.
@@ -879,10 +945,11 @@ function bvgPassoUltimo(st, resps, cfg) {
     const h = itens[0];
     if (!h) return so(null);
     // A ultima visita pode ter varios servicos (uma linha do historico por servico). PROD 23/11: cliente que fez corte + duas
-    // depilacoes perguntou so por um horario e recebeu a proposta de DEPILACAO DE ORELHA, a primeira linha. Visita = mesma comanda ou mesmo dia.
-    const dia = (x) => String(x.dataAbertura || '').slice(0, 10);
-    const visita = itens.filter((x) => x === h || (h.idComanda && x.idComanda === h.idComanda) || (dia(h) && dia(x) === dia(h)));
-    const hum = visita.map((x) => bvBarbeiroHumano({ idProfissional: x.idProfissional, apelido: String(x.profissional || '') }, cfg.humanos)).find(Boolean);
+    // depilacoes perguntou so por um horario e recebeu a proposta de DEPILACAO DE ORELHA, a primeira linha.
+    const humDe = (x) => bvBarbeiroHumano({ idProfissional: x.idProfissional, apelido: String(x.profissional || '') }, cfg.humanos);
+    const visitas = bvgVisitas(itens), visita = visitas[0], { rank, humano } = bvgHabituais(visitas, bvgVisitasN(cfg), humDe);
+    // equipe humana: a ultima visita (como sempre) ou o mais frequente das ultimas (empate no topo inclui); a regra nova so aumenta as transferencias
+    const hum = visita.map(humDe).find(Boolean) || humano;
     if (hum) return bvgFim({ ok: true, encontrado: true, nome: ped.cliente_nome, futuros: aoModelo, ultimo: { humano: hum.nome } }, { pedido: { ...ped, ultimo: { humano: hum.nome }, futuros: fut } });
     // mais de um servico na ultima visita: nao ha "o servico de sempre" para repetir sozinho; o agente pergunta (so os nomes vao adiante)
     const distintos = visita.filter((x, k, a) => a.findIndex((y) => y.idServico === x.idServico) === k);
@@ -892,13 +959,14 @@ function bvgPassoUltimo(st, resps, cfg) {
       const u = nomes.length > 1 && !nomes.some(bvSegundaVez) ? { servicos: nomes } : null;
       return bvgFim({ ok: true, encontrado: true, nome: ped.cliente_nome, futuros: aoModelo, ...(u ? { ultimo: u } : {}) }, { pedido: { ...ped, ultimo: u, futuros: fut } });
     }
-    return { reqs: [{ m: 'GET', path: '/agenda/servicos', qs: {} }, { m: 'GET', path: '/servicos/profissionais', qs: { idServico: h.idServico } }], st: { ...st, meta: { ...meta, etapa: 'ult', h, fut } } };
+    return { reqs: [{ m: 'GET', path: '/agenda/servicos', qs: {} }, { m: 'GET', path: '/servicos/profissionais', qs: { idServico: h.idServico } }], st: { ...st, meta: { ...meta, etapa: 'ult', h, rank: rank.filter((e) => !e.humano).map((e) => e.idProfissional), fut } } };
   }
   const s = ok(resps[0]) ? bvFiltrarServicos(resps[0].body.filter((x) => x && x.ativo !== false).map((x) => ({ ...x, nome: String(x.descricaoAgenda || '') })))
     .find((x) => x.idServico === meta.h.idServico) : null;
   if (!s) return so(null);
-  const b = ok(resps[1]) ? bvFiltrarBarbeiros(resps[1].body.map((x) => ({ idProfissional: x.idProfissional, apelido: String(x.apelido || '').trim(), nome: x.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos)
-    .find((x) => x.idProfissional === meta.h.idProfissional) : null;
+  // o primeiro do ranking que faz o servico e passa no filtro (Jayme e teste saem); ninguem serve = sem habitual
+  const bs = ok(resps[1]) ? bvgBarbeiros(resps[1].body, cfg, null, 'idProfissional') : [];
+  const b = meta.rank.map((id) => bs.find((x) => x.idProfissional === id)).find(Boolean);
   return so({ servico: { idServico: s.idServico, nome: s.nome, preco: s.valorPadrao, minutos: s.tempoPadrao, opcao_id: 'ult' }, barbeiro: b ? { idProfissional: b.idProfissional, apelido: b.apelido } : null });
 }
 
@@ -930,7 +998,7 @@ function bvgPassoUm(st, resps0, cfg) {
       if (cs.length === 1) {
         const ped = { idCliente: cs[0].idCliente, cliente_sem_cadastro: false, cliente_nome: cs[0].primeiroNome, identificado: true };
         if (meta.sem_historico) return bvgFim({ ok: true, encontrado: true, nome: ped.cliente_nome }, { pedido: ped });
-        return { reqs: [{ m: 'GET', path: '/agenda/historico', qs: { idCliente: ped.idCliente, pageSize: 10 } }, { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: ped.idCliente, proximos: true } }], st: { ...st, meta: { ...meta, etapa: 'hist', ped } } };
+        return { reqs: [{ m: 'GET', path: '/agenda/historico', qs: { idCliente: ped.idCliente, pageSize: Math.min(200, bvgVisitasN(cfg) * 10) } }, { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: ped.idCliente, proximos: true } }], st: { ...st, meta: { ...meta, etapa: 'hist', ped } } };
       }
       const of = bvMontarOferta('cliente', cs.map((c) => ({ rotulo: c.nome, valor: c })), cfg);
       return bvgFim({ ok: true, varios: true, opcoes: of.itens.map((x) => ({ id: x.id, nome: x.rotulo })), orientacao: 'mais de um cadastro neste telefone; pergunte quem é e use escolher_cliente' },
@@ -981,7 +1049,7 @@ function bvgPassoUm(st, resps0, cfg) {
       return bvgFim({ ok: true, total: ss.length, servicos: of.itens.map((x) => ({ id: x.id, nome: x.valor.nome, preco: x.valor.preco })), orientacao }, { ...(ss.length ? { opcoes: of } : {}), pedido: { servicos_vistos: ids.lista, ...(meta.dois ? { dois_pacote: null } : {}), ...(comb.length ? { dois_turno: st.in.turno_id } : {}) } });
     }
     case 'listar_barbeiros': {
-      const bs = bvFiltrarBarbeiros(lista.map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos);
+      const bs = bvgBarbeiros(lista, cfg, ctx.rodizio, 'id');
       // "Qualquer barbeiro" e uma opcao da lista (17/11: quem nao conhecia nenhum barbeiro recebia a lista de novo). So com 2 ou mais.
       const brutos = bs.map((b) => ({ rotulo: b.apelido, valor: { idProfissional: b.id, apelido: b.apelido } }));
       const of = bvMontarOferta('barbeiro', bs.length > 1 ? [...brutos.slice(0, cfg.lista.max_itens - 1), { rotulo: 'Qualquer barbeiro', valor: { qualquer: true } }] : brutos, cfg);
@@ -994,27 +1062,30 @@ function bvgPassoUm(st, resps0, cfg) {
     }
     case 'horarios_livres': {
       if (meta.etapa === 'ag_prof') {
-        const bs = bvFiltrarBarbeiros(lista.map((b) => ({ idProfissional: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos)
+        const bs = bvgBarbeiros(lista, cfg, ctx.rodizio, 'idProfissional')
           .filter((b) => b.idProfissional !== meta.semId).slice(0, 10); // semId: o barbeiro habitual, ja consultado e sem horario
         if (!bs.length) return bvgFim({ ok: true, total: 0, orientacao: meta.sem ? `${meta.sem} não tem horário nesse dia e não há outro barbeiro para este serviço; sugira outro dia` : 'nenhum barbeiro disponível para este serviço' });
         const reqs = bvgReqsLivre(bs.map((b) => ({ idServico: meta.servico.idServico, idProfissional: b.idProfissional, data: meta.data })));
         return { reqs, st: { ...st, meta: { ...meta, etapa: null, barbeiros: bs } } };
       }
-      const porHora = new Map();
       const noPeriodo = bvgNoPedido({ periodo: meta.periodo }); // por_barbeiro conta o periodo, sem a hora minima
       const porBarbeiro = [];
+      const livres = []; // um por barbeiro com resposta, na ordem de meta.barbeiros (a da fila quando o sistema indica)
       // servico a mais: o que o cliente ja tem de outro servico nesse dia (remarcacao fica de fora: o horario e do proprio agendamento)
       const ancs = i.id_opcao_agendamento ? [] : bvgNoDia(ctx.pedido, meta.data, meta.servico.idServico);
       meta.barbeiros.forEach((b, k) => {
         const r = resps[k];
         if (!ok200(r) || !r.body || !Array.isArray(r.body.horarios)) return;
         const hs = bvgLivre(r.body, resps[meta.barbeiros.length + k]).inicios;
-        // a lista mostra um barbeiro por horario: no horario colado vale o barbeiro do agendamento que o cliente ja tem, se ele tiver
-        hs.forEach((hh) => { if (!porHora.has(hh) || (bvgColado(ancs, hh, r.body.minutos) || {}).idProfissional === b.idProfissional) porHora.set(hh, { b, minutos: r.body.minutos }); });
+        livres.push({ b, minutos: r.body.minutos, hs: new Set(hs) });
         const hp = hs.filter(noPeriodo);
         porBarbeiro.push({ barbeiro: b.apelido, total: hp.length, primeiro: hp[0] || null });
       });
-      const todas = [...porHora.keys()].sort();
+      const todas = [...new Set(livres.flatMap((x) => [...x.hs]))].sort();
+      // a lista mostra um barbeiro por horario: no horario colado vale o barbeiro do agendamento que o cliente ja tem, se ele tiver;
+      // nos demais, o mais a frente na fila (bvgRepartir; sem a chave ligada, o primeiro de meta.barbeiros)
+      const dono = (x, hh) => !!ancs.length && (bvgColado(ancs, hh, x.minutos) || {}).idProfissional === x.b.idProfissional;
+      const porHora = bvgRepartir(todas, (hh) => livres.filter((x) => x.hs.has(hh)), ctx.rodizio ? meta.barbeiros : null, (hh) => livres.find((x) => x.hs.has(hh) && dono(x, hh)) || null);
       const naFaixa = todas.filter(bvgNoPedido(meta));
       const perto = bvgPertoDaHora(naFaixa, meta.hora, cfg, (hh) => hh);
       // o horario colado entra mesmo fora do periodo ou da hora pedidos (barba 11:20-12:00: o "logo depois" e 12:00, que "manha" cortava)
@@ -1023,7 +1094,8 @@ function bvgPassoUm(st, resps0, cfg) {
       const s = meta.servico;
       const of = bvMontarOferta('horario', horas.map((hh) => {
         const { b, minutos } = porHora.get(hh);
-        return { rotulo: meta.qualquer ? `${hh} ${b.apelido}` : hh, valor: { data: meta.data, hora: hh, idProfissional: b.idProfissional, apelido: b.apelido, idServico: s.idServico, servico: s.nome, preco: s.preco, minutos } };
+        // indicado: quem pos o barbeiro foi o sistema (qualquer barbeiro), nao o cliente nem o agendamento colado
+        return { rotulo: meta.qualquer ? `${hh} ${b.apelido}` : hh, valor: { data: meta.data, hora: hh, idProfissional: b.idProfissional, apelido: b.apelido, idServico: s.idServico, servico: s.nome, preco: s.preco, minutos, ...(meta.qualquer && !dono(porHora.get(hh), hh) ? { indicado: true } : {}) } };
       }), cfg, true); // FR-001: oferta completa; o Compor divide em listas
       const res = { ok: true, data: meta.data, total: horas.length, completa: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.hora, barbeiro: x.valor.apelido, ...(junto(x.valor.hora) ? { junto: true } : {}) })) };
       // A lista mostra um barbeiro por horario: sem o resumo, o modelo concluia "fulano nao tem horario" (teste do owner, 2026-10-22)
@@ -1058,7 +1130,7 @@ function bvgPassoUm(st, resps0, cfg) {
       else if (meta.qualquer) res.orientacao = 'a lista mostra um barbeiro por horário e não serve para dizer quando cada um começa: para dizer quem tem horário e a partir de que horas, use quem_tem_horario como está, sem trocar as horas; se o cliente pedir um barbeiro específico na próxima mensagem, chame horarios_livres com id_opcao_barbeiro dele (neste turno a lista já é esta)';
       // suite R8 (2026-11-16): com a lista de qualquer barbeiro numa remarcacao, o modelo dizia que "a troca mantem o barbeiro"
       if (meta.agQualquer && horas.length) res.orientacao = 'os horários da lista são de qualquer barbeiro, não do barbeiro do agendamento: não diga que a remarcação mantém o barbeiro, não diga com quem é o agendamento atual e não cite barbeiro nenhum pelo nome; diga só que há horários nesse dia e pergunte qual fica melhor; ' + (res.orientacao || '');
-      if (meta.sem) res.orientacao = `${meta.sem}, o barbeiro do ${meta.doAg ? 'agendamento' : 'último atendimento'}, não tem horário ${meta.periodo ? `de ${meta.periodo} ` : ''}nesse dia: diga isso ao cliente${horas.length ? ' e que os horários da lista são de outros barbeiros' : ''}` + (res.orientacao ? '; ' + res.orientacao : '');
+      if (meta.sem) res.orientacao = `${meta.sem}, ${meta.doAg ? 'o barbeiro do agendamento' : 'o barbeiro de costume do cliente'}, não tem horário ${meta.periodo ? `de ${meta.periodo} ` : ''}nesse dia: diga isso ao cliente${horas.length ? ' e que os horários da lista são de outros barbeiros' : ''}` + (res.orientacao ? '; ' + res.orientacao : '');
       if (perto.aproximada) res.orientacao = bvgAvisoPerto(meta.hora) + (res.orientacao ? '; ' + res.orientacao : '');
       // Servico a mais: o horario colado sai pronto daqui (o modelo erra conta de hora); ja_tem_no_dia e campo proprio porque a
       // orientacao e sobrescrita quando o horario pedido esta livre
@@ -1164,12 +1236,12 @@ function bvgPassoEnc(st, resps, cfg) {
   const reqsDe = (bs) => [...bs.flatMap((b) => meta.servicos.map((s) => ({ m: 'GET', path: '/agenda/horarios-livres', qs: { idServico: s.idServico, idProfissional: b.id, data: meta.data } }))),
     ...bs.map((b) => ({ m: 'GET', path: '/agenda/horarios', qs: { idServico: meta.servicos[0].idServico, idProfissional: b.id, data: meta.data } }))];
   if (meta.etapa === 'enc_prof') {
-    const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos));
+    const sets = meta.servicos.map((_, k) => bvgBarbeiros(resps[k].body, cfg, st.ctx.rodizio, 'id')); // ja na ordem da fila: `fazem` herda
     const teto = Math.max(1, Math.floor(((cfg.graces || {}).max_consultas_estagio || 20) / (n + 1))); // n grades + 1 ocupacoes por barbeiro
-    const fazem = sets[0].filter((b) => sets.every((x) => x.some((y) => y.id === b.id)));
+    const fazem = sets[0].filter((b) => sets.every((x) => x.some((y) => y.id === b.id))); // a fila vale antes do teto
     // Barbeiro escolhido: so ele e consultado neste estagio (n + 1 chamadas em vez de (n + 1) por barbeiro); os outros (`resto`) so
     // sao consultados se ele nao tiver o pedido, num estagio a mais, e o total de chamadas fica igual ao de antes, nunca maior.
-    const dele = meta.esc ? fazem.filter((b) => b.id === meta.esc.idProfissional) : [];
+    const dele = meta.esc ? fazem.filter((b) => b.id === meta.esc.idProfissional) : []; // o escolhido segue primeiro, fora da fila
     const comuns = [...dele, ...fazem.filter((b) => !dele.includes(b))].slice(0, teto);
     if (!comuns.length) return semUnico();
     const agora = dele.length ? dele : comuns;
@@ -1187,7 +1259,8 @@ function bvgPassoEnc(st, resps, cfg) {
       for (let k = 0; k < n; k++) {
         const g = gr[k], s = meta.servicos[k];
         if (!(g.minutos > 0) || !g.cabe(t)) break;
-        itens.push({ idServico: s.idServico, servico: s.nome, idProfissional: b.id, apelido: b.apelido, hora: t, minutos: g.minutos, valor: s.preco });
+        // indicado: barbeiro posto pelo sistema (fila da vez), nao o que o cliente escolheu
+        itens.push({ idServico: s.idServico, servico: s.nome, idProfissional: b.id, apelido: b.apelido, hora: t, minutos: g.minutos, valor: s.preco, ...(!meta.esc || b.id !== meta.esc.idProfissional ? { indicado: true } : {}) });
         t = bvgSomaMin(t, g.minutos);
       }
       if (itens.length === n) seqs.push({ hora: ini, id: b.id, apelido: b.apelido, valor: { data: meta.data, itens } });
@@ -1205,12 +1278,12 @@ function bvgPassoEnc(st, resps, cfg) {
     { opcoes: of, pedido: { ...pedido, ...um, modo_encadeamento: 'mesmo_barbeiro', busca: bvgBuscaSeq(st, of.itens.length, sel) } });
 }
 
-// Barbeiros diferentes por servico (FR-012): primeiro barbeiro, na ordem de listar_barbeiros, que tem o inicio exato (fim do anterior) na grade.
+// Barbeiros diferentes por servico (FR-012): primeiro barbeiro da fila (a ordem de listar_barbeiros) que tem o inicio exato (fim do anterior) na grade.
 function bvgDifProf(st, resps, cfg) {
   const { meta } = st;
   const n = meta.servicos.length;
   const teto = Math.max(1, Math.floor(((cfg.graces || {}).max_consultas_estagio || 20) / (2 * n)));
-  const sets = meta.servicos.map((_, k) => bvFiltrarBarbeiros((Array.isArray(resps[k].body) ? resps[k].body : []).map((b) => ({ id: b.idProfissional, apelido: String(b.apelido || '').trim(), nome: b.nomeCompleto })), cfg.testeId, cfg.testeLiberado, cfg.humanos).slice(0, teto));
+  const sets = meta.servicos.map((_, k) => bvgBarbeiros(resps[k].body, cfg, st.ctx.rodizio, 'id').slice(0, teto));
   if (sets.some((x) => !x.length)) return bvgFim(bvgRecusa('sem_barbeiro_servico', 'nenhum barbeiro disponível para um dos serviços; ofereça chamar a equipe da loja'));
   const reqs = bvgReqsLivre(sets.flatMap((bs, k) => bs.map((b) => ({ idServico: meta.servicos[k].idServico, idProfissional: b.id, data: meta.data }))));
   return { reqs, st: { ...st, meta: { ...meta, etapa: 'dif_grade', sets } } };
@@ -1231,7 +1304,7 @@ function bvgDifGrade(st, resps, cfg) {
       const g = grades[k].find((x) => x.minutos > 0 && x.cabe(t));
       if (!g) break;
       const s = meta.servicos[k];
-      itens.push({ idServico: s.idServico, servico: s.nome, idProfissional: g.b.id, apelido: g.b.apelido, hora: t, minutos: g.minutos, valor: s.preco });
+      itens.push({ idServico: s.idServico, servico: s.nome, idProfissional: g.b.id, apelido: g.b.apelido, hora: t, minutos: g.minutos, valor: s.preco, indicado: true });
       t = bvgSomaMin(t, g.minutos);
     }
     if (itens.length === meta.servicos.length) seqs.push({ hora: ini, apelidos: [...new Set(itens.map((x) => x.apelido))], valor: { data: meta.data, itens } });
@@ -1331,7 +1404,7 @@ function bvgPassoEscrita(st, resps, cfg) {
     const livre = r0.status === 200 && r0.body && Array.isArray(r0.body.horarios) && bvgLivre(r0.body, resps[meta.idCliente ? 2 : 1]).cabe(d.hora);
     if (!livre) { // US1-4: horario tomado -> falhou + novas opcoes do mesmo dia
       const hs = r0.status === 200 && Array.isArray(r0.body && r0.body.horarios) ? r0.body.horarios.filter((x) => /^\d{2}:\d{2}$/.test(x)) : [];
-      const of = bvMontarOferta('horario', hs.map((hh) => ({ rotulo: hh, valor: { data: d.data, hora: hh, idProfissional: d.idProfissional, apelido: d.barbeiro, idServico: d.idServico, servico: d.servico, preco: d.valor } })), cfg);
+      const of = bvMontarOferta('horario', hs.map((hh) => ({ rotulo: hh, valor: { data: d.data, hora: hh, idProfissional: d.idProfissional, apelido: d.barbeiro, idServico: d.idServico, servico: d.servico, preco: d.valor, ...(d.indicado ? { indicado: true } : {}) } })), cfg); // a reoferta do mesmo barbeiro guarda a marca da proposta
       const { e, f } = r0.status === 200 ? { e: null, f: null } : err('horarios_livres', r0);
       return termina('falhou', { ok: false, code: 'horario_indisponivel', orientacao: 'esse horário não está mais livre; ofereça as novas opções', opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.hora })) }, { opcoes: of, falha: f });
     }
@@ -1418,4 +1491,4 @@ function bvGParams(i, efeitos, msg) {
     ...bvgMsgParams(e, msg), e.contato && e.contato.como_conheceu ? String(e.contato.como_conheceu) : null];
 }
 
-if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, bvgCabeloEBarba, BVG_ACOES };
+if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, bvgCabeloEBarba, bvgFila, bvgRepartir, BVG_ACOES };

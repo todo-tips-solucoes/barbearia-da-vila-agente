@@ -320,6 +320,72 @@ class Converge(unittest.TestCase):  # achados da rodada real 20261021-031240 (re
         get = lambda c: {"horarios": ["17:20"]} if c.startswith("/agenda/horarios-livres?idServico=s1&idProfissional=p1&") else resp2[c]
         self.assertRegex(sv.referencia_graces(get), r'Horarios livres em \d{4}-\d{2}-\d{2} para corte adulto \(so este dia[^)]*\): \{"Kiel": \["17:20"\]\}')
 
+    # barbeiro de costume: espelho de bvgVisitas/bvgHabituais (workflows/shared/graces.js)
+    @staticmethod
+    def _h(dia, prof, serv="s1", comanda=None):
+        return {"dataAbertura": f"2026-11-{dia:02d}T10:00:00", "idProfissional": f"id-{prof}", "profissional": prof, "idServico": serv, "idComanda": comanda, "descricaoServico": {"s1": "corte adulto", "s2": "corte com maquina"}.get(serv)}
+
+    def test_costume_maioria_nao_e_a_ultima_visita(self):
+        h = [self._h(20, "Black")] + [self._h(d, "Pedro") for d in (18, 16, 14, 12)]
+        self.assertEqual(sv.barbeiros_de_costume(h, 5), ([("Pedro", 4), ("Black", 1)], None, 5))
+
+    def test_costume_empate_vence_o_mais_recente(self):
+        h = [self._h(20, "Black"), self._h(18, "Pedro"), self._h(16, "Black"), self._h(14, "Pedro")]
+        self.assertEqual(sv.barbeiros_de_costume(h, 5)[0], [("Black", 2), ("Pedro", 2)])
+
+    def test_costume_com_menos_de_n_visitas_e_n_limita(self):
+        h = [self._h(20, "Black"), self._h(18, "Pedro")]
+        self.assertEqual(sv.barbeiros_de_costume(h, 5)[2], 2)
+        self.assertEqual(sv.barbeiros_de_costume(h, 1), ([("Black", 1)], None, 1))  # visitas: 1 = so a ultima
+
+    def test_costume_visita_com_duas_linhas_do_mesmo_barbeiro_conta_uma_vez(self):
+        h = [self._h(20, "Black", "s1"), self._h(20, "Black", "s2"), self._h(18, "Pedro", "s1", "c9"), self._h(10, "Pedro", "s1", "c9")]
+        self.assertEqual(sv.barbeiros_de_costume(h, 5)[0], [("Black", 1), ("Pedro", 1)])  # mesma comanda = mesma visita, mesmo em dias diferentes
+
+    def test_costume_barbeiro_humano_na_ultima_ou_mais_frequente(self):
+        hum = [{"id": "id-J", "nome": "Jayme"}]
+        self.assertEqual(sv.barbeiros_de_costume([self._h(20, "Jayme")] + [self._h(d, "Pedro") for d in (18, 16)], 5, hum)[1], "Jayme")  # ultima
+        maioria = [self._h(20, "Pedro")] + [{**self._h(d, "Jayme"), "idProfissional": None} for d in (18, 16)]  # so pelo nome
+        self.assertEqual(sv.barbeiros_de_costume(maioria, 5, hum)[1], "Jayme")
+        self.assertIsNone(sv.barbeiros_de_costume([self._h(20, "Pedro"), self._h(18, "Pedro"), self._h(16, "Jayme")], 5, hum)[1])  # so numa visita antiga
+
+    def _ref(self, hist, servicos):
+        T = sv.sa.TESTE_ID
+        livres = []
+
+        def get(c):
+            if c.startswith("/agenda/historico"):
+                return hist
+            if c == "/agenda/servicos?texto=":
+                return servicos
+            if c.startswith("/servicos/profissionais"):
+                return [{"idProfissional": "id-Pedro", "apelido": "Pedro"}, {"idProfissional": T, "apelido": "ZZ X"}]
+            if c.startswith("/agenda/horarios-livres"):
+                livres.append(c)
+                return {"horarios": ["16:00"]}
+            return {"horarios": []}
+        with mock.patch.dict(sv.sa.CFG["graces"], {"habitual": {"visitas": 5}}):
+            return sv.referencia_graces(get), livres
+
+    def test_referencia_inclui_horarios_do_servico_do_ultimo_atendimento_e_o_costume(self):
+        sv_ = [{"descricaoAgenda": "corte adulto", "idServico": "s1", "valorPadrao": 85}, {"descricaoAgenda": "corte com maquina", "idServico": "s2", "valorPadrao": 60}]
+        hist = [self._h(20, "Black", "s2")] + [self._h(d, "Pedro", "s2") for d in (18, 16, 14)]
+        r, livres = self._ref(hist, sv_)
+        self.assertRegex(r, r"Horarios livres em [\d-]+ para corte com maquina \(so este dia[^)]*\): \{\"Pedro\": \[\"16:00\"\]\}")
+        self.assertIn("servico corte com maquina, barbeiro da ultima visita Black", r)
+        self.assertIn("ultimas 4 visitas: Pedro 3, Black 1; o agente propoe o barbeiro de costume, Pedro", r)
+        self.assertNotIn("ZZ X\"", r.split("Horarios livres")[1])  # o barbeiro de teste nunca entra nos horarios
+
+    def test_referencia_nao_duplica_linha_nem_requisicao_para_corte_adulto(self):
+        r, livres = self._ref([self._h(20, "Pedro", "s1")], [{"descricaoAgenda": "corte adulto", "idServico": "s1", "valorPadrao": 85}])
+        self.assertEqual(r.count("para corte adulto"), 1)
+        self.assertEqual(len(livres), 1)
+
+    def test_referencia_humano_no_costume_manda_para_equipe(self):
+        with mock.patch.dict(sv.sa.CFG["graces"], {"barbeiros_humanos": [{"id": "id-J", "nome": "Jayme"}]}):
+            r, _ = self._ref([self._h(20, "Jayme", "s1")], [{"descricaoAgenda": "corte adulto", "idServico": "s1", "valorPadrao": 85}])
+        self.assertIn("vai para o atendimento humano (Jayme)", r)
+
     def test_telefone_da_loja_nao_e_mascarado(self):
         with mock.patch.dict(sv.sa.CFG, {"loja": {"contatos": "Telefone/WhatsApp (11) 97126-5299"}}):
             self.assertEqual(sv.sanitizar("loja (11) 97126-5299, cliente +5511967296849"), "loja (11) 97126-5299, cliente <telefone>")

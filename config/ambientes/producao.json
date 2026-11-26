@@ -115,7 +115,14 @@
       "CORTE MAQUINA SIMPLES (1 PENTE)",
       "BARBA EXPRESS"
     ],
-    "agendamentos_max_dia": 3
+    "agendamentos_max_dia": 3,
+    "rodizio": {
+      "ligado": true,
+      "janela_dias": 30
+    },
+    "habitual": {
+      "visitas": 5
+    }
   },
   "textos": {
     "contingencia": "Opa, tive um probleminha aqui agora. Pode me mandar de novo daqui a pouquinho?",
