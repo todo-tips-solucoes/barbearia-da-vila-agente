@@ -2421,5 +2421,20 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(rodar(lixo), null);
   // o barbeiro habitual nao anda a fila: nenhuma marca no ultimo
   assert.ok(!('indicado' in rodar(hist(vis(20, 'B'), vis(15, 'P'), vis(10, 'P')), 'PB').barbeiro));
+  // clausula petrea, lado conservador (na duvida, transfere)
+  const semId = (v) => v.map((x) => ({ ...x, idProfissional: undefined }));
+  const comDois = (dia, a, b) => [...vis(dia, a), ...vis(dia, b)]; // um servico de cada barbeiro, mesma visita
+  assert.deepEqual(rodar(hist(comDois(20, 'P', 'J'), vis(15, 'P'))), { humano: 'Jayme' }); // ultima visita com dois servicos, um do Jayme
+  assert.deepEqual(rodar(hist([...semId(vis(20, 'P')), ...vis(20, 'J')], vis(15, 'P'))), { humano: 'Jayme' }); // uma linha sem id e outra do Jayme
+  assert.deepEqual(rodar(hist(semId(vis(20, 'P')), vis(15, 'J'))), { humano: 'Jayme' }); // visita mais recente sem barbeiro conhecido, a anterior do Jayme
+  assert.deepEqual(rodar(hist(vis(20, 'P'), semId(vis(15, 'J')), semId(vis(10, 'J')), semId(vis(5, 'J')), vis(1, 'B'))), { humano: 'Jayme' }); // Jayme so pelo nome em 3 de 5
+  assert.deepEqual(rodar(hist(vis(20, 'P'), vis(15, 'J'), vis(10, 'P'), vis(5, 'J'), vis(1, 'K'))), { humano: 'Jayme' }); // 2 a 2 no topo: o Pedro e mais recente, mas o Jayme empata
+  assert.equal(barb(rodar(hist(vis(20, 'P'), vis(15, 'J'), vis(10, 'P'), vis(5, 'B'), vis(1, 'K')))), 'Pedro'); // Jayme com 1 contra 2: nao empata no topo
+  for (const l of [rodar(hist(vis(20, 'P'), semId(vis(15, 'J'))), 'PB'), rodar(hist(vis(20, 'P'), vis(15, 'J'), vis(10, 'J')), 'PBJ')]) assert.ok(!l.barbeiro || l.barbeiro.apelido !== 'jayme'); // nunca sai em ultimo.barbeiro
+  // data ausente ou estranha e linhas fora de ordem nao quebram
+  const sd = (v) => v.map((x) => ({ ...x, dataAbertura: undefined })), est = (v) => v.map((x) => ({ ...x, dataAbertura: 'ontem?' }));
+  assert.equal(barb(rodar(hist(sd(vis(20, 'P')), est(vis(15, 'P')), vis(10, 'B')), 'PB')), 'Pedro');
+  assert.equal(barb(rodar(hist(vis(5, 'P'), vis(20, 'B'), vis(10, 'P')), 'PB')), 'Pedro');
+  assert.ok(rodar(hist(sd(vis(20, 'P')).map((x) => ({ ...x, idComanda: undefined })), est(vis(15, 'B'))), 'PB').servico);
   console.log('graces.test.js habitual ok');
 }
