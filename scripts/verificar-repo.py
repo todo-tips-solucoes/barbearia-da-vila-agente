@@ -115,6 +115,14 @@ def regras_rodizio(amb, c):
     return erros
 
 
+def regras_habitual(amb, c):
+    """Barbeiro habitual (26/11/2026): graces.habitual.visitas, inteiro entre 1 e 20 (1 = so a ultima visita)."""
+    v = c.get("graces", {}).get("habitual", {}).get("visitas")
+    if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 20:
+        return [f"{amb}: graces.habitual.visitas deve ser inteiro entre 1 e 20"]
+    return []
+
+
 def verificar_workflows(raiz):
     """FR-008/FR-015: sem execucao salva com conteudo de midia e sem errorWorkflow nos workflows que a tocam."""
     erros = []
@@ -150,6 +158,7 @@ def verificar(cfgs, infra):
         erros += regras_midia(amb, c)
         erros += regras_mensagens(amb, c)
         erros += regras_rodizio(amb, c)
+        erros += regras_habitual(amb, c)
     lk = {a: c.get("lock", {}) for a, c in cfgs.items()}
     for a, l in lk.items():
         if l and l.get("espera_s", 0) * l.get("tentativas", 0) < l.get("ttl_s", 0):
