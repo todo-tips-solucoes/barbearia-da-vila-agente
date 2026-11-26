@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -729,6 +730,41 @@ def gravar_relatorio(rel, pasta=None):
     return base
 
 
+def barbeiros_de_costume(itens, n, humanos=()):
+    """Barbeiro de costume pelas `n` ultimas visitas. ESPELHO em Python da regra de workflows/shared/graces.js (`bvgVisitas`, `bvgHabituais`,
+    `bvgConta`): quem mudar uma lembre da outra (a suite nao executa o JS). `itens` = historico da Graces, mais recente primeiro, uma linha por servico;
+    visita = mesma comanda ou mesmo dia (dataAbertura) da primeira linha restante; cada visita conta uma vez por barbeiro; vence quem tem mais
+    visitas e, no empate, quem atendeu mais recentemente. `humanos` = [{"id","nome"}] (graces.barbeiros_humanos), vistos tambem pelo nome.
+    Devolve (ranking [(apelido, visitas)], humano|None, visitas_consideradas); humano = o da ultima visita ou o empatado no topo (na duvida, transfere)."""
+    def norm(t):
+        return " " + re.sub(r"[^a-z0-9]+", " ", unicodedata.normalize("NFD", str(t or "").lower()).encode("ascii", "ignore").decode()).strip() + " "
+    def chave(x):  # bvgConta: o humano numa chave so, os demais so pelo id
+        h = next((h for h in humanos if (h.get("id") and h["id"] == x.get("idProfissional")) or (h.get("nome") and norm(h["nome"]) in norm(x.get("profissional")))), None)
+        return (f"h:{h['nome']}", h["nome"]) if h else ((x["idProfissional"], None) if x.get("idProfissional") else (None, None))
+    dia = lambda x: str(x.get("dataAbertura") or "")[:10]
+    visitas, resto = [], list(itens)
+    while resto:
+        h = resto[0]
+        vis = [x for x in resto if x is h or (h.get("idComanda") and x.get("idComanda") == h["idComanda"]) or (dia(h) and dia(x) == dia(h))]
+        visitas.append(vis)
+        resto = [x for x in resto if not any(x is y for y in vis)]
+    validas = [v for v in visitas if any(chave(x)[0] for x in v)][:n]
+    m = {}
+    for k, v in enumerate(validas):
+        for x in v:
+            c, hum = chave(x)
+            if c is None:
+                continue
+            e = m.setdefault(c, dict(apelido=hum or str(x.get("profissional") or "").strip(), humano=hum, n=0, k=k, v=-1))
+            if e["v"] != k:
+                e["n"] += 1
+            e["v"] = k
+    rank = sorted(m.values(), key=lambda e: (-e["n"], e["k"]))
+    topo = [e for e in rank if e["n"] == rank[0]["n"]] if rank else []
+    ultima = next((chave(x)[1] for x in (visitas[0] if visitas else []) if chave(x)[1]), None)
+    return [(e["apelido"], e["n"]) for e in rank], ultima or next((e["humano"] for e in topo if e["humano"]), None), len(validas)
+
+
 def referencia_graces(get=None):
     """Fonte do K4/K6 da avaliadora (so leitura na Graces): servicos e precos, barbeiros reais, o nome do barbeiro de teste, funcionamento e a config loja."""
     get = get or sa.graces_get
@@ -745,19 +781,29 @@ def referencia_graces(get=None):
         partes.append("Barbeiro de teste (K6: nunca pode aparecer ao cliente): " + (teste[0] if teste else "ZZ TESTE INTEGRACAO - NAO AGENDAR"))
     except Exception:  # noqa: BLE001 - sem Graces a avaliadora fica so com a loja
         pass
+    hist, n_vis = [], sa.CFG["graces"].get("habitual", {}).get("visitas", 5)
+    try:  # historico uma vez so: serve ao servico do ultimo atendimento (horarios) e ao barbeiro de costume; pageSize como o agente (N x 10, max 200)
+        hist = [x for x in get(f"/agenda/historico?idCliente={sa.PAULO}&pageSize={min(200, n_vis * 10)}") if x.get("idServico")]
+    except Exception:  # noqa: BLE001
+        pass
     try:  # R18: sem isso a avaliadora so via a lista (um barbeiro por horario) e lia o resumo por barbeiro como invencao
         amanha = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))) + datetime.timedelta(days=1)).date().isoformat()
         # sem os "2a vez": a referencia trazia "Corte Infantil 2º vez" no lugar do infantil normal e a avaliadora reprovava o R18 (2026-11-16)
-        for s in [x for x in ss if re.search(r"^corte adulto$|infantil", str(x.get("descricaoAgenda", "")), re.I) and not re.search(r"2\s*[ªaºo°]?\s*vez", str(x.get("descricaoAgenda", "")), re.I)][:2]:
+        base = [x for x in ss if re.search(r"^corte adulto$|infantil", str(x.get("descricaoAgenda", "")), re.I) and not re.search(r"2\s*[ªaºo°]?\s*vez", str(x.get("descricaoAgenda", "")), re.I)][:2]
+        base += [x for x in ss if hist and x.get("idServico") == hist[0]["idServico"] and x not in base]  # R11 reprovou 3x (26/11): o agente propoe repetir o ultimo servico e fala do horario dele
+        for s in base:
             ps = [p for p in get(f"/servicos/profissionais?idServico={s['idServico']}") if p.get("idProfissional") not in humanos | {sa.TESTE_ID}]
             livres = {str(p.get("apelido", "")).strip(): get(f"/agenda/horarios-livres?idServico={s['idServico']}&idProfissional={p['idProfissional']}&data={amanha}").get("horarios", []) for p in ps}
             partes.append(f"Horarios livres em {amanha} para {s.get('descricaoAgenda')} (so este dia e servico; outros dias e servicos nao constam aqui e nao sao invencao): " + json.dumps(livres, ensure_ascii=False))
     except Exception:  # noqa: BLE001 - dia fechado ou Graces fora: a avaliadora fica sem disponibilidade
         pass
-    try:  # owner, 2026-11-14: o agente propoe repetir o ultimo atendimento; sem isso a avaliadora o leria como invencao
-        h = next((x for x in get(f"/agenda/historico?idCliente={sa.PAULO}&pageSize=10") if x.get("idServico")), None)
-        if h:
-            partes.append(f"Ultimo atendimento do cliente cadastrado (roteiros com agenda; historico da Graces): {h.get('descricaoServico')} com {str(h.get('profissional', '')).strip()}")
+    try:  # owner, 2026-11-14: o agente propoe repetir o ultimo atendimento; 26/11: com o barbeiro de costume (ultimas N visitas), nao o da ultima
+        if hist:
+            rank, humano, vistas = barbeiros_de_costume(hist, n_vis, sa.CFG["graces"].get("barbeiros_humanos", []))
+            quem = f"o cliente vai para o atendimento humano ({humano}); o agente nao propoe barbeiro" if humano else \
+                f"o agente propoe o barbeiro de costume, {rank[0][0]}, que pode nao ser o da ultima visita" if rank else "sem barbeiro de costume"
+            partes.append(f"Ultimo atendimento do cliente cadastrado (roteiros com agenda; historico da Graces): servico {hist[0].get('descricaoServico')}, barbeiro da ultima visita {str(hist[0].get('profissional', '')).strip()}. "
+                          f"Barbeiro de costume nas ultimas {vistas} visitas: " + ", ".join(f"{a} {c}" for a, c in rank) + f"; {quem}")
     except Exception:  # noqa: BLE001
         pass
     partes.append("Cliente sem cadastro (roteiros sem agenda, contato simulado): duvidas e horarios livres saem sem cadastro; o cadastro (nome completo, data de nascimento e como conheceu) so e pedido na hora de marcar um horario, ou antes de transferir quem pede um barbeiro que so a equipe agenda; o cadastro no TESTE nao vai a Graces")
