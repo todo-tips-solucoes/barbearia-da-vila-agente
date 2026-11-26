@@ -157,7 +157,7 @@ class BvGraces(unittest.TestCase):
 
     def test_contador_diario_vem_do_banco(self):  # ctx.dia vem do banco, nunca fica vazio (hoje: o teto de agendamentos)
         q = self.nos["Contexto"]["parameters"]["query"]
-        self.assertRegex(q, r"AS dia FROM")
+        self.assertRegex(q, r"AS dia, ")
         self.assertIn("'agendados'", q)
         self.assertIn("America/Sao_Paulo", q)
 
@@ -486,7 +486,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         q = self.graces["Contexto"]["parameters"]["query"]
         self.assertIn("r.retomada_em > propostas.criada_em AND r.retomada_em > now() - make_interval(mins => $6::int)", q)
         self.assertEqual(q.count("("), q.count(")"))
-        self.assertTrue(self.graces["Contexto"]["parameters"]["options"]["queryReplacement"].endswith("{{BV:retomada.resposta_max_min}}] }}"))
+        self.assertEqual(self.graces["Contexto"]["parameters"]["options"]["queryReplacement"].count("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}'"), 1)  # o 6o parametro; o 7o e a janela do rodizio
 
     def test_transferencia_tenta_de_novo(self):
         self.assertEqual([self.graces["Transferir ticket"].get(k) for k in ("retryOnFail", "maxTries")], [True, 2])
@@ -673,6 +673,25 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
         self.assertEqual(q.count("("), q.count(")"))
         self.assertIn("agendamentosMaxDia: {{BV:graces.agendamentos_max_dia}}", ler("workflows/shared/config.js"))
         self.assertEqual([c["graces"]["agendamentos_max_dia"] for c in self.cfgs.values()], [3, 3])  # owner, 17/11
+
+    def test_fila_da_vez(self):  # 26/11/2026: rodizio dos barbeiros indicados pelo agente, derivado de propostas (sem tabela nem escrita nova)
+        js = ler("workflows/shared/graces.js")
+        q = self.graces["Contexto"]["parameters"]["query"]
+        rep = self.graces["Contexto"]["parameters"]["options"]["queryReplacement"]
+        for trecho in ("AS rodizio", "e @> '{\"indicado\": true}'::jsonb", "p.estado = 'executada'", "p.acao IN ('agendar', 'agendar_conjunto', 'reagendar', 'trocar_servico')",
+                       "p.atualizada_em >= now() - make_interval(days => $7::int)", "$7::int > 0"):
+            self.assertIn(trecho, q)  # janela e chave de ligar por parametro ($7): nada concatenado no SQL
+        self.assertNotRegex(q, r"\$8")
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertTrue(rep.endswith("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}' === 'True' ? Math.min(365, Math.max(1, parseInt('{{BV:graces.rodizio.janela_dias}}', 10) || 30)) : 0] }}"))
+        self.assertIn("rodizio: { ligado: '{{BV:graces.rodizio.ligado}}' === 'True' }", ler("workflows/shared/config.js"))
+        self.assertEqual([c["graces"]["rodizio"] for c in self.cfgs.values()], [{"ligado": True, "janela_dias": 30}] * 2)
+        # a marca `indicado` sai das ofertas e vai aos dados da proposta; nunca ao resultado do modelo
+        self.assertEqual(js.count("indicado: true"), 6)
+        self.assertNotIn("indicado", json.dumps(self.graces["Gatilho"]["parameters"]))
+        # as funcoes da fila e da reparticao existem uma vez so; ninguem ordena barbeiros por conta propria
+        self.assertEqual((js.count("function bvgFila("), js.count("function bvgRepartir(")), (1, 1))
+        self.assertEqual(js.count("bvgFila("), 6)  # a definicao e os 5 pontos que ordenam: busca com qualquer, lista de barbeiros, ag_prof, enc_prof e dif_prof
 
     def test_turno_cabe_na_posse_do_contato(self):
         self.assertEqual(self.rajada["settings"]["executionTimeout"], "{{BV:NUM:execucao.turno_timeout_s}}")
