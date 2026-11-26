@@ -932,6 +932,8 @@ Quando é o **sistema** que indica o barbeiro (o cliente não escolheu), vale a 
 - **Contagem e vencedor.** Entram as `N` visitas mais recentes com barbeiro conhecido (`graces.habitual.visitas`, 5). Cada visita conta uma vez por barbeiro que atendeu nela; vence quem tem mais visitas e, no empate, quem atendeu mais recentemente (`bvgHabituais`). O critério do que conta como atendimento está num ponto só, `bvgConta` (hoje qualquer serviço).
 - **O serviço** continua sendo o da última visita, com as mesmas condições de antes (visita de um serviço só, ativo, sem "2ª vez"). **O barbeiro** é o primeiro do ranking que faz esse serviço (`/servicos/profissionais`) e passa em `bvFiltrarBarbeiros`; se ninguém serve, `barbeiro: null` e o agente pergunta, como antes. O formato de `ctx.pedido.ultimo` não mudou.
 - **Equipe humana (cláusula pétrea).** A última visita com o Jayme continua levando ao atendimento humano; agora também vai se o Jayme for o mais frequente das últimas visitas. A regra só aumenta as transferências. O Jayme e o barbeiro de teste nunca são propostos.
+  - O barbeiro da equipe humana também é contado quando a linha do histórico vem só com o nome (sem `idProfissional`), do mesmo jeito que a regra da última visita o enxerga; para os demais, linha sem id é ignorada.
+  - Empate no topo: se o Jayme está entre os que têm o maior número de visitas, o cliente vai para a equipe, mesmo que outro empatado tenha atendido mais recentemente (na dúvida, transfere). Sem humano no empate, vale o mais recente.
 - **Requisição.** A mesma de antes, com `pageSize` = 10 por visita (50 com 5 visitas; máximo 200). Nenhuma requisição a mais. O habitual continua sem a marca `indicado` e sem andar a fila da vez.
 - **Textos.** O prompt passou a dizer "o barbeiro de costume dele (o que mais o atendeu nos últimos atendimentos)" e a orientação de `meta.sem` diz "X, o barbeiro de costume do cliente, não tem horário"; o serviço segue sendo "o do último atendimento".
 
@@ -963,4 +965,4 @@ Quando é o **sistema** que indica o barbeiro (o cliente não escolheu), vale a 
 
 ### Testes e limites
 
-`tests/graces.test.js` (bloco "habitual"), `tests/agente.test.js`, `tests/test_verificacoes_repo.py` e `tests/test_workflows_agente.py`. Falta medir em TESTE com o agente real. Com `visitas: 1`, só difere de antes se a última visita não trouxer barbeiro: agora vale a visita anterior que o traga.
+`tests/graces.test.js` (bloco "habitual"), `tests/agente.test.js`, `tests/test_verificacoes_repo.py` e `tests/test_workflows_agente.py`. Falta medir em TESTE com o agente real. Limites que só o agente real mostra: a ordem do histórico (mais recente primeiro) vem da documentação da Graces e do uso que o código já fazia, não foi medida (o cliente de teste não tem histórico); o `pageSize` de 10 linhas por visita é folga estimada. Com `visitas: 1`, só difere de antes se a última visita não trouxer barbeiro: agora vale a visita anterior que o traga.
