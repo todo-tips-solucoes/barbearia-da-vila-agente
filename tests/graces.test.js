@@ -2342,6 +2342,18 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(dif({ 'id-K': t(20) }, cfgOff).final.efeitos.opcoes.itens[0].valor.itens.map((q) => q.apelido).join(''), 'KK');
   assert.ok(dif({}).final.efeitos.opcoes.itens[0].valor.itens.every((q) => q.indicado === true));
 
+  // reoferta (horario tomado na revalidacao): a oferta refeita do mesmo barbeiro guarda a marca; a proposta nova sai com ela
+  for (const indicado of [true, false]) {
+    const dados = { idCliente: 'c1', idServico: 's1', servico: 'corte adulto', idProfissional: 'id-B', barbeiro: 'B', data: D, hora: '09:40', valor: 85, minutos: 40, ...(indicado ? { indicado } : {}) };
+    const PID = '33333333-3333-4333-8333-333333333333';
+    const f2 = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: PID, turno_id: T2 }), { opcoes: {}, pedido: { idCliente: 'c1' }, proposta: { id: PID, acao: 'agendar', dados } }, cfgR);
+    const rv = g.bvGPasso(f2.st, [ok({ minutos: 40, horarios: ['10:20', '11:00'] }), ok([]), resp(500, {})], cfgR).final; // 09:40 foi tomado
+    assert.equal(rv.resultado.code, 'horario_indisponivel');
+    assert.deepEqual(rv.efeitos.opcoes.itens.map((y) => y.valor.indicado), [indicado || undefined, indicado || undefined]);
+    const nova = semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '2', turno_id: T1 }), { opcoes: rv.efeitos.opcoes, pedido: { ...ped() } }, cfgR)).final.efeitos.proposta_nova;
+    assert.deepEqual([nova.dados.idProfissional, nova.dados.hora, nova.dados.indicado], ['id-B', '11:00', indicado || undefined]);
+  }
+
   // clausula petrea: o Jayme e o barbeiro de teste nao entram na fila nem com historico (filtrados antes de ordenar)
   const hum = [{ id: 'id-J', nome: 'Jayme' }];
   const pj = g.bvGPlano(entrada({ operacao: 'horarios_livres', qualquer: true, data: D }), { opcoes: {}, pedido: ped({ barbeiros: [...ped().barbeiros, { opcao_id: '9', idProfissional: 'id-J', apelido: 'Jayme' }, { opcao_id: '8', idProfissional: TESTE, apelido: 'ZZ TESTE' }] }), rodizio: { 'id-K': t(20) } }, { ...cfgR, humanos: hum });

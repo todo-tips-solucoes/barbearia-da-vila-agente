@@ -75,10 +75,12 @@ class BvGraces(unittest.TestCase):
             a = self.js.rindex(f"case '{caso}':")
             return self.js[a:a + 2500]  # o passo de listar_servicos cresceu com cabelo e barba (24/11)
         b = corpo("listar_barbeiros")
-        self.assertLess(b.index("bvFiltrarBarbeiros"), b.index("bvMontarOferta"))
+        self.assertLess(b.index("bvgBarbeiros"), b.index("bvMontarOferta"))  # bvgBarbeiros = bvFiltrarBarbeiros e depois a fila
+        d = self.js[self.js.index("const bvgBarbeiros ="):][:600]
+        self.assertIn("bvgFila(bvFiltrarBarbeiros(", d)  # o filtro e o argumento da fila: roda antes, sempre
         s = corpo("listar_servicos")
         self.assertLess(s.index("bvFiltrarServicos"), s.index("bvMontarOferta"))
-        self.assertIn(".trim()", b)  # apelido com espaco no final
+        self.assertIn(".trim()", d)  # apelido com espaco no final
         for nome in ("Planejar", "Passo"):
             self.assertIn("{{BV:INCLUDE:shared/agente.js}}", self.nos[nome]["parameters"]["jsCode"])
 
@@ -686,12 +688,15 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
         self.assertTrue(rep.endswith("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}' === 'True' ? Math.min(365, Math.max(1, parseInt('{{BV:graces.rodizio.janela_dias}}', 10) || 30)) : 0] }}"))
         self.assertIn("rodizio: { ligado: '{{BV:graces.rodizio.ligado}}' === 'True' }", ler("workflows/shared/config.js"))
         self.assertEqual([c["graces"]["rodizio"] for c in self.cfgs.values()], [{"ligado": True, "janela_dias": 30}] * 2)
-        # a marca `indicado` sai das ofertas e vai aos dados da proposta; nunca ao resultado do modelo
-        self.assertEqual(js.count("indicado: true"), 6)
-        self.assertNotIn("indicado", json.dumps(self.graces["Gatilho"]["parameters"]))
-        # as funcoes da fila e da reparticao existem uma vez so; ninguem ordena barbeiros por conta propria
-        self.assertEqual((js.count("function bvgFila("), js.count("function bvgRepartir(")), (1, 1))
-        self.assertEqual(js.count("bvgFila("), 6)  # a definicao e os 5 pontos que ordenam: busca com qualquer, lista de barbeiros, ag_prof, enc_prof e dif_prof
+        # o Contexto tem 7 parametros, na ordem certa: o 7o e a janela (0 = desligado), calculada no no e nunca concatenada no SQL
+        self.assertEqual(sorted({int(n) for n in re.findall(r"\$(\d+)", q)}), list(range(1, 8)))
+        self.assertIn("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}'", rep)
+        self.assertNotIn("{{BV:", q)
+        self.assertNotIn("janela_dias", q)
+        # o codigo embutido ordena os barbeiros por uma funcao so (bvgBarbeiros: filtro e depois fila); ninguem reimplementa a ordem
+        self.assertEqual((js.count("function bvgFila("), js.count("function bvgRepartir("), js.count("const bvgBarbeiros =")), (1, 1, 1))
+        self.assertIn("{{BV:INCLUDE:shared/graces.js}}", self.graces["Planejar"]["parameters"]["jsCode"])
+        self.assertIn("{{BV:INCLUDE:shared/graces.js}}", self.graces["Passo"]["parameters"]["jsCode"])
 
     def test_turno_cabe_na_posse_do_contato(self):
         self.assertEqual(self.rajada["settings"]["executionTimeout"], "{{BV:NUM:execucao.turno_timeout_s}}")
