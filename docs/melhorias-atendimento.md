@@ -966,3 +966,5 @@ Quando é o **sistema** que indica o barbeiro (o cliente não escolheu), vale a 
 ### Testes e limites
 
 `tests/graces.test.js` (bloco "habitual"), `tests/agente.test.js`, `tests/test_verificacoes_repo.py` e `tests/test_workflows_agente.py`. Falta medir em TESTE com o agente real. Limites que só o agente real mostra: a ordem do histórico (mais recente primeiro) vem da documentação da Graces e do uso que o código já fazia, não foi medida (o cliente de teste não tem histórico); o `pageSize` de 10 linhas por visita é folga estimada. Com `visitas: 1`, só difere de antes se a última visita não trouxer barbeiro: agora vale a visita anterior que o traga.
+
+**Correção da referência da suíte (26/11).** A referência da avaliadora (`referencia_graces` em `scripts/suite-validacao.py`) trazia horários só de "corte adulto" e "infantil" e o último atendimento em vez do barbeiro de costume; o R11 reprovou três vezes no K4 com a resposta do agente verdadeira. Agora ela inclui os horários do serviço do último atendimento e o barbeiro de costume das últimas N visitas (`barbeiros_de_costume`, espelho de `bvgVisitas`/`bvgHabituais`).
