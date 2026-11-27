@@ -272,6 +272,12 @@ class BvMensagens(Base, unittest.TestCase):
             t = json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))["textos"]["lembrete_dia"]
             self.assertIn("Toque em *Ver opções*", t)
             self.assertNotIn("responder SIM", t)
+            # sem "?": o lembrete entra no historico, e saida com pergunta dispara a retomada (Reivindicar retomadas) e conta como
+            # lista repetida no laco (bvVezesDaLista), que anteciparia a transferencia (revisao de 27/11)
+            self.assertNotIn("?", t)
+        # falha entre o envio da lista e a gravacao: a reserva vencida vira `incerto`, nunca reenvia (como o Reservar legado)
+        self.assertIn("situacao = CASE WHEN tipo = 'lembrete_dia' AND situacao = 'pendente' AND agendamento_canal_id IS NULL AND previsto_para <= reservada_em THEN 'falhou' ELSE situacao END", q)
+        self.assertIn("motivo = CASE WHEN tipo = 'lembrete_dia' AND situacao = 'pendente' AND agendamento_canal_id IS NULL AND previsto_para <= reservada_em THEN 'incerto' ELSE motivo END", q)
         self.assertEqual(g.count("("), g.count(")"))
         lin = {"id": 9, "tipo": "lembrete_hora", "situacao": "pendente", "previsto_para": "2030-01-10T16:00:00.000Z", "inicio": "2030-01-10T14:00:00",
                "dados": {"nome": "Ana Souza", "servico": "corte adulto", "barbeiro": "Pedro"}, "canal_id": None, "tentativas": 0, "reserva": "1.5",

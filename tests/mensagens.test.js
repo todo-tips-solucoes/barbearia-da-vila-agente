@@ -300,8 +300,19 @@ console.log('mensagens.test.js (confirmacao) ok');
     assert.equal(plano({ contato_canal_id: null, ticket_id: null }, '2026-11-21T17:10:00Z').acao, 'enviar_lista');
     assert.equal(plano({}, '2026-11-21T17:31:00Z').acao, 'ja_passou');
     // linha que ja tinha o agendamento de texto no Chat Master segue como estava (transicao sem migracao)
-    assert.equal(plano({ canal_id: '99', canal_previsto_para: '2026-11-21T17:00:00.000Z', canal_texto: 'Oi, Paulo! Amanhã às 14:00, corte com Pedro.' }, '2026-11-21T10:00:00Z').acao, 'nada');
     assert.equal(plano({ canal_id: '99' }, '2026-11-21T17:00:30Z').acao, 'enviada');
+    // revisao de 27/11 -- transicao: ja agendado como texto e relido antes da hora (remarcacao, segundo servico): apaga, nao atualiza
+    pl = plano({ canal_id: '99', canal_previsto_para: '2026-11-21T17:00:00.000Z', canal_texto: 'Oi, Paulo! ... É só responder SIM para confirmar ou NÃO se não puder vir.' }, '2026-11-21T10:00:00Z');
+    assert.deepEqual([pl.acao, pl.req], ['apagar', { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: '99' } }]);
+    assert.deepEqual(m.bvMSincResultado(pl, 200, {}, 0, cl, agora), { id: 5, limpar_canal: true }); // sem canal: a rodada seguinte cai na lista
+    // preparo do contato que ja falhou duas vezes nao e mais tentado: a lista sai pelo numero na hora
+    assert.equal(plano({ contato_canal_id: null, tentativas: 2 }, '2026-11-21T10:00:00Z').acao, 'aguardar');
+    assert.equal(plano({ contato_canal_id: null, tentativas: 1 }, '2026-11-21T10:00:00Z').acao, 'buscar_contato');
+    // contato @lid sem cadastro no Chat Master: espera e envia pelo @lid (antes era cancelado como sem_contato)
+    assert.equal(plano({ telefone: '123@lid', contato_canal_id: null, ticket_id: null }, '2026-11-21T10:00:00Z').acao, 'aguardar');
+    pl = plano({ telefone: '123@lid', contato_canal_id: null, ticket_id: null }, '2026-11-21T17:00:30Z');
+    assert.deepEqual([pl.acao, pl.req.body.number], ['enviar_lista', '123@lid']);
+    assert.equal(m.bvMSincPlano([linha({ telefone: '123@lid', contato_canal_id: null })], agora, cl)[0].acao, 'sem_contato'); // o de 1 hora segue como era
     // o lembrete de 1 hora continua no agendador
     assert.equal(m.bvMSincPlano([linha()], agora, cl)[0].acao, 'criar');
     console.log('mensagens.test.js lembrete de 24 h com lista ok');
@@ -457,9 +468,12 @@ console.log('mensagens.test.js retomada ok');
   // seguidora que ja tinha agendamento no Chat Master (lembretes criados antes desta regra): apaga
   [b] = m.bvMSincPlano([linha({ id: '2', canal_id: '900' })], agora, cfg);
   assert.deepEqual([b.acao, b.req], ['apagar', { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: '900' } }]);
-  // lider ja agendada com o texto de um servico so: atualiza o texto (PUT), sem recriar
+  // lider ja agendada com o texto de um servico so: o de 1 hora atualiza o texto (PUT), sem recriar; o de 24 h (lista, 27/11)
+  // apaga o agendamento de texto e sai em lista na hora dele
+  [a] = m.bvMSincPlano([linha({ tipo: 'lembrete_hora', canal_id: '899', canal_previsto_para: '2026-11-21T17:00:00.000Z', canal_texto: 'antigo' })], agora, cfg);
+  assert.deepEqual([a.acao, a.req.body.body], ['atualizar', 'x']);
   [a] = m.bvMSincPlano([linha({ canal_id: '899', canal_previsto_para: '2026-11-21T17:00:00.000Z', canal_texto: 'Oi, Paulo! Seu corte adulto com Kiel amanhã, às 14:00.' })], agora, cfg);
-  assert.deepEqual([a.acao, a.req.body.body], ['atualizar', 'Oi, Paulo! Seu corte adulto e barba design com Kiel amanhã, às 14:00.']);
+  assert.deepEqual([a.acao, a.req.path], ['apagar', '/api/schedules/delete']);
   // barbeiros diferentes (pai e filho): cada servico com o seu barbeiro; tres servicos: virgula e "e"
   assert.deepEqual(m.bvMServicos(linha({ grupo: [G[0], { id: 2, servico: 'Corte Infantil', barbeiro: 'Rodrigo' }] })), { servico: 'corte adulto com Kiel e Corte Infantil', barbeiro: 'Rodrigo' });
   assert.deepEqual(m.bvMServicos(linha({ grupo: [...G, { id: 3, servico: 'Pezinho', barbeiro: 'Kiel' }] })), { servico: 'corte adulto, barba design e Pezinho', barbeiro: 'Kiel' });
@@ -577,4 +591,14 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
     assert.deepEqual(m.bvMAvisoEquipe(d, nums, t, cfgA), []);
   }
   console.log('mensagens.test.js aviso a equipe ok');
+}
+
+{ // Confirmacao aberta (27/11): quem contesta o lembrete ouve o que esta na agenda; "sim" com outro assunto confirma primeiro
+  const m = require('../workflows/shared/mensagens.js');
+  const ctx = m.bvMPromptConfirmacoes({ confirmacoes: [{ id: 9, servico: 'corte adulto', barbeiro: 'Kiel', inicio: '2026-11-28T14:00:00' }] }, Date.now(), 120, String, false);
+  assert.match(ctx, /^\nConfirmações de presença abertas, enviadas pela barbearia \(dado\): id=9 \(corte adulto com Kiel, /);
+  assert.match(ctx, /chame meus_agendamentos antes de responder e diga o que está marcado; nunca diga que anotou, remarcou ou cancelou sem a ferramenta ter feito isso\./);
+  assert.match(ctx, /traz outro assunto junto, chame confirmar_presenca primeiro e só depois trate o outro assunto\./);
+  assert.equal(m.bvMPromptConfirmacoes({ confirmacoes: [] }, Date.now(), 120, String, false), ''); // sem confirmacao aberta, nenhuma linha
+  console.log('mensagens.test.js confirmacao aberta: contestacao e sim com outro assunto ok');
 }
