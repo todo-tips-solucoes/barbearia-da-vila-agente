@@ -375,12 +375,25 @@ function bvContextoRetorno(itens, hist, agoraMs) {
   const ts = (Array.isArray(itens) ? itens : []).map((x) => Date.parse(x && x.recebida_em)).filter(Number.isFinite);
   const min = ts.length ? Math.max(1, Math.round((agoraMs - Math.max(...ts)) / 60000)) : null;
   const ha = min === null ? 'há pouco' : `há ${min} min`;
-  const fim = ' Não diga que a equipe não respondeu ou demorou, não prometa retorno dela e não transfira neste turno.';
+  const fim = ' Não diga que a equipe não respondeu ou demorou, não prometa retorno dela e não transfira neste turno. A equipe não está mais nesta conversa: não diga que o pedido ficou com ela nem que alguém vai responder.';
   if ((Array.isArray(hist) ? hist : []).some((h) => h && h.equipe)) {
     return `\nVolta do atendimento humano (dado): a conversa esteve com a equipe e voltou para você; as mensagens novas do cliente, de ${ha}, ficaram sem resposta. Continue de onde parou, respondendo a elas com base no que a equipe já disse na conversa recente, sem recomeçar e sem repetir a equipe.${fim} O que você não vê (áudio ou arquivo da equipe, pix, pagamento, valor combinado) não invente: se o pedido depende disso ou de algo que só a equipe faz, diga em uma frase que por aqui você não consegue e ofereça o que você faz.`;
   }
-  return `\nVolta do atendimento humano (dado): a conversa foi passada para a equipe ${ha} e voltou para você com o pedido do cliente em aberto. Não repita o encaminhamento.${fim} Se as suas ferramentas resolvem o pedido, resolva agora; se só a equipe faz (barbeiro que só ela agenda, atraso, pagamento), diga em uma frase que por aqui você não consegue, sem dizer o nome do barbeiro, e ofereça o que você faz.`;
+  return `\nVolta do atendimento humano (dado): a conversa foi passada para a equipe ${ha} e voltou para você com o pedido do cliente em aberto. Não repita o encaminhamento.${fim} A mensagem nova pode ser só um "ok" ao encaminhamento antigo: responda ao pedido que está na conversa recente, não ao "ok". Se as suas ferramentas resolvem o pedido, resolva agora; se só a equipe faz (barbeiro que só ela agenda, atraso, pagamento), diga em uma frase que por aqui você não consegue, sem dizer o nome do barbeiro, e ofereça o que você faz.`;
 }
+
+// Turno de retorno: o chamado foi encerrado e a conversa nao esta mais com a equipe. Resposta que diz que o pedido ficou com ela ou
+// que alguem vai responder deixa o cliente esperando ninguem (TESTE, 27/11: "Certo! Seu pedido ficou com a equipe por aqui.", 1 de 2
+// rodadas, com a linha de contexto proibindo). Barreira em codigo: o Compor troca essa resposta por textos.retorno_sem_equipe.
+// "como a equipe falou", "quem envia e a equipe" e "a equipe informou que nao vai dar" nao sao promessa.
+const BV_EQUIPE_CUIDA = new RegExp([
+  '(?:^| )(?:ficou|fica|ficara|esta|segue|continua)(?: [a-z0-9]+){0,2} com a equipe(?: |$)',
+  '(?:^| )(?:deixei|passei|repassei|encaminhei|avisei|vou passar|vou encaminhar|vou avisar)(?: [a-z0-9]+){0,5} (?:com |para |pra )?a equipe(?: |$)',
+  '(?:^| )equipe(?: [a-z0-9]+){0,3} (?:te )?(?:responde|respondera|retorna|retornara|chama|avisa|vai te|vai responder|vai retornar|vai resolver|vai confirmar|vai entrar|entra em contato|da retorno)(?: |$)',
+  '(?:^| )(?:alguem|atendente)(?: [a-z0-9]+){0,3} (?:responde|respondera|retorna|chama|vai te|vai responder)(?: |$)',
+  '(?:^| )aguarde?(?: [a-z0-9]+){0,4} (?:equipe|atendente|retorno)(?: |$)',
+].join('|'));
+const bvPrometeEquipe = (t) => BV_EQUIPE_CUIDA.test(bvNormalizarDescricao(String(t || '')).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
 
 // Mensagem da equipe (equipeMs) tambem conta como atividade: quem respondia a equipe depois da janela perdia o historico (revisao de 17/11).
 // "Sim" com proposta pendente e confirmacao de presenca aberta ao mesmo tempo (item 11 das melhorias): o "sim" solto vale para a
@@ -633,5 +646,5 @@ function bvPediuPessoa(texto) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { bvToques, bvEscolhaNaLista, bvOfereceEquipe, bvPediuPessoa, bvNegou, bvPrometeu, bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvContextoRetorno, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
+  module.exports = { bvToques, bvEscolhaNaLista, bvOfereceEquipe, bvPediuPessoa, bvNegou, bvPrometeu, bvSoSaudacao, bvPerguntaAberta, bvDatas, bvContextoFeita, bvContextoOferta, bvUltimaPergunta, bvPerguntas, bvVezesDaPergunta, bvVezesDaLista, bvLaco, bvRepetePergunta, bvTerceiraVez, bvDiaSemana, bvLinhaHistorico, bvCorrida, bvQuaseIgual, bvSemRepetir, bvBarbeiroHumano, bvRegraBarbeiros, bvClienteDoResultado, bvClienteDoPedido, bvContextoCliente, bvNeutralizar, bvMontarTurno, bvPromptImagem, bvFiltrarBarbeiros, bvFiltrarServicos, bvSegundaVez, bvNormalizarDescricao, bvResolverOpcao, bvMontarOferta, bvCompor, bvRecencia, bvTransferido, bvContextoRetorno, bvPrometeEquipe, bvDigitacaoMs, bvPrompt, bvFrases, bvSaudar, bvContextoPedido };
 }

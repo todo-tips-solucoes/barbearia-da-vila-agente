@@ -438,7 +438,11 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertIn("bvCompor(out, oferta, cfg, ofertaNova, !!$input.first().json.proposta_nova, repete)", self.nos["Compor"]["parameters"]["jsCode"])
         # terceira vez (owner, 24/11): nao sai mais a oferta da equipe; o Compor so marca o laco e o ramo Laco? transfere
         self.assertIn("const laco = bvTerceiraVez(out, histC, antes, ofertaNova, composta.some((x) => x.tipo === 'lista')) && !bvCorrida(($('Gatilho').first().json || {}).itens, histC) && !($('Preparar').first().json.escolheu_opcao && !bvOfereceEquipe(out));", self.nos["Compor"]["parameters"]["jsCode"])  # quem tocou numa opcao nao e transferido pelo laco (PROD, 24/11)
-        self.assertIn("return [{ json: { saida, laco: laco && !$('Preparar').first().json.retorno } }];", self.nos["Compor"]["parameters"]["jsCode"])  # so esses campos seguem para o sub-workflow
+        self.assertIn("return [{ json: { saida, laco: laco && !$('Preparar').first().json.retorno } }];", self.nos["Compor"]["parameters"]["jsCode"])
+        # turno de retorno: resposta que diz que o pedido ficou com a equipe e trocada pelo texto configurado (27/11)
+        self.assertIn("if ($('Preparar').first().json.retorno && (bvPrometeEquipe(out) || bvBarbeiroHumano({ nome: out }, {{BV:graces.barbeiros_humanos}}))) saida = [{ n: 1, tipo: 'texto', texto: \"{{BV:textos.retorno_sem_equipe}}\" }];", self.nos["Compor"]["parameters"]["jsCode"])
+        for amb in ("integracao", "producao"):
+            self.assertTrue(json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))["textos"]["retorno_sem_equipe"])  # so esses campos seguem para o sub-workflow
         for amb in ("producao", "integracao"):
             self.assertNotIn("laco", json.loads(ler(f"config/ambientes/{amb}.json"))["textos"])
         # etapa 4: a mesma pergunta pela segunda vez leva a lista junto; a terceira nao sai (o contexto manda oferecer a equipe)
