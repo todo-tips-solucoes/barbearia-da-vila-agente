@@ -435,7 +435,7 @@ function bvMAgendaDe(body) {
 }
 
 // Ocorrencia de (idAgenda, inicio) na resposta (recorrente: mesmo idAgenda em varias ocorrencias, so a do inicio vale).
-const bvMOcorrencia = (lista, idAgenda, inicio) => lista.find((a) => a && a.idAgenda === idAgenda && String(a.horaInicio).slice(0, 16) === String(inicio).slice(0, 16));
+const bvMOcorrencia = (lista, idAgenda, inicio) => lista.find((a) => a && String(a.idAgenda) === String(idAgenda) && String(a.horaInicio).slice(0, 16) === String(inicio).slice(0, 16));
 
 // Decide o destino de uma linha reservada: enviar | cancelar(motivo) | adiar (libera a reserva, tenta na proxima varredura).
 // resp: { status, body } do GET /agenda/agendamentos do cliente ou da /agenda/completa do dia (linha sem graces_cliente_id); null = nao revalida.
