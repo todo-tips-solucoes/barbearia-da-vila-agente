@@ -940,6 +940,22 @@ Caminho normal do agente, com o mesmo código: roteiros R1 (primeiro contato, ag
 - **Falha do turno de retorno:** se o `entregar-rajada` falhar ou estourar o tempo, o cliente não recebe nada e o vigia não registra a falha.
 - **O que só a equipe resolve** (barbeiro que só ela agenda, atraso, pagamento): o agente diz em uma frase que por ali não consegue e oferece o que faz. O chamado já foi encerrado, então o pedido sai da fila da equipe, como já era.
 
+### Barreira: no turno de retorno o agente não diz que o pedido ficou com a equipe (27/11)
+
+Na prova repetida depois do merge, o caso "pediu o barbeiro que só a equipe agenda, ninguém respondeu, disse ok" recebeu **"Certo! Seu pedido ficou com a equipe por aqui."**. O chamado já estava encerrado: o cliente ficaria esperando ninguém. Na primeira rodada o mesmo caso tinha saído certo; é variação do modelo, com a linha de contexto proibindo.
+
+- **Linha de contexto mais explícita** (`bvContextoRetorno`): "A equipe não está mais nesta conversa: não diga que o pedido ficou com ela nem que alguém vai responder" e, quando a equipe nunca falou, "responda ao pedido que está na conversa recente, não ao ok".
+- **Barreira em código** no `Compor`, só no turno de retorno: a resposta que diz que o pedido ficou com a equipe ou que alguém vai responder (`bvPrometeEquipe`, `workflows/shared/agente.js`), ou que cita o barbeiro que só a equipe agenda (`bvBarbeiroHumano`, a mesma função da cláusula pétrea), é trocada por `textos.retorno_sem_equipe`: "Por aqui eu não consigo resolver isso. Se quiser, vejo um horário ou ajudo com um agendamento pra você." "Como a equipe falou" e "quem envia é a equipe" não são promessa e passam.
+
+Medição no TESTE (27/11, mesma cópia temporária do vigia, 8 turnos de retorno por rodada: 6 vezes o caso do barbeiro da equipe, um de atraso e um de pedido de atendente, todos com a equipe sem responder):
+
+| Versão | Disse que ficou com a equipe | Citou o nome do barbeiro | Barreira trocou a resposta |
+|---|---|---|---|
+| Só a linha mais explícita | 0 de 8 | 1 de 8 | não havia a do nome |
+| Linha e barreira completas | 0 de 8 | 0 de 8 | 2 de 8 |
+
+Nas duas rodadas nenhum turno transferiu de novo. Nos 2 de 8 em que a barreira agiu, o cliente recebeu o texto neutro em vez da resposta do modelo; a medição não guarda o que o modelo tinha escrito.
+
 ## Fila da vez: rodízio dos barbeiros indicados pelo agente (26/11)
 
 ### O que estava acontecendo
