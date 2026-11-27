@@ -453,7 +453,20 @@ const bvgEncaminhar = (motivo, operacao, cfg) => bvgFim(
 
 // ctx.rodizio: o do Contexto quando a chave esta ligada (valor que nao e objeto vale vazio: todos sem registro); null = desligado.
 const bvgRodizio = (ctx0, cfg) => (cfg.rodizio && cfg.rodizio.ligado ? (ctx0 && ctx0.rodizio && typeof ctx0.rodizio === 'object' && !Array.isArray(ctx0.rodizio) ? ctx0.rodizio : {}) : null);
-function bvGPlano(i, ctx0, cfg) {
+// Turno de retorno do atendimento humano (owner, 2026-11-25): o vigia marca o turno em pedido.retorno. A conversa acabou de voltar
+// da equipe, entao nada a devolve neste turno (senao: transfere -> 30 min parada -> retorno -> transfere, com aviso a equipe a cada
+// volta). Um ponto so, na saida do plano e do passo: sai o efeito da transferencia, ficam os demais (proposta_upd).
+const BVG_SEM_EQUIPE = 'neste turno não dá para passar a conversa para a equipe: diga em uma frase que por aqui você não consegue resolver isso, sem dizer nome de barbeiro e sem prometer retorno da equipe, e ofereça o que você faz (ver, marcar, remarcar ou cancelar horário)';
+function bvgSemRetransferir(r, pedido, turnoId) {
+  const e = r && r.final && r.final.efeitos;
+  if (!e || !e.handoff || !turnoId || !pedido || pedido.retorno !== turnoId) return r;
+  const { handoff, falha, pedido: ped, ...resto } = e;
+  const { handoff: marca, ...pedSem } = ped || {};
+  return bvgFim(bvgRecusa('equipe_neste_turno', BVG_SEM_EQUIPE), { ...resto, pedido: pedSem,
+    falha: { motivo: `retorno_sem_transferir|${r.final.resultado.motivo || ''}`, operacao: falha && falha.operacao, code: 'equipe_neste_turno', status: 0, trace: null } });
+}
+function bvGPlano(i, ctx0, cfg) { return bvgSemRetransferir(bvgPlanoUm(i, ctx0, cfg), ctx0 && ctx0.pedido, i && i.turno_id); }
+function bvgPlanoUm(i, ctx0, cfg) {
   const ctx = { pedido: (ctx0 && ctx0.pedido) || {}, opcoes: (ctx0 && ctx0.opcoes) || {}, proposta: ctx0 && ctx0.proposta, info: ctx0 && ctx0.info, dia: (ctx0 && ctx0.dia) || {}, rodizio: bvgRodizio(ctx0, cfg) };
   const st = { in: i, ctx, meta: { op: i.operacao } };
   const chamar = (reqs, meta = {}) => ({ reqs, st: { ...st, meta: { ...st.meta, ...meta } } });
@@ -887,7 +900,7 @@ function bvGPasso(st, resps0, cfg) {
   const teto = (cfg.graces || {}).max_estagios || 16;
   if (n > teto) return bvgFim({ ok: false, code: 'estagios_esgotados', orientacao: 'a agenda não concluiu a tempo; não repita sozinho, confira com meus_agendamentos ou chame a equipe da loja' }, { falha: { motivo: 'graces|estagios_esgotados', operacao: st && st.meta && st.meta.op, code: 'estagios_esgotados', status: 0, trace: null } });
   const r = bvgPassoUm({ ...st, estagio: n }, resps0, cfg);
-  return r.reqs ? { ...r, st: { ...r.st, estagio: n } } : r;
+  return r.reqs ? { ...r, st: { ...r.st, estagio: n } } : bvgSemRetransferir(r, st.ctx && st.ctx.pedido, st.in && st.in.turno_id);
 }
 
 const BVG_ORIENT_CADASTRO = 'cliente sem cadastro neste número: responda dúvidas e siga o agendamento (serviço, barbeiro, horários) sem cadastro; só quando ele escolher o horário peça, numa mensagem só, o nome completo, a data de nascimento e como conheceu a barbearia, chame cadastrar_cliente e então agendar com o horário escolhido';
@@ -1491,4 +1504,4 @@ function bvGParams(i, efeitos, msg) {
     ...bvgMsgParams(e, msg), e.contato && e.contato.como_conheceu ? String(e.contato.como_conheceu) : null];
 }
 
-if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, bvgCabeloEBarba, bvgFila, bvgRepartir, BVG_ACOES };
+if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, bvgCabeloEBarba, bvgSemRetransferir, bvgFila, bvgRepartir, BVG_ACOES };

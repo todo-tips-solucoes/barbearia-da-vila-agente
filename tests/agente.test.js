@@ -868,3 +868,20 @@ console.log('agente.test.js retomada longa ok');
   assert.deepEqual(['Quer que eu passe para a equipe te ajudar?', 'Posso passar para a equipe?', 'Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?', 'Qual horário você prefere?'].map(ag.bvOfereceEquipe), [true, true, false, false]);
   console.log('agente.test.js toque na lista ok');
 }
+
+// Turno de retorno do atendimento humano (owner, 2026-11-25): linha de contexto, com a variante de quando a equipe nunca falou
+{
+  const agora = Date.parse('2026-11-25T19:40:00Z');
+  const itens = [{ recebida_em: '2026-11-25T19:01:00Z' }, { recebida_em: '2026-11-25T19:05:00Z' }];
+  const com = a.bvContextoRetorno(itens, [{ direcao: 'saida', equipe: true }], agora);
+  assert.match(com, /^\nVolta do atendimento humano \(dado\): a conversa esteve com a equipe e voltou para você; as mensagens novas do cliente, de há 35 min, ficaram sem resposta\./);
+  const sem = a.bvContextoRetorno(itens, [{ direcao: 'saida' }], agora);
+  assert.match(sem, /^\nVolta do atendimento humano \(dado\): a conversa foi passada para a equipe há 35 min e voltou para você com o pedido do cliente em aberto\. Não repita o encaminhamento\./);
+  for (const l of [com, sem]) {
+    assert.match(l, /Não diga que a equipe não respondeu ou demorou, não prometa retorno dela e não transfira neste turno\./);
+    assert.equal(l.includes('\n', 1), false); // uma linha so
+  }
+  assert.match(sem, /sem dizer o nome do barbeiro/); // quem pediu o barbeiro que so a equipe agenda nao ouve o nome dele
+  assert.match(a.bvContextoRetorno([], null, agora), /há pouco/); // sem horario nos itens
+  console.log('agente.test.js retorno do atendimento humano ok');
+}

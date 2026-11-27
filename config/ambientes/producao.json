@@ -150,7 +150,6 @@
     "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!",
     "retomada_confirmar": "Oi, {nome}! Ficou faltando só confirmar {resumo}. Ainda quer esse horário?",
     "retomada_continuar": "Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?",
-    "fila_sem_resposta": "A equipe não conseguiu te responder por aqui agora. Se eu puder ajudar em mais alguma coisa, é só me chamar.",
     "confirmacao_desatualizada_atual": "Esse lembrete ficou desatualizado. O que está marcado no seu cadastro agora: {lista}. Se quiser mudar alguma coisa, é só me falar.",
     "confirmacao_desatualizada_sem": "Esse lembrete ficou desatualizado e não encontrei horário marcado no seu cadastro. Quer que eu veja um horário pra você?",
     "sem_entrega": "Não consegui consultar agora. Pode me mandar de novo o que você precisa?"

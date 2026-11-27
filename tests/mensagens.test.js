@@ -474,8 +474,8 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   console.log('mensagens.test.js recusa em lista e lembrete desatualizado ok');
 }
 
-{ // Vigia da fila humana (23/11): o aviso de "sem resposta" nao sai quando a equipe respondeu e o cliente so agradeceu depois
-  const { bvMSoAgradeceu: G, bvMAvisaFila: A } = require('../workflows/shared/mensagens.js');
+{ // Vigia da fila humana (23/11 e 25/11): encerra calado quando a equipe respondeu e o cliente so agradeceu ou confirmou depois; senao o agente retoma
+  const { bvMSoAgradeceu: G, bvMRetomaFila: A } = require('../workflows/shared/mensagens.js');
   for (const t of ['Obrigado!', 'Ok obrigado', 'valeuu 🙏🏻', 'Beleza', 'ok', 'Okk', 'Muito obrigada, até amanhã', 'Show, valeu', '👍', 'Tá bom, obrigado', 'Eu que agradeço', 'kkkk valeu', 'Combinado', 'Perfeito. Obrigado pela atenção']) assert.equal(G([t]), true, t);
   // pergunta, pedido, cumprimento, "sim" sozinho, pontuacao e texto longo nao sao agradecimento: o cliente ficou esperando
   for (const t of ['Obrigado, mas e amanhã?', 'Ótimo! Pode ser 17:20', 'Boa tarde', 'Sim', 'Isso mesmo', 'E antes das 9h?', '...', '', 'Conseguem agendar por favor', 'ok ' + 'obrigado '.repeat(12), 'Pode ser esse horário das 14h', 'Não', '?']) assert.equal(G([t]), false, t);
@@ -487,7 +487,17 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.equal(G([]), false);
   assert.equal(G(null), false);
   assert.equal(G(Array(7).fill('ok')), false); // a consulta manda no maximo 7: acima de 6 pode haver mensagem anterior nao lida
-  // linha do encerramento: so cala com a equipe tendo respondido E o cliente so agradecendo; o resto avisa como antes
+  // confirmacao (owner, 2026-11-25): so conta com o segundo argumento, que o encerramento da fila humana passa
+  for (const t of ['Sim', 'Isso mesmo', 'Tá bom', 'Pode ser sim', 'Pode ser', 'Com certeza', 'Confirmo', 'Sim, obrigado', 'ss', 'Claro', 'Tá, pode ser', 'Bora 👍', 'Então tá']) assert.equal(G([t], true), true, t);
+  // o que pede resposta continua pedindo: outro dia ou periodo, pergunta, numero, negativa, pedido
+  for (const t of ['Pode ser amanhã', 'Sim, à tarde', 'Tá tarde', 'Sim, e amanhã?', 'Pode ser 14h', 'Não', 'Não entendi', 'Não fechou', 'Quero marcar', 'Marcar', 'Pode marcar', 'Pode agendar pra mim', 'Pode confirmar', 'Sim mas com outro barbeiro', 'Pode ser hoje', 'Boa tarde', '']) assert.equal(G([t], true), false, t);
+  assert.equal(G(['Pode ser sim', 'Obrigado']), false); // sem o argumento, a confirmacao nao fecha (regra de 23/11 intacta)
+  assert.equal(G(['Pode ser sim', 'Obrigado'], true), true);
+  // linha do encerramento: so cala com a equipe tendo respondido E o cliente so agradecendo ou confirmando; o resto o agente retoma
+  assert.equal(A({ equipe_respondeu: true, depois: '["Pode ser sim"]' }), false); // PROD, 25/11: a equipe propos 12h40 e o cliente confirmou
+  assert.equal(A({ equipe_respondeu: true, depois: '["Pode ser amanhã"]' }), true);
+  assert.equal(A({ equipe_respondeu: false, depois: '["ok"]' }), true); // a equipe nunca respondeu: o pedido ficou sem atendimento
+  assert.equal(A(null), false);
   assert.equal(A({ equipe_respondeu: true, depois: '["Obrigado!"]' }), false);
   assert.equal(A({ equipe_respondeu: true, depois: ['Ok obrigado'] }), false);
   assert.equal(A({ equipe_respondeu: false, depois: '["Obrigado!"]' }), true); // a equipe nunca respondeu
@@ -495,8 +505,7 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.equal(A({ equipe_respondeu: true, depois: '[]' }), true);
   assert.equal(A({ equipe_respondeu: true, depois: 'x' }), true); // JSON invalido: avisa
   assert.equal(A({ equipe_respondeu: 'true', depois: '["ok"]' }), true); // so o booleano do banco vale
-  assert.equal(A({ contato_id: 1, telefone: '+55' }), true); // turno que estourou o tempo (sem os campos): sempre avisa
-  console.log('mensagens.test.js aviso do vigia ok');
+  console.log('mensagens.test.js encerramento da fila humana ok');
 }
 
 { // Agendamento por pacote: o servico vem em servicoPacote; sobe para o formato do avulso num lugar so (agente e lembretes)

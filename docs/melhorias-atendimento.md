@@ -92,7 +92,7 @@ Depois da publicação das correções, o owner relatou atendimentos ainda confu
 
 ### Decisões do owner (17/11)
 
-- **Fila humana sem interação há 30 minutos:** encerra também quando o cliente falou por último; nesse caso o cliente recebe um aviso (`textos.fila_sem_resposta`). Consequência assumida: o pedido sai da fila da equipe. Desde 23/11 o aviso não sai quando a equipe respondeu e o cliente só agradeceu depois (ver "Leitura dos atendimentos de 23/11").
+- **Fila humana sem interação há 30 minutos:** encerra também quando o cliente falou por último; nesse caso o cliente recebia um aviso fixo. Consequência assumida: o pedido sai da fila da equipe. Desde 23/11 o aviso não sai quando a equipe respondeu e o cliente só agradeceu depois (ver "Leitura dos atendimentos de 23/11"). **Desde 25/11 o aviso fixo não existe mais:** o agente retoma a conversa ou o encerramento é calado (ver "Volta do atendimento humano sem texto fixo").
 - **Teto de agendamentos por contato por dia:** 3; acima disso, transfere para a equipe (etapa 3).
 - **Item 21 (Jayme):** manter os lembretes e as confirmações dos agendamentos dele.
 - **OpenAI:** chave separada para o TESTE, com orçamento próprio (depende de o owner criar a chave e a credencial no n8n).
@@ -855,7 +855,7 @@ Nenhuma mensagem da equipe nesses chamados entrou no histórico da conversa: a g
 
 - **Chamado assumido vale como fila humana.** Assumido é o chamado `open` com `ticketData.userId` de uma pessoa (diferente de `chatmaster.user_id`, o usuário do agente). A regra mora em `bvAssumido` e `bvFilaDe` (`workflows/shared/rajada.js`), usada pelo nó `Normalizar` da recepção: a fila gravada em `contatos.fila_id` passa a ser a humana, e o resto segue como já era na fila humana (`bvTransferido` cala o agente, a mídia não é interpretada, o vigia conta os 30 minutos).
 - **A mensagem da equipe nesse chamado entra no histórico**, desde que escrita por gente (painel, com `userId`; aparelho, com `fromApp`). O eco de uma mensagem enviada pela API não entra.
-- **O agente volta sozinho** quando o chamado deixa de estar assumido (devolvido para "aguardando" ou encerrado e reaberto pelo cliente), ou quando o vigia o encerra depois de 30 minutos sem interação; nesse caso, se o cliente falou por último, ele recebe o aviso de sempre (`textos.fila_sem_resposta`).
+- **O agente volta sozinho** quando o chamado deixa de estar assumido (devolvido para "aguardando" ou encerrado e reaberto pelo cliente), ou quando o vigia o encerra depois de 30 minutos sem interação; nesse caso, se o cliente ficou sem resposta, o agente retoma a conversa (ver "Volta do atendimento humano sem texto fixo").
 - Os simuladores do TESTE (`_smoke.chamado_do_agente`) passam a mandar o chamado como ele fica em PROD com o agente (`pending`, sem atendente): as fixtures vieram de chamados que o owner tinha assumido no painel.
 
 ### Testes
@@ -879,6 +879,66 @@ O cliente pediu para remarcar o corte de 24/11 às 19:20 (Pedro Henrique) para 2
 - É o único `HTTP_200` de remarcação nas leituras de PROD (15 a 24/11). As outras 6 remarcações executadas passaram.
 - O agendamento antigo (24/11 19:20 com o Pedro Henrique) não está mais na agenda. A equipe combinou 25/11 às 20:40 com o Rodrigo; na leitura de 25/11 às 14:00 esse horário do Rodrigo aparecia livre, e o único agendamento às 20:40 é com outro barbeiro. Vale a equipe conferir.
 - **Aberto:** guardar a `mensagem` da Graces quando ela recusa com `sucesso: false` (hoje não há coluna para isso em `falhas_agente`), para a próxima recusa ser explicável.
+
+## Volta do atendimento humano sem texto fixo (25/11)
+
+Pedido do owner em 25/11, depois de ver o aviso sair para um cliente que tinha acabado de aceitar o horário proposto pela equipe: tirar a frase "A equipe não conseguiu te responder por aqui agora"; se o cliente ficou sem resposta, o agente lê as últimas mensagens e continua a conversa; se a última mensagem dele é despedida ou confirmação, só encerra.
+
+### Como funciona
+
+O vigia continua encerrando o atendimento humano parado há 30 minutos. O que muda é o que acontece depois, quando o cliente falou por último:
+
+| Situação | O que acontece |
+|---|---|
+| A equipe respondeu e, depois dela, o cliente só agradeceu, se despediu ou confirmou ("Pode ser sim", "Confirmo", "Tá bom") | Encerra calado |
+| A equipe propôs um horário em pergunta ("Pode ser às 12h40?") e o cliente só confirmou | Encerra calado (antes, a pergunta da equipe contava como pendência) |
+| A equipe perguntou sem horário, ou prometeu ver, e o cliente respondeu | O agente retoma |
+| O cliente perguntou, pediu, mandou número, horário, áudio ou imagem | O agente retoma |
+| A equipe nunca respondeu, mesmo que o cliente só tenha dito "ok" ao encaminhamento | O agente retoma: o pedido dele ficou sem atendimento |
+
+- **Decisão em código**, em `bvMRetomaFila` (`workflows/shared/mensagens.js`), que reaproveita `bvMSoAgradeceu` com as palavras de confirmação. "Pode ser amanhã", "Sim, à tarde", "Pode ser 14h", "Não" e "Pode marcar" (pedido esperando a ação de alguém) continuam pedindo resposta.
+- **Turno de retorno.** No `bv-vigia`, `Gravar encerramento` → `Decidir retorno` → `Montar retorno` → `Tem retorno?` → `Chamar retorno`. `Montar retorno` põe num turno novo as mensagens do cliente que ficaram sem resposta: as posteriores à última resposta do agente ou da equipe (lembrete e retomada não contam como resposta), no máximo 10, dentro da janela da sessão (120 minutos, com 10 de folga, para o turno nunca nascer como sessão nova, sem histórico). Grava também a marca `pedido.retorno` com o id desse turno. `Chamar retorno` executa o `entregar-rajada`. Por rodada do vigia sai no máximo um encerramento com o cliente por último (os demais ficam para as rodadas seguintes, de 5 em 5 minutos) e até cinco dos que só encerram. As mensagens não são reabertas (`processada_em` fica como está): se o turno falhar, a recepção não as reprocessa num "Oi" futuro.
+- **O que o agente recebe:** as mensagens sem resposta como mensagens novas, a conversa recente com o que a equipe disse, e uma linha de contexto (`bvContextoRetorno`, `workflows/shared/agente.js`) mandando continuar de onde parou, sem dizer que a equipe não respondeu, sem prometer retorno dela e sem inventar o que só a equipe sabe (pix, valor combinado, áudio da equipe).
+- **Sem nova transferência no turno de retorno**, para não haver o laço transfere → 30 minutos → retorno → transfere, com aviso à equipe a cada volta. São três travas, todas pela marca `pedido.retorno`: o atalho `Limite?` e o laço não disparam (`Preparar` e `Compor`), e qualquer ferramenta do `bv-graces` que passaria a conversa para a equipe é recusada num ponto só (`bvgSemRetransferir`, `workflows/shared/graces.js`). No turno seguinte, se o cliente pedir uma pessoa, valem as regras normais.
+- O texto `textos.fila_sem_resposta` saiu da configuração. O aviso do turno que estourou o tempo (`textos.contingencia`) não muda.
+
+### Topologia
+
+O `bv-vigia` passa a ser um segundo chamador do `entregar-rajada` (o primeiro é a recepção). Não há ciclo: `Chamar retorno` é terminal e ninguém chama o vigia. O `entregar-rajada` não ganhou nó nem ligação; mudaram duas linhas de código (`Preparar` e `Compor`).
+
+### Desenho e revisão
+
+Desenho com dois especialistas em leitura (comportamento do agente e arquitetura de backend). Deles saíram: a trava contra nova transferência em código e não só na linha de contexto (há transferência sem o modelo em `Limite?`, no laço e em nove pontos do `graces.js`); não reabrir as mensagens; guarda de concorrência em SQL em vez de copiar os nós de posse do Redis para o vigia; `mode: each` no nó de chamada; e encerramento atômico (`AND fila_id = ...`).
+
+Revisão independente do diff (especialista de backend, em leitura), com quatro achados corrigidos: item sem turno chegando ao sub-workflow quando não há mensagem a retomar (nó `Tem retorno?`); vários retornos reivindicados antes do primeiro rodar, com a guarda de concorrência envelhecendo minutos (um por rodada); a marca `pedido.retorno` e o histórico perdidos em sessão nova (janela da sessão no `Montar retorno`); e lembrete gravado depois da mensagem do cliente contando como resposta. Da mesma revisão: a linha do laço não entra no turno de retorno (contradizia a de retorno), "Pode marcar" não conta como confirmação, e um teste confere que o item montado pelo vigia tem os mesmos campos do da recepção.
+
+### Testes
+
+- Unidade: `tests/mensagens.test.js` (confirmação e decisão calado × retorno), `tests/agente.test.js` (linha de contexto), `tests/graces.test.js` (trava contra nova transferência) e `tests/test_workflows_*.py` (nós, ligações, chamada terminal e contrato do item).
+- As consultas do vigia rodaram no banco do TESTE dentro de transação desfeita: o encerramento devolve a linha uma vez só; o retorno pega só as mensagens sem resposta; lembrete gravado depois não esconde a mensagem; turno em andamento ou mensagem fora da janela não monta retorno; de três contatos com o cliente por último, sai um por rodada.
+- TESTE (25/11, com o ok do owner para a ligação nova): agente e ferramentas publicados da branch e uma cópia temporária do vigia, só com o ramo da fila humana, a cada minuto, restrita a 7 contatos simulados e sem tocar no Chat Master. O n8n respondeu saudável em todas as conferências e a cópia foi apagada no fim.
+
+| Caso | Resultado |
+|---|---|
+| Equipe resolveu e o cliente agradeceu | Calado |
+| Equipe propôs "Pode ser às 12h? Perdão, às 12h40" e o cliente disse "Pode ser sim" | Calado |
+| Equipe falou por último | Calado |
+| Cliente pediu o barbeiro que só a equipe agenda, foi transferido, ninguém respondeu e ele disse "ok" | "Por aqui não consigo agendar com esse barbeiro. Posso verificar horários com outro barbeiro hoje à tarde, se você quiser." |
+| Equipe disse que não havia horário com um barbeiro; cliente perguntou por outro, hoje ou amanhã | O agente consultou a agenda e mandou a lista de horários do dia seguinte |
+| Equipe mandou um áudio; cliente pediu de novo "a mensagem com as informações e o pix" | "Não consigo ver o áudio nem recuperar a mensagem ou o Pix que foram apagados por aqui. Posso ajudar com serviços, preços, horários e agendamentos da barbearia." |
+| Cliente atrasado, equipe ofereceu outro dia, cliente insistiu e pediu um atendente de novo | O modelo tentou transferir e a trava recusou (`retorno_sem_transferir`): "Por aqui não consigo chamar um atendente neste momento. Posso verificar um horário para você amanhã ou remarcar seu agendamento." |
+
+Em nenhum dos quatro turnos de retorno a conversa voltou para a fila humana, o agente disse que a equipe não respondeu, ou saiu o nome do barbeiro.
+
+Caminho normal do agente, com o mesmo código: roteiros R1 (primeiro contato, agenda direto) e R28 (ida e volta da fila humana) aprovados, p50 de 20,0 s e p95 de 21,1 s. A suíte completa (45 roteiros) não rodou: o saldo da OpenAI do TESTE é o mesmo de PROD e o token próprio de testes ainda não existe.
+
+### O que falta e limites
+
+- **Cliente escreve durante o turno de retorno** (uns 20 segundos, depois de 30 minutos de silêncio): a recepção roda outro turno em paralelo e as duas respostas podem se cruzar. O vigia não toma a posse do Redis: seriam seis nós copiados da recepção e o vigia passaria a depender do Redis, que é a falha que ele cobre. A guarda é em SQL (não monta o retorno se há turno em andamento ou mensagem nova ainda não processada). Não há escrita em dobro na agenda: a proposta é reivindicada de forma atômica no `bv-graces`. Se aparecer em PROD, a correção é extrair posse e turno para um sub-workflow comum à recepção e ao vigia.
+- **Mensagem sem resposta há mais de 110 minutos** (fila de encerramentos acumulada ou n8n parado): encerra calado, sem retorno.
+- **Confirmação a uma proposta que a equipe não fechou:** o cliente que respondeu "Pode ser sim" a "Pode ser às 12h40?" fica sem aviso, e nada garante que o horário entrou na agenda. Decisão do owner: só encerrar.
+- **Falha do turno de retorno:** se o `entregar-rajada` falhar ou estourar o tempo, o cliente não recebe nada e o vigia não registra a falha.
+- **O que só a equipe resolve** (barbeiro que só ela agenda, atraso, pagamento): o agente diz em uma frase que por ali não consegue e oferece o que faz. O chamado já foi encerrado, então o pedido sai da fila da equipe, como já era.
 
 ## Fila da vez: rodízio dos barbeiros indicados pelo agente (26/11)
 
