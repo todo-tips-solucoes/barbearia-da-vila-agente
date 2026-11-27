@@ -197,7 +197,10 @@ console.log('mensagens.test.js (decisao) ok');
   assert.equal(R({ ...dg, abertas: '1', propostas: '0', lembrete_ultimo: true, recentes: '0' }), 'consumir');
   assert.equal(R({ ...dg, abertas: 2, propostas: 0, lembrete_ultimo: 'true' }), 'consumir'); // 2 abertas: o bv-confirmacao pede para escolher
   for (const e of [{ abertas: 1, propostas: 0, lembrete_ultimo: false }, { abertas: 1, propostas: 1, lembrete_ultimo: true }, { abertas: 0, propostas: 0, lembrete_ultimo: true },
-    { abertas: 1, propostas: 0, lembrete_ultimo: false, ultima_lista: true }, { abertas: 0, propostas: 0, recentes: 3 }, {}]) assert.equal(R({ ...e, ...dg }), 'agente', JSON.stringify(e));
+    { abertas: 0, propostas: 0, recentes: 3 }, {}]) assert.equal(R({ ...e, ...dg }), 'agente', JSON.stringify(e));
+  // 27/11: o lembrete de 24 h voltou a sair em lista; o "sim" digitado logo depois dela tambem confirma (a lista e a ultima saida)
+  assert.equal(R({ ...dg, abertas: 1, propostas: 0, lembrete_ultimo: false, ultima_lista: true }), 'consumir');
+  assert.equal(R({ ...dg, abertas: 1, propostas: 1, lembrete_ultimo: false, ultima_lista: true }), 'agente'); // proposta pendente: o sim e do agente
   // o titulo exato: recentes, ou aberta + lista como ultima saida, como antes; "Confirmo" escrito a mao depois do lembrete de 24 h tambem confirma
   assert.equal(R({ sim: true, abertas: 1, propostas: 0, ultima_lista: true, lembrete_ultimo: false }), 'consumir');
   assert.equal(R({ sim: true, abertas: 1, propostas: 0, ultima_lista: false, lembrete_ultimo: true }), 'consumir');
@@ -268,6 +271,41 @@ console.log('mensagens.test.js (confirmacao) ok');
   assert.equal(m.bvMTextoDe({ tipo: 'lembrete_hora', inicio: '2026-11-22T14:00:00', dados: {} }, textos), 'Oi! Às 14:00.');
   const cfg = { textos, user_id: '234', wid: '159', retentativas_min: [1, 5, 15] };
   const linha = (o) => ({ id: 1, tipo: 'lembrete_hora', situacao: 'pendente', previsto_para: '2026-11-22T16:00:00.000Z', inicio: '2026-11-22T14:00:00', dados: { nome: 'Paulo', servico: 'corte', barbeiro: 'Pedro' }, canal_id: null, contato_id: 7, telefone: '+5511967296849', contato_canal_id: 236429, ticket_id: 172345, ...o });
+  { // Lembrete de 24 h com lista (owner, 2026-11-27): nao e agendado no Chat Master; na hora dele a lista sai daqui
+    const cl = { ...cfg, fila: '107', botao: 'Ver opções', topo: 'Escolha uma das opções', titulo_sim: 'Confirmo', titulo_nao: 'Não vou poder', atraso_max_min: 30, antecedencia_min_s: 120 };
+    const dia = (o) => linha({ id: 5, tipo: 'lembrete_dia', previsto_para: '2026-11-21T17:00:00.000Z', inicio: '2026-11-22T14:00:00', ...o });
+    const plano = (o, quando) => m.bvMSincPlano([dia(o)], new Date(quando), cl)[0];
+    // antes da hora: contato e ticket prontos -> dorme ate a hora; nada e criado no agendador
+    let pl = plano({}, '2026-11-21T10:00:00Z');
+    assert.deepEqual([pl.acao, pl.req, pl.previsto_para], ['aguardar', undefined, '2026-11-21T17:00:00.000Z']);
+    assert.deepEqual(m.bvMSincResultado(pl, 200, null, 0, cl, agora), { id: 5, proxima: '2026-11-21T17:00:00.000Z' });
+    assert.equal(plano({}, '2026-11-21T16:59:00Z').acao, 'aguardar'); // dentro da folga do agendador: espera, nao cancela
+    // sem contato ou sem ticket no Chat Master: a preparacao e a mesma de antes
+    assert.equal(plano({ contato_canal_id: null }, '2026-11-21T10:00:00Z').acao, 'buscar_contato');
+    assert.equal(plano({ ticket_id: null }, '2026-11-21T10:00:00Z').acao, 'buscar_ticket');
+    // na hora: a lista, com os ids que a recepcao ja reconhece
+    pl = plano({}, '2026-11-21T17:00:30Z');
+    assert.equal(pl.acao, 'enviar_lista');
+    assert.deepEqual(pl.req, { m: 'POST', path: '/api/messages/whatsmeow/sendListPRO', body: { number: '5511967296849', openTicket: '0', queueId: '107', whatsappId: '159',
+      body: { Desc: 'Oi, Paulo! Amanhã às 14:00, corte com Pedro.', ButtonText: 'Ver opções', TopText: 'Escolha uma das opções', List: [{ RowId: 'bvc:5:s', title: 'Confirmo', desc: '' }, { RowId: 'bvc:5:n', title: 'Não vou poder', desc: '' }] } } });
+    assert.deepEqual(m.bvMReconhecer({ acao: 'from_internal', mensagem: { dataJson: JSON.stringify({ rawData: { event: { Message: { listResponseMessage: { singleSelectReply: { selectedRowID: pl.req.body.body.List[0].RowId } } } } } }) } }, cl),
+      { origem: 'id', mensagem_id: 5, confirmado: true, stanza: null });
+    assert.deepEqual(m.bvMSincResultado(pl, 200, {}, 0, cl, agora), { id: 5, situacao: 'enviada', lista_texto: 'Oi, Paulo! Amanhã às 14:00, corte com Pedro.' });
+    // falha de envio repete pela politica de sempre; sem resposta nunca reenvia
+    let rf = m.bvMSincResultado(pl, 500, {}, 0, cl, agora);
+    assert.deepEqual([rf.falhou, rf.situacao, rf.tentativas, rf.code, rf.operacao, !!rf.proxima, rf.lista_texto], [true, 'pendente', 1, 'HTTP_500', 'enviar_lista', true, undefined]);
+    rf = m.bvMSincResultado(pl, 0, null, 0, cl, agora);
+    assert.deepEqual([rf.situacao, rf.motivo, rf.proxima], ['falhou', 'incerto', null]);
+    // sem contato no Chat Master na hora: a lista sai pelo numero assim mesmo; atraso alem do limite nao envia
+    assert.equal(plano({ contato_canal_id: null, ticket_id: null }, '2026-11-21T17:10:00Z').acao, 'enviar_lista');
+    assert.equal(plano({}, '2026-11-21T17:31:00Z').acao, 'ja_passou');
+    // linha que ja tinha o agendamento de texto no Chat Master segue como estava (transicao sem migracao)
+    assert.equal(plano({ canal_id: '99', canal_previsto_para: '2026-11-21T17:00:00.000Z', canal_texto: 'Oi, Paulo! Amanhã às 14:00, corte com Pedro.' }, '2026-11-21T10:00:00Z').acao, 'nada');
+    assert.equal(plano({ canal_id: '99' }, '2026-11-21T17:00:30Z').acao, 'enviada');
+    // o lembrete de 1 hora continua no agendador
+    assert.equal(m.bvMSincPlano([linha()], agora, cl)[0].acao, 'criar');
+    console.log('mensagens.test.js lembrete de 24 h com lista ok');
+  }
   // criar: payload medido na API (fuso de SP, userId do agente, sem abrir ticket)
   let [a] = m.bvMSincPlano([linha()], agora, cfg);
   assert.equal(a.acao, 'criar');
@@ -405,10 +443,11 @@ console.log('mensagens.test.js retomada ok');
   const G = [{ id: 1, servico: 'corte adulto', barbeiro: 'Kiel' }, { id: 2, servico: 'barba design', barbeiro: 'Kiel ' }];
   const linha = (o) => ({ id: '1', tipo: 'lembrete_dia', situacao: 'pendente', previsto_para: '2026-11-21T17:00:00.000Z', inicio: '2026-11-22T14:00:00', dados: { nome: 'PAULO', servico: 'corte adulto', barbeiro: 'Kiel' },
     canal_id: null, contato_id: 7, telefone: '+5511967296849', contato_canal_id: 236429, ticket_id: 172345, grupo: G, ...o });
-  // lider: um agendamento no Chat Master citando os dois servicos
+  // lider: um lembrete so, citando os dois servicos. Desde 27/11 o de 24 h sai em lista na hora dele (antes, dorme)
   let [a, b] = m.bvMSincPlano([linha(), linha({ id: '2', previsto_para: '2026-11-21T17:40:00.000Z', inicio: '2026-11-22T14:40:00', dados: { nome: 'PAULO', servico: 'barba design', barbeiro: 'Kiel' } })], agora, cfg);
-  assert.equal(a.acao, 'criar');
-  assert.equal(a.req.body.body, 'Oi, Paulo! Seu corte adulto e barba design com Kiel amanhã, às 14:00.');
+  assert.equal(a.acao, 'aguardar');
+  [a] = m.bvMSincPlano([linha()], '2026-11-21T17:00:30Z', cfg);
+  assert.deepEqual([a.acao, a.req.body.body.Desc], ['enviar_lista', 'Oi, Paulo! Seu corte adulto e barba design com Kiel amanhã, às 14:00.']);
   // seguidora: nenhuma chamada; reavaliada em ate 30 min e encerrada como `junto` no horario dela
   assert.deepEqual([b.acao, b.fim, b.req], ['junto', false, undefined]);
   assert.deepEqual(m.bvMSincResultado(b, 200, null, 0, cfg, agora), { id: '2', proxima: '2026-11-20T12:30:00.000Z' });
@@ -430,8 +469,8 @@ console.log('mensagens.test.js retomada ok');
     assert.deepEqual(m.bvMServicos(linha({ grupo: g })), { servico: 'corte adulto', barbeiro: 'Kiel' });
   }
   // lider cancelada sai do grupo na consulta: a seguidora vira lider e manda o proprio lembrete
-  [b] = m.bvMSincPlano([linha({ id: '2', grupo: [G[1]], dados: { nome: 'Paulo', servico: 'barba design', barbeiro: 'Kiel' } })], agora, cfg);
-  assert.deepEqual([b.acao, b.req.body.body], ['criar', 'Oi, Paulo! Seu barba design com Kiel amanhã, às 14:00.']);
+  [b] = m.bvMSincPlano([linha({ id: '2', grupo: [G[1]], dados: { nome: 'Paulo', servico: 'barba design', barbeiro: 'Kiel' } })], '2026-11-21T17:00:30Z', cfg);
+  assert.deepEqual([b.acao, b.req.body.body.Desc], ['enviar_lista', 'Oi, Paulo! Seu barba design com Kiel amanhã, às 14:00.']);
 }
 console.log('mensagens.test.js lembrete unico por grupo ok');
 

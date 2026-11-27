@@ -283,7 +283,17 @@ function bvMSincPlano(linhas, agora, cfg) {
       if (mesmo) return { ...base, acao: 'nada' };
       return { ...base, acao: 'atualizar', texto, previsto_para: l.previsto_para, req: { m: 'PUT', path: `/api/schedules/${encodeURIComponent(String(l.canal_id))}`, body: { body: texto, sendAt: bvMLocal(l.previsto_para, ' ') } } };
     }
-    if (!futuro) return { ...base, acao: 'ja_passou' };
+    // Lembrete de 24 h com lista (owner, 2026-11-27): o agendador do Chat Master nao leva lista, entao este lembrete nao e agendado
+    // la. O contato e o ticket sao preparados antes, como sempre; na hora dele a lista sai daqui (bvMLista: titulo_sim / titulo_nao,
+    // ids bvc:<id>:s|n, a recepcao do toque ja existia). Linha que ja tinha agendamento de texto (canal_id) segue como estava.
+    const lista = l.tipo === 'lembrete_dia';
+    const esperar = { ...base, acao: 'aguardar', previsto_para: l.previsto_para };
+    const previsto = new Date(l.previsto_para).getTime();
+    if (lista && previsto <= t0) {
+      if (t0 - previsto > (cfg.atraso_max_min || 30) * 60000) return { ...base, acao: 'ja_passou' };
+      return { ...base, acao: 'enviar_lista', texto, req: { m: 'POST', ...bvMLista({ texto }, l.id, l.telefone, cfg) } };
+    }
+    if (!futuro) return lista ? esperar : { ...base, acao: 'ja_passou' };
     // bigint do Postgres chega ao Code node como TEXTO ('0', '138449'): sem converter, '0' === 0 falhava e o contato inexistente
     // voltava a ser buscado a cada rodada, sem falha registrada, travando a fila em PROD (2026-11-15)
     const num0 = (x) => (x === null || x === undefined || x === '' ? null : Number(x));
@@ -304,6 +314,7 @@ function bvMSincPlano(linhas, agora, cfg) {
       return { ...base, acao: 'buscar_ticket', conexao: String(cfg.wid), req: { m: 'GET', path: '/api/contacts/alltickets', body: { number: num } } };
     }
     if (cid > 0) {
+      if (lista) return esperar; // contato e ticket prontos: a linha dorme ate a hora do envio
       return { ...base, acao: 'criar', texto, previsto_para: l.previsto_para, req: { m: 'POST', path: '/api/schedules', body: { body: texto, sendAt: bvMLocal(l.previsto_para, 'T'), contactId: String(cid),
         userId: String(cfg.user_id), openTicket: '0', queueId: String(cfg.fila || '0'), whatsappId: String(cfg.wid), repetir: '0', repetirTodo: '0', quantasVezes: '0' } } };
     }
@@ -342,6 +353,10 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
     case 'desetiquetar': return ok || status === 404 ? { id, etiqueta_removida: true } : falha();
     case 'sem_etiqueta': return { id, etiqueta_id: 0 };
     case 'enviada': return { id, situacao: 'enviada' };
+    // lista do lembrete de 24 h: enviada aqui; lista_texto vai para `mensagens` (o modelo ve o lembrete e a recepcao sabe que a
+    // ultima saida foi a lista). Falha segue a politica de envio (repete por retentativas_min; sem resposta nunca reenvia).
+    case 'enviar_lista': return ok ? { id, situacao: 'enviada', lista_texto: p.texto } : falha();
+    case 'aguardar': return { id, proxima: p.previsto_para }; // a reconciliacao zera a proxima tentativa se o horario mudar
     case 'ja_passou': return { id, situacao: 'cancelada', motivo: 'ja_passou' };
     case 'sem_contato': return { id, situacao: 'cancelada', motivo: 'sem_contato_canal' };
     case 'junto': // seguidora: sem chamada; reavalia em ate 30 min (sem ocupar a varredura) e encerra no horario dela
@@ -487,7 +502,8 @@ function bvMTituloRota(e) {
   const dig = !!e && v(e.digitado);
   const aberta = Number(e && e.abertas) > 0 && !(Number(e.propostas) > 0);
   if (!dig && Number(e && e.recentes) > 0) return 'consumir';
-  if (aberta && ((!dig && v(e.ultima_lista)) || (v(e.sim) && v(e.lembrete_ultimo)))) return 'consumir';
+  // sim digitado: vale com o lembrete como a ultima coisa dita pela barbearia, seja o de texto (lembrete_ultimo) ou a lista (27/11)
+  if (aberta && ((!dig && v(e.ultima_lista)) || (v(e.sim) && (v(e.lembrete_ultimo) || v(e.ultima_lista))))) return 'consumir';
   return 'agente';
 }
 
@@ -496,7 +512,10 @@ function bvMTituloRota(e) {
 function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro, semConversa) {
   let s = '';
   const cs = Array.isArray(ctx && ctx.confirmacoes) ? ctx.confirmacoes : [];
-  if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ');
+  // PROD, 16 a 26/11: "eu remarquei para sabado" recebeu "Anotado" sem conferencia; "amanha nao, agendei para quarta" e "e so barba"
+  // viraram listas sem relacao. Quem contesta o lembrete precisa ouvir o que esta na agenda.
+  if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ')
+    + '. Se o cliente disser que o dia, o horário ou o serviço não é esse, ou que já remarcou ou cancelou, chame meus_agendamentos antes de responder e diga o que está marcado; nunca diga que anotou, remarcou ou cancelou sem a ferramenta ter feito isso.';
   // Lembrete de 1 hora (17/11): sai pelo Chat Master e nao entra no historico; o "Simm" de resposta chegava ao agente sem contexto
   // e virava "Como posso ajudar?". Com confirmacao aberta vale a linha de cima (o sim confirma a presenca). Sem o nome do barbeiro.
   // semConversa: so quando nao ha conversa em andamento; no meio dela o "sim" responde a ultima pergunta do agente (um resumo, p. ex.).

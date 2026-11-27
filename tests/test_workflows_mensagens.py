@@ -260,7 +260,18 @@ class BvMensagens(Base, unittest.TestCase):
         self.assertIn("m.tipo IN ('confirmacao','lembrete','pos_atendimento')", self.nos["Reservar"]["parameters"]["query"])  # legado nao envia os novos
         self.assertEqual(self.nos["Chat Master agendamentos"]["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.chatmaster}}")
         g = self.nos["Gravar sincronizacao"]["parameters"]["query"]
-        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), list(range(1, 21)))
+        self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), list(range(1, 22)))
+        # lembrete de 24 h com lista (owner, 2026-11-27): a lista enviada entra em `mensagens` (historico do modelo e ultima_lista da recepcao)
+        self.assertIn("ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT u.contato_id, 'agendada-' || u.id, 'saida', 'lista', $21::text FROM u WHERE $21::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1)", g)
+        self.assertTrue(self.nos["Gravar sincronizacao"]["parameters"]["options"]["queryReplacement"].endswith("!!$json.etiqueta_removida, $json.lista_texto ?? null] }}"))
+        ps = self.nos["Planejar sincronizacao"]["parameters"]["jsCode"]
+        self.assertIn("{{BV:INCLUDE:shared/config.js}}", ps)
+        self.assertIn("const cfg = { ...bvMCfgEnvio(), atraso_max_min: {{BV:mensagens.atraso_max_min}}, textos: {", ps)  # conexao, fila e titulos da lista num lugar so
+        self.assertIn("p.acao === 'enviar_lista' && bvSimulado(linhas[k].telefone) ? { req: undefined } : {}", ps)  # contato simulado: so grava
+        for amb in ("integracao", "producao"):
+            t = json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))["textos"]["lembrete_dia"]
+            self.assertIn("Toque em *Ver opções*", t)
+            self.assertNotIn("responder SIM", t)
         self.assertEqual(g.count("("), g.count(")"))
         lin = {"id": 9, "tipo": "lembrete_hora", "situacao": "pendente", "previsto_para": "2030-01-10T16:00:00.000Z", "inicio": "2030-01-10T14:00:00",
                "dados": {"nome": "Ana Souza", "servico": "corte adulto", "barbeiro": "Pedro"}, "canal_id": None, "tentativas": 0, "reserva": "1.5",
@@ -409,7 +420,7 @@ class RevisaoOnda7(CodeNodes):
         self.assertEqual(rota(ultima_lista=False)["rota"], "agente")
         # "sim" ao lembrete de 24 h (23/11): so se o lembrete foi a ultima coisa dita pela barbearia; vale para o titulo escrito a mao
         self.assertEqual(rota(dig=True, ultima_lista=False, lembrete_ultimo=True)["rota"], "consumir")
-        self.assertEqual(rota(dig=True, ultima_lista=True, lembrete_ultimo=False)["rota"], "agente")
+        self.assertEqual(rota(dig=True, ultima_lista=True, lembrete_ultimo=False)["rota"], "consumir")  # 27/11: sim digitado logo depois da lista do lembrete
         self.assertEqual(rota(dig=True, lembrete_ultimo=True, propostas="1")["rota"], "agente")
         self.assertEqual(rota(dig=True, abertas="0", recentes="1", lembrete_ultimo=False)["rota"], "agente")
         self.assertEqual(rota(ultima_lista=False, lembrete_ultimo=True)["rota"], "consumir")
