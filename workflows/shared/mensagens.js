@@ -435,7 +435,7 @@ function bvMAgendaDe(body) {
 }
 
 // Ocorrencia de (idAgenda, inicio) na resposta (recorrente: mesmo idAgenda em varias ocorrencias, so a do inicio vale).
-const bvMOcorrencia = (lista, idAgenda, inicio) => lista.find((a) => a && a.idAgenda === idAgenda && String(a.horaInicio).slice(0, 16) === String(inicio).slice(0, 16));
+const bvMOcorrencia = (lista, idAgenda, inicio) => lista.find((a) => a && String(a.idAgenda) === String(idAgenda) && String(a.horaInicio).slice(0, 16) === String(inicio).slice(0, 16));
 
 // Decide o destino de uma linha reservada: enviar | cancelar(motivo) | adiar (libera a reserva, tenta na proxima varredura).
 // resp: { status, body } do GET /agenda/agendamentos do cliente ou da /agenda/completa do dia (linha sem graces_cliente_id); null = nao revalida.
@@ -550,8 +550,17 @@ function bvMTituloRota(e) {
   return 'agente';
 }
 
+// Recusa de presenca ainda em pauta: vale por janelaMin a partir de `em` (propria, nao a da conversa). Um lugar so para a regra: a
+// linha do contexto (abaixo), as ferramentas (bvgRecusado, graces.js) e o Preparar do entregar-rajada, que diz ao no Sessao se a
+// recusa atravessa a sessao nova (vencida, vai embora com o pedido; na mesma sessao o Sessao nao mexe nela).
+// -> pedido.confirmacao_recusada ou null.
+function bvMRecusa(pedido, agoraMs, janelaMin) {
+  const r = pedido && pedido.confirmacao_recusada;
+  const em = r ? Date.parse(r.em) : NaN;
+  return Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000 ? r : null;
+}
 // Linhas do prompt do agente sobre confirmacoes (independem de sessao nova: a confirmacao chega quando o cliente nao fala ha dias).
-// A recusa vale por janelaMin a partir de `em` (propria, nao a da conversa). neutro = bvNeutralizar. semConversa: turno sem historico.
+// neutro = bvNeutralizar. semConversa: turno sem historico.
 function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro, semConversa) {
   let s = '';
   const cs = Array.isArray(ctx && ctx.confirmacoes) ? ctx.confirmacoes : [];
@@ -565,9 +574,16 @@ function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro, semConversa) {
   // semConversa: so quando nao ha conversa em andamento; no meio dela o "sim" responde a ultima pergunta do agente (um resumo, p. ex.).
   const l = ctx && ctx.lembrete_hora;
   if (l && !cs.length && semConversa) s += '\nLembrete enviado pela barbearia há pouco (dado): ' + neutro(l.servico || 'horário') + ', hoje às ' + String(l.inicio).slice(11, 16) + '. O lembrete não pede resposta: se a mensagem nova for só um "sim", "ok" ou agradecimento, o cliente está respondendo a ele; responda em uma frase curta, no tom de "combinado, até já", sem perguntar como pode ajudar.';
-  const r = ctx && ctx.pedido && ctx.pedido.confirmacao_recusada;
-  const em = r ? Date.parse(r.em) : NaN;
-  if (Number.isFinite(em) && agoraMs - em >= 0 && agoraMs - em <= janelaMin * 60000) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado), e a decisão "remarcar ou cancelar?" já foi enviada a ele em lista: não a repita. Se a última oferta ainda for essa decisão, siga o que ela diz; se a confirmação do cancelamento tiver vencido, chame meus_agendamentos e cancelar (fase 1) desse agendamento e peça só a confirmação. Quer remarcar: pergunte o dia e o horário que ele prefere e siga a remarcação.';
+  const r = bvMRecusa(ctx && ctx.pedido, agoraMs, janelaMin);
+  // PROD, 27/11: a linha levava so o id da agenda, que nenhuma ferramenta aceita; para remarcar o modelo chamava meus_agendamentos e,
+  // com dez horarios marcados, perguntava qual (ou mandava o resumo com a lista deles pendurada). Com o inicio gravado pela recusa, a
+  // linha diz qual e o agendamento e as ferramentas ja o assumem (`rec`, bvgRecusado). Recusa antiga (sem inicio): a linha de antes.
+  if (r && r.inicio) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento de ' + neutro(r.servico || 'horário') + ' de ' + bvMDia(r.inicio) + ' às ' + String(r.inicio).slice(11, 16)
+    + ' (dado; nas ferramentas ele é o id_opcao_agendamento rec), e a decisão "remarcar ou cancelar?" já foi enviada a ele em lista: não a repita e não pergunte qual agendamento: é esse.'
+    + ' Remarcar: pergunte o dia e o horário que ele prefere e chame horarios_livres só com a data (e a hora ou o período, se ele disse): a busca já sai como remarcação desse agendamento, com o mesmo barbeiro; escolhido o horário, chame reagendar só com id_opcao_horario.'
+    + ' Cancelar mesmo: com confirmação pendente de cancelamento no contexto, chame cancelar só com o proposta_id; sem ela, chame cancelar com id_opcao_agendamento rec e peça só a confirmação.'
+    + ' Não chame meus_agendamentos para isso, a menos que a ferramenta peça.';
+  else if (r) s += '\nO cliente respondeu que não vai poder comparecer ao agendamento ' + neutro(r.idAgenda) + ' (dado), e a decisão "remarcar ou cancelar?" já foi enviada a ele em lista: não a repita. Se a última oferta ainda for essa decisão, siga o que ela diz; se a confirmação do cancelamento tiver vencido, chame meus_agendamentos e cancelar (fase 1) desse agendamento e peça só a confirmação. Quer remarcar: pergunte o dia e o horário que ele prefere e siga a remarcação.';
   return s;
 }
 
@@ -633,5 +649,5 @@ function bvMRetomaFila(l) {
   return !bvMSoAgradeceu(d, true);
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMAvisoEquipe, bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMRetomaFila, bvMConvite, bvMPediuParar, bvMContextoConvite, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMOcorrencia, bvMRecusa, bvMAvisoEquipe, bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMRetomaFila, bvMConvite, bvMPediuParar, bvMContextoConvite, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };
