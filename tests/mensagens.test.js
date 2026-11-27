@@ -659,3 +659,15 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.match(m.bvMContextoConvite({ sessoes: 0 }, true, false), /Não prometa parar de mandar este lembrete: isso só vale quando o contexto disser que o pedido já foi registrado\.$/);
   console.log('mensagens.test.js convite de volta ok');
 }
+
+{ // bvMOcorrencia (27/11): tambem confere o que a fase 2 do cancelar vai apagar; o id vale como texto (a agenda pode devolver numero)
+  // e a ocorrencia e a do inicio, nao a primeira linha do id (serie recorrente repete o idAgenda)
+  const m = require('../workflows/shared/mensagens.js');
+  const lista = [{ idAgenda: 7, horaInicio: '2026-12-04T10:00:00' }, { idAgenda: 7, horaInicio: '2026-12-11T10:00:00' }, { idAgenda: 'a1', horaInicio: '2026-12-04T10:00:00' }];
+  assert.equal(m.bvMOcorrencia(lista, '7', '2026-12-11T10:00'), lista[1]);
+  assert.equal(m.bvMOcorrencia(lista, 7, '2026-12-04T10:00:00'), lista[0]);
+  assert.equal(m.bvMOcorrencia(lista, 'a1', '2026-12-04T10:00:00'), lista[2]);
+  assert.equal(m.bvMOcorrencia(lista, '7', '2026-12-18T10:00:00'), undefined);
+  assert.equal(m.bvMOcorrencia(lista, 'a1', undefined), undefined); // proposta sem inicio: nao acha (a fase 2 nao apaga)
+  console.log('mensagens.test.js ocorrencia por id e inicio ok');
+}

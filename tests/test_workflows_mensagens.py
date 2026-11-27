@@ -849,3 +849,33 @@ class Etapa5(unittest.TestCase):  # atendimentos de 17/11 e decisao do owner de 
         self.assertIsNone(d2["decisao"])
         e2 = rodar("workflows/sub/bv-confirmacao.json", "Compor envio", [{}], {"Desfecho": [dict(d2, telefone="+5511999998888")]})[0]
         self.assertEqual(e2["path"], "/api/messages/send")
+
+    def test_proposta_da_recusa_so_executa_com_o_cancelamento_dito(self):
+        # 27/11: nos renderizados, da recusa do lembrete ate o DELETE. A proposta de cancelar que a recusa deixa fica pendente enquanto
+        # o cliente remarca: "pode ser às 20" nao a executa (nenhuma chamada a agenda); o "Cancelar mesmo" executa, e numa serie
+        # recorrente (a linha do lembrete criada pela reconciliacao nao sabe que e serie) o DELETE leva a data da ocorrencia.
+        ent = {"ok": True, "contato_id": "1", "origem": "id", "confirmado": False, "mensagem_id": "7"}
+        row = {"id": 9, "inicio": "2026-12-04T10:00:00", "dados": {"servico": "corte adulto", "barbeiro": "Ze"}, "telefone": "+" + TEL, "graces_cliente_id": "c1", "graces_agendamento_id": "serie"}
+        dados = rodar("workflows/sub/bv-confirmacao.json", "Desfecho", [{"code": "recusada", "status": 200}],
+                      {"Resolver claim": [{"ent": ent, "row": row, "req": {"idAgenda": "serie", "confirmado": False}}], "Normalizar": [ent]})[0]["decisao"]["dados"]
+        self.assertEqual((dados["recorrente"], "sim_basta" in dados), (False, False))
+        PID = "55555555-5555-4555-8555-555555555555"
+        gat = {"Gatilho": [{"telefone": "+" + TEL}]}
+
+        def planejar(fala):
+            n = rodar("workflows/sub/bv-graces.json", "Normalizar", [{"operacao": "cancelar", "contato_id": "1", "telefone": "+" + TEL, "turno_id": "22222222-2222-4222-8222-222222222222",
+                                                                      "ambiente": "integracao", "proposta_id": PID, "texto_cliente": fala}], gat)[0]
+            self.assertTrue(n["ok"], fala)
+            return rodar("workflows/sub/bv-graces.json", "Planejar", [{"pedido": {"idCliente": "c1"}, "opcoes": {"tipo": "horario", "itens": [{"id": "1", "rotulo": "20:00", "valor": {}}]},
+                                                                     "proposta": {"id": PID, "acao": "cancelar", "dados": dados}}], dict(gat, Normalizar=[n]))
+        for fala in ("pode ser às 20", "ok, segunda então", "sim"):
+            r = planejar(fala)
+            self.assertEqual((len(r), "req" in r[0], r[0]["final"]["resultado"]["code"]), (1, False, "cliente_nao_disse_cancelar"), fala)
+            self.assertEqual(r[0]["final"]["efeitos"]["proposta_upd"]["estado"], "falhou")
+            self.assertNotIn("opcoes", r[0]["final"]["efeitos"])  # a lista de horarios de quem esta remarcando fica
+        r = planejar("Cancelar mesmo")
+        self.assertEqual((r[0]["req"]["m"], r[0]["req"]["path"]), ("GET", "/agenda/agendamentos"))
+        serie = [{"idAgenda": "serie", "horaInicio": d + "T10:00:00", "idServico": "s1", "descricaoServico": "corte adulto", "idProfissional": TESTE, "recorrente": True} for d in ("2026-12-04", "2026-12-11")]
+        passo = lambda agenda: rodar("workflows/sub/bv-graces.json", "Passo", [{"statusCode": 200, "body": agenda}], dict(gat, **{"Tem chamada?": [{"st": r[0]["st"]}]}))
+        self.assertEqual(passo(serie)[0]["req"], {"m": "DELETE", "path": "/agenda/serie", "qs": {"data": "2026-12-04"}})
+        self.assertEqual(passo(serie[1:])[0]["final"]["resultado"]["code"], "agendamento_nao_encontrado")  # a ocorrencia recusada saiu da serie: nada e apagado
