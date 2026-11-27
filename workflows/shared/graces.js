@@ -395,12 +395,39 @@ const bvgPacoteLido = (r) => !!r && r.status === 200 && Array.isArray(r.body);
 // Secoes que servem para o servico `sv` no dia `data` (AAAA-MM-DD). Defesa sobre o que a Graces devolve (revisoes de 23/11): so
 // secao do proprio servico (o filtro da consulta nao e tomado como garantia: o POST agenda "o servico da secao"), so pacote que
 // nao vence antes do dia (o POST recusa e o cliente ficaria preso no mesmo resumo) e sem id repetido.
+// `sv` nulo: secoes de qualquer servico (convite de volta: total de sessoes disponiveis).
 const bvgSecoes = (r, sv, data) => [...new Set((bvgPacoteLido(r) ? r.body : [])
   .filter((x) => x && Array.isArray(x.secoes) && (x.dataValidade == null || String(x.dataValidade).slice(0, 10) >= String(data)))
-  .flatMap((x) => x.secoes.filter((y) => y && String(y.idProdutoServico || '').toLowerCase() === String(sv).toLowerCase()))
+  .flatMap((x) => x.secoes.filter((y) => y && (sv == null || String(y.idProdutoServico || '').toLowerCase() === String(sv).toLowerCase())))
   .map((y) => String(y.idClienteItemPacote || '')).filter((y) => BVG_UUID.test(y)))];
 // resps alinhado a svs (um GET por servico distinto) -> { idServico: [secoes na ordem de consumo] }
 const bvgSecoesPor = (svs, resps, data) => Object.fromEntries(svs.map((sv, j) => [sv, bvgSecoes(resps[j], sv, data)]));
+// Convite de volta (owner, 2026-11-27): lembrete a quem esta ha quase um mes sem cortar. Os candidatos saem do nosso banco (o
+// bv-mensagens reivindica um por rodada); a verdade vem da Graces so para ele, na hora do envio, em duas etapas.
+// 1a etapa, o cadastro pelo celular -> { idCliente } ou { motivo }: sem cadastro, ou com mais de um (nao da para saber quem e), nao recebe.
+function bvgConviteCliente(r) {
+  if (!r || r.status !== 200 || !Array.isArray(r.body)) return { motivo: 'graces_falhou' };
+  const ids = [...new Set(r.body.map((c) => String((c && c.idCliente) || '')).filter((x) => BVG_UUID.test(x)))];
+  return ids.length === 1 ? { idCliente: ids[0] } : { motivo: ids.length ? 'varios_cadastros' : 'sem_cadastro' };
+}
+// 2a etapa, as tres leituras do cliente, nesta ordem: historico, proximos agendamentos e pacotes.
+const bvgConviteReqs = (idCliente) => [{ m: 'GET', path: '/agenda/historico', qs: { idCliente, pageSize: 20 } },
+  { m: 'GET', path: '/agenda/agendamentos', qs: { idCliente, proximos: true, pageSize: 5 } }, bvgReqPacote(idCliente)];
+// rs: as tres respostas, na ordem de bvgConviteReqs; c: { dias_min, dias_max }; hoje: AAAA-MM-DD (Sao Paulo).
+// -> { enviar: true, dias, sessoes } ou { enviar: false, motivo }. A ultima visita e a MAIOR dataAbertura do historico (a ordem das
+// linhas nunca foi medida). Quem tem horario marcado, voltou depois (visita mais nova que a da nossa base) ou nao vem ha bem mais
+// de um mes (o agendamento da base foi falta) nao recebe. Pacote que nao deu para ler: envia sem a frase do pacote (sessoes 0).
+function bvgConvite(rs, c, hoje) {
+  const [h, f, p] = Array.isArray(rs) ? rs : [];
+  if (!bvgPacoteLido(h) || !bvgPacoteLido(f)) return { enviar: false, motivo: 'graces_falhou' };
+  if (f.body.some((a) => a && a.idAgenda)) return { enviar: false, motivo: 'tem_horario' };
+  const ult = h.body.map((x) => String((x && x.dataAbertura) || '').slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().pop();
+  if (!ult) return { enviar: false, motivo: 'sem_visita' };
+  const dias = Math.round((Date.parse(`${hoje}T00:00:00Z`) - Date.parse(`${ult}T00:00:00Z`)) / 86400000);
+  if (!(dias >= Number(c && c.dias_min))) return { enviar: false, motivo: 'voltou' };
+  if (dias > Number(c.dias_max) + 2) return { enviar: false, motivo: 'visita_antiga' };
+  return { enviar: true, dias, sessoes: bvgSecoes(p, null, hoje).length };
+}
 // Corpo do POST /agenda: exatamente um entre idServico (avulso) e idClienteItemPacote (secao do pacote).
 const bvgCorpoAgendar = (idCliente, x, prof, idIntegracao, secao) => ({ idCliente, ...(secao ? { idClienteItemPacote: secao } : { idServico: x.idServico }), idProfissional: prof, data: x.data, horaInicio: x.hora, idIntegracao });
 const bvgSoDigitos = (t) => String(t).replace(/\D/g, '');
@@ -1504,4 +1531,4 @@ function bvGParams(i, efeitos, msg) {
     ...bvgMsgParams(e, msg), e.contato && e.contato.como_conheceu ? String(e.contato.como_conheceu) : null];
 }
 
-if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, bvgCabeloEBarba, bvgSemRetransferir, bvgFila, bvgRepartir, BVG_ACOES };
+if (typeof module !== 'undefined') module.exports = { bvGNormalizar, bvGPlano, bvGPasso, bvGErro, bvGParams, bvgConfirmou, bvgCabeloEBarba, bvgSemRetransferir, bvgFila, bvgRepartir, bvgConviteCliente, bvgConviteReqs, bvgConvite, bvgSecoes, BVG_ACOES };

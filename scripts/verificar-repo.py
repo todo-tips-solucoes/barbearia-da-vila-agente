@@ -123,6 +123,36 @@ def regras_habitual(amb, c):
     return []
 
 
+def regras_convite(amb, c):
+    """Convite de volta (27/11/2026): bloco `convite` e textos nos dois ambientes; em producao nasce desligado ate o owner ligar."""
+    v, t, erros = c.get("convite"), c.get("textos", {}), []
+    if not isinstance(v, dict):
+        return [f"{amb}: convite ausente"]
+    if not isinstance(v.get("ativo"), bool):
+        erros.append(f"{amb}: convite.ativo deve ser boolean")
+    faixas = {"dias_min": (7, 120), "dias_max": (7, 120), "intervalo_min": (1, 60), "max_por_dia": (1, 100), "falhas_max_hora": (1, 20), "sem_conversa_dias": (0, 30), "resposta_max_dias": (1, 30)}
+    for k, (lo, hi) in faixas.items():
+        x = v.get(k)
+        if isinstance(x, bool) or not isinstance(x, int) or not lo <= x <= hi:
+            erros.append(f"{amb}: convite.{k} deve ser inteiro entre {lo} e {hi}")
+    if not erros and v["dias_min"] > v["dias_max"]:
+        erros.append(f"{amb}: convite.dias_min maior que dias_max")
+    for k in ("hora_inicio", "hora_fim"):
+        if not re.fullmatch(r"[0-2]\d:[0-5]\d", str(v.get(k, ""))):
+            erros.append(f"{amb}: convite.{k} deve ser HH:MM")
+    d = v.get("dias_semana")
+    if not isinstance(d, list) or not d or any(isinstance(x, bool) or not isinstance(x, int) or not 1 <= x <= 7 for x in d):
+        erros.append(f"{amb}: convite.dias_semana deve ser lista de 1 (segunda) a 7 (domingo)")
+    # sem "?" (saida com pergunta dispara a retomada e conta no laco) e sem barbeiro (clausula petrea: o convite nao cita ninguem)
+    for k in ("convite", "convite_pacote", "convite_pacote_uma"):
+        x = str(t.get(k, ""))
+        if not x or "?" in x or "{barbeiro}" in x:
+            erros.append(f"{amb}: textos.{k} ausente, com '?' ou citando barbeiro")
+    if "{nome}" not in str(t.get("convite", "")) or "{pacote}" not in str(t.get("convite", "")) or "{sessoes}" not in str(t.get("convite_pacote", "")):
+        erros.append(f"{amb}: textos.convite precisa de {{nome}} e {{pacote}}, e textos.convite_pacote de {{sessoes}}")
+    return erros
+
+
 def verificar_workflows(raiz):
     """FR-008/FR-015: sem execucao salva com conteudo de midia e sem errorWorkflow nos workflows que a tocam."""
     erros = []
@@ -159,6 +189,7 @@ def verificar(cfgs, infra):
         erros += regras_mensagens(amb, c)
         erros += regras_rodizio(amb, c)
         erros += regras_habitual(amb, c)
+        erros += regras_convite(amb, c)
     lk = {a: c.get("lock", {}) for a, c in cfgs.items()}
     for a, l in lk.items():
         if l and l.get("espera_s", 0) * l.get("tentativas", 0) < l.get("ttl_s", 0):

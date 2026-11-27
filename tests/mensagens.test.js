@@ -602,3 +602,38 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.equal(m.bvMPromptConfirmacoes({ confirmacoes: [] }, Date.now(), 120, String, false), ''); // sem confirmacao aberta, nenhuma linha
   console.log('mensagens.test.js confirmacao aberta: contestacao e sim com outro assunto ok');
 }
+
+{ // Convite de volta (owner, 2026-11-27): texto com e sem pacote, pedido de parar e linha de contexto
+  const m = require('../workflows/shared/mensagens.js');
+  const textos = { convite: 'Oi, {nome}! Faz quase um mês do seu último corte.{pacote} É só me chamar. Para não receber, é só avisar.',
+    convite_pacote: 'Você ainda tem {sessoes} sessões do seu pacote disponíveis.', convite_pacote_uma: 'Você ainda tem 1 sessão do seu pacote disponível.' };
+  const cfg = { wid: '159', fila: '107', textos };
+  const c = (n, nome = 'PAULO sudre') => m.bvMConvite({ nome, telefone: '+55 11 99999-0000' }, n, cfg);
+  assert.equal(c(0).texto, 'Oi, Paulo! Faz quase um mês do seu último corte. É só me chamar. Para não receber, é só avisar.');
+  assert.equal(c(1).texto, 'Oi, Paulo! Faz quase um mês do seu último corte. Você ainda tem 1 sessão do seu pacote disponível. É só me chamar. Para não receber, é só avisar.');
+  assert.equal(c(3).texto, 'Oi, Paulo! Faz quase um mês do seu último corte. Você ainda tem 3 sessões do seu pacote disponíveis. É só me chamar. Para não receber, é só avisar.');
+  assert.match(c(0, '').texto, /^Oi! Faz quase/); // sem nome
+  assert.equal(c(undefined).texto, c(0).texto);
+  assert.deepEqual(c(2).req, { path: '/api/messages/send', body: { number: '5511999990000', openTicket: '0', queueId: '107', whatsappId: '159', body: c(2).texto } });
+  // os textos de producao e de teste: sem "?" (retomada e laco) e sem barbeiro
+  for (const amb of ['producao', 'integracao']) {
+    const t = require(`../config/ambientes/${amb}.json`).textos;
+    const txt = m.bvMConvite({ nome: 'Ana', telefone: '1' }, 2, { wid: '1', fila: '1', textos: t }).texto;
+    assert.equal(/[?{}]|barbeiro/i.test(txt), false, txt);
+    assert.match(txt, /^Oi, Ana! Já faz quase um mês do seu último corte aqui na Barbearia da Vila\. Você ainda tem 2 sessões do seu pacote disponíveis para agendar\. /);
+  }
+  // pedido de parar: por palavras
+  for (const t of ['Não quero mais receber', 'não quero receber essas mensagens', 'Pare de me mandar isso', 'para de mandar mensagem', 'Me tira da lista', 'quero sair da lista', 'Não precisa mais mandar', 'não me mande mais', 'Não quero esses lembretes', 'parar de receber', 'pode me descadastrar'])
+    assert.equal(m.bvMPediuParar(t), true, t);
+  for (const t of ['Quero sim', 'Não quero cortar agora', 'Para amanhã tem horário', 'Pode mandar os horários', 'Não precisa, obrigado', 'Parei de cortar aí', 'Me manda a lista de serviços', '', null])
+    assert.equal(m.bvMPediuParar(t), false, String(t));
+  // linha de contexto: so com convite recente; sem conversa em andamento; com as sessoes; e a do pedido de parar
+  assert.equal(m.bvMContextoConvite(null, true, false), '');
+  assert.equal(m.bvMContextoConvite({ sessoes: 2 }, false, false), '');
+  assert.match(m.bvMContextoConvite({ sessoes: 0 }, true, false), /^\nConvite enviado pela barbearia há poucos dias \(dado\): lembrou o cliente de que faz quase um mês do último corte e convidou a marcar\. Se a mensagem nova aceita o convite/);
+  assert.match(m.bvMContextoConvite({ sessoes: 3 }, true, false), /; ele tem 3 sessões de pacote disponíveis para agendar\./);
+  assert.match(m.bvMContextoConvite({ sessoes: 1 }, true, false), /; ele tem 1 sessão de pacote disponível para agendar\./);
+  assert.match(m.bvMContextoConvite({ sessoes: 1 }, false, true), /pediu para não receber mais o lembrete de retorno da barbearia \(dado\): o pedido já foi registrado/);
+  assert.equal(/barbeiro|Jayme/i.test(m.bvMContextoConvite({ sessoes: 3 }, true, false)), false);
+  console.log('mensagens.test.js convite de volta ok');
+}

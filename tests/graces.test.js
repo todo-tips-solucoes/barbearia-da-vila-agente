@@ -2461,3 +2461,38 @@ console.log('graces.test.js segunda analise ok');
   assert.ok(rodar(hist(sd(vis(20, 'P')).map((x) => ({ ...x, idComanda: undefined })), est(vis(15, 'B'))), 'PB').servico);
   console.log('graces.test.js habitual ok');
 }
+
+// Convite de volta (owner, 2026-11-27): cadastro pelo celular e decisao com o historico, os proximos e os pacotes
+{
+  const assert = require('assert');
+  const U = (n) => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
+  const ok = (body) => ({ status: 200, body });
+  assert.deepEqual(g.bvgConviteCliente(ok([{ idCliente: U(1), nomeCliente: 'x' }])), { idCliente: U(1) });
+  assert.deepEqual(g.bvgConviteCliente(ok([{ idCliente: U(1) }, { idCliente: U(1) }])), { idCliente: U(1) }); // a mesma pessoa duas vezes
+  assert.deepEqual(g.bvgConviteCliente(ok([{ idCliente: U(1) }, { idCliente: U(2) }])), { motivo: 'varios_cadastros' });
+  assert.deepEqual(g.bvgConviteCliente(ok([])), { motivo: 'sem_cadastro' });
+  for (const r of [null, { status: 500, body: [] }, { status: 200, body: 'x' }]) assert.deepEqual(g.bvgConviteCliente(r), { motivo: 'graces_falhou' });
+  assert.deepEqual(g.bvgConviteReqs(U(1)).map((r) => [r.m, r.path, r.qs.idCliente, !!r.qs.proximos]), [['GET', '/agenda/historico', U(1), false], ['GET', '/agenda/agendamentos', U(1), true], ['GET', '/agenda/pacotes', U(1), false]]);
+  const c = { dias_min: 25, dias_max: 28 }, hoje = '2026-12-10';
+  const h = (...ds) => ok(ds.map((d) => ({ dataAbertura: `${d}T14:00:00`, idServico: 's' })));
+  const pac = ok([{ dataValidade: null, secoes: [{ idClienteItemPacote: U(11), idProdutoServico: 'a' }, { idClienteItemPacote: U(12), idProdutoServico: 'b' }] },
+    { dataValidade: '2027-01-01T00:00:00', secoes: [{ idClienteItemPacote: U(13), idProdutoServico: 'a' }, { idClienteItemPacote: U(13), idProdutoServico: 'a' }, { idClienteItemPacote: 'lixo' }] },
+    { dataValidade: '2026-12-01T00:00:00', secoes: [{ idClienteItemPacote: U(14), idProdutoServico: 'a' }] }]);
+  // a ultima visita e a MAIOR dataAbertura, em qualquer ordem; 25 a 30 dias envia; sessoes somam os pacotes validos, sem repetir
+  assert.deepEqual(g.bvgConvite([h('2026-10-01', '2026-11-14', '2026-09-01'), ok([]), pac], c, hoje), { enviar: true, dias: 26, sessoes: 3 });
+  assert.deepEqual(g.bvgConvite([h('2026-11-15'), ok([]), ok([])], c, hoje), { enviar: true, dias: 25, sessoes: 0 });
+  assert.equal(g.bvgConvite([h('2026-11-10'), ok([]), ok([])], c, hoje).enviar, true); // 30 dias: ainda "quase um mes"
+  // pacote que nao deu para ler: envia sem a frase do pacote
+  assert.deepEqual(g.bvgConvite([h('2026-11-14'), ok([]), { status: 500, body: null }], c, hoje), { enviar: true, dias: 26, sessoes: 0 });
+  // nao envia: tem horario marcado; voltou depois; visita antiga (o agendamento da base foi falta); nunca veio; leitura falhou
+  assert.deepEqual(g.bvgConvite([h('2026-11-14'), ok([{ idAgenda: 'a1' }]), pac], c, hoje), { enviar: false, motivo: 'tem_horario' });
+  assert.deepEqual(g.bvgConvite([h('2026-11-14', '2026-12-02'), ok([]), pac], c, hoje), { enviar: false, motivo: 'voltou' });
+  assert.deepEqual(g.bvgConvite([h('2026-11-09'), ok([]), pac], c, hoje), { enviar: false, motivo: 'visita_antiga' });
+  assert.deepEqual(g.bvgConvite([ok([{ dataAbertura: null }]), ok([]), pac], c, hoje), { enviar: false, motivo: 'sem_visita' });
+  assert.deepEqual(g.bvgConvite([{ status: 0 }, ok([]), pac], c, hoje), { enviar: false, motivo: 'graces_falhou' });
+  assert.deepEqual(g.bvgConvite([h('2026-11-14'), { status: 500 }, pac], c, hoje), { enviar: false, motivo: 'graces_falhou' });
+  assert.deepEqual(g.bvgConvite(null, c, hoje), { enviar: false, motivo: 'graces_falhou' });
+  // bvgSecoes com servico continua como era (so as secoes daquele servico)
+  assert.deepEqual(g.bvgSecoes(pac, 'a', hoje), [U(11), U(13)]);
+  console.log('graces.test.js convite de volta ok');
+}
