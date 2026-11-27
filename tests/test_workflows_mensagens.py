@@ -266,11 +266,14 @@ class BvMensagens(Base, unittest.TestCase):
         q = self.nos["Reivindicar convite"]["parameters"]["query"]
         for t in ("$1::boolean AND extract(isodow FROM sp)::int = ANY(string_to_array($2::text, ',')::int[]) AND sp::time >= $3::time AND sp::time < $4::time",  # ligado, dia da semana e horario
                   "e.tipo = 'convite_volta' AND e.enviada_em >= date_trunc('day', sp) AT TIME ZONE 'America/Sao_Paulo') < $5::int",  # teto por dia
-                  "f.motivo = 'mensagem|convite_falhou' AND f.criado_em > now() - interval '1 hour') < $6::int",  # disjuntor
+                  "f.motivo = 'mensagem|convite_falhou' AND f.criado_em > now() - interval '1 hour') + (SELECT count(*)",  # disjuntor: falhas de envio
                   "b.visita::date BETWEEN (SELECT sp FROM agora)::date - $8::int AND (SELECT sp FROM agora)::date - $7::int",  # janela de dias
                   "WHERE NOT b.futuro", "o.tipo = 'convite_volta' AND o.motivo = 'parou'", "c.fila_id IS DISTINCT FROM $9::int", "<> ALL(string_to_array($10::text, ','))",
                   "h.situacao = 'aberto'", "x.criado_em > now() - make_interval(days => $11::int)",
-                  "v.tipo = 'convite_volta' AND v.inicio >= b.visita::date",  # um convite por visita
+                  "v.tipo = 'convite_volta' AND v.inicio >= b.visita::date AND v.motivo IS DISTINCT FROM 'graces_falhou')",  # um convite por visita; leitura que falhou tenta de novo
+                  "velhas AS (UPDATE mensagens_agendadas SET situacao = 'cancelada', motivo = 'graces_falhou', reservada_em = NULL, atualizado_em = now() WHERE tipo = 'convite_volta' AND situacao = 'pendente' AND reservada_em < now() - interval '15 minutes' RETURNING 1)",  # linha que ficou no meio do caminho
+                  "+ (SELECT count(*) FROM mensagens_agendadas g WHERE g.tipo = 'convite_volta' AND g.criado_em > now() - interval '1 hour' AND (g.situacao = 'pendente' OR g.motivo = 'graces_falhou')) < $6::int",  # Graces fora tambem para as rodadas
+                  "coalesce(m.motivo, '') NOT IN ('orfa','reagendada','cancelada_agente')",  # agendamento que deixou de existir nao e visita
                   "ORDER BY b.visita LIMIT 1 FOR UPDATE OF c SKIP LOCKED"):  # um por rodada
             self.assertIn(t, q)
         self.assertEqual((sorted({int(x) for x in re.findall(r"\$(\d+)", q)}), q.count("(") == q.count(")")), (list(range(1, 12)), True))
@@ -300,6 +303,8 @@ class BvMensagens(Base, unittest.TestCase):
         self.assertNotIn("?", d["texto"])
         d2 = rodar(self.ARQ, "Decidir convite", [resp[0], {"statusCode": 200, "body": [{"idAgenda": "a1"}]}, resp[2]], {"Pedir cliente": pc})[0]
         self.assertEqual(d2["convite"], {"id": "77", "situacao": "cancelada", "motivo": "tem_horario"})
+        canc = rodar(self.ARQ, "Resultado retomada", [d2], {"Envia retomada?": [d2]}, each=True)  # nao envia: nada gravado como mensagem nem como falha
+        self.assertEqual((canc["texto"], canc["code"], canc["convite"]), (None, None, {"id": "77", "situacao": "cancelada", "motivo": "tem_horario"}))
         # a cauda de envio fecha a linha: enviada (simulado), ou falhou quando o canal recusa
         ok = rodar(self.ARQ, "Resultado retomada", [d], {"Envia retomada?": [d]}, each=True)
         self.assertEqual((ok["origem"], ok["texto"], ok["code"], ok["convite"]), ("convite", d["texto"], None, {"id": "77", "situacao": "enviada", "sessoes": 2}))

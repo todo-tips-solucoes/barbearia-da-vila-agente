@@ -1114,7 +1114,7 @@ Pedido do owner em 27/11: mandar um lembrete ao cliente que está há quase um m
 | Quando | 25 dias depois da última visita (janela de 25 a 28 dias) |
 | Para quem | Quem não tem horário marcado; um convite por visita, sem segundo aviso |
 | Dias e horário | Terça a sábado, das 10:00 às 18:00 |
-| Limites | Um envio por rodada de 5 minutos (até 12 por hora) e 30 por dia; três falhas de envio em uma hora param as rodadas |
+| Limites | Um envio por rodada de 5 minutos (até 12 por hora) e 30 por dia; três falhas em uma hora (de envio ou de leitura da Graces) param as rodadas |
 | Pacote | Só o total de sessões disponíveis para agendar, somando os pacotes abertos |
 | Cliente do barbeiro que só a equipe agenda | Recebe; o texto não cita barbeiro e, se ele aceitar, a conversa vai para a equipe pelas regras de sempre |
 | Parar de receber | A mensagem diz como; o pedido é respeitado |
@@ -1129,9 +1129,28 @@ Pedido do owner em 27/11: mandar um lembrete ao cliente que está há quase um m
 - **Resposta do cliente:** o `Ler contexto` do agente lê o último convite enviado há até 3 dias, e uma linha de dado (`bvMContextoConvite`) entra quando não há conversa em andamento: um "quero" segue o agendamento normal, com o serviço do último atendimento e o barbeiro de costume que o `Identificar` já traz. Não usa `retomada_em`, para não ressuscitar um pedido de um mês atrás.
 - **Parar de receber:** reconhecido em código, por palavras (`bvMPediuParar`), só com convite enviado há pouco. O nó `Sessao` marca a linha do convite (`motivo = 'parou'`) e quem tem essa marca não é mais candidato. Não há coluna nova: o agente não depende da migração para rodar.
 
+### Revisão independente do diff
+
+Um especialista de backend revisou em leitura e não achou nada crítico para publicar com o convite desligado. Corrigido antes do PR: o reconhecimento do pedido de parar deixava passar frases comuns ("pode parar de mandar", "me tira dessa lista", "cancela esse lembrete") e casava com o que não era pedido ("não precisa mandar a localização", "não precisa avisar o barbeiro"), e a marca é permanente; com a Graces fora, cada rodada fechava um cliente como `graces_falhou` e ele nunca mais era tentado (agora a leitura que falhou não conta no "um por visita", a linha que ficou no meio do caminho é fechada depois de 15 minutos, e três leituras falhas em uma hora param as rodadas); o agendamento cancelado ou remarcado contava como última visita na nossa base; o convite marcado como `parou` voltava ao contexto do agente; e `bvgSecoes` passou a aceitar só `null` como "qualquer serviço".
+
 ### Topologia
 
 Oito nós novos no `bv-mensagens` (`A cada convite`, `Reivindicar convite`, `Pedir cliente`, `Graces cliente`, `Pedir convite`, `Consulta convite?`, `Graces convite`, `Decidir convite`), ligados à cauda de envio da retomada. Nenhum workflow novo, nenhum ciclo, nenhuma chamada ao sub-workflow do agente. No `entregar-rajada`, só código e SQL de três nós que já existiam (`Ler contexto`, `Preparar`, `Sessao`).
+
+### Testes
+
+- Unidade: `tests/graces.test.js` (cadastro pelo celular e decisão: maior `dataAbertura`, voltou, visita antiga, horário futuro, soma das sessões, pacote ilegível), `tests/mensagens.test.js` (texto com e sem pacote, singular e plural, pedido de parar e falsos positivos, linha de contexto), `tests/test_workflows_mensagens.py` (ligações, sem ciclo, filtros do SQL, e os nós `Pedir cliente`, `Pedir convite`, `Decidir convite` e `Resultado retomada` executados com o código renderizado) e `tests/test_verificacoes_repo.py` (bloco `convite` e textos).
+- Banco do TESTE, em transação desfeita (a migração ensaiada dentro dela): desligado ou fora do horário não reivindica; sai um por rodada, o mais antigo primeiro; ficam de fora quem tem horário futuro, quem pediu para parar, quem veio há 10 dias, quem veio há 40, quem está no atendimento humano e quem conversou há pouco; um convite por visita; teto diário e disjuntor seguram; a gravação fecha a linha como enviada ou cancelada, e a retomada segue com o prefixo de sempre.
+- TESTE, ponta a ponta (27/11, migração 0020 aplicada no banco de TESTE): cópia temporária só do ramo do convite, a cada minuto e sem a restrição de horário, restrita a dois contatos semeados, com o envio trocado por um nó sem efeito e lendo a Graces de verdade. O contato sem cadastro terminou como `sem_cadastro`; o cliente de teste, com cadastro único, terminou como `tem_horario` (ele tem horários marcados de verdade). O n8n respondeu saudável em todas as conferências e a cópia foi apagada.
+- TESTE, resposta do agente a quem recebeu o convite há um dia (6 contatos simulados):
+
+| Mensagem do cliente | Resultado |
+|---|---|
+| "Quero sim", "Oi! Pode ver um horário pra mim sim", "Opa, bora marcar" | 3 de 3 seguiram o agendamento ("Qual serviço você quer agendar?") |
+| "Não quero mais receber esses lembretes", "Pare de me mandar mensagem por favor" | 2 de 2 marcaram a linha (`parou`) e confirmaram ("você não receberá mais esses lembretes") |
+| "Agora não, obrigado" | Agradeceu, sem marcar |
+
+O caminho em que o convite é de fato enviado não rodou de ponta a ponta no n8n: não há no TESTE um cliente real com a última visita há 25 a 30 dias e sem horário marcado. Esse trecho está coberto pela execução dos nós renderizados nos testes, pela validação do SQL no banco e por ser a mesma cauda de envio que a retomada já usa em produção.
 
 ### Antes de ligar em produção
 
@@ -1144,4 +1163,6 @@ Oito nós novos no `bv-mensagens` (`A cada convite`, `Reivindicar convite`, `Ped
 - **Bloqueio do número:** não há limite de envio documentado para a conexão por QR Code. Os limites acima são conservadores, sem base medida.
 - **Quem fica de fora:** cliente sem celular válido na agenda, celular com mais de um cadastro, e quem agendou com menos de uma hora de antecedência (não gera linha na nossa base).
 - **Sessões do pacote:** a Graces só lista o que é agendável; seção de agendamento cancelado pode ficar presa como agendada e o número sair menor que o real.
-- **Uma linha reivindicada e não concluída** (o fluxo caiu no meio) não é tentada de novo: aquele cliente fica sem o convite daquela visita.
+- **Vazão:** uma avaliação por rodada dá no máximo 96 por dia (terça a sábado), contando as que terminam canceladas. Acima disso, quem passar dos 28 dias fica sem o convite daquela visita, sem registro.
+- **Resposta por outro número** (`@lid` ou celular sem o 9): o contexto do convite e o pedido de parar são por contato e se perderiam.
+- **Envio real a quem nunca falou com o agente:** não medido em que fila do Chat Master a resposta cai.

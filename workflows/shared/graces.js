@@ -395,10 +395,10 @@ const bvgPacoteLido = (r) => !!r && r.status === 200 && Array.isArray(r.body);
 // Secoes que servem para o servico `sv` no dia `data` (AAAA-MM-DD). Defesa sobre o que a Graces devolve (revisoes de 23/11): so
 // secao do proprio servico (o filtro da consulta nao e tomado como garantia: o POST agenda "o servico da secao"), so pacote que
 // nao vence antes do dia (o POST recusa e o cliente ficaria preso no mesmo resumo) e sem id repetido.
-// `sv` nulo: secoes de qualquer servico (convite de volta: total de sessoes disponiveis).
+// `sv` null (so null: undefined continua nao casando com nada, como antes): secoes de qualquer servico (convite de volta).
 const bvgSecoes = (r, sv, data) => [...new Set((bvgPacoteLido(r) ? r.body : [])
   .filter((x) => x && Array.isArray(x.secoes) && (x.dataValidade == null || String(x.dataValidade).slice(0, 10) >= String(data)))
-  .flatMap((x) => x.secoes.filter((y) => y && (sv == null || String(y.idProdutoServico || '').toLowerCase() === String(sv).toLowerCase())))
+  .flatMap((x) => x.secoes.filter((y) => y && (sv === null || String(y.idProdutoServico || '').toLowerCase() === String(sv).toLowerCase())))
   .map((y) => String(y.idClienteItemPacote || '')).filter((y) => BVG_UUID.test(y)))];
 // resps alinhado a svs (um GET por servico distinto) -> { idServico: [secoes na ordem de consumo] }
 const bvgSecoesPor = (svs, resps, data) => Object.fromEntries(svs.map((sv, j) => [sv, bvgSecoes(resps[j], sv, data)]));

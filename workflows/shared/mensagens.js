@@ -87,7 +87,18 @@ function bvMConvite(l, sessoes, cfg) {
   return { texto, req: bvMTexto({ texto }, l.telefone, cfg) };
 }
 // Pedido para nao receber mais o convite (opt-out), por palavras: so vale com convite enviado ha pouco (quem decide e o Preparar).
-const BVM_PARAR = /(?:^| )(?:nao quero (?:mais )?(?:receber|ess[ea]s? (?:lembretes?|mensagens?|avisos?)|est[ea]s? (?:lembretes?|mensagens?|avisos?)|lembretes?|mensagens?|avisos?)|nao (?:me )?(?:mande|mandem|manda|envie|enviem|envia) mais|par[ae]m? de (?:me )?(?:mandar|enviar|lembrar)|(?:me )?tir[ae]m? da lista|sair da lista|nao precisam? (?:mais )?(?:mandar|enviar|lembrar|avisar)|parar de receber|me descadastr[ae]m?|descadastrar)(?: |$)/;
+// "nao precisa" so vale com "mais" ou com o objeto (lembrete, mensagem, aviso): "nao precisa mandar a localizacao" e "nao precisa
+// avisar o barbeiro" nao sao pedido de parar, e a marca e permanente (revisao de 27/11).
+const BVM_ISTO = '(?:ess[ea]s? |est[ea]s? |os |as |o |a )?(?:lembretes?|mensage(?:m|ns)|avisos?)';
+const BVM_PARAR = new RegExp('(?:^| )(?:' + [
+  `nao quero (?:mais )?(?:receber|${BVM_ISTO})`,
+  `nao (?:me )?(?:mande|mandem|manda|envie|enviem|envia) (?:mais|nada|${BVM_ISTO})`,
+  'par(?:a|e|ar|em|am) de (?:me )?(?:mandar|enviar|lembrar)',
+  `par(?:a|e|ar|em|am) com ${BVM_ISTO}`,
+  '(?:me )?tir[ae]m? d?(?:a|essa|esta) lista', 'sair d?(?:a|essa|esta) lista',
+  `nao precisam? (?:me )?(?:mais (?:mandar|enviar|lembrar|avisar)|(?:mandar|enviar|lembrar|avisar) mais|(?:mandar|enviar) (?:mais )?${BVM_ISTO})`,
+  `cancel[ae]r? ${BVM_ISTO}`, 'parar de receber', 'me descadastr[ae]m?', 'descadastrar',
+].join('|') + ')(?: |$)');
 const bvMPediuParar = (t) => BVM_PARAR.test(String(t == null ? '' : t).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
 // Linha de contexto do convite (dado): cv = ultimo convite enviado ha poucos dias ({ sessoes }); semConversa: so quando nao ha
 // conversa em andamento (como o lembrete de 1 hora); parou: o cliente pediu para nao receber mais (o no Sessao marca a linha do convite).
@@ -98,7 +109,7 @@ function bvMContextoConvite(cv, semConversa, parou) {
   const n = Number(cv.sessoes) || 0;
   return '\nConvite enviado pela barbearia há poucos dias (dado): lembrou o cliente de que faz quase um mês do último corte e convidou a marcar'
     + (n ? `; ele tem ${n} ${n === 1 ? 'sessão de pacote disponível' : 'sessões de pacote disponíveis'} para agendar` : '')
-    + '. Se a mensagem nova aceita o convite ("quero", "sim", "pode ver"), siga o agendamento normalmente, como para qualquer cliente que pede um horário; se ele não quer agora, agradeça em uma frase.';
+    + '. Se a mensagem nova aceita o convite ("quero", "sim", "pode ver"), siga o agendamento normalmente, como para qualquer cliente que pede um horário; se ele não quer agora, agradeça em uma frase. Não prometa parar de mandar este lembrete: isso só vale quando o contexto disser que o pedido já foi registrado.';
 }
 function bvMTexto(m, contato, cfg) {
   const lid = /@lid$/.test(String(contato));

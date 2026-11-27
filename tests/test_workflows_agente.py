@@ -493,7 +493,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         # convite de volta (27/11): linha de contexto da resposta ao convite e o pedido de parar, decidido em codigo
         self.assertIn("const pararConvite = !!ctx.convite && bvMPediuParar(fala);", prep)
         self.assertIn("+ bvMContextoConvite(ctx.convite, hist.length === 0, pararConvite)", prep)
-        self.assertIn("m.tipo = 'convite_volta' AND m.situacao = 'enviada' AND m.enviada_em > now() - interval '{{BV:convite.resposta_max_dias}} days' ORDER BY m.enviada_em DESC LIMIT 1) AS convite,", self.nos["Ler contexto"]["parameters"]["query"])  # estouro e laco: nao_resolvi
+        self.assertIn("m.tipo = 'convite_volta' AND m.situacao = 'enviada' AND m.motivo IS NULL AND m.enviada_em > now() - interval '{{BV:convite.resposta_max_dias}} days' ORDER BY m.enviada_em DESC LIMIT 1) AS convite,", self.nos["Ler contexto"]["parameters"]["query"])  # estouro e laco: nao_resolvi
         self.assertIn("{{BV:INCLUDE:shared/agente.js}}", prep)
         self.assertNotIn("$fromAI", json.dumps(v))  # contato, telefone e turno vem do Gatilho, nunca do modelo
         self.assertIn("($input.first().json || {}).texto", self.nos["Compor humano"]["parameters"]["jsCode"])

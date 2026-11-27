@@ -2494,5 +2494,7 @@ console.log('graces.test.js segunda analise ok');
   assert.deepEqual(g.bvgConvite(null, c, hoje), { enviar: false, motivo: 'graces_falhou' });
   // bvgSecoes com servico continua como era (so as secoes daquele servico)
   assert.deepEqual(g.bvgSecoes(pac, 'a', hoje), [U(11), U(13)]);
+  assert.deepEqual(g.bvgSecoes(pac, undefined, hoje), []); // so null abre para qualquer servico: item sem idServico nao consome secao alheia
+  assert.equal(g.bvgSecoes(pac, null, hoje).length, 3);
   console.log('graces.test.js convite de volta ok');
 }

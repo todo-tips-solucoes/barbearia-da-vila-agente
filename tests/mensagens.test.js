@@ -623,9 +623,13 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
     assert.match(txt, /^Oi, Ana! Já faz quase um mês do seu último corte aqui na Barbearia da Vila\. Você ainda tem 2 sessões do seu pacote disponíveis para agendar\. /);
   }
   // pedido de parar: por palavras
-  for (const t of ['Não quero mais receber', 'não quero receber essas mensagens', 'Pare de me mandar isso', 'para de mandar mensagem', 'Me tira da lista', 'quero sair da lista', 'Não precisa mais mandar', 'não me mande mais', 'Não quero esses lembretes', 'parar de receber', 'pode me descadastrar'])
+  for (const t of ['Não quero mais receber', 'não quero receber essas mensagens', 'Pare de me mandar isso', 'para de mandar mensagem', 'Me tira da lista', 'quero sair da lista', 'Não precisa mais mandar', 'não me mande mais', 'Não quero esses lembretes', 'parar de receber', 'pode me descadastrar',
+    // revisao de 27/11: pedidos comuns que passavam batido
+    'pode parar de mandar', 'parar de mandar mensagem', 'não me mande mensagem', 'me tira dessa lista', 'para com essas mensagens', 'não precisa me avisar mais', 'cancela esse lembrete', 'não precisa mandar mensagem', 'Não quero mensagens'])
     assert.equal(m.bvMPediuParar(t), true, t);
-  for (const t of ['Quero sim', 'Não quero cortar agora', 'Para amanhã tem horário', 'Pode mandar os horários', 'Não precisa, obrigado', 'Parei de cortar aí', 'Me manda a lista de serviços', '', null])
+  for (const t of ['Quero sim', 'Não quero cortar agora', 'Para amanhã tem horário', 'Pode mandar os horários', 'Não precisa, obrigado', 'Parei de cortar aí', 'Me manda a lista de serviços', '', null,
+    // revisao de 27/11: a marca e permanente, entao o que fala de outra coisa nao pode casar
+    'não precisa mandar a localização', 'quero sim, não precisa avisar o barbeiro', 'não precisa lembrar, eu anoto', 'cancela esse horário', 'não manda o endereço, eu já sei', 'para de enrolar'])
     assert.equal(m.bvMPediuParar(t), false, String(t));
   // linha de contexto: so com convite recente; sem conversa em andamento; com as sessoes; e a do pedido de parar
   assert.equal(m.bvMContextoConvite(null, true, false), '');
@@ -635,5 +639,6 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   assert.match(m.bvMContextoConvite({ sessoes: 1 }, true, false), /; ele tem 1 sessão de pacote disponível para agendar\./);
   assert.match(m.bvMContextoConvite({ sessoes: 1 }, false, true), /pediu para não receber mais o lembrete de retorno da barbearia \(dado\): o pedido já foi registrado/);
   assert.equal(/barbeiro|Jayme/i.test(m.bvMContextoConvite({ sessoes: 3 }, true, false)), false);
+  assert.match(m.bvMContextoConvite({ sessoes: 0 }, true, false), /Não prometa parar de mandar este lembrete: isso só vale quando o contexto disser que o pedido já foi registrado\.$/);
   console.log('mensagens.test.js convite de volta ok');
 }
