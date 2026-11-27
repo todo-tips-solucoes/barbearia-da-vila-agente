@@ -262,9 +262,12 @@ class EntregarRajadaAgente(unittest.TestCase):
         q = self.nos["Sessao"]["parameters"]["query"]
         self.assertIn("COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())", q)
         self.assertNotIn("THEN now()", q)
-        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff), String(!!$json.transferido)] }}"))
+        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff), String(!!$json.transferido), String(!!$json.parar_convite)] }}"))
+        # convite de volta (27/11): o pedido de parar de receber e gravado aqui, na propria linha do convite (sem coluna nova: o agente nao depende da migracao)
+        self.assertIn("oc AS (UPDATE mensagens_agendadas SET motivo = 'parou', atualizado_em = now() WHERE contato_id = $1::bigint AND tipo = 'convite_volta' AND situacao = 'enviada' AND $7::boolean RETURNING 1)", self.nos["Sessao"]["parameters"]["query"])
         # item 26: quando o agente volta a atender o contato, a transferencia aberta e encerrada (com o agente em silencio, nao)
-        self.assertTrue(q.startswith("WITH hf AS (UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'retorno' WHERE contato_id = $1::bigint AND situacao = 'aberto' AND NOT $6::boolean RETURNING 1) INSERT INTO conversas"))
+        self.assertTrue(q.startswith("WITH hf AS (UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'retorno' WHERE contato_id = $1::bigint AND situacao = 'aberto' AND NOT $6::boolean RETURNING 1), oc AS (UPDATE mensagens_agendadas SET motivo = 'parou'"))
+        self.assertIn("RETURNING 1) INSERT INTO conversas", q)
         # ticket fora da fila humana: a marca da transferencia sai, senao toda ferramenta recusava com handoff_ativo (17/11)
         self.assertIn("WHEN $5::boolean THEN conversas.pedido - 'handoff' ELSE conversas.pedido END", q)
 
@@ -483,10 +486,14 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertEqual([v["operacao"], v["motivo"]], ["transferir_atendimento", "={{ $('Preparar').first().json.motivo_limite }}"])
         prep = self.nos["Preparar"]["parameters"]["jsCode"]
         self.assertIn("const estourou = Number(reg.turnos_hora) >= {{BV:agente.turnos_max_contato_hora}};", prep)
-        self.assertIn("retorno, limite: !retorno && (estourou || bvPediuPessoa(fala)), motivo_limite: !estourou && bvPediuPessoa(fala) ? 'pediu_pessoa' : 'nao_resolvi',", prep)
+        self.assertIn("retorno, parar_convite: pararConvite, limite: !retorno && (estourou || bvPediuPessoa(fala)), motivo_limite: !estourou && bvPediuPessoa(fala) ? 'pediu_pessoa' : 'nao_resolvi',", prep)
         # turno de retorno do atendimento humano (owner, 2026-11-25): a marca e do estado (pedido.retorno = este turno), nao do gatilho
         self.assertIn("const retorno = !!g.turno_id && (ctx.pedido || {}).retorno === g.turno_id;", prep)
-        self.assertIn("+ (retorno ? bvContextoRetorno(itens, hist, Date.now()) : '')", prep)  # estouro e laco: nao_resolvi
+        self.assertIn("+ (retorno ? bvContextoRetorno(itens, hist, Date.now()) : '')", prep)
+        # convite de volta (27/11): linha de contexto da resposta ao convite e o pedido de parar, decidido em codigo
+        self.assertIn("const pararConvite = !!ctx.convite && bvMPediuParar(fala);", prep)
+        self.assertIn("+ bvMContextoConvite(ctx.convite, hist.length === 0, pararConvite)", prep)
+        self.assertIn("m.tipo = 'convite_volta' AND m.situacao = 'enviada' AND m.motivo IS NULL AND m.enviada_em > now() - interval '{{BV:convite.resposta_max_dias}} days' ORDER BY m.enviada_em DESC LIMIT 1) AS convite,", self.nos["Ler contexto"]["parameters"]["query"])  # estouro e laco: nao_resolvi
         self.assertIn("{{BV:INCLUDE:shared/agente.js}}", prep)
         self.assertNotIn("$fromAI", json.dumps(v))  # contato, telefone e turno vem do Gatilho, nunca do modelo
         self.assertIn("($input.first().json || {}).texto", self.nos["Compor humano"]["parameters"]["jsCode"])

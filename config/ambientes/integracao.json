@@ -185,6 +185,9 @@
     "midia_grande": "Esse áudio ficou um pouco longo pra mim 😅 Consegue mandar um mais curtinho ou me escrever?",
     "humano": "Vou pedir pra equipe da loja te ajudar. Eles falam com você em seguida, tá?",
     "reformular": "Não consegui entender direitinho. Pode me explicar de outro jeito?",
+    "convite": "Oi, {nome}! Já faz quase um mês do seu último corte aqui na Barbearia da Vila.{pacote} Se quiser, é só me chamar que eu vejo um horário pra você. Se preferir não receber este lembrete, é só me avisar.",
+    "convite_pacote": "Você ainda tem {sessoes} sessões do seu pacote disponíveis para agendar.",
+    "convite_pacote_uma": "Você ainda tem 1 sessão do seu pacote disponível para agendar.",
     "retorno_sem_equipe": "Por aqui eu não consigo resolver isso. Se quiser, vejo um horário ou ajudo com um agendamento pra você.",
     "lista_botao": "Ver opções",
     "lista_topo": "Escolha uma das opções",
@@ -281,6 +284,25 @@
       "whatsapp_id": "145",
       "queue_id": "0"
     }
+  },
+  "convite": {
+    "ativo": true,
+    "dias_min": 25,
+    "dias_max": 28,
+    "hora_inicio": "10:00",
+    "hora_fim": "18:00",
+    "dias_semana": [
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "intervalo_min": 5,
+    "max_por_dia": 30,
+    "falhas_max_hora": 3,
+    "sem_conversa_dias": 3,
+    "resposta_max_dias": 3
   },
   "retomada": {
     "ativo": true,

@@ -1,3 +1,4 @@
+import json
 import importlib.util
 import os
 import unittest
@@ -25,12 +26,15 @@ MENS = {"ativo": True, "lembretes": [{"tipo": "lembrete_dia", "antes_min": 1440}
         "atraso_max_min": 30, "retentativas_min": [1, 5, 15], "reconciliacao_min": 15, "reconciliacao_dias": 7, "espera_texto_s": 10,
         "titulo_sim": "Confirmo", "titulo_nao": "Nao vou", "repetida_max_por_hora": 2, "max_por_varredura": 20, "max_por_contato_dia": 6}
 TXT_M = {k: "x" for k in vr.TEXTOS_MENSAGENS}
+CONVITE = {"ativo": False, "dias_min": 25, "dias_max": 28, "hora_inicio": "10:00", "hora_fim": "18:00", "dias_semana": [2, 3, 4, 5, 6], "intervalo_min": 5, "max_por_dia": 30,
+           "falhas_max_hora": 3, "sem_conversa_dias": 3, "resposta_max_dias": 3}
+TXT_CONVITE = {"convite": "Oi, {nome}! Faz quase um mês.{pacote} É só chamar.", "convite_pacote": "Tem {sessoes} sessões.", "convite_pacote_uma": "Tem 1 sessão."}
 
 
 def cfg(prefixo, banco, db=2, **extra):
     base = {"redis": {"prefixo": prefixo, "db": db}, "postgres": {"database": banco, "credencial_id": ""},
             "midia": dict(MIDIA), "workflows_sub": {"interpretar_midia": ""},
-            "textos": {"midia_nao_entendida": "x", "midia_grande": "y", **TXT_M}, "mensagens": {**MENS, "ativo": banco.endswith("_teste")}, "graces": {"timeout_ms": 15000, "rodizio": {"ligado": True, "janela_dias": 30}, "habitual": {"visitas": 5}}}
+            "textos": {"midia_nao_entendida": "x", "midia_grande": "y", **TXT_M, **TXT_CONVITE}, "convite": dict(CONVITE), "mensagens": {**MENS, "ativo": banco.endswith("_teste")}, "graces": {"timeout_ms": 15000, "rodizio": {"ligado": True, "janela_dias": 30}, "habitual": {"visitas": 5}}}
     return {**base, **extra}
 
 
@@ -51,6 +55,22 @@ class T(unittest.TestCase):
         for ruim in (0, 366, "30", 3.5, True):
             self.assertIn("janela_dias", erros(janela_dias=ruim))
         self.assertIn("rodizio ausente", "\n".join(vr.regras_rodizio("producao", {"graces": {}})))
+
+    def test_regras_do_convite(self):  # convite de volta, 27/11/2026
+        def erros(conv=None, txt=None):
+            c = {"convite": {**CONVITE, **(conv or {})}, "textos": {**TXT_CONVITE, **(txt or {})}}
+            return "\n".join(vr.regras_convite("producao", c))
+        self.assertEqual(erros(), "")
+        self.assertIn("convite ausente", "\n".join(vr.regras_convite("producao", {})))
+        for conv in ({"ativo": "sim"}, {"dias_min": 3}, {"dias_min": 30}, {"max_por_dia": 0}, {"max_por_dia": True}, {"hora_inicio": "10h"}, {"dias_semana": []}, {"dias_semana": [0]}, {"intervalo_min": 0}):
+            self.assertNotEqual(erros(conv), "", conv)
+        # o texto do convite nao pergunta (retomada e laco) nem cita barbeiro (clausula petrea), e leva {nome} e {pacote}
+        for txt in ({"convite": "Oi, {nome}!{pacote} Quer marcar?"}, {"convite": "Oi, {nome}!{pacote} Seu {barbeiro} espera."}, {"convite": "Oi!{pacote}"}, {"convite": "Oi, {nome}!"}, {"convite_pacote": "Tem sessões."}, {"convite_pacote_uma": ""}):
+            self.assertNotEqual(erros(txt=txt), "", txt)
+        for amb in ("integracao", "producao"):
+            c = json.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "ambientes", amb + ".json"), encoding="utf-8"))
+            self.assertEqual(vr.regras_convite(amb, c), [])
+            self.assertIs(c["convite"]["ativo"], amb == "integracao")  # em producao nasce desligado ate o owner ligar
 
     def test_regras_do_habitual(self):  # barbeiro habitual pelos ultimos atendimentos, 26/11/2026
         def erros(v):

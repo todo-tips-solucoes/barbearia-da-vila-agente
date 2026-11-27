@@ -76,6 +76,41 @@ function bvMDecisaoCancelar(row, idAgenda) {
   // idCliente: a fase 2 do cancelar le a agenda do cliente antes de apagar (agendamento de pacote vai para a equipe)
   return { dados: { idAgenda, horaInicio: String(r.inicio), recorrente: !!d.recorrente, servico, resumo, ...(r.graces_cliente_id ? { idCliente: String(r.graces_cliente_id) } : {}) }, opcoes: { tipo: 'decisao_cancelamento', itens: BVM_DECISAO } };
 }
+// Convite de volta (owner, 2026-11-27): texto a quem esta ha quase um mes sem cortar. Sem barbeiro (clausula petrea: o convite nao
+// cita ninguem) e sem "?" (saida com pergunta dispara a retomada e conta no laco). Com pacote, o total de sessoes disponiveis
+// entra no lugar de {pacote}; nenhum texto da Graces vai ao cliente. l: { nome, telefone }; cfg: { wid, fila, textos }.
+function bvMConvite(l, sessoes, cfg) {
+  const t = cfg.textos, n = Number(sessoes) || 0;
+  const nome = bvMNomeProprio(String((l && l.nome) || '').trim().split(/\s+/)[0]);
+  const pacote = n === 1 ? t.convite_pacote_uma : n > 1 ? bvMTemplate(t.convite_pacote, { sessoes: n }) : '';
+  const texto = bvMTemplate(t.convite, { nome, pacote: pacote ? ` ${pacote}` : '' }).replace(/,\s*!/g, '!').replace(/\s{2,}/g, ' ').trim();
+  return { texto, req: bvMTexto({ texto }, l.telefone, cfg) };
+}
+// Pedido para nao receber mais o convite (opt-out), por palavras: so vale com convite enviado ha pouco (quem decide e o Preparar).
+// "nao precisa" so vale com "mais" ou com o objeto (lembrete, mensagem, aviso): "nao precisa mandar a localizacao" e "nao precisa
+// avisar o barbeiro" nao sao pedido de parar, e a marca e permanente (revisao de 27/11).
+const BVM_ISTO = '(?:ess[ea]s? |est[ea]s? |os |as |o |a )?(?:lembretes?|mensage(?:m|ns)|avisos?)';
+const BVM_PARAR = new RegExp('(?:^| )(?:' + [
+  `nao quero (?:mais )?(?:receber|${BVM_ISTO})`,
+  `nao (?:me )?(?:mande|mandem|manda|envie|enviem|envia) (?:mais|nada|${BVM_ISTO})`,
+  'par(?:a|e|ar|em|am) de (?:me )?(?:mandar|enviar|lembrar)',
+  `par(?:a|e|ar|em|am) com ${BVM_ISTO}`,
+  '(?:me )?tir[ae]m? d?(?:a|essa|esta) lista', 'sair d?(?:a|essa|esta) lista',
+  `nao precisam? (?:me )?(?:mais (?:mandar|enviar|lembrar|avisar)|(?:mandar|enviar|lembrar|avisar) mais|(?:mandar|enviar) (?:mais )?${BVM_ISTO})`,
+  `cancel[ae]r? ${BVM_ISTO}`, 'parar de receber', 'me descadastr[ae]m?', 'descadastrar',
+].join('|') + ')(?: |$)');
+const bvMPediuParar = (t) => BVM_PARAR.test(String(t == null ? '' : t).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
+// Linha de contexto do convite (dado): cv = ultimo convite enviado ha poucos dias ({ sessoes }); semConversa: so quando nao ha
+// conversa em andamento (como o lembrete de 1 hora); parou: o cliente pediu para nao receber mais (o no Sessao marca a linha do convite).
+function bvMContextoConvite(cv, semConversa, parou) {
+  if (!cv) return '';
+  if (parou) return '\nO cliente pediu para não receber mais o lembrete de retorno da barbearia (dado): o pedido já foi registrado. Confirme em uma frase curta que ele não vai mais receber, sem insistir.';
+  if (!semConversa) return '';
+  const n = Number(cv.sessoes) || 0;
+  return '\nConvite enviado pela barbearia há poucos dias (dado): lembrou o cliente de que faz quase um mês do último corte e convidou a marcar'
+    + (n ? `; ele tem ${n} ${n === 1 ? 'sessão de pacote disponível' : 'sessões de pacote disponíveis'} para agendar` : '')
+    + '. Se a mensagem nova aceita o convite ("quero", "sim", "pode ver"), siga o agendamento normalmente, como para qualquer cliente que pede um horário; se ele não quer agora, agradeça em uma frase. Não prometa parar de mandar este lembrete: isso só vale quando o contexto disser que o pedido já foi registrado.';
+}
 function bvMTexto(m, contato, cfg) {
   const lid = /@lid$/.test(String(contato));
   return { path: lid ? '/api/messages/whatsmeow/sendTextPROLid' : '/api/messages/send',
@@ -598,5 +633,5 @@ function bvMRetomaFila(l) {
   return !bvMSoAgradeceu(d, true);
 }
 
-if (typeof module !== 'undefined') module.exports = { bvMAvisoEquipe, bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMRetomaFila, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
+if (typeof module !== 'undefined') module.exports = { bvMAvisoEquipe, bvMSimDigitado, bvMComServico, bvMListaDe, bvMSoAgradeceu, bvMRetomaFila, bvMConvite, bvMPediuParar, bvMContextoConvite, bvMServicos, bvMSeguidora, bvMRetomada, bvMNomeProprio, bvMSincPlano, bvMSincResultado, bvMLocal, bvMProgramar, bvMLista, bvMListaDecisao, bvMDecisaoCancelar, bvMTexto, bvMResultadoEnvio, bvMReconhecer, bvMReconciliar, bvMLocalParaInstante, bvMDia, bvMTemplate, bvMTextoDe, bvMDecidir, bvMConfNormalizar, bvMConfEscolher, bvMConfAvaliar, bvMConfTexto,
   bvMAgendaDe, bvMConfConferir, bvMConfReq, bvMTituloRota, bvMPromptConfirmacoes };
