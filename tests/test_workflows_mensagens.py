@@ -53,7 +53,7 @@ class Base:
 
     def test_renderiza_com_o_config_e_o_js_compila(self):
         wf = json.loads(dep.renderizar(self.texto, CFG, RAIZ))
-        self.assertNotIn("{{BV:", json.dumps(wf).replace("via {{BV:INCLUDE:shared/", ""))  # o cabecalho do .js incluido cita o placeholder
+        self.assertNotIn("{{BV:", json.dumps(wf).replace("via {{BV:INCLUDE:shared/", "").replace("({{BV:INCLUDE:...}})", ""))  # o cabecalho do .js incluido cita o placeholder
         for n in wf["nodes"]:
             js = n["parameters"].get("jsCode")
             if js is None:
@@ -210,7 +210,7 @@ class BvMensagens(Base, unittest.TestCase):
 
     def test_dois_agendadores(self):
         gat = [n for n in self.wf["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]
-        self.assertEqual(len(gat), 4)  # varredura (legado), reconciliacao, sincronizacao com o Chat Master e retomada (owner, 2026-11-16)
+        self.assertEqual(len(gat), 5)  # varredura (legado), reconciliacao, sincronizacao com o Chat Master, retomada (16/11) e convite de volta (27/11)
         j = json.dumps(self.wf)
         self.assertIn("{{BV:NUM:mensagens.varredura_s}}", j)
         self.assertIn("{{BV:NUM:mensagens.reconciliacao_min}}", j)
@@ -227,7 +227,7 @@ class BvMensagens(Base, unittest.TestCase):
         self.assertEqual(sorted({int(x) for x in re.findall(r"\$(\d+)", q)}), list(range(1, 11)))
         self.assertEqual(q.count("("), q.count(")"))
         g = self.nos["Gravar retomada"]["parameters"]["query"]
-        self.assertEqual((sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), g.count("(") == g.count(")")), ([1, 2, 3, 4], True))
+        self.assertEqual((sorted({int(x) for x in re.findall(r"\$(\d+)", g)}), g.count("(") == g.count(")")), (list(range(1, 10)), True))  # 5 a 9: a cauda de envio tambem fecha a linha do convite de volta (27/11)
         self.assertEqual(self.nos["Enviar retomada"]["credentials"]["httpHeaderAuth"]["id"], "{{BV:credenciais.chatmaster}}")
         lin = {"contato_id": "9", "telefone": TEL, "nome": "DANIEL", "servico": "Cabelo adulto + barba",
                "proposta": {"acao": "agendar", "dados": {"servico": "Cabelo adulto + barba", "barbeiro": "Pedro Henrique", "data": "2030-01-10", "hora": "14:40"}}}
@@ -240,10 +240,80 @@ class BvMensagens(Base, unittest.TestCase):
         self.assertEqual((r[0]["simulado"], r[0]["req"]["body"]["number"], r[0]["req"]["body"]["openTicket"]), (False, TEL, "0"))  # na lista de escrita do TESTE: envia de verdade
         r2 = rodar("workflows/bv-mensagens.json", "Montar retomada", [{**lin, "telefone": "5500000000510", "proposta": None}])
         self.assertEqual((r2[0]["simulado"], r2[0]["texto"]), (True, "Oi, Daniel! A gente não terminou de marcar o seu Cabelo adulto + barba. Quer continuar de onde paramos?"))
-        ok = rodar("workflows/bv-mensagens.json", "Resultado retomada", [{"statusCode": 200}], {"Montar retomada": r}, each=True)
+        ok = rodar("workflows/bv-mensagens.json", "Resultado retomada", [{"statusCode": 200}], {"Envia retomada?": r}, each=True)
         self.assertEqual((ok["texto"], ok["code"]), (r[0]["texto"], None))
-        ko = rodar("workflows/bv-mensagens.json", "Resultado retomada", [{"error": "x"}], {"Montar retomada": r}, each=True)
+        ko = rodar("workflows/bv-mensagens.json", "Resultado retomada", [{"error": "x"}], {"Envia retomada?": r}, each=True)
         self.assertEqual((ko["texto"], ko["code"]), (None, "SEM_RESPOSTA"))  # falha: nada gravado como enviado, sem nova tentativa
+        self.assertEqual((ok["origem"], ok["convite"]), ("retomada", None))  # a cauda e compartilhada com o convite de volta; a retomada segue igual
+        self.assertIn("$5::text || '-' || $1::text || '-' ||", g)
+        self.assertTrue(self.nos["Gravar retomada"]["parameters"]["options"]["queryReplacement"].endswith("$json.origem || 'retomada', ($json.convite || {}).id ?? null, ($json.convite || {}).situacao ?? null, ($json.convite || {}).motivo ?? null, ($json.convite || {}).sessoes ?? null] }}"))
+
+    def test_convite_de_volta(self):  # owner, 2026-11-27: lembrete a quem esta ha quase um mes sem cortar
+        con = {k: [[c["node"] for c in s] for s in v["main"]] for k, v in self.wf["connections"].items()}
+        self.assertEqual([con[n] for n in ("A cada convite", "Reivindicar convite", "Pedir cliente", "Graces cliente", "Pedir convite", "Consulta convite?", "Graces convite", "Decidir convite")],
+                         [[["Reivindicar convite"]], [["Pedir cliente"]], [["Graces cliente"]], [["Pedir convite"]], [["Consulta convite?"]], [["Graces convite"], ["Decidir convite"]], [["Decidir convite"]], [["Envia retomada?"]]])
+        # sem ciclo: do gatilho do convite nao se volta a nenhum no ja visitado, e o ramo nao chama sub-workflow
+        visto, pilha = set(), ["A cada convite"]
+        while pilha:
+            n = pilha.pop()
+            caminho_novo = n not in visto
+            visto.add(n)
+            if caminho_novo:
+                pilha += [d for s in con.get(n, []) for d in s]
+        self.assertEqual(visto, {"A cada convite", "Reivindicar convite", "Pedir cliente", "Graces cliente", "Pedir convite", "Consulta convite?", "Graces convite", "Decidir convite", "Envia retomada?", "Enviar retomada", "Resultado retomada", "Gravar retomada"})
+        self.assertEqual([self.nos[n]["type"] for n in visto if "executeWorkflow" in self.nos[n]["type"]], [])
+        self.assertEqual(self.nos["A cada convite"]["parameters"]["rule"]["interval"][0], {"field": "minutes", "minutesInterval": "{{BV:NUM:convite.intervalo_min}}"})
+        q = self.nos["Reivindicar convite"]["parameters"]["query"]
+        for t in ("$1::boolean AND extract(isodow FROM sp)::int = ANY(string_to_array($2::text, ',')::int[]) AND sp::time >= $3::time AND sp::time < $4::time",  # ligado, dia da semana e horario
+                  "e.tipo = 'convite_volta' AND e.enviada_em >= date_trunc('day', sp) AT TIME ZONE 'America/Sao_Paulo') < $5::int",  # teto por dia
+                  "f.motivo = 'mensagem|convite_falhou' AND f.criado_em > now() - interval '1 hour') + (SELECT count(*)",  # disjuntor: falhas de envio
+                  "b.visita::date BETWEEN (SELECT sp FROM agora)::date - $8::int AND (SELECT sp FROM agora)::date - $7::int",  # janela de dias
+                  "WHERE NOT b.futuro", "o.tipo = 'convite_volta' AND o.motivo = 'parou'", "c.fila_id IS DISTINCT FROM $9::int", "<> ALL(string_to_array($10::text, ','))",
+                  "h.situacao = 'aberto'", "x.criado_em > now() - make_interval(days => $11::int)",
+                  "v.tipo = 'convite_volta' AND v.inicio >= b.visita::date AND v.motivo IS DISTINCT FROM 'graces_falhou')",  # um convite por visita; leitura que falhou tenta de novo
+                  "velhas AS (UPDATE mensagens_agendadas SET situacao = 'cancelada', motivo = 'graces_falhou', reservada_em = NULL, atualizado_em = now() WHERE tipo = 'convite_volta' AND situacao = 'pendente' AND reservada_em < now() - interval '15 minutes' RETURNING 1)",  # linha que ficou no meio do caminho
+                  "+ (SELECT count(*) FROM mensagens_agendadas g WHERE g.tipo = 'convite_volta' AND g.criado_em > now() - interval '1 hour' AND (g.situacao = 'pendente' OR g.motivo = 'graces_falhou')) < $6::int",  # Graces fora tambem para as rodadas
+                  "coalesce(m.motivo, '') NOT IN ('orfa','reagendada','cancelada_agente')",  # agendamento que deixou de existir nao e visita
+                  "ORDER BY b.visita LIMIT 1 FOR UPDATE OF c SKIP LOCKED"):  # um por rodada
+            self.assertIn(t, q)
+        self.assertEqual((sorted({int(x) for x in re.findall(r"\$(\d+)", q)}), q.count("(") == q.count(")")), (list(range(1, 12)), True))
+        for n in ("Graces cliente", "Graces convite"):
+            self.assertEqual((self.nos[n]["parameters"]["method"], self.nos[n]["credentials"]["httpHeaderAuth"]["id"], self.nos[n]["onError"]), ("GET", "{{BV:credenciais.graces}}", "continueRegularOutput"))
+        # os outros ramos nao enxergam o tipo novo
+        for n, t in (("Reservar", "m.tipo IN ('confirmacao','lembrete','pos_atendimento')"), ("Pendencias", "m.tipo = ANY(ARRAY['lembrete_dia','lembrete_hora'])")):
+            self.assertIn(t, self.nos[n]["parameters"]["query"])
+        # execucao dos nos: sem candidato nada segue; cadastro unico pede as tres leituras; sem cadastro vai direto a decisao
+        self.assertEqual(rodar(self.ARQ, "Pedir cliente", [{"success": True}]), [])
+        cand = {"convite_id": "77", "contato_id": "9", "telefone": "+55 (11) 99999-8888", "nome": "DANIEL souza", "visita": "2030-01-01"}
+        pc = rodar(self.ARQ, "Pedir cliente", [cand])
+        self.assertEqual(pc[0]["req"], {"m": "GET", "path": "/agenda/clientes", "qs": {"celular": TEL}})
+        U = "11111111-1111-4111-8111-111111111111"
+        reqs = rodar(self.ARQ, "Pedir convite", [{"statusCode": 200, "body": [{"idCliente": U}]}])
+        self.assertEqual([r["req"]["path"] for r in reqs], ["/agenda/historico", "/agenda/agendamentos", "/agenda/pacotes"])
+        self.assertEqual(rodar(self.ARQ, "Pedir convite", [{"statusCode": 200, "body": []}]), [{"fim": {"enviar": False, "motivo": "sem_cadastro"}}])
+        d = rodar(self.ARQ, "Decidir convite", [{"fim": {"enviar": False, "motivo": "sem_cadastro"}}], {"Pedir cliente": pc})
+        self.assertEqual(d, [{"contato_id": "9", "origem": "convite", "texto": None, "req": None, "simulado": True, "convite": {"id": "77", "situacao": "cancelada", "motivo": "sem_cadastro"}}])
+        import datetime
+        ha26 = (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))) - datetime.timedelta(days=26)).strftime("%Y-%m-%d")
+        resp = [{"statusCode": 200, "body": [{"dataAbertura": ha26 + "T10:00:00"}]}, {"statusCode": 200, "body": []},
+                {"statusCode": 200, "body": [{"dataValidade": None, "secoes": [{"idClienteItemPacote": U, "idProdutoServico": "s"}, {"idClienteItemPacote": U.replace("1111-4", "2222-4"), "idProdutoServico": "s"}]}]}]
+        d = rodar(self.ARQ, "Decidir convite", resp, {"Pedir cliente": pc})[0]
+        self.assertEqual((d["simulado"], d["origem"], d["convite"], d["req"]["path"], d["req"]["body"]["number"], d["req"]["body"]["openTicket"]), (True, "convite", {"id": "77", "situacao": "enviada", "sessoes": 2}, "/api/messages/send", TEL, "0"))
+        self.assertTrue(d["texto"].startswith("Oi, Daniel! Já faz quase um mês do seu último corte aqui na Barbearia da Vila. Você ainda tem 2 sessões do seu pacote disponíveis para agendar. "))
+        self.assertNotIn("?", d["texto"])
+        d2 = rodar(self.ARQ, "Decidir convite", [resp[0], {"statusCode": 200, "body": [{"idAgenda": "a1"}]}, resp[2]], {"Pedir cliente": pc})[0]
+        self.assertEqual(d2["convite"], {"id": "77", "situacao": "cancelada", "motivo": "tem_horario"})
+        canc = rodar(self.ARQ, "Resultado retomada", [d2], {"Envia retomada?": [d2]}, each=True)  # nao envia: nada gravado como mensagem nem como falha
+        self.assertEqual((canc["texto"], canc["code"], canc["convite"]), (None, None, {"id": "77", "situacao": "cancelada", "motivo": "tem_horario"}))
+        # a cauda de envio fecha a linha: enviada (simulado), ou falhou quando o canal recusa
+        ok = rodar(self.ARQ, "Resultado retomada", [d], {"Envia retomada?": [d]}, each=True)
+        self.assertEqual((ok["origem"], ok["texto"], ok["code"], ok["convite"]), ("convite", d["texto"], None, {"id": "77", "situacao": "enviada", "sessoes": 2}))
+        real = {**d, "simulado": False}
+        ko = rodar(self.ARQ, "Resultado retomada", [{"statusCode": 500}], {"Envia retomada?": [real]}, each=True)
+        self.assertEqual((ko["texto"], ko["code"], ko["convite"]["situacao"], ko["convite"]["motivo"]), (None, "HTTP_500", "falhou", "envio"))
+        g = self.nos["Gravar retomada"]["parameters"]["query"]
+        self.assertIn("cv AS (UPDATE mensagens_agendadas SET situacao = $7::text, motivo = $8::text, enviada_em = CASE WHEN $7::text = 'enviada' THEN now() END, dados = dados || jsonb_build_object('sessoes', COALESCE($9::int, 0)), reservada_em = NULL, atualizado_em = now() WHERE id = $6::bigint AND tipo = 'convite_volta' AND situacao = 'pendente' AND $7::text IS NOT NULL RETURNING 1)", g)
+        self.assertIn("'mensagem|' || $5::text || '_falhou'", g)
         rj = json.loads(ler("workflows/sub/entregar-rajada.json")) if "ler" in globals() else json.load(open(os.path.join(RAIZ, "workflows", "sub", "entregar-rajada.json"), encoding="utf-8"))
         nos = {n["name"]: n for n in rj["nodes"]}
         self.assertIn("retomada_ms", nos["Ler contexto"]["parameters"]["query"])
