@@ -117,7 +117,9 @@ function bvCompor(textoModelo, oferta, cfg, ofertaNova = false, aguardaConfirmac
   const idsModelo = bloco.split('\n').map((l) => l.split('|')[0].replace(/^\s*[-*]\s*/, '').trim()).filter(Boolean);
   // Resumo com pedido de confirmacao nao leva a lista de horarios da busca do mesmo turno: o cliente tocava num horario e recebia
   // "Posso confirmar?" de novo (16/11, 3 conversas). A resposta ao resumo e texto (sim / nao / outro horario).
-  const semLista = aguardaConfirmacao && !!oferta && (oferta.tipo === 'horario' || oferta.tipo === 'sequencia');
+  // Nem a lista de agendamentos (PROD, 27/11: meus_agendamentos e reagendar no mesmo turno; o resumo da remarcacao saiu com os dez
+  // horarios marcados do cliente, ele tocou no que queria mudar e ouviu "voce quer manter?").
+  const semLista = aguardaConfirmacao && !!oferta && ['horario', 'sequencia', 'agendamento'].includes(oferta.tipo);
   const frases0 = bvFrases(corpo).map((f, i, todas) => { const g = semSoltas(f); return completar(semId(g), g !== f, todas[i + 1]); }).filter((f) => f && !(testeId && f.includes(testeId)) && (liberado || !BV_NOME_TESTE.test(f)) && !solta(f));
   // Promessa sem entrega: so quando a resposta INTEIRA e a promessa ("Oi, Paulo! Vou consultar os horários... Só um momento."): tiradas as
   // frases que so prometem, sobra no maximo uma interjeicao. Resposta com conteudo (preco, horario, pedido de dado) fica como veio.

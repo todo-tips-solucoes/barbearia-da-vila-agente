@@ -521,6 +521,41 @@ class RevisaoOnda7(CodeNodes):
         self.assertTrue(r["sessao_nova"])
         self.assertIn("id=9 (Corte com Ze", r["system"])
         self.assertIn("não vai poder comparecer ao agendamento A", r["system"])
+        self.assertIs(r["recusa_valida"], True)  # 27/11: o no Sessao guarda a recusa valida na sessao nova
+
+    def test_planejar_resolve_o_agendamento_recusado_com_o_relogio_e_a_janela(self):  # 27/11: o no renderizado, com a configuracao de verdade
+        import time
+        iso = lambda seg: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - seg))
+        ent = {"in": {"operacao": "horarios_livres", "contato_id": "7", "telefone": "+" + TEL, "turno_id": "22222222-2222-4222-8222-222222222222", "ambiente": "integracao", "data": "2026-11-30", "qualquer": False}}
+
+        def planejar(em):
+            pedido = {"idCliente": "c1", "futuros": [{"idAgenda": "a1", "idServico": "s1", "horaInicio": "2026-11-28T11:20:00", "servico": "corte adulto", "idProfissional": "b1"}],
+                      "ultimo": {"servico": {"idServico": "s1", "nome": "corte adulto", "opcao_id": "ult"}, "barbeiro": {"idProfissional": "b7", "apelido": "Black"}},
+                      "confirmacao_recusada": {"idAgenda": "a1", "inicio": "2026-11-28T11:20:00", "servico": "corte adulto", "barbeiro": "Pedro", "idProfissional": "b1", "idCliente": "c1", "em": em}}
+            return rodar("workflows/sub/bv-graces.json", "Planejar", [{"pedido": pedido, "opcoes": {}}], {"Normalizar": [ent], "Gatilho": [{"telefone": "+" + TEL}]})
+        valida = planejar(iso(60))
+        self.assertEqual((valida[0]["req"]["qs"]["idProfissional"], valida[0]["st"]["in"]["id_opcao_agendamento"]), ("b1", "rec"))  # remarcacao, com o barbeiro do agendamento
+        vencida = planejar(iso(3 * 3600))
+        self.assertEqual((vencida[0]["req"]["qs"]["idProfissional"], vencida[0]["st"]["in"].get("id_opcao_agendamento")), ("b7", None))  # recusa de 3 h: a busca de sempre
+
+    def test_recusa_valida_ou_vencida_no_preparar(self):  # 27/11: recusa por toque, conversa parada ha dias, depois "Remarcar"
+        import time
+        agora = int(time.time() * 1000)
+        iso = lambda ms: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ms / 1000))
+
+        def preparar(pedido, ultima):
+            ctx = {"ultima_ms": ultima, "pedido": pedido, "opcoes": {"tipo": "decisao_cancelamento", "itens": [{"id": "1", "rotulo": "Remarcar"}, {"id": "2", "rotulo": "Cancelar mesmo"}]}, "historico": [], "pendente": None, "confirmacoes": []}
+            ds = rodar("workflows/sub/entregar-rajada.json", "Decidir silencio", [], {"Ler contexto": [ctx]})[0]
+            return rodar("workflows/sub/entregar-rajada.json", "Preparar", [], {"Gatilho": [{"itens": [{"tipo": "texto", "conteudo": "Remarcar"}]}], "Ler contexto": [ctx], "Registrar turno": [{"turnos_hora": 0}], "Decidir silencio": [ds]})[0]
+        rec = lambda ms: {"confirmacao_recusada": {"idAgenda": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "inicio": "2026-11-28T11:20:00", "servico": "corte adulto", "barbeiro": "Pedro", "em": iso(ms)}}
+        r = preparar(rec(agora - 60000), agora - 3 * 86400000)
+        self.assertEqual((r["sessao_nova"], r["recusa_valida"]), (True, True))
+        self.assertIn("não vai poder comparecer ao agendamento de corte adulto de sábado (28/11) às 11:20 (dado; nas ferramentas ele é o id_opcao_agendamento rec)", r["system"])
+        self.assertNotIn("3fa85f64", r["system"])  # o id da agenda nao vai mais ao modelo
+        velha = preparar(rec(agora - 3 * 3600000), agora - 60000)  # mesma sessao, recusa de 3 h atras: sai do pedido e do contexto
+        self.assertEqual((velha["sessao_nova"], velha["recusa_valida"]), (False, False))
+        self.assertNotIn("não vai poder comparecer", velha["system"])
+        self.assertIs(preparar({}, agora - 60000)["recusa_valida"], False)
 
     def test_item3_lista_antiga_encerrada_e_desatualizada_sem_graces(self):
         ent = {"ok": True, "contato_id": "1", "origem": "id", "confirmado": True, "mensagem_id": "7"}
@@ -783,6 +818,10 @@ class Etapa5(unittest.TestCase):  # atendimentos de 17/11 e decisao do owner de 
         # uma proposta pendente por contato: a de cancelar entra no lugar da pendente, na mesma instrucao
         self.assertIn("ON CONFLICT (contato_id) WHERE estado = 'pendente' DO UPDATE SET id = EXCLUDED.id, turno_id = EXCLUDED.turno_id, acao = EXCLUDED.acao, dados = EXCLUDED.dados", q)
         self.assertIn("opcoes = CASE WHEN $18::jsonb IS NULL THEN conversas.opcoes ELSE EXCLUDED.opcoes END", q)
+        # 27/11: a recusa guarda o inicio, o servico, o barbeiro (nome e id) e o cliente da linha do lembrete: e por eles que as ferramentas
+        # acham o agendamento ao remarcar e conferem que e o mesmo. O barbeiro fica so no estado da conversa: a proposta de cancelar e o texto continuam sem ele
+        self.assertIn("jsonb_build_object('confirmacao_recusada', jsonb_build_object('idAgenda', $7::text, 'em', now()) || COALESCE((SELECT jsonb_strip_nulls(jsonb_build_object('inicio', to_char(la.inicio, 'YYYY-MM-DD\"T\"HH24:MI:SS'), 'servico', la.dados->>'servico', 'barbeiro', la.dados->>'barbeiro', 'idProfissional', la.id_profissional, 'idCliente', la.graces_cliente_id)) FROM mensagens_agendadas la WHERE la.id = $1::bigint), '{}'::jsonb))", q)
+        self.assertIn("ON CONFLICT (contato_id) DO UPDATE SET pedido = conversas.pedido || EXCLUDED.pedido", q)
         self.assertIn("jsonb_build_object('em',", q)  # a oferta nasce com a hora, como as do bv-graces
         self.assertIn("CASE WHEN $18::jsonb IS NOT NULL THEN 'lista' ELSE 'texto' END", q)
         self.assertEqual(q.count("("), q.count(")"))
