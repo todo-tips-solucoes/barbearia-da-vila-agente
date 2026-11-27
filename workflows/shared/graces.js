@@ -362,6 +362,9 @@ const bvgFechaRecusa = (ctx, alvos) => (((ctx && ctx.pedido) || {}).confirmacao_
 // outro (bvgFase1). So no estado da conversa, nunca no que vai ao modelo.
 const bvgMarcaRec = (x) => ({ idAgenda: x.idAgenda, inicio: String(x.horaInicio).slice(0, 16) });
 const bvgMesmaMarca = (m, x) => !!m && !!x && String(m.idAgenda) === String(x.idAgenda) && String(m.inicio) === String(x.horaInicio).slice(0, 16);
+// Agendamento a mais num horario de busca de remarcacao: busca nova, sem marca. Com a hora, o `agendar` novo sai no mesmo turno e troca a
+// proposta de remarcar; sem ela saia cliente_nao_escolheu e a proposta de remarcar seguia pendente para um "pode ser" do turno seguinte.
+const BVG_A_MAIS = 'se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico e a hora que ele escolheu';
 // Sem saber qual agendamento: nada e feito e o modelo lista (com a recusa em pauta que nao resolve, a linha do contexto promete o `rec`).
 const bvgSemAgendamento = (fim) => bvgRecusa('agendamento_nao_informado', `não dá para saber de qual agendamento o cliente fala e nada foi feito: chame meus_agendamentos (com mais de um, pergunte qual, mandando a lista) e chame esta ferramenta de novo com o id_opcao_agendamento${fim}`);
 // Agendamento feito por pacote: cancelar pela API nao devolve a sessao (medido em 23/11 e conferido pelo owner no sistema: ela fica
@@ -845,13 +848,18 @@ function bvgFase1(i, ctx, cfg, chamar) {
   // traz da recusa). Marca que nao resolve: nada e proposto e a ferramenta manda listar.
   const comH = (i.operacao === 'agendar' || i.operacao === 'reagendar') && i.id_opcao_horario;
   const rc = comH ? bvgRecusado(ctx) : null;
-  const marca = comH ? (bvgResolver(i.id_opcao_horario, 'horario', ctx) || {}).rec : null;
+  // id que e de uma sequencia (cabelo e barba) nao le marca: com a lista de sequencias aberta, o mesmo numero resolvia tambem na lista
+  // de horarios guardada no pedido (horarios_oferta) e a escolha da sequencia saia como remarcacao
+  const marca = comH && !bvgResolver(i.id_opcao_horario, 'sequencia', ctx) ? (bvgResolver(i.id_opcao_horario, 'horario', ctx) || {}).rec : null;
   const daMarca = !marca ? null : bvgMesmaMarca(marca, rc) ? 'rec' : ((ctx.pedido.agendamentos || []).find((a) => bvgMesmaMarca(marca, a)) || {}).opcao_id;
   // `agendar` num horario de busca de remarcacao, sem substituicao, e a remarcacao (TESTE, 27/11, 1 de 7 rodadas: saia a proposta de
   // um agendamento NOVO, com o antigo de pe): segue como `reagendar`, com as mesmas barreiras e a mesma proposta; o teto de
   // agendamentos do dia nao conta. Busca de outro servico, ou de agendamento novo, nao leva a marca.
   const convertido = i.operacao === 'agendar' && !i.substitui_id_opcao_agendamento && !!marca;
   if (convertido) i.operacao = 'reagendar';
+  // As duas recusas da marca ficam em falhas_agente (no TESTE, sem registro, nao deu para saber qual recusa tinha saido). A recusa
+  // comum de agendamento_nao_informado (horario sem marca) nao e registrada: e caminho frequente e viraria ruido.
+  const semProposta = (motivo, code) => ({ falha: { motivo: `graces|${motivo}`, operacao: convertido ? 'agendar' : 'reagendar', code, status: 0, trace: null } });
   // Remarcar sem dizer qual agendamento: o da marca; horario sem marca (busca de agendamento novo), o da recusa de presenca em pauta.
   // O id informado continua valendo (se nao for o da marca, a recusa esta mais abaixo, depois das barreiras). Na primeira linha, antes
   // de toda barreira (bvgTocaHumano le i.id_opcao_agendamento: aplicado depois, o agendamento com barbeiro so da equipe seria
@@ -926,16 +934,17 @@ function bvgFase1(i, ctx, cfg, chamar) {
     return bvgProporPacote(chamar, antigo ? 'trocar_servico' : 'agendar', dados, antigo ? {} : bvgJaTem(ctx.pedido, [h]));
   }
   // convertido: quem chamou foi `agendar`, que nao aceita o agendamento; a saida diz a ferramenta e como pedir um agendamento a mais
-  if (!ag) return bvgFim(!i.id_opcao_agendamento || i.id_opcao_agendamento === 'rec' ? bvgSemAgendamento(convertido ? ' e este id_opcao_horario, pela ferramenta reagendar (o horário é de uma busca de remarcação); se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico' : i.operacao === 'reagendar' ? ' e este id_opcao_horario' : '') : bvgOpcaoInvalida());
+  if (!ag && i.id_opcao_agendamento && i.id_opcao_agendamento !== 'rec') return bvgFim(bvgOpcaoInvalida());
+  if (!ag) return bvgFim(bvgSemAgendamento(convertido ? ` e este id_opcao_horario, pela ferramenta reagendar (o horário é de uma busca de remarcação); ${BVG_A_MAIS}` : i.operacao === 'reagendar' ? ' e este id_opcao_horario' : ''), marca ? semProposta('marca_sem_agendamento', 'agendamento_nao_informado') : {});
   if (i.operacao === 'reagendar') {
     if (!h) return bvgFim(bvgOpcaoInvalida());
     if (h.idServico !== ag.idServico) return bvgFim(bvgRecusa('servico_diferente', 'os horários da lista são de outro serviço, não do agendamento: para remarcar, chame horarios_livres só com id_opcao_agendamento (sem id_opcao_servico); se é um serviço a mais, chame agendar com o horário, sem substitui_id_opcao_agendamento'));
     // id informado que nao e o agendamento da busca (o modelo contradiz a propria busca, ou o cliente mudou de ideia): nada e proposto
-    if (h.rec && !bvgMesmaMarca(h.rec, ag)) return bvgFim(bvgRecusa('horario_de_outro_agendamento', 'os horários da lista foram buscados para outro agendamento, não para o informado, e nada foi proposto: para remarcar o agendamento da busca, chame reagendar só com este id_opcao_horario (sem id_opcao_agendamento); para remarcar o informado, chame horarios_livres com o id_opcao_agendamento dele e ofereça os horários'));
+    if (h.rec && !bvgMesmaMarca(h.rec, ag)) return bvgFim(bvgRecusa('horario_de_outro_agendamento', 'os horários da lista foram buscados para outro agendamento, não para o informado, e nada foi proposto: para remarcar o agendamento da busca, chame reagendar só com este id_opcao_horario (sem id_opcao_agendamento); para remarcar o informado, chame horarios_livres com o id_opcao_agendamento dele e ofereça os horários'), semProposta('horario_de_outro_agendamento', 'horario_de_outro_agendamento'));
     const dados = { ...agAnt, idServico: ag.idServico, servico: ag.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, minutos: h.minutos, ...(h.indicado ? { indicado: true } : {}) };
     const resumo = `Remarcar ${ag.servico} de ${bvgDia(ag.horaInicio)} ${ag.horaInicio.slice(11, 16)} para ${bvgDiaSem(h.data)} às ${h.hora} com ${h.apelido}`;
     // convertido: o modelo chamou agendar; sem esta linha ele nao sabe que saiu remarcacao nem como pedir um agendamento a mais
-    const orientacao = convertido ? { orientacao: 'saiu como remarcação do agendamento para o qual os horários foram buscados, não como agendamento novo: mande o resumo e peça a confirmação; com o sim, chame reagendar (ou agendar) só com o proposta_id. Se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico' } : {};
+    const orientacao = convertido ? { orientacao: `saiu como remarcação do agendamento para o qual os horários foram buscados, não como agendamento novo: mande o resumo e peça a confirmação; com o sim, chame reagendar (ou agendar) só com o proposta_id; ${BVG_A_MAIS}` } : {};
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo, ...orientacao }, { proposta_nova: { acao: 'reagendar', dados: { ...dados, resumo }, resumo } });
   }
   // barbeiro de teste e barbeiro so da equipe nunca aparecem ao cliente: com o nome no resumo, a frase inteira da confirmacao era
@@ -1338,7 +1347,8 @@ function bvgPassoUm(st, resps0, cfg) {
       // o barbeiro so vira escolha da conversa quando o cliente o escolheu (ou e o da remarcacao); o habitual segue sendo sugestao
       const um = soUm && !meta.habitual ? { barbeiro: { idProfissional: soUm.idProfissional, apelido: soUm.apelido }, barbeiro_ag: meta.agId || null } : {};
       if (decisao) res.opcoes = decisao.itens.map((x) => ({ id: x.id, rotulo: x.rotulo }));
-      return bvgFim(res, { opcoes: decisao || of, pedido: { servico: s, ...um, busca: bvgBusca(i, of.itens.length, { livre: exato ? String(exato.id) : null, hora: !!(meta.hora || meta.aPartir), outros: !!meta.sem || horas.length > perto.itens.length }) } }); // colado de fora do pedido: o cliente escolhe (nao vai ao resumo no turno)
+      // lista nova de horarios: a guardada no pedido (meus_agendamentos no meio) deixa de valer; um id que so existia nela resolvia num horario de outra busca
+      return bvgFim(res, { opcoes: decisao || of, pedido: { servico: s, ...um, ...(horas.length ? { horarios_oferta: null } : {}), busca: bvgBusca(i, of.itens.length, { livre: exato ? String(exato.id) : null, hora: !!(meta.hora || meta.aPartir), outros: !!meta.sem || horas.length > perto.itens.length }) } }); // colado de fora do pedido: o cliente escolhe (nao vai ao resumo no turno)
     }
     case 'funcionamento': {
       const hs = (r0.body && Array.isArray(r0.body.horarios) ? r0.body.horarios : []).filter((h) => h && h.dia)

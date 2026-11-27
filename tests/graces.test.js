@@ -2634,9 +2634,13 @@ console.log('graces.test.js segunda analise ok');
   assert.deepEqual([conv.resultado.resumo, conv.efeitos.proposta_nova.acao, conv.efeitos.proposta_nova.dados.idAgenda, conv.efeitos.proposta_nova.dados.horaInicio],
     ['Remarcar corte adulto de 28/11 11:20 para segunda-feira, 30/11 às 20:00 com Pedro Henrique', 'reagendar', 'serie', '2026-11-28T11:20:00']);
   assert.deepEqual(conv.efeitos.proposta_nova.dados, plano({ operacao: 'reagendar', id_opcao_horario: idH, turno_id: T1 }, aposBusca, f.efeitos.opcoes).final.efeitos.proposta_nova.dados); // a mesma proposta do reagendar
-  assert.equal(agendar(aposBusca, f.efeitos.opcoes, {}, { dia: { agendados: 3 } }).final.efeitos.proposta_nova.acao, 'reagendar'); // remarcar nao conta no teto de agendamentos do dia
+  // remarcar nao conta no teto de agendamentos do dia; o mesmo horario sem a marca, com o teto estourado, vai para a equipe
+  const noTeto = (opcoes) => g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: idH, turno_id: T1 }), { opcoes, pedido: aposBusca, agora_ms: AGORA, dia: { agendados: 3 } }, { ...c, agendamentosMaxDia: 3 }).final;
+  assert.equal(noTeto(f.efeitos.opcoes).efeitos.proposta_nova.acao, 'reagendar');
+  const semMarca = { ...f.efeitos.opcoes, itens: f.efeitos.opcoes.itens.map(({ valor: { rec: _r, ...v }, ...x }) => ({ ...x, valor: v })) };
+  assert.deepEqual([noTeto(semMarca).resultado.code, noTeto(semMarca).efeitos.proposta_nova], ['encaminhar_equipe', undefined]);
   // o modelo chamou agendar: o resultado diz que saiu remarcacao, como confirmar e como pedir um agendamento a mais (o do reagendar nao muda)
-  assert.match(conv.resultado.orientacao, /saiu como remarcação do agendamento para o qual os horários foram buscados.*chame reagendar \(ou agendar\) só com o proposta_id.*agendamento a mais.*id_opcao_servico/);
+  assert.match(conv.resultado.orientacao, /saiu como remarcação do agendamento para o qual os horários foram buscados.*chame reagendar \(ou agendar\) só com o proposta_id.*agendamento a mais.*horarios_livres informando o id_opcao_servico e a hora que ele escolheu$/);
   assert.equal(plano({ operacao: 'reagendar', id_opcao_horario: idH, turno_id: T1 }, aposBusca, f.efeitos.opcoes).final.resultado.orientacao, undefined);
   // No sim, o modelo pode repetir `agendar` com o proposta_id: o mapa do no Contexto (espelhado em BVG_ACOES) deixa agendar reivindicar a
   // proposta de reagendar, e a fase 2 decide pela acao da proposta: revalida e manda o PUT. A conferencia do sim e a mesma nas duas.
@@ -2663,7 +2667,7 @@ console.log('graces.test.js segunda analise ok');
   const TARDE = { agora_ms: AGORA + 3 * 86400000 };
   const vencida = agendar(aposBusca, f.efeitos.opcoes, {}, TARDE).final;
   assert.deepEqual([vencida.resultado.code, vencida.efeitos.proposta_nova], ['agendamento_nao_informado', undefined]);
-  assert.match(vencida.resultado.orientacao, /chame meus_agendamentos.*id_opcao_agendamento e este id_opcao_horario, pela ferramenta reagendar.*agendamento a mais.*horarios_livres informando o id_opcao_servico/);
+  assert.match(vencida.resultado.orientacao, /chame meus_agendamentos.*id_opcao_agendamento e este id_opcao_horario, pela ferramenta reagendar.*agendamento a mais.*horarios_livres informando o id_opcao_servico e a hora que ele escolheu$/);
   const listadoA = { ...aposBusca, agendamentos: [{ opcao_id: '4', ...futuros[0], profissional: 'Pedro Henrique' }] };
   for (const x of [agendar(listadoA, f.efeitos.opcoes, {}, TARDE).final, g.bvGPlano(entrada({ operacao: 'reagendar', id_opcao_horario: idH, turno_id: T1 }), { opcoes: f.efeitos.opcoes, pedido: listadoA, ...TARDE }, c).final]) {
     assert.deepEqual([x.efeitos.proposta_nova.acao, x.efeitos.proposta_nova.dados.idAgenda, x.efeitos.proposta_nova.dados.horaInicio], ['reagendar', 'serie', '2026-11-28T11:20:00']);
@@ -2710,14 +2714,34 @@ console.log('graces.test.js segunda analise ok');
     // id informado que nao e o da marca (o recusado, pelo `rec` ou pelo id da lista): o lado seguro, nada e proposto
     for (const outroId of ['rec', '1']) {
       const dv = nessa(b, 'reagendar', { id_opcao_agendamento: outroId }).final;
-      assert.deepEqual([dv.resultado.code, dv.efeitos.proposta_nova, Object.keys(dv.efeitos)], ['horario_de_outro_agendamento', undefined, []], `${id} ${outroId}`);
+      assert.deepEqual([dv.resultado.code, dv.efeitos], ['horario_de_outro_agendamento', { falha: { motivo: 'graces|horario_de_outro_agendamento', operacao: 'reagendar', code: 'horario_de_outro_agendamento', status: 0, trace: null } }], `${id} ${outroId}`); // so o registro em falhas_agente
       assert.match(dv.resultado.orientacao, /chame reagendar só com este id_opcao_horario \(sem id_opcao_agendamento\).*horarios_livres com o id_opcao_agendamento dele/, id);
     }
     // marca que nao resolve (a lista saiu do pedido; nos futuros o agendamento segue, mas sem o nome do barbeiro): manda listar
     const semLista = { ...b.pd, agendamentos: null };
-    for (const op of ['reagendar', 'agendar']) assert.deepEqual([nessa(b, op, {}, semLista).final.resultado.code, nessa(b, op, {}, semLista).final.efeitos.proposta_nova], ['agendamento_nao_informado', undefined], `${id} ${op}`);
+    for (const op of ['reagendar', 'agendar']) { // registrada com a ferramenta que o modelo chamou
+      assert.deepEqual([nessa(b, op, {}, semLista).final.resultado.code, nessa(b, op, {}, semLista).final.efeitos], ['agendamento_nao_informado', { falha: { motivo: 'graces|marca_sem_agendamento', operacao: op, code: 'agendamento_nao_informado', status: 0, trace: null } }], `${id} ${op}`);
+    }
     assert.match(nessa(b, 'reagendar', {}, semLista).final.resultado.orientacao, /id_opcao_agendamento e este id_opcao_horario$/, id);
   }
+  // horario sem marca, sem recusa e com a lista de agendamentos no pedido: nenhum agendamento e assumido (nem o primeiro da lista)
+  const semMarcaLista = { ...comLista, confirmacao_recusada: null };
+  const sm = plano({ operacao: 'reagendar', id_opcao_horario: '9' }, semMarcaLista, hora()).final;
+  assert.deepEqual([sm.resultado.code, sm.efeitos], ['agendamento_nao_informado', {}]); // a recusa comum, sem marca, nao e registrada
+  assert.equal(semPacote(plano({ operacao: 'agendar', id_opcao_horario: '9' }, semMarcaLista, hora())).final.efeitos.proposta_nova.acao, 'agendar');
+  // "quero um a mais, nao remarcar": a busca nova, com o servico e a hora escolhida, sai sem marca e o `agendar` novo vale no mesmo turno
+  // (sem a hora, cliente_nao_escolheu, e a proposta de remarcar seguia pendente). A lista nova apaga a guardada no pedido.
+  const b2 = daLista('2');
+  const aMais = (extra) => {
+    const fn = g.bvGPasso(plano({ operacao: 'horarios_livres', data: '2026-11-30', id_opcao_servico: 'ult', turno_id: T1, ...extra }, { ...b2.pd, horarios_oferta: b2.of }, b2.of).st, grade, c).final;
+    assert.deepEqual([fn.efeitos.opcoes.itens.some((x) => x.valor.rec), fn.efeitos.pedido.horarios_oferta], [false, null]);
+    return semPacote(plano({ operacao: 'agendar', id_opcao_horario: fn.efeitos.opcoes.itens.find((x) => x.valor.hora === '20:00').id, turno_id: T1 }, { ...b2.pd, ...fn.efeitos.pedido }, fn.efeitos.opcoes)).final;
+  };
+  assert.deepEqual([aMais({ hora: '20:00' }).efeitos.proposta_nova.acao, aMais({}).resultado.code], ['agendar', 'cliente_nao_escolheu']);
+  assert.equal('horarios_oferta' in g.bvGPasso(busca({ ...b2.pd, horarios_oferta: b2.of }, { id_opcao_servico: 'ult' }).st, [ok({ minutos: 40, horarios: [] })], c).final.efeitos.pedido, false); // busca sem horario: a guardada fica
+  // lista de sequencias aberta e lista de horarios marcada guardada no pedido: o id escolhido e da sequencia, nao vira remarcacao
+  const seq = { tipo: 'sequencia', itens: [{ id: b2.id, rotulo: '09:00', valor: { data: '2026-12-08', itens: [{ idServico: 's1', servico: 'corte adulto', idProfissional: 'b1', apelido: 'Pedro Henrique', hora: '09:00', minutos: 40 }, { idServico: 's2', servico: 'barba', idProfissional: 'b1', apelido: 'Pedro Henrique', hora: '09:40', minutos: 20 }] } }] };
+  assert.equal(plano({ operacao: 'agendar', id_opcao_horario: b2.id }, { ...b2.pd, horarios_oferta: b2.of }, seq).st.meta.prop.acao, 'agendar_conjunto');
   // as barreiras de sempre valem para o agendamento da marca. Barbeiro que so a equipe agenda (estado forjado: a busca dele encaminha
   // antes de ofertar): encaminha sem proposta e sem o nome. TESTE: agendamento de barbeiro real nao e alterado.
   const marcado = (idAg, ini) => ({ tipo: 'horario', itens: [{ id: '9', rotulo: '20:00', valor: { ...hora('b2', 'Kiel').itens[0].valor, rec: { idAgenda: idAg, inicio: ini } } }] });
