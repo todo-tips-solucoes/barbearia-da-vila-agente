@@ -1102,3 +1102,46 @@ Um especialista de backend revisou em leitura. Corrigidos: o lembrete já agenda
 - **"É só barba"** ainda vira pergunta de serviço sem mencionar o horário marcado.
 - **Lembrete de 1 hora** continua em texto, sem opções.
 - Um toque que chegue nos segundos entre o envio e a gravação recebe "esse horário não está mais valendo".
+
+## Convite de volta: lembrete para quem está há quase um mês sem cortar (27/11)
+
+Pedido do owner em 27/11: mandar um lembrete ao cliente que está há quase um mês sem cortar e, para quem tem pacote, dizer quantas sessões restam.
+
+### Decisões do owner
+
+| Ponto | Decisão |
+|---|---|
+| Quando | 25 dias depois da última visita (janela de 25 a 28 dias) |
+| Para quem | Quem não tem horário marcado; um convite por visita, sem segundo aviso |
+| Dias e horário | Terça a sábado, das 10:00 às 18:00 |
+| Limites | Um envio por rodada de 5 minutos (até 12 por hora) e 30 por dia; três falhas de envio em uma hora param as rodadas |
+| Pacote | Só o total de sessões disponíveis para agendar, somando os pacotes abertos |
+| Cliente do barbeiro que só a equipe agenda | Recebe; o texto não cita barbeiro e, se ele aceitar, a conversa vai para a equipe pelas regras de sempre |
+| Parar de receber | A mensagem diz como; o pedido é respeitado |
+| Produção | Nasce desligado (`convite.ativo: false`), até o owner aprovar o texto e ligar |
+
+### Como funciona
+
+- **Candidatos saem do nosso banco, sem chamada.** A reconciliação já grava em `mensagens_agendadas` todo agendamento da loja. A cada 5 minutos, `Reivindicar convite` (ramo novo do `bv-mensagens`) escolhe um contato cujo último horário foi há 25 a 28 dias, sem horário futuro, sem convite para essa visita, que não pediu para parar, não está no atendimento humano, não conversou nos últimos 3 dias e não é número da equipe, e já grava a linha `convite_volta` (tipo novo, migração 0020).
+- **A verdade vem da Graces, só para esse contato, na hora do envio.** Primeiro o cadastro pelo celular (`Graces cliente`); com um cadastro só, três leituras (`Graces convite`): histórico, próximos agendamentos e pacotes. A decisão é `bvgConvite` (`workflows/shared/graces.js`): a última visita é a maior `dataAbertura` do histórico; não recebe quem tem horário marcado, quem voltou depois, quem não vem há bem mais de um mês (o agendamento da base foi falta) e quem nunca veio. Sem cadastro, ou com mais de um no mesmo celular, também não. O motivo fica na linha.
+- **Texto** (`bvMConvite`, `textos.convite`): "Oi, {nome}! Já faz quase um mês do seu último corte aqui na Barbearia da Vila. Se quiser, é só me chamar que eu vejo um horário pra você. Se preferir não receber este lembrete, é só me avisar." Com pacote entra, depois da primeira frase, "Você ainda tem N sessões do seu pacote disponíveis para agendar." Sem barbeiro, sem pergunta (saída com "?" dispara a retomada e conta no laço) e sem nenhum texto da Graces. Pacote que não deu para ler: sai sem a frase.
+- **Envio pela cauda da retomada**, agora compartilhada (`Envia retomada?` → `Enviar retomada` → `Resultado retomada` → `Gravar retomada`): mesma trava do TESTE (contato simulado só grava), mesmo endpoint de texto, e o `Gravar retomada` fecha a linha do convite como enviada, cancelada (com o motivo) ou falhou.
+- **Resposta do cliente:** o `Ler contexto` do agente lê o último convite enviado há até 3 dias, e uma linha de dado (`bvMContextoConvite`) entra quando não há conversa em andamento: um "quero" segue o agendamento normal, com o serviço do último atendimento e o barbeiro de costume que o `Identificar` já traz. Não usa `retomada_em`, para não ressuscitar um pedido de um mês atrás.
+- **Parar de receber:** reconhecido em código, por palavras (`bvMPediuParar`), só com convite enviado há pouco. O nó `Sessao` marca a linha do convite (`motivo = 'parou'`) e quem tem essa marca não é mais candidato. Não há coluna nova: o agente não depende da migração para rodar.
+
+### Topologia
+
+Oito nós novos no `bv-mensagens` (`A cada convite`, `Reivindicar convite`, `Pedir cliente`, `Graces cliente`, `Pedir convite`, `Consulta convite?`, `Graces convite`, `Decidir convite`), ligados à cauda de envio da retomada. Nenhum workflow novo, nenhum ciclo, nenhuma chamada ao sub-workflow do agente. No `entregar-rajada`, só código e SQL de três nós que já existiam (`Ler contexto`, `Preparar`, `Sessao`).
+
+### Antes de ligar em produção
+
+1. Aplicar a migração 0020 (`scripts/migrar.py`). Sem ela o agente roda normalmente; só o ramo do convite falharia ao gravar a linha.
+2. O owner aprova o texto e muda `convite.ativo` para `true`.
+3. Nossos dados de visita começam em 15/11: os primeiros convites sairiam por volta de 10/12. Não há carga de clientes antigos.
+
+### O que falta e limites
+
+- **Bloqueio do número:** não há limite de envio documentado para a conexão por QR Code. Os limites acima são conservadores, sem base medida.
+- **Quem fica de fora:** cliente sem celular válido na agenda, celular com mais de um cadastro, e quem agendou com menos de uma hora de antecedência (não gera linha na nossa base).
+- **Sessões do pacote:** a Graces só lista o que é agendável; seção de agendamento cancelado pode ficar presa como agendada e o número sair menor que o real.
+- **Uma linha reivindicada e não concluída** (o fluxo caiu no meio) não é tentada de novo: aquele cliente fica sem o convite daquela visita.

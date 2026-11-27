@@ -90,7 +90,7 @@ function bvMConvite(l, sessoes, cfg) {
 const BVM_PARAR = /(?:^| )(?:nao quero (?:mais )?(?:receber|ess[ea]s? (?:lembretes?|mensagens?|avisos?)|est[ea]s? (?:lembretes?|mensagens?|avisos?)|lembretes?|mensagens?|avisos?)|nao (?:me )?(?:mande|mandem|manda|envie|enviem|envia) mais|par[ae]m? de (?:me )?(?:mandar|enviar|lembrar)|(?:me )?tir[ae]m? da lista|sair da lista|nao precisam? (?:mais )?(?:mandar|enviar|lembrar|avisar)|parar de receber|me descadastr[ae]m?|descadastrar)(?: |$)/;
 const bvMPediuParar = (t) => BVM_PARAR.test(String(t == null ? '' : t).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
 // Linha de contexto do convite (dado): cv = ultimo convite enviado ha poucos dias ({ sessoes }); semConversa: so quando nao ha
-// conversa em andamento (como o lembrete de 1 hora); parou: o cliente pediu para nao receber mais (ja registrado pelo no Sessao).
+// conversa em andamento (como o lembrete de 1 hora); parou: o cliente pediu para nao receber mais (o no Sessao marca a linha do convite).
 function bvMContextoConvite(cv, semConversa, parou) {
   if (!cv) return '';
   if (parou) return '\nO cliente pediu para não receber mais o lembrete de retorno da barbearia (dado): o pedido já foi registrado. Confirme em uma frase curta que ele não vai mais receber, sem insistir.';

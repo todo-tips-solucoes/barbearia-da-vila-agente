@@ -762,7 +762,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const p = $('Montar retomada').item.json;\nconst st = p.simulado ? 200 : Number($input.item.json.statusCode || 0); // 0 = sem resposta\nconst ok = st >= 200 && st < 300;\n// a conversa ja foi marcada (retomada_em): falha nao repete, so fica registrada\nreturn { json: { contato_id: p.contato_id, texto: ok ? p.texto : null, code: ok ? null : (st ? `HTTP_${st}` : 'SEM_RESPOSTA'), status: st } };"
+        "jsCode": "// cauda de envio compartilhada (27/11): o item que entrou no envio vem da retomada (Montar retomada) ou do convite de volta (Decidir convite)\nconst p = $('Envia retomada?').item.json;\nconst st = p.simulado ? 200 : Number($input.item.json.statusCode || 0); // 0 = sem resposta\nconst ok = st >= 200 && st < 300;\n// a conversa ja foi marcada (retomada_em): falha nao repete, so fica registrada\n// convite: a linha convite_volta fecha como enviada, cancelada (com o motivo da decisao) ou falhou (envio recusado)\nconst convite = p.convite ? { ...p.convite, ...(ok ? {} : { situacao: 'falhou', motivo: 'envio' }) } : null;\nreturn { json: { contato_id: p.contato_id, origem: p.origem || 'retomada', texto: ok ? p.texto : null, code: ok ? null : (st ? `HTTP_${st}` : 'SEM_RESPOSTA'), status: st, convite } };"
       },
       "id": "e674f6ce-c557-5a59-83b1-a7ac21553e6f",
       "name": "Resultado retomada",
@@ -776,9 +776,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT $1::bigint, 'retomada-' || $1::text || '-' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint::text, 'saida', 'texto', $2::text WHERE $2::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', 'mensagem|retomada_falhou', 'retomada', $3::text, $4::int, $1::bigint WHERE $3::text IS NOT NULL RETURNING 1) SELECT (SELECT count(*) FROM ms) AS gravada, (SELECT count(*) FROM fa) AS falha",
+        "query": "WITH ms AS (INSERT INTO mensagens (contato_id, mensagem_id_canal, direcao, tipo, conteudo) SELECT $1::bigint, $5::text || '-' || $1::text || '-' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint::text, 'saida', 'texto', $2::text WHERE $2::text IS NOT NULL ON CONFLICT (mensagem_id_canal) DO NOTHING RETURNING 1), fa AS (INSERT INTO falhas_agente (tipo, motivo, operacao, code, status_http, contato_id) SELECT 'mensagem', 'mensagem|' || $5::text || '_falhou', $5::text, $3::text, $4::int, $1::bigint WHERE $3::text IS NOT NULL RETURNING 1), cv AS (UPDATE mensagens_agendadas SET situacao = $7::text, motivo = $8::text, enviada_em = CASE WHEN $7::text = 'enviada' THEN now() END, dados = dados || jsonb_build_object('sessoes', COALESCE($9::int, 0)), reservada_em = NULL, atualizado_em = now() WHERE id = $6::bigint AND tipo = 'convite_volta' AND situacao = 'pendente' AND $7::text IS NOT NULL RETURNING 1) SELECT (SELECT count(*) FROM ms) AS gravada, (SELECT count(*) FROM fa) AS falha, (SELECT count(*) FROM cv) AS convite",
         "options": {
-          "queryReplacement": "={{ [$json.contato_id, $json.texto ?? null, $json.code ?? null, $json.status ?? null] }}"
+          "queryReplacement": "={{ [$json.contato_id, $json.texto ?? null, $json.code ?? null, $json.status ?? null, $json.origem || 'retomada', ($json.convite || {}).id ?? null, ($json.convite || {}).situacao ?? null, ($json.convite || {}).motivo ?? null, ($json.convite || {}).sessoes ?? null] }}"
         }
       },
       "id": "bc346fe5-780f-591a-9b92-eea6b19b21eb",
@@ -795,6 +795,195 @@
           "name": "Postgres Barbearia Vila"
         }
       }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": "{{BV:NUM:convite.intervalo_min}}"
+            }
+          ]
+        }
+      },
+      "id": "a2de83d2-990d-5bf1-b728-7af65879ca9e",
+      "name": "A cada convite",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH agora AS (SELECT now() AT TIME ZONE 'America/Sao_Paulo' AS sp), ok AS (SELECT 1 FROM agora WHERE $1::boolean AND extract(isodow FROM sp)::int = ANY(string_to_array($2::text, ',')::int[]) AND sp::time >= $3::time AND sp::time < $4::time AND (SELECT count(*) FROM mensagens_agendadas e WHERE e.tipo = 'convite_volta' AND e.enviada_em >= date_trunc('day', sp) AT TIME ZONE 'America/Sao_Paulo') < $5::int AND (SELECT count(*) FROM falhas_agente f WHERE f.motivo = 'mensagem|convite_falhou' AND f.criado_em > now() - interval '1 hour') < $6::int), base AS (SELECT m.contato_id, max(m.inicio) FILTER (WHERE m.inicio <= (SELECT sp FROM agora)) AS visita, bool_or(m.inicio > (SELECT sp FROM agora) AND m.situacao IN ('pendente','enviada')) AS futuro FROM mensagens_agendadas m WHERE m.tipo IN ('lembrete_dia','lembrete_hora') AND m.inicio > (SELECT sp FROM agora) - make_interval(days => $8::int + 1) GROUP BY m.contato_id), cand AS (SELECT c.id, c.telefone, b.visita FROM base b JOIN contatos c ON c.id = b.contato_id CROSS JOIN ok WHERE NOT b.futuro AND b.visita::date BETWEEN (SELECT sp FROM agora)::date - $8::int AND (SELECT sp FROM agora)::date - $7::int AND NOT EXISTS (SELECT 1 FROM mensagens_agendadas o WHERE o.contato_id = c.id AND o.tipo = 'convite_volta' AND o.motivo = 'parou') AND c.fila_id IS DISTINCT FROM $9::int AND regexp_replace(c.telefone, '\\D', '', 'g') <> ALL(string_to_array($10::text, ',')) AND NOT EXISTS (SELECT 1 FROM handoffs h WHERE h.contato_id = c.id AND h.situacao = 'aberto') AND NOT EXISTS (SELECT 1 FROM mensagens x WHERE x.contato_id = c.id AND x.criado_em > now() - make_interval(days => $11::int)) AND NOT EXISTS (SELECT 1 FROM mensagens_agendadas v WHERE v.contato_id = c.id AND v.tipo = 'convite_volta' AND v.inicio >= b.visita::date) ORDER BY b.visita LIMIT 1 FOR UPDATE OF c SKIP LOCKED) INSERT INTO mensagens_agendadas (contato_id, tipo, previsto_para, graces_agendamento_id, situacao, id_profissional, inicio, dados, reservada_em) SELECT cand.id, 'convite_volta', now(), 'convite:' || cand.id || ':' || to_char(cand.visita, 'YYYY-MM-DD'), 'pendente', u.id_profissional, cand.visita, jsonb_build_object('nome', coalesce(u.nome, '')), clock_timestamp() FROM cand LEFT JOIN LATERAL (SELECT l.id_profissional, l.dados->>'nome' AS nome FROM mensagens_agendadas l WHERE l.contato_id = cand.id AND l.tipo IN ('lembrete_dia','lembrete_hora') AND l.inicio = cand.visita ORDER BY l.id DESC LIMIT 1) u ON true RETURNING id AS convite_id, contato_id, (SELECT t.telefone FROM contatos t WHERE t.id = contato_id) AS telefone, dados->>'nome' AS nome, to_char(inicio, 'YYYY-MM-DD') AS visita",
+        "options": {
+          "queryReplacement": "={{ ['{{BV:convite.ativo}}' === 'True', {{BV:convite.dias_semana}}.join(','), '{{BV:convite.hora_inicio}}', '{{BV:convite.hora_fim}}', {{BV:convite.max_por_dia}}, {{BV:convite.falhas_max_hora}}, {{BV:convite.dias_min}}, {{BV:convite.dias_max}}, {{BV:handoff.setor_id}}, {{BV:handoff.avisar_numeros}}.join(','), {{BV:convite.sem_conversa_dias}}] }}"
+        }
+      },
+      "id": "421eb025-bebc-53ec-bc20-7609a7924a05",
+      "name": "Reivindicar convite",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        1400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "{{BV:postgres.credencial_id}}",
+          "name": "Postgres Barbearia Vila"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convite de volta (owner, 2026-11-27): um candidato por rodada, ja reivindicado no banco (linha convite_volta pendente). Primeiro o\n// cadastro dele na Graces, pelo celular. Sem candidato o Postgres devolve um item sem convite_id, que para aqui.\nreturn $input.all().map((x) => x.json).filter((l) => l.convite_id != null).map((l, k) => ({ json: { ...l, req: { m: 'GET', path: '/agenda/clientes', qs: { celular: String(l.telefone || '').replace(/\\D/g, '') } } }, pairedItem: k }));"
+      },
+      "id": "bbd28d4a-66db-5b08-aadf-569165e91251",
+      "name": "Pedir cliente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
+        "sendBody": false
+      },
+      "id": "51102e03-5855-57a5-9cc8-3350d5199be9",
+      "name": "Graces cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        1400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/graces.js}}\n{{BV:INCLUDE:shared/config.js}}\n// Cadastro unico: pede o historico, os proximos agendamentos e os pacotes (bvgConviteReqs). Sem cadastro, com mais de um ou com a\n// leitura falhando: o convite nao sai (o item segue sem `req`, direto para a decisao).\nconst r = $input.first().json;\nconst c = bvgConviteCliente({ status: Number(r.statusCode || 0), body: r.body });\nif (c.motivo) return [{ json: { fim: { enviar: false, motivo: c.motivo } } }];\nreturn bvgConviteReqs(c.idCliente).map((req) => ({ json: { req } }));"
+      },
+      "id": "07fd7211-4501-570f-9117-eefc531a0f27",
+      "name": "Pedir convite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1250
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "facce3d0-e8eb-50ee-916d-d90cd9e8113a",
+              "leftValue": "={{ String(!!$json.req) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ab42341c-f9e5-5f6c-b793-e6c5785d1092",
+      "name": "Consulta convite?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{BV:graces.host}}/public/v1{{ $json.req.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": "{{BV:NUM:graces.timeout_ms}}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.req.qs || {}) }}",
+        "sendBody": false
+      },
+      "id": "42e5dee4-b7e9-5146-8306-4c04ce66567a",
+      "name": "Graces convite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        1340
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{BV:credenciais.graces}}",
+          "name": "Barbearia Vila Graces"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "{{BV:INCLUDE:shared/agente.js}}\n{{BV:INCLUDE:shared/mensagens.js}}\n{{BV:INCLUDE:shared/graces.js}}\n{{BV:INCLUDE:shared/config.js}}\n// Decide o convite com a verdade da Graces (bvgConvite) e entrega o item no formato da cauda de envio da retomada (Envia retomada?\n// -> Enviar retomada -> Resultado retomada -> Gravar retomada), que fecha a linha convite_volta. TESTE: contato simulado so grava.\nconst l = $('Pedir cliente').first().json;\nconst itens = $input.all().map((x) => x.json);\nconst hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });\nconst d = (itens[0] && itens[0].fim) || bvgConvite(itens.map((x) => ({ status: Number(x.statusCode || 0), body: x.body })), { dias_min: {{BV:convite.dias_min}}, dias_max: {{BV:convite.dias_max}} }, hoje);\nconst base = { contato_id: l.contato_id, origem: 'convite' };\nif (!d.enviar) return [{ json: { ...base, texto: null, req: null, simulado: true, convite: { id: l.convite_id, situacao: 'cancelada', motivo: d.motivo } } }];\nconst m = bvMConvite(l, d.sessoes, { wid: '{{BV:chatmaster.whatsapp_id}}', fila: '{{BV:chatmaster.queue_id}}', textos: { convite: \"{{BV:textos.convite}}\", convite_pacote: \"{{BV:textos.convite_pacote}}\", convite_pacote_uma: \"{{BV:textos.convite_pacote_uma}}\" } });\nreturn [{ json: { ...base, texto: m.texto, req: m.req, simulado: bvSimulado(l.telefone), convite: { id: l.convite_id, situacao: 'enviada', sessoes: d.sessoes } } }];"
+      },
+      "id": "bf1116f3-0b47-52a7-99d8-28ff83ba5198",
+      "name": "Decidir convite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        1400
+      ]
     }
   ],
   "connections": {
@@ -1135,6 +1324,101 @@
         [
           {
             "node": "Gravar retomada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada convite": {
+      "main": [
+        [
+          {
+            "node": "Reivindicar convite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reivindicar convite": {
+      "main": [
+        [
+          {
+            "node": "Pedir cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir cliente": {
+      "main": [
+        [
+          {
+            "node": "Graces cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces cliente": {
+      "main": [
+        [
+          {
+            "node": "Pedir convite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir convite": {
+      "main": [
+        [
+          {
+            "node": "Consulta convite?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consulta convite?": {
+      "main": [
+        [
+          {
+            "node": "Graces convite",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Decidir convite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graces convite": {
+      "main": [
+        [
+          {
+            "node": "Decidir convite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir convite": {
+      "main": [
+        [
+          {
+            "node": "Envia retomada?",
             "type": "main",
             "index": 0
           }
