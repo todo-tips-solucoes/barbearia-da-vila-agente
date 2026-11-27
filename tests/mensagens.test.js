@@ -112,7 +112,29 @@ rc = bvMReconciliar([it('A', '2026-10-22T14:00:00')], prev.programar.map((p, i) 
 assert.deepEqual([rc.criar, rc.cancelar], [[], []]);
 // sem contato / telefone de outro
 rc = bvMReconciliar([it('B', '2026-10-22T14:00:00', '977776666')], [], cts, now, cfg);
-assert.deepEqual([rc.sem_contato, rc.criar], [['B'], []]);
+assert.deepEqual([rc.sem_contato, rc.criar, rc.novos_contatos], [['B'], [], []]);
+// 27/11 (PROD: 132 de 189 sem_contato em 7 dias nunca tiveram lembrete a criar): a falha so vale para a entrada com cliente, com
+// lembrete a criar e que nao pode virar contato; com criar_contatos (PROD) o celular valido vira contato e nao e falha
+{
+  const ag = (id, ini, o) => ({ ...it(id, ini, '977776666'), ...o });
+  const semCliente = { ddiCelular: undefined, celularCliente: undefined };
+  const agenda = [ag('B1', '2026-10-22T14:00:00'), ag('B2', '2026-10-23T09:00:00'), // mesmo telefone: um contato so
+    ag('FIXO', '2026-10-22T15:00:00', { celularCliente: '(11) 3333-4444' }), // 12 digitos: vira contato
+    ag('SEMDDI', '2026-10-22T14:00:00', { ddiCelular: '' }), ag('SEMCEL', '2026-10-22T14:00:00', { celularCliente: '', nomeCliente: 'Rui', idCliente: 'c9' }),
+    ag('DDI2X', '2026-10-22T14:00:00', { celularCliente: '5511977776666' }), // 55 repetido: 15 digitos
+    ag('AUSENTE', '2026-10-22T14:00:00', { ...semCliente, idStatusAgenda: 7 }), // bloqueio "Prof. Ausente": sem cliente
+    ag('PASSOU', '2026-10-18T08:00:00', { idStatusAgenda: 6 }), ag('PASSOUSEMCEL', '2026-10-18T08:00:00', { celularCliente: '', nomeCliente: 'Rui' })]; // nada a programar
+  const prod = bvMReconciliar(agenda, [], cts, now, { ...cfg, criar_contatos: true });
+  assert.deepEqual([prod.novos_contatos, prod.sem_contato, prod.criar], [['5511977776666', '551133334444'], ['SEMDDI', 'SEMCEL', 'DDI2X'], []]);
+  const teste = bvMReconciliar(agenda, [], cts, now, cfg); // TESTE: nunca cria contato; registra quem tem cliente e lembrete a criar
+  assert.deepEqual([teste.novos_contatos, teste.sem_contato], [[], ['B1', 'B2', 'FIXO', 'SEMDDI', 'SEMCEL', 'DDI2X']]);
+  // lembretes que ja existem (agendado pelo agente com outro numero): nada a criar, nem contato nem falha
+  const feitas = bvMProgramar({ inicio: '2026-10-22T14:00:00', fim: '2026-10-22T15:00:00' }, now, cfg).programar.map((p, i) => ({ id: 40 + i, graces_agendamento_id: 'B1', tipo: p.tipo, situacao: 'pendente', previsto_para: p.previsto_para, inicio: '2026-10-22T14:00:00' }));
+  const ja = bvMReconciliar([agenda[0]], feitas, cts, now, { ...cfg, criar_contatos: true });
+  assert.deepEqual([ja.novos_contatos, ja.sem_contato, ja.criar, ja.cancelar], [[], [], [], []]);
+  // com o contato criado, a rodada seguinte cria os lembretes
+  assert.equal(bvMReconciliar([agenda[0]], [], [...cts, { id: 2, telefone: '5511977776666' }], now, { ...cfg, criar_contatos: true }).criar.length, 3);
+}
 // item 7: recorrente (mesmo idAgenda 2x na janela): pulado e registrado, nunca 2 `criar` com a mesma chave; pendente dele nao vira orfa
 rc = bvMReconciliar([it('R', '2026-10-21T14:00:00'), it('R', '2026-10-24T14:00:00')], [{ id: 31, graces_agendamento_id: 'R', tipo: 'lembrete', situacao: 'pendente', previsto_para: '2026-10-21T15:00:00Z', inicio: '2026-10-21T14:00:00' }], cts, now, cfg);
 assert.deepEqual([rc.criar, rc.cancelar, rc.recorrente], [[], [], ['R']]);
@@ -173,6 +195,14 @@ console.log('mensagens.test.js (decisao) ok');
   const row = (o) => ({ id: 3, situacao: 'enviada', resposta: null, id_profissional: T, futuro: true, repetidas: 0, inicio: '2026-10-22T14:00:00', ...o });
   assert.equal(E([row()], { mensagem_id: null }, cfg2).acao, 'claim');
   assert.equal(E([row(), row({ id: 4 })], { mensagem_id: null }, cfg2).code, 'ambigua'); // 2 abertas sem id: pede para escolher
+  // PROD, 27/11: confirmacao digitada com 2 abertas vale para a mais recente (a primeira de rows); nada muda na recusa sem id, na
+  // trava de teste e no gemeo do toque ja respondido
+  const sim = { origem: 'titulo', confirmado: true, mensagem_id: null };
+  const s2 = E([row({ id: 4 }), row()], sim, cfg2);
+  assert.deepEqual([s2.acao, s2.row.id], ['claim', 4]);
+  assert.equal(E([row({ id: 4 }), row()], { ...sim, confirmado: false }, cfg2).code, 'ambigua');
+  assert.equal(E([row({ id: 4, id_profissional: 'real' }), row()], sim, cfg2).code, 'fora_do_teste');
+  assert.equal(E([row({ id: 4 }), row(), row({ id: 5, resposta: 'confirmada', recente: true })], sim, cfg2).code, 'repetida');
   // item 1: o from_internal (id) do mesmo toque ja respondeu B; o titulo nao pode confirmar A (a unica aberta que sobrou)
   assert.deepEqual(E([row(), row({ id: 4, resposta: 'confirmada', recente: true })], { mensagem_id: null }, cfg2).code, 'repetida');
   assert.equal(E([row(), row({ id: 4, resposta: 'confirmada', recente: false })], { mensagem_id: null }, cfg2).row.id, 3);
@@ -195,7 +225,7 @@ console.log('mensagens.test.js (decisao) ok');
   // rota do "sim" ao lembrete de 24 h: confirmacao aberta, sem proposta pendente e o lembrete como a ultima coisa dita pela barbearia
   const dg = { digitado: true, sim: true };
   assert.equal(R({ ...dg, abertas: '1', propostas: '0', lembrete_ultimo: true, recentes: '0' }), 'consumir');
-  assert.equal(R({ ...dg, abertas: 2, propostas: 0, lembrete_ultimo: 'true' }), 'consumir'); // 2 abertas: o bv-confirmacao pede para escolher
+  assert.equal(R({ ...dg, abertas: 2, propostas: 0, lembrete_ultimo: 'true' }), 'consumir'); // 2 abertas: o bv-confirmacao confirma a mais recente
   for (const e of [{ abertas: 1, propostas: 0, lembrete_ultimo: false }, { abertas: 1, propostas: 1, lembrete_ultimo: true }, { abertas: 0, propostas: 0, lembrete_ultimo: true },
     { abertas: 0, propostas: 0, recentes: 3 }, {}]) assert.equal(R({ ...e, ...dg }), 'agente', JSON.stringify(e));
   // 27/11: o lembrete de 24 h voltou a sair em lista; o "sim" digitado logo depois dela tambem confirma (a lista e a ultima saida)
@@ -212,8 +242,14 @@ console.log('mensagens.test.js (decisao) ok');
   const g = (st, o) => ({ status: 200, body: [{ idAgenda: 'A', horaInicio: '2026-10-22T14:00:00', idStatusAgenda: st, ...o }] });
   assert.equal(C(g(3), lr, true).code, 'confirmada');
   assert.equal(C(g(10), lr, false).code, 'recusada');
-  assert.equal(C(g(10), lr, true).code, 'desatualizada'); // divergente
-  assert.equal(C(g(3), lr, false).code, 'desatualizada');
+  // 27/11 (medido na Graces): quem recusou e remarcou segue com status 10 e a API responde 409 ao confirmar; com o agendamento do
+  // lembrete de pe (mesmo id e mesmo inicio) a confirmacao vale. Outro horario, outro id, ausente ou outro status: desatualizada
+  assert.equal(C(g(10), lr, true).code, 'confirmada');
+  assert.equal(C(g(10, { horaInicio: '2026-10-22T15:00:00' }), lr, true).code, 'desatualizada');
+  assert.equal(C(g(10, { idAgenda: 'B' }), { ...lr, graces_cliente_id: 'c1' }, true).code, 'desatualizada');
+  assert.equal(C({ status: 200, body: [] }, { ...lr, graces_cliente_id: 'c1' }, true).code, 'desatualizada');
+  for (const st of [2, 9]) assert.equal(C(g(st), lr, true).code, 'desatualizada', String(st));
+  assert.equal(C(g(3), lr, false).code, 'desatualizada'); // divergente
   assert.equal(C(g(3, { horaInicio: '2026-10-22T15:00:00' }), lr, true).code, 'desatualizada');
   assert.equal(C({ status: 200, body: [{ idProfissional: 'p', agendamentos: [{ idAgenda: 'A', horaInicio: '2026-10-22T14:00:00', idStatusAgenda: 3 }] }] }, lr, true).code, 'confirmada'); // /completa
   assert.equal(C({ status: 0 }, lr, true).code, 'falhou');

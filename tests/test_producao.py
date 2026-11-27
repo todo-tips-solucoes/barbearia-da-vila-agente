@@ -113,6 +113,12 @@ class Alerta(unittest.TestCase):  # 3.6
         self.assertEqual(nos["Checar banco"]["onError"], "continueRegularOutput")  # banco fora vira alerta, nao erro mudo
         self.assertIn("number: '5511967296849'", nos["Enviar alerta"]["parameters"]["jsonBody"])
         self.assertIn("function bvAlertaDecidir", nos["Decidir"]["parameters"]["jsCode"])
+        # listas do lembrete de 24 h que nao sairam (27/11): contadas na mesma consulta, pelo indice (situacao, previsto_para)
+        q = nos["Checar banco"]["parameters"]["query"]
+        self.assertIn("tipo = 'lembrete_dia' AND agendamento_canal_id IS NULL AND situacao IN ('pendente', 'falhou', 'cancelada') AND previsto_para > now() - interval '60 minutes' AND previsto_para <= now() - interval '5 minutes'", q)
+        self.assertIn("(situacao <> 'cancelada' OR (motivo = 'ja_passou' AND criado_em <= previsto_para))) AS lembretes", q)  # a linha que nasce ja_passou nao conta
+        self.assertNotIn("$2", q)
+        self.assertIn("bvAlertaDecidir(falhas, cfg, conexao, banco.lembretes)", nos["Decidir"]["parameters"]["jsCode"])
         # WhatsApp da loja fora do ar (2026-11-21): status pela API do Chat Master; com a conexao fora, o alerta sai pela conexao reserva
         chk = nos["Checar WhatsApp"]
         self.assertEqual((chk["parameters"]["url"], chk["onError"], chk["credentials"]["httpHeaderAuth"]["id"]), ("https://api.chatmasterveloz.com/api/whatsapp-status", "continueRegularOutput", cfg("producao")["credenciais"]["chatmaster"]))

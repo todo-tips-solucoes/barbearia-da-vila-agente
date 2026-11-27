@@ -8,6 +8,12 @@ assert.deepEqual(bvAlertaDecidir(2, cfg), []);
 assert.equal(bvAlertaDecidir('3', cfg)[0].tipo, 'agente');
 assert.match(bvAlertaDecidir(5, cfg)[0].texto, /5 falhas .*10 min.*OpenAI/);
 
+// listas do lembrete de 24 h que nao sairam (27/11): uma ja avisa; contagem ausente (consulta falhou) ou zero nao avisa
+assert.deepEqual(bvAlertaDecidir(0, cfg, 'CONNECTED', 0), []);
+assert.deepEqual(bvAlertaDecidir(null, cfg, 'CONNECTED', undefined).map((a) => a.tipo), ['postgres']);
+assert.deepEqual(bvAlertaDecidir(0, cfg, 'CONNECTED', '2').map((a) => [a.tipo, a.reserva]), [['lembrete', false]]);
+assert.match(bvAlertaDecidir(0, cfg, null, 1)[0].texto, /PROD.*1 lembrete\(s\) de 24 h não saíram/);
+assert.deepEqual(bvAlertaDecidir(5, cfg, 'DISCONNECTED', 3).map((a) => [a.tipo, a.reserva]), [['whatsapp', true], ['agente', true], ['lembrete', true]]);
 // mesmo tipo so de hora em hora; tipos diferentes nao se bloqueiam
 const est = {};
 const t0 = 1_000_000_000_000;
@@ -15,6 +21,8 @@ assert.equal(bvAlertaFiltrar(bvAlertaDecidir(null, cfg), est, t0, cfg).length, 1
 assert.equal(bvAlertaFiltrar(bvAlertaDecidir(null, cfg), est, t0 + 59 * 60000, cfg).length, 0);
 assert.equal(bvAlertaFiltrar(bvAlertaDecidir(4, cfg), est, t0 + 60000, cfg).length, 1);
 assert.equal(bvAlertaFiltrar(bvAlertaDecidir(null, cfg), est, t0 + 60 * 60000, cfg).length, 1);
+assert.equal(bvAlertaFiltrar(bvAlertaDecidir(0, cfg, null, 1), est, t0, cfg).length, 1);
+assert.equal(bvAlertaFiltrar(bvAlertaDecidir(0, cfg, null, 4), est, t0 + 50 * 60000, cfg).length, 0); // a mesma lista perdida fica 55 min na contagem: um aviso so
 
 // WhatsApp da loja fora do ar: estado lido da lista de conexoes; sem resposta util nao alerta; com a conexao fora tudo sai pela reserva
 const st = (s) => ({ whatsapps: [{ id: 145, status: 'CONNECTED', hubtoken: 'segredo' }, { id: 159, status: s }] });

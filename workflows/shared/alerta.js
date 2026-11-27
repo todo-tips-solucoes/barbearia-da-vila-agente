@@ -11,13 +11,15 @@ function bvAlertaConexao(resp, whatsappId) {
 }
 
 // falhas: contagem da janela (null = consulta ao Postgres falhou); conexao: bvAlertaConexao (ausente/null = nao avaliada).
+// lembretes: listas do lembrete de 24 h que nao sairam na ultima hora (contagem do Checar banco; ausente = nao avaliado).
 // -> [{tipo, texto, reserva}]. reserva: a conexao da loja esta fora, entao TODO alerta desta rodada sai pela conexao reserva.
-function bvAlertaDecidir(falhas, cfg, conexao) {
+function bvAlertaDecidir(falhas, cfg, conexao, lembretes) {
   const fora = conexao != null && conexao !== 'CONNECTED';
   const out = [];
   if (fora) out.push({ tipo: 'whatsapp', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: o WhatsApp da loja está fora do ar no Chat Master (estado: ${conexao}). Os clientes ficam sem resposta até reconectar.` });
   if (falhas === null) out.push({ tipo: 'postgres', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: o Postgres não respondeu. O atendimento pode estar parado.` });
   else if (Number(falhas) >= cfg.limiar) out.push({ tipo: 'agente', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: ${falhas} falhas do agente nos últimos ${cfg.janela_min} min. Pode ser cota ou gasto da OpenAI.` });
+  if (Number(lembretes) >= 1) out.push({ tipo: 'lembrete', texto: `[Barbearia da Vila ${cfg.rotulo}] Alerta: ${Number(lembretes)} lembrete(s) de 24 h não saíram na última hora. Confira o n8n (bv-mensagens) e o Chat Master.` });
   return out.map((a) => ({ ...a, reserva: fora }));
 }
 
