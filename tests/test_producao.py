@@ -106,6 +106,31 @@ class Liberacao(unittest.TestCase):  # producao liberada a todos (owner, 2026-10
 
 
 class Alerta(unittest.TestCase):  # 3.6
+    def decidir(self, banco, estado, conexao="CONNECTED", js=None):
+        """Executa o no Decidir renderizado de PROD (tests/harness_code_node.js) -> (tipos dos alertas, estado guardado)."""
+        js = js or next(n["parameters"]["jsCode"] for n in render("bv-alerta.json", "producao")["nodes"] if n["name"] == "Decidir")
+        entrada = {"js": js, "input": [{"whatsapps": [{"id": 159, "status": conexao}]} if conexao else {"error": "timeout"}], "refs": {"Checar banco": [banco]}, "estado": estado}
+        r = subprocess.run(["node", os.path.join(RAIZ, "tests", "harness_code_node.js")], capture_output=True, text=True, input=json.dumps(entrada))
+        self.assertEqual(r.returncode, 0, r.stderr[:400])
+        s = json.loads(r.stdout)
+        return [(a["tipo"], a["reserva"]) for a in s["out"]], s["estado"]
+
+    def test_decidir_executado(self):  # 27/11: o no so tinha comparacao de texto; erro nele derruba todos os alertas de PROD
+        self.assertEqual(self.decidir({"falhas": 0, "lembretes": 0}, {})[0], [])
+        tipos, est = self.decidir({"falhas": 0, "lembretes": 2}, {})
+        self.assertEqual((tipos, list(est["ultimo"])), ([("lembrete", False)], ["lembrete"]))
+        self.assertEqual(self.decidir({"falhas": 0, "lembretes": 2}, est)[0], [])  # segunda rodada com o estado guardado: nao repete
+        self.assertEqual(self.decidir({"falhas": 0, "lembretes": 2}, {"ultimo": {"lembrete": 1}})[0], [("lembrete", False)])  # passada a hora, repete
+        # os tipos que ja existiam: falhas do agente, Postgres com erro (sem contagem de lembretes) e conexao fora (um por queda, pela reserva)
+        self.assertEqual(self.decidir({"falhas": 3, "lembretes": 0}, {})[0], [("agente", False)])
+        self.assertEqual(self.decidir({"falhas": 2, "lembretes": 1}, {})[0], [("lembrete", False)])
+        self.assertEqual(self.decidir({"error": "connection refused"}, {})[0], [("postgres", False)])
+        tipos, est = self.decidir({"falhas": 0, "lembretes": 4}, {}, "DISCONNECTED")
+        self.assertEqual(tipos, [("whatsapp", True)])  # com a conexao fora o lembrete nao alerta junto
+        self.assertEqual(self.decidir({"falhas": 0, "lembretes": 4}, est, "DISCONNECTED")[0], [])
+        self.assertEqual(self.decidir({"falhas": 0, "lembretes": 1}, {}, None)[0], [("lembrete", False)])  # estado da conexao desconhecido: avalia
+        self.assertEqual(self.decidir({"falhas": 5, "lembretes": 0}, {"ultimo": {"whatsapp": 1}}, "DISCONNECTED")[0], [("agente", True)])  # estado guardado pela versao anterior
+
     def test_render_prod_envia_ao_owner_e_so_em_prod(self):
         w = render("bv-alerta.json", "producao")
         self.assertTrue(w["name"].endswith("[PROD]"))
@@ -115,10 +140,12 @@ class Alerta(unittest.TestCase):  # 3.6
         self.assertIn("function bvAlertaDecidir", nos["Decidir"]["parameters"]["jsCode"])
         # listas do lembrete de 24 h que nao sairam (27/11): contadas na mesma consulta, pelo indice (situacao, previsto_para)
         q = nos["Checar banco"]["parameters"]["query"]
-        self.assertIn("tipo = 'lembrete_dia' AND agendamento_canal_id IS NULL AND situacao IN ('pendente', 'falhou', 'cancelada') AND previsto_para > now() - interval '60 minutes' AND previsto_para <= now() - interval '5 minutes'", q)
-        self.assertIn("(situacao <> 'cancelada' OR (motivo = 'ja_passou' AND criado_em <= previsto_para))) AS lembretes", q)  # a linha que nasce ja_passou nao conta
-        self.assertNotIn("$2", q)
-        self.assertIn("bvAlertaDecidir(falhas, cfg, conexao, banco.lembretes)", nos["Decidir"]["parameters"]["jsCode"])
+        self.assertIn("tipo = 'lembrete_dia' AND agendamento_canal_id IS NULL AND situacao IN ('pendente', 'falhou', 'cancelada') AND previsto_para > now() - make_interval(mins => $2::int) AND previsto_para <= now() - interval '5 minutes'", q)
+        # a pendente que espera a proxima retentativa ainda vai sair; a linha que nasce ja_passou nunca foi devida
+        self.assertIn("(situacao = 'falhou' OR (situacao = 'pendente' AND COALESCE(proxima_tentativa_em, previsto_para) <= now() - interval '5 minutes') OR (situacao = 'cancelada' AND motivo = 'ja_passou' AND criado_em <= previsto_para))) AS lembretes", q)
+        self.assertEqual(nos["Checar banco"]["parameters"]["options"]["queryReplacement"], "={{ [10, 60] }}")
+        with open(os.path.join(RAIZ, "workflows", "bv-alerta.json"), encoding="utf-8") as f:  # a janela da contagem e a da repeticao: a mesma configuracao
+            self.assertIn("{{BV:alerta.janela_min}}, {{BV:alerta.repetir_min}}] }}", f.read())
         # WhatsApp da loja fora do ar (2026-11-21): status pela API do Chat Master; com a conexao fora, o alerta sai pela conexao reserva
         chk = nos["Checar WhatsApp"]
         self.assertEqual((chk["parameters"]["url"], chk["onError"], chk["credentials"]["httpHeaderAuth"]["id"]), ("https://api.chatmasterveloz.com/api/whatsapp-status", "continueRegularOutput", cfg("producao")["credenciais"]["chatmaster"]))

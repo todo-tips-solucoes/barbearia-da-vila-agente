@@ -120,14 +120,15 @@ assert.deepEqual([rc.sem_contato, rc.criar, rc.novos_contatos], [['B'], [], []])
   const semCliente = { ddiCelular: undefined, celularCliente: undefined };
   const agenda = [ag('B1', '2026-10-22T14:00:00'), ag('B2', '2026-10-23T09:00:00'), // mesmo telefone: um contato so
     ag('FIXO', '2026-10-22T15:00:00', { celularCliente: '(11) 3333-4444' }), // 12 digitos: vira contato
-    ag('SEMDDI', '2026-10-22T14:00:00', { ddiCelular: '' }), ag('SEMCEL', '2026-10-22T14:00:00', { celularCliente: '', nomeCliente: 'Rui', idCliente: 'c9' }),
+    ag('SEMDDI', '2026-10-22T14:00:00', { ddiCelular: '' }), ag('SEMCEL', '2026-10-22T14:00:00', { celularCliente: '', nomeCliente: 'Rui' }),
     ag('DDI2X', '2026-10-22T14:00:00', { celularCliente: '5511977776666' }), // 55 repetido: 15 digitos
     ag('AUSENTE', '2026-10-22T14:00:00', { ...semCliente, idStatusAgenda: 7 }), // bloqueio "Prof. Ausente": sem cliente
+    ag('SOID', '2026-10-22T14:00:00', { ...semCliente, idCliente: 'c7' }), // cliente so pelo id (sem nome e sem celular): nao e bloqueio
     ag('PASSOU', '2026-10-18T08:00:00', { idStatusAgenda: 6 }), ag('PASSOUSEMCEL', '2026-10-18T08:00:00', { celularCliente: '', nomeCliente: 'Rui' })]; // nada a programar
   const prod = bvMReconciliar(agenda, [], cts, now, { ...cfg, criar_contatos: true });
-  assert.deepEqual([prod.novos_contatos, prod.sem_contato, prod.criar], [['5511977776666', '551133334444'], ['SEMDDI', 'SEMCEL', 'DDI2X'], []]);
+  assert.deepEqual([prod.novos_contatos, prod.sem_contato, prod.criar], [['5511977776666', '551133334444'], ['SEMDDI', 'SEMCEL', 'DDI2X', 'SOID'], []]);
   const teste = bvMReconciliar(agenda, [], cts, now, cfg); // TESTE: nunca cria contato; registra quem tem cliente e lembrete a criar
-  assert.deepEqual([teste.novos_contatos, teste.sem_contato], [[], ['B1', 'B2', 'FIXO', 'SEMDDI', 'SEMCEL', 'DDI2X']]);
+  assert.deepEqual([teste.novos_contatos, teste.sem_contato], [[], ['B1', 'B2', 'FIXO', 'SEMDDI', 'SEMCEL', 'DDI2X', 'SOID']]);
   // lembretes que ja existem (agendado pelo agente com outro numero): nada a criar, nem contato nem falha
   const feitas = bvMProgramar({ inicio: '2026-10-22T14:00:00', fim: '2026-10-22T15:00:00' }, now, cfg).programar.map((p, i) => ({ id: 40 + i, graces_agendamento_id: 'B1', tipo: p.tipo, situacao: 'pendente', previsto_para: p.previsto_para, inicio: '2026-10-22T14:00:00' }));
   const ja = bvMReconciliar([agenda[0]], feitas, cts, now, { ...cfg, criar_contatos: true });
