@@ -276,6 +276,10 @@ function bvMSincPlano(linhas, agora, cfg) {
     // parada e e reavaliada (a lider pode ser cancelada e ela virar lider); no horario dela, encerra como `junto`.
     if (bvMSeguidora(l) && futuro && l.canal_id) return { ...base, acao: 'apagar', req: { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: String(l.canal_id) } } };
     if (bvMSeguidora(l) && !l.canal_id) return { ...base, acao: 'junto', fim: !futuro, previsto_para: l.previsto_para };
+    // Transicao para a lista (27/11): lembrete de 24 h que ja tinha agendamento de texto e foi relido antes da hora (remarcacao, segundo
+    // servico no dia) nao e atualizado, porque o texto novo fala em "Ver opcoes" e o agendador nao leva a lista: apaga o agendamento
+    // e a rodada seguinte cai no caminho da lista. Quem nao e relido sai como texto, com a redacao antiga, e o "sim" digitado vale.
+    if (l.tipo === 'lembrete_dia' && l.canal_id && futuro) return { ...base, acao: 'apagar', req: { m: 'POST', path: '/api/schedules/delete', body: { scheduleId: String(l.canal_id) } } };
     const texto = bvMTextoDe(l, cfg.textos);
     if (l.canal_id) {
       if (new Date(l.previsto_para).getTime() <= t0) return { ...base, acao: 'enviada' };
@@ -283,7 +287,20 @@ function bvMSincPlano(linhas, agora, cfg) {
       if (mesmo) return { ...base, acao: 'nada' };
       return { ...base, acao: 'atualizar', texto, previsto_para: l.previsto_para, req: { m: 'PUT', path: `/api/schedules/${encodeURIComponent(String(l.canal_id))}`, body: { body: texto, sendAt: bvMLocal(l.previsto_para, ' ') } } };
     }
-    if (!futuro) return { ...base, acao: 'ja_passou' };
+    // Lembrete de 24 h com lista (owner, 2026-11-27): o agendador do Chat Master nao leva lista, entao este lembrete nao e agendado
+    // la. O contato e o ticket sao preparados antes, como sempre; na hora dele a lista sai daqui (bvMLista: titulo_sim / titulo_nao,
+    // ids bvc:<id>:s|n, a recepcao do toque ja existia). Linha que ja tinha agendamento de texto (canal_id) segue como estava.
+    const lista = l.tipo === 'lembrete_dia';
+    const esperar = { ...base, acao: 'aguardar', previsto_para: l.previsto_para };
+    const previsto = new Date(l.previsto_para).getTime();
+    if (lista && previsto <= t0) {
+      if (t0 - previsto > (cfg.atraso_max_min || 30) * 60000) return { ...base, acao: 'ja_passou' };
+      return { ...base, acao: 'enviar_lista', texto, req: { m: 'POST', ...bvMLista({ texto }, l.id, l.telefone, cfg) } };
+    }
+    if (!futuro) return lista ? esperar : { ...base, acao: 'ja_passou' };
+    // a lista sai pelo numero e nao depende do contato nem do ticket no Chat Master: preparo que falhou duas vezes para de ser tentado
+    // e a linha dorme ate a hora (quatro falhas dias antes deixavam a linha `falhou` e o lembrete nunca saia)
+    if (lista && Number(l.tentativas || 0) >= 2) return esperar;
     // bigint do Postgres chega ao Code node como TEXTO ('0', '138449'): sem converter, '0' === 0 falhava e o contato inexistente
     // voltava a ser buscado a cada rodada, sem falha registrada, travando a fila em PROD (2026-11-15)
     const num0 = (x) => (x === null || x === undefined || x === '' ? null : Number(x));
@@ -304,10 +321,11 @@ function bvMSincPlano(linhas, agora, cfg) {
       return { ...base, acao: 'buscar_ticket', conexao: String(cfg.wid), req: { m: 'GET', path: '/api/contacts/alltickets', body: { number: num } } };
     }
     if (cid > 0) {
+      if (lista) return esperar; // contato e ticket prontos: a linha dorme ate a hora do envio
       return { ...base, acao: 'criar', texto, previsto_para: l.previsto_para, req: { m: 'POST', path: '/api/schedules', body: { body: texto, sendAt: bvMLocal(l.previsto_para, 'T'), contactId: String(cid),
         userId: String(cfg.user_id), openTicket: '0', queueId: String(cfg.fila || '0'), whatsappId: String(cfg.wid), repetir: '0', repetirTodo: '0', quantasVezes: '0' } } };
     }
-    if (!num) return { ...base, acao: 'sem_contato' };
+    if (!num) return lista ? esperar : { ...base, acao: 'sem_contato' }; // @lid: o agendador nao alcanca, a lista sim
     if (contatoFeito.has(l.contato_id)) return { ...base, acao: 'aguardar_contato' };
     contatoFeito.add(l.contato_id);
     if (cid === 0) return { ...base, acao: 'criar_contato', req: { m: 'POST', path: '/api/contacts', body: { name: String((l.dados || {}).nome || num).slice(0, 80), number: num } } };
@@ -342,6 +360,10 @@ function bvMSincResultado(p, status, body, tentativas, cfg, agora) {
     case 'desetiquetar': return ok || status === 404 ? { id, etiqueta_removida: true } : falha();
     case 'sem_etiqueta': return { id, etiqueta_id: 0 };
     case 'enviada': return { id, situacao: 'enviada' };
+    // lista do lembrete de 24 h: enviada aqui; lista_texto vai para `mensagens` (o modelo ve o lembrete e a recepcao sabe que a
+    // ultima saida foi a lista). Falha segue a politica de envio (repete por retentativas_min; sem resposta nunca reenvia).
+    case 'enviar_lista': return ok ? { id, situacao: 'enviada', lista_texto: p.texto } : falha();
+    case 'aguardar': return { id, proxima: p.previsto_para }; // a reconciliacao zera a proxima tentativa se o horario mudar
     case 'ja_passou': return { id, situacao: 'cancelada', motivo: 'ja_passou' };
     case 'sem_contato': return { id, situacao: 'cancelada', motivo: 'sem_contato_canal' };
     case 'junto': // seguidora: sem chamada; reavalia em ate 30 min (sem ocupar a varredura) e encerra no horario dela
@@ -481,13 +503,15 @@ const bvMConfReq = (idAgenda, row, confirmado) => ({ idAgenda, confirmado, ...(r
 // com confirmacao aberta, sem proposta pendente e com a lista como ultima saida => consome (espera o id); senao vai ao agente.
 // "Sim" ao lembrete de 24 h (e.sim: digitado, ou o titulo "Confirmo" escrito a mao): consome com confirmacao aberta, sem proposta
 // pendente e com o lembrete como a ultima coisa dita pela barbearia (lembrete_ultimo): no meio de uma conversa o "sim" responde a
-// ultima pergunta do agente. O digitado nunca entra pelos atalhos do toque (recentes, ultima_lista).
+// ultima pergunta do agente. O digitado nao entra pelo atalho `recentes`; desde 27/11 (lembrete em lista) ele vale tambem com a lista
+// do lembrete como ultima saida (ultima_lista so e verdadeiro para `agendada-%`: a lista de remarcar/cancelar nao conta).
 function bvMTituloRota(e) {
   const v = (x) => x === true || x === 'true';
   const dig = !!e && v(e.digitado);
   const aberta = Number(e && e.abertas) > 0 && !(Number(e.propostas) > 0);
   if (!dig && Number(e && e.recentes) > 0) return 'consumir';
-  if (aberta && ((!dig && v(e.ultima_lista)) || (v(e.sim) && v(e.lembrete_ultimo)))) return 'consumir';
+  // sim digitado: vale com o lembrete como a ultima coisa dita pela barbearia, seja o de texto (lembrete_ultimo) ou a lista (27/11)
+  if (aberta && ((!dig && v(e.ultima_lista)) || (v(e.sim) && (v(e.lembrete_ultimo) || v(e.ultima_lista))))) return 'consumir';
   return 'agente';
 }
 
@@ -496,7 +520,11 @@ function bvMTituloRota(e) {
 function bvMPromptConfirmacoes(ctx, agoraMs, janelaMin, neutro, semConversa) {
   let s = '';
   const cs = Array.isArray(ctx && ctx.confirmacoes) ? ctx.confirmacoes : [];
-  if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ');
+  // PROD, 16 a 26/11: "eu remarquei para sabado" recebeu "Anotado" sem conferencia; "amanha nao, agendei para quarta" e "e so barba"
+  // viraram listas sem relacao. Quem contesta o lembrete precisa ouvir o que esta na agenda. "Sim (e tem mao e pe tambem)" nao
+  // confirmava: o modelo ia atras do outro assunto (PROD 26/11 e TESTE 27/11).
+  if (cs.length) s += '\nConfirmações de presença abertas, enviadas pela barbearia (dado): ' + cs.map((c) => 'id=' + c.id + ' (' + neutro(c.servico) + ' com ' + neutro(c.barbeiro) + ', ' + bvMDia(c.inicio) + ' às ' + String(c.inicio).slice(11, 16) + ')').join('; ')
+    + '. Se o cliente disser que o dia, o horário ou o serviço não é esse, ou que já remarcou ou cancelou, chame meus_agendamentos antes de responder e diga o que está marcado; nunca diga que anotou, remarcou ou cancelou sem a ferramenta ter feito isso. Se a mensagem começa confirmando ou recusando a presença ("sim", "vou", "não vou") e traz outro assunto junto, chame confirmar_presenca primeiro e só depois trate o outro assunto.';
   // Lembrete de 1 hora (17/11): sai pelo Chat Master e nao entra no historico; o "Simm" de resposta chegava ao agente sem contexto
   // e virava "Como posso ajudar?". Com confirmacao aberta vale a linha de cima (o sim confirma a presenca). Sem o nome do barbeiro.
   // semConversa: so quando nao ha conversa em andamento; no meio dela o "sim" responde a ultima pergunta do agente (um resumo, p. ex.).

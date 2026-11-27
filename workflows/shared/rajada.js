@@ -39,6 +39,9 @@ function bvEquipe(b, filaHumana, textoAgente, usuarioAgente) { // ticket: chamad
     texto = texto && !/\.(?:mp3|ogg|oga|opus|m4a|aac|wav|mp4|mov|webm|jpe?g|png|webp|gif|pdf|docx?|xlsx?|csv|txt|zip)$/i.test(texto.trim()) ? `${marca} ${texto}` : marca;
   }
   if (texto && textoAgente && texto.includes(String(textoAgente))) return null;
+  // eco de lista enviada pela API (lembrete de 24 h, decisao de remarcar/cancelar): o painel a registra como "MENU ENVIADO ..." e, com o
+  // contato na fila humana, ela virava fala da equipe e renovava o prazo do vigia (revisao de 27/11)
+  if (texto && /^MENU ENVIADO\b/.test(texto)) return null;
   return { telefone: b.sender, fila: Number(filaHumana), id: m.id === undefined || m.id === null ? null : String(m.id), texto, ticket: /^\d+$/.test(String(b.chamadoId)) ? Number(b.chamadoId) : null };
 }
 

@@ -147,7 +147,7 @@
     "confirmacao_desatualizada": "Esse horário não está mais valendo. Se quiser, me fala e eu vejo outro pra você.",
     "confirmacao_falhou": "Tive um probleminha pra registrar sua resposta agora. Pode me mandar de novo daqui a pouquinho?",
     "confirmacao_escolher": "Você tem mais de um horário pra confirmar. Toca no botão da mensagem do horário que quer responder, ou me fala o dia e a hora, tá?",
-    "lembrete_dia": "Oi, {nome}! Passando para lembrar do seu {servico} com {barbeiro} amanhã, às {hora}, aqui na Barbearia da Vila. Você confirma? É só responder SIM para confirmar ou NÃO se não puder vir.",
+    "lembrete_dia": "Oi, {nome}! Passando para lembrar do seu {servico} com {barbeiro} amanhã, às {hora}, aqui na Barbearia da Vila. Toque em *Ver opções* para confirmar a presença ou avisar que não vai poder.",
     "lembrete_hora": "Oi, {nome}! Seu {servico} com {barbeiro} é daqui a 1 hora, às {hora}. Te esperamos!",
     "retomada_confirmar": "Oi, {nome}! Ficou faltando só confirmar {resumo}. Ainda quer esse horário?",
     "retomada_continuar": "Oi, {nome}! A gente não terminou de marcar {servico}. Quer continuar de onde paramos?",
