@@ -358,8 +358,8 @@ function bvgEhRecusado(ctx, x) {
 // seguia no contexto). Recusa antiga (sem inicio) fica como era.
 const bvgFechaRecusa = (ctx, alvos) => (((ctx && ctx.pedido) || {}).confirmacao_recusada && ctx.pedido.confirmacao_recusada.inicio && alvos.some((x) => bvgEhRecusado(ctx, x)) ? { confirmacao_recusada: null } : {});
 // Marca `rec` do horario ofertado numa busca de remarcacao: o agendamento DA BUSCA, em toda busca de remarcacao (pelo `rec` ou pelo id
-// da lista). Com a recusa em pauta, o horario buscado para outro agendamento (outra ocorrencia da serie, um avulso, a recusa anterior)
-// nao remarca o recusado (bvgFase1). So no estado da conversa, nunca no que vai ao modelo.
+// da lista). E ela que diz qual agendamento o `reagendar` so com o horario (ou o `agendar`) remarca: o da busca, seja o recusado ou
+// outro (bvgFase1). So no estado da conversa, nunca no que vai ao modelo.
 const bvgMarcaRec = (x) => ({ idAgenda: x.idAgenda, inicio: String(x.horaInicio).slice(0, 16) });
 const bvgMesmaMarca = (m, x) => !!m && !!x && String(m.idAgenda) === String(x.idAgenda) && String(m.inicio) === String(x.horaInicio).slice(0, 16);
 // Sem saber qual agendamento: nada e feito e o modelo lista (com a recusa em pauta que nao resolve, a linha do contexto promete o `rec`).
@@ -837,21 +837,28 @@ function bvgPropor(prop, resps) {
 
 // Fase 1: so cria a proposta pendente com o resumo; nada e escrito na Graces (FR-006).
 function bvgFase1(i, ctx, cfg, chamar) {
-  // TESTE, 27/11 (1 de 7 rodadas): depois da busca de remarcacao do agendamento recusado, o modelo chamou `agendar` no horario escolhido
-  // e saiu a proposta de um agendamento NOVO, com o recusado de pe. Horario de uma busca dessas (marca `rec` no horario) com `agendar`
-  // sem substituicao e a remarcacao: a chamada segue como `reagendar` (as mesmas barreiras, a mesma proposta; o teto de agendamentos do
-  // dia nao conta). Busca de outro servico nao leva a marca; recusa que venceu, segue agendar. A marca tem de ser do agendamento que a
-  // recusa em pauta resolve AGORA: horario buscado para outro agendamento nao remarca este, nem pelo `agendar` nem pelo `reagendar`
-  // so com o horario (27/11: a busca pelo id da lista saia sem marca e a proposta ia para o recusado, nao para o escolhido).
-  const rc = (i.operacao === 'agendar' || i.operacao === 'reagendar') && i.id_opcao_horario ? bvgRecusado(ctx) : null;
-  const marca = rc ? (bvgResolver(i.id_opcao_horario, 'horario', ctx) || {}).rec : null;
-  const convertido = i.operacao === 'agendar' && !i.substitui_id_opcao_agendamento && bvgMesmaMarca(marca, rc);
+  // Quem diz qual agendamento remarcar e a marca do horario escolhido: o agendamento da busca de remarcacao (bvgMarcaRec), seja o
+  // recusado ou outro. Com a recusa em pauta e a busca feita para outro agendamento (escolhido na lista), o `reagendar` so com o
+  // horario propunha remarcar o recusado; barrar a chamada (agendamento_nao_informado) deixava o cliente sem a remarcacao que pediu.
+  // daMarca: o id com que a conversa ja resolve esse agendamento, `rec` se e o recusado, senao o da lista (pedido.agendamentos). Pelos
+  // futuros so o recusado resolve: eles nao levam o nome do barbeiro, que a barreira do barbeiro so da equipe confere (bvgRecusado o
+  // traz da recusa). Marca que nao resolve: nada e proposto e a ferramenta manda listar.
+  const comH = (i.operacao === 'agendar' || i.operacao === 'reagendar') && i.id_opcao_horario;
+  const rc = comH ? bvgRecusado(ctx) : null;
+  const marca = comH ? (bvgResolver(i.id_opcao_horario, 'horario', ctx) || {}).rec : null;
+  const daMarca = !marca ? null : bvgMesmaMarca(marca, rc) ? 'rec' : ((ctx.pedido.agendamentos || []).find((a) => bvgMesmaMarca(marca, a)) || {}).opcao_id;
+  // `agendar` num horario de busca de remarcacao, sem substituicao, e a remarcacao (TESTE, 27/11, 1 de 7 rodadas: saia a proposta de
+  // um agendamento NOVO, com o antigo de pe): segue como `reagendar`, com as mesmas barreiras e a mesma proposta; o teto de
+  // agendamentos do dia nao conta. Busca de outro servico, ou de agendamento novo, nao leva a marca.
+  const convertido = i.operacao === 'agendar' && !i.substitui_id_opcao_agendamento && !!marca;
   if (convertido) i.operacao = 'reagendar';
-  // Remarcar sem dizer qual agendamento (ou pelo `rec`): o da recusa de presenca em pauta. Na primeira linha, antes de toda barreira
-  // (bvgTocaHumano le i.id_opcao_agendamento: aplicado depois, o agendamento com barbeiro so da equipe seria remarcado para outro barbeiro).
-  if (i.operacao === 'reagendar' && (!i.id_opcao_agendamento || i.id_opcao_agendamento === 'rec')) {
-    if (rc && (!marca || bvgMesmaMarca(marca, rc))) i.id_opcao_agendamento = 'rec';
-    else delete i.id_opcao_agendamento;
+  // Remarcar sem dizer qual agendamento: o da marca; horario sem marca (busca de agendamento novo), o da recusa de presenca em pauta.
+  // O id informado continua valendo (se nao for o da marca, a recusa esta mais abaixo, depois das barreiras). Na primeira linha, antes
+  // de toda barreira (bvgTocaHumano le i.id_opcao_agendamento: aplicado depois, o agendamento com barbeiro so da equipe seria
+  // remarcado para outro barbeiro).
+  if (i.operacao === 'reagendar' && !i.id_opcao_agendamento) {
+    const id = marca ? daMarca : rc && 'rec';
+    if (id) i.id_opcao_agendamento = String(id);
   }
   const bloq = bvgEscritaPermitida(cfg);
   if (bloq) return bvgFim(bloq);
@@ -918,14 +925,17 @@ function bvgFase1(i, ctx, cfg, chamar) {
     if (antigo) dados.antigo = { ...agAnt, servico: antigo.servico }; // o servico que sai vai ao resumo (bvgPropor)
     return bvgProporPacote(chamar, antigo ? 'trocar_servico' : 'agendar', dados, antigo ? {} : bvgJaTem(ctx.pedido, [h]));
   }
-  if (!ag) return bvgFim(!i.id_opcao_agendamento || i.id_opcao_agendamento === 'rec' ? bvgSemAgendamento(i.operacao === 'reagendar' ? ' e este id_opcao_horario' : '') : bvgOpcaoInvalida());
+  // convertido: quem chamou foi `agendar`, que nao aceita o agendamento; a saida diz a ferramenta e como pedir um agendamento a mais
+  if (!ag) return bvgFim(!i.id_opcao_agendamento || i.id_opcao_agendamento === 'rec' ? bvgSemAgendamento(convertido ? ' e este id_opcao_horario, pela ferramenta reagendar (o horário é de uma busca de remarcação); se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico' : i.operacao === 'reagendar' ? ' e este id_opcao_horario' : '') : bvgOpcaoInvalida());
   if (i.operacao === 'reagendar') {
     if (!h) return bvgFim(bvgOpcaoInvalida());
     if (h.idServico !== ag.idServico) return bvgFim(bvgRecusa('servico_diferente', 'os horários da lista são de outro serviço, não do agendamento: para remarcar, chame horarios_livres só com id_opcao_agendamento (sem id_opcao_servico); se é um serviço a mais, chame agendar com o horário, sem substitui_id_opcao_agendamento'));
+    // id informado que nao e o agendamento da busca (o modelo contradiz a propria busca, ou o cliente mudou de ideia): nada e proposto
+    if (h.rec && !bvgMesmaMarca(h.rec, ag)) return bvgFim(bvgRecusa('horario_de_outro_agendamento', 'os horários da lista foram buscados para outro agendamento, não para o informado, e nada foi proposto: para remarcar o agendamento da busca, chame reagendar só com este id_opcao_horario (sem id_opcao_agendamento); para remarcar o informado, chame horarios_livres com o id_opcao_agendamento dele e ofereça os horários'));
     const dados = { ...agAnt, idServico: ag.idServico, servico: ag.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, minutos: h.minutos, ...(h.indicado ? { indicado: true } : {}) };
     const resumo = `Remarcar ${ag.servico} de ${bvgDia(ag.horaInicio)} ${ag.horaInicio.slice(11, 16)} para ${bvgDiaSem(h.data)} às ${h.hora} com ${h.apelido}`;
     // convertido: o modelo chamou agendar; sem esta linha ele nao sabe que saiu remarcacao nem como pedir um agendamento a mais
-    const orientacao = convertido ? { orientacao: 'saiu como remarcação do agendamento cuja presença o cliente recusou, não como agendamento novo: mande o resumo e peça a confirmação; com o sim, chame reagendar (ou agendar) só com o proposta_id. Se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico' } : {};
+    const orientacao = convertido ? { orientacao: 'saiu como remarcação do agendamento para o qual os horários foram buscados, não como agendamento novo: mande o resumo e peça a confirmação; com o sim, chame reagendar (ou agendar) só com o proposta_id. Se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico' } : {};
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo, ...orientacao }, { proposta_nova: { acao: 'reagendar', dados: { ...dados, resumo }, resumo } });
   }
   // barbeiro de teste e barbeiro so da equipe nunca aparecem ao cliente: com o nome no resumo, a frase inteira da confirmacao era
@@ -1263,7 +1273,7 @@ function bvgPassoUm(st, resps0, cfg) {
       const of = bvMontarOferta('horario', horas.map((hh) => {
         const { b, minutos } = porHora.get(hh);
         // indicado: quem pos o barbeiro foi o sistema (qualquer barbeiro), nao o cliente nem o agendamento colado
-        // rec: horario de uma busca de remarcacao (o agendamento dela); com o do recusado, `agendar` e a remarcacao (bvgFase1). Nunca vai ao modelo.
+        // rec: horario de uma busca de remarcacao (o agendamento dela); `agendar` com ele e a remarcacao desse agendamento (bvgFase1). Nunca vai ao modelo.
         return { rotulo: meta.qualquer ? `${hh} ${b.apelido}` : hh, valor: { data: meta.data, hora: hh, idProfissional: b.idProfissional, apelido: b.apelido, idServico: s.idServico, servico: s.nome, preco: s.preco, minutos, ...(meta.qualquer && !dono(porHora.get(hh), hh) ? { indicado: true } : {}), ...(i.rec ? { rec: i.rec } : {}) } };
       }), cfg, true); // FR-001: oferta completa; o Compor divide em listas
       const res = { ok: true, data: meta.data, total: horas.length, completa: true, opcoes: of.itens.map((x) => ({ id: x.id, hora: x.valor.hora, barbeiro: x.valor.apelido, ...(junto(x.valor.hora) ? { junto: true } : {}) })) };
