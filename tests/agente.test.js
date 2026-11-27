@@ -868,3 +868,47 @@ console.log('agente.test.js retomada longa ok');
   assert.deepEqual(['Quer que eu passe para a equipe te ajudar?', 'Posso passar para a equipe?', 'Vou passar você para a equipe da barbearia, que resolve isso direitinho. Já já alguém te responde por aqui, tá?', 'Qual horário você prefere?'].map(ag.bvOfereceEquipe), [true, true, false, false]);
   console.log('agente.test.js toque na lista ok');
 }
+
+// Turno de retorno do atendimento humano (owner, 2026-11-25): linha de contexto, com a variante de quando a equipe nunca falou
+{
+  const agora = Date.parse('2026-11-25T19:40:00Z');
+  const itens = [{ recebida_em: '2026-11-25T19:01:00Z' }, { recebida_em: '2026-11-25T19:05:00Z' }];
+  const com = a.bvContextoRetorno(itens, [{ direcao: 'saida', equipe: true }], agora);
+  assert.match(com, /^\nVolta do atendimento humano \(dado\): a conversa esteve com a equipe e voltou para você; as mensagens novas do cliente, de há 35 min, ficaram sem resposta\./);
+  const sem = a.bvContextoRetorno(itens, [{ direcao: 'saida' }], agora);
+  assert.match(sem, /^\nVolta do atendimento humano \(dado\): a conversa foi passada para a equipe há 35 min e voltou para você com o pedido do cliente em aberto\. Não repita o encaminhamento\./);
+  for (const l of [com, sem]) {
+    assert.match(l, /Não diga que a equipe não respondeu ou demorou, não prometa retorno dela e não transfira neste turno\./);
+    assert.equal(l.includes('\n', 1), false); // uma linha so
+  }
+  assert.match(sem, /sem dizer o nome do barbeiro/); // quem pediu o barbeiro que so a equipe agenda nao ouve o nome dele
+  assert.match(a.bvContextoRetorno([], null, agora), /há pouco/); // sem horario nos itens
+  console.log('agente.test.js retorno do atendimento humano ok');
+}
+
+// Turno de retorno: resposta que diz que o pedido ficou com a equipe, ou que alguem vai responder, nao sai (TESTE, 27/11)
+{
+  for (const t of ['Certo! Seu pedido ficou com a equipe por aqui.', 'Seu pedido segue com a equipe.', 'Já já alguém te responde por aqui, tá?', 'A equipe vai te responder em breve.',
+    'A equipe te retorna assim que puder.', 'Vou passar você para a equipe da barbearia.', 'Já avisei a equipe.', 'Aguarde o retorno da equipe.', 'Isso fica com a equipe.', 'Um atendente vai te chamar.',
+    'A equipe entra em contato com você.']) assert.equal(a.bvPrometeEquipe(t), true, t);
+  // o que o agente pode dizer: o que ele nao consegue, o que a equipe ja disse, de quem e a responsabilidade
+  for (const t of ['Por aqui não consigo agendar com esse barbeiro. Posso verificar horários com outro barbeiro hoje à tarde, se você quiser.',
+    'Por aqui eu não consigo resolver essa situação com a equipe. Posso verificar outro horário para amanhã ou remarcar seu agendamento.',
+    'Com o atraso não dá para segurar aquele horário, como a equipe falou. Quer que eu veja o primeiro horário livre?',
+    'Essa mensagem com as informações e o pix quem envia é a equipe, e por aqui eu não tenho acesso a ela.',
+    'A equipe informou que hoje não vai dar. Quer ver outro dia?', 'Não consigo recuperar a mensagem apagada nem visualizar o conteúdo do áudio ou do Pix.',
+    'Por aqui não consigo chamar um atendente neste momento. Posso verificar um horário para você amanhã.', '', null]) assert.equal(a.bvPrometeEquipe(t), false, String(t));
+  const sem = a.bvContextoRetorno([], [], Date.now());
+  assert.match(sem, /A equipe não está mais nesta conversa: não diga que o pedido ficou com ela nem que alguém vai responder\./);
+  assert.match(sem, /responda ao pedido que está na conversa recente, não ao "ok"\./);
+  assert.match(a.bvContextoRetorno([], [{ equipe: true }], Date.now()), /A equipe não está mais nesta conversa/);
+  console.log('agente.test.js retorno sem prometer a equipe ok');
+}
+
+// Turno de retorno: a resposta que cita o barbeiro que so a equipe agenda tambem e trocada (TESTE, 27/11: 1 em 6); mesma funcao da clausula petrea
+{
+  const hs = [{ id: 'b623', nome: 'Jayme' }];
+  assert.ok(a.bvBarbeiroHumano({ nome: 'Entendi! O pedido é para cortar com o Jayme hoje à tarde. Por aqui, esse agendamento é feito somente pela equipe.' }, hs));
+  assert.equal(a.bvBarbeiroHumano({ nome: 'Por aqui não consigo agendar com esse barbeiro. Posso verificar horários com outro barbeiro?' }, hs), null);
+  console.log('agente.test.js retorno sem o nome do barbeiro da equipe ok');
+}

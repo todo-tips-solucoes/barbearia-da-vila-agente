@@ -580,27 +580,66 @@ class FilaHumana(unittest.TestCase):
     def test_vigia_encerra_o_atendimento_parado(self):
         nos, con = self.nos("workflows/bv-vigia.json")
         self.assertIn("Filas paradas", con["A cada 5 minutos"][0])
-        self.assertEqual([con[n] for n in ("Filas paradas", "Encerrar atendimento", "Gravar encerramento")], [[["Encerrar atendimento"]], [["Gravar encerramento"]], [["Montar aviso"]]])
+        self.assertEqual([con[n] for n in ("Filas paradas", "Encerrar atendimento", "Gravar encerramento")], [[["Encerrar atendimento"]], [["Gravar encerramento"]], [["Decidir retorno"]]])
         p = nos["Filas paradas"]["parameters"]
         self.assertIn("(NOT $4::boolean OR c.fila_ultima_de = 'equipe')", p["query"])  # a chave so_respondido restringe a quem a equipe respondeu
         self.assertIn("coalesce(c.fila_ultima_de, '') AS ultima_de", p["query"])
         g = nos["Gravar encerramento"]["parameters"]
         # owner, 2026-11-17: encerra tambem com o cliente por ultimo, e so nesse caso o cliente e avisado (pela cadeia de aviso do vigia)
         self.assertIn("WHERE $2::int BETWEEN 200 AND 299 AND $3::text = 'cliente'", g["query"])
-        self.assertIn("WHERE id = $1::bigint RETURNING id, telefone", g["query"])  # o estado local sai mesmo se o Chat Master recusar: nao repete a cada varredura
-        self.assertIn("{{BV:textos.fila_sem_resposta}}", g["options"]["queryReplacement"])
+        # o estado local sai mesmo se o Chat Master recusar (nao repete a cada varredura), e so de quem ainda esta na fila humana:
+        # duas rodadas sobrepostas nao devolvem a linha duas vezes (25/11)
+        self.assertIn("WHERE id = $1::bigint AND fila_id = $4::int RETURNING id, telefone", g["query"])
+        self.assertNotIn("fila_sem_resposta", json.dumps(nos))  # owner, 2026-11-25: o texto fixo saiu
         # item 26: o encerramento pelo vigia fecha a transferencia aberta
         self.assertIn("UPDATE handoffs SET situacao = 'encerrado', encerrado_em = now(), encerrado_por = 'vigia' FROM ok WHERE handoffs.contato_id = ok.id AND handoffs.situacao = 'aberto'", g["query"])
-        self.assertIn("texto: l.texto || contingencia", nos["Montar aviso"]["parameters"]["jsCode"])
+        self.assertIn("texto: contingencia,", nos["Montar aviso"]["parameters"]["jsCode"])  # so o turno que estourou o tempo passa por aqui
         # 23/11: a equipe respondeu e o cliente so agradeceu depois -> encerra calado (decisao em shared/mensagens.js, nao no SQL)
         self.assertIn("(e.em IS NOT NULL AND NOT e.pendente) AS equipe_respondeu", p["query"])  # pergunta ou promessa de retorno da equipe nao e resposta
-        self.assertIn("~ '[?]|(vou|vamos) (ver|verificar|conferir|checar|olhar|confirmar|consultar)|j[aá] te |te retorn|te aviso|um moment|um instant|um minut|aguarde|j[aá] volto' AS pendente", p["query"])
+        self.assertIn("~ '(vou|vamos) (ver|verificar|conferir|checar|olhar|confirmar|consultar)|j[aá] te |te retorn|te aviso|um moment|um instant|um minut|aguarde|j[aá] volto' OR (coalesce(m.conteudo, '') ~ '[?]' AND coalesce(m.conteudo, '') !~* '[0-9]{1,2} ?(h|:[0-9]{2})')) AS pendente", p["query"])  # pergunta com horario e proposta ("Pode ser às 12h40?"), nao pendencia (25/11)
+        # por rodada: 1 encerramento com o cliente por ultimo (pode virar turno do agente, e a guarda de concorrencia do Montar
+        # retorno nao pode envelhecer esperando os turnos dos outros) e ate 5 dos demais, que so encerram
+        self.assertIn("row_number() OVER (PARTITION BY coalesce(c.fila_ultima_de, '') = 'cliente' ORDER BY c.fila_interacao_em) AS ordem", p["query"])
+        self.assertTrue(p["query"].endswith(") z WHERE z.ordem <= CASE WHEN z.ultima_de = 'cliente' THEN 1 ELSE 5 END ORDER BY z.ordem"))
         self.assertIn("m.mensagem_id_canal LIKE 'equipe-%' AND m.criado_em > now() - interval '24 hours' ORDER BY m.criado_em DESC LIMIT 1) e ON true", p["query"])
         self.assertIn("m.direcao = 'entrada' AND m.criado_em > e.em ORDER BY m.criado_em DESC LIMIT 7", p["query"])
         self.assertIn("length(coalesce(m.conteudo, '')) <= 80 AND coalesce(m.conteudo, '') !~ '[?0-9@]'", p["query"])  # texto longo, pergunta, numero, e-mail e midia viram "?": nao viajam pela execucao
         self.assertIn("$5::boolean AS equipe_respondeu, $6::text AS depois", g["query"])
         self.assertIn("$('Filas paradas').item.json.equipe_respondeu === true, $('Filas paradas').item.json.depois || '[]'", g["options"]["queryReplacement"])
-        self.assertIn(".filter((l) => l.contato_id != null && bvMAvisaFila(l))", nos["Montar aviso"]["parameters"]["jsCode"])
+        self.assertNotIn("bvMAvisaFila", json.dumps(nos))
+        # owner, 2026-11-25: em vez do texto fixo, o agente retoma a conversa (ou o encerramento e calado)
+        self.assertEqual([con[n] for n in ("Decidir retorno", "Montar retorno", "Tem retorno?")], [[["Montar retorno"]], [["Tem retorno?"]], [["Chamar retorno"]]])
+        # sem mensagem a retomar o Postgres devolve um item sem turno: ele para no Tem retorno? (nao chega ao sub-workflow)
+        self.assertEqual(nos["Tem retorno?"]["parameters"]["conditions"]["conditions"][0]["leftValue"], "={{ String($json.turno_id != null && $json.contato_id != null) }}")
+        self.assertNotIn("Chamar retorno", con)  # terminal: nada volta para o vigia nem para o agente (sem ciclo)
+        self.assertIn("bvMRetomaFila(x.l)", nos["Decidir retorno"]["parameters"]["jsCode"])
+        self.assertIn("json: { contato_id: x.l.contato_id, telefone: x.l.telefone }", nos["Decidir retorno"]["parameters"]["jsCode"])  # o texto do cliente nao segue adiante
+        mr = nos["Montar retorno"]["parameters"]["query"]
+        self.assertIn("m.direcao = 'entrada' AND m.processada_em IS NOT NULL", mr)  # nao reabre mensagem: a recepcao nunca a reprocessa num "Oi" futuro
+        self.assertIn("NOT EXISTS (SELECT 1 FROM turnos x WHERE x.contato_id = $1::bigint AND x.estado = 'em_andamento'", mr)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM mensagens p WHERE p.contato_id = $1::bigint AND p.direcao = 'entrada' AND p.processada_em IS NULL)", mr)
+        self.assertIn("jsonb_build_object('retorno', (SELECT u::text FROM t))", mr)  # a marca do turno de retorno, lida pelo Preparar e pelo bv-graces
+        self.assertIn("LIMIT 10 FOR UPDATE SKIP LOCKED", mr)
+        # resposta e a do agente ou a da equipe: lembrete, retomada e aviso gravados depois nao escondem a mensagem sem resposta
+        self.assertIn("s.direcao = 'saida' AND (s.mensagem_id_canal LIKE 'equipe-%' OR s.mensagem_id_canal LIKE 'out-%')", mr)
+        # dentro da janela da sessao, com folga: o turno de retorno nunca nasce como sessao nova (sem historico e sem a marca)
+        self.assertIn("m.criado_em > now() - make_interval(mins => $4::int - 10)", mr)
+        self.assertTrue(nos["Montar retorno"]["parameters"]["options"]["queryReplacement"].endswith("{{BV:execucao.timeout_s}}, {{BV:conversa.janela_recencia_min}}] }}"))
+        # contrato do item: os mesmos campos que a recepcao manda ao entregar-rajada (Montar entrega)
+        rec, _ = self.nos("workflows/bv-recepcao.json")
+        campos = lambda txt, pad: set(re.findall(pad, txt))
+        ent = rec["Montar entrega"]["parameters"]["jsCode"]
+        self.assertEqual(campos(mr[mr.index("json_build_object('mensagem_id'"):], r"'(\w+)', u\.|'(recebida_em)'") - {("", "")},
+                         {(c, "") for c in ("mensagem_id", "tipo", "conteudo", "midia_url", "midia_mime", "midia_segundos", "midia_bytes")} | {("", "recebida_em")})
+        for c in ("mensagem_id", "tipo", "conteudo", "midia_url", "midia_mime", "midia_segundos", "midia_bytes", "recebida_em"):
+            self.assertIn(c + ":", ent[ent.index("itens: ord.map"):])
+        for c in ("turno_id", "contato_id", "telefone", "total", "itens"):
+            self.assertIn(c + ":", ent)
+            self.assertRegex(mr, r"AS " + c + r"\b")
+        self.assertEqual(mr.count("("), mr.count(")"))
+        ch = nos["Chamar retorno"]
+        self.assertEqual([ch["parameters"]["mode"], ch["parameters"]["options"]["waitForSubWorkflow"], ch["onError"], ch["parameters"]["workflowId"]["value"]],
+                         ["each", True, "continueRegularOutput", "{{BV:workflows_sub.entregar_rajada}}"])  # um turno por contato, um por vez; a falha de um nao derruba os outros
         self.assertIn("{{BV:INCLUDE:shared/mensagens.js}}", nos["Montar aviso"]["parameters"]["jsCode"])
         self.assertIn("'{{BV:handoff.encerrar_ativo}}' === 'True'", p["options"]["queryReplacement"])
         self.assertEqual(nos["Encerrar atendimento"]["parameters"]["url"], "https://api.chatmasterveloz.com/api/tickets/updateAPI")
@@ -613,7 +652,7 @@ class FilaHumana(unittest.TestCase):
         for amb, ativo in (("integracao", False), ("producao", True)):
             c = json.load(open(os.path.join(RAIZ, "config", "ambientes", amb + ".json"), encoding="utf-8"))
             self.assertEqual([c["handoff"]["encerrar_ativo"], c["handoff"]["encerrar_apos_min"], c["handoff"]["encerrar_so_respondido"]], [ativo, 30, False])
-            self.assertTrue(c["textos"]["fila_sem_resposta"])
+            self.assertNotIn("fila_sem_resposta", c["textos"])  # owner, 2026-11-25
             self.assertEqual([c["retomada"]["resposta_max_min"], c["retomada"]["apos_min_urgente"]], [720, 20])
 
     def test_lembrete_recem_enviado_vale_como_enviado(self):
