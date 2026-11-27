@@ -1141,14 +1141,16 @@ Oito nós novos no `bv-mensagens` (`A cada convite`, `Reivindicar convite`, `Ped
 
 - Unidade: `tests/graces.test.js` (cadastro pelo celular e decisão: maior `dataAbertura`, voltou, visita antiga, horário futuro, soma das sessões, pacote ilegível), `tests/mensagens.test.js` (texto com e sem pacote, singular e plural, pedido de parar e falsos positivos, linha de contexto), `tests/test_workflows_mensagens.py` (ligações, sem ciclo, filtros do SQL, e os nós `Pedir cliente`, `Pedir convite`, `Decidir convite` e `Resultado retomada` executados com o código renderizado) e `tests/test_verificacoes_repo.py` (bloco `convite` e textos).
 - Banco do TESTE, em transação desfeita (a migração ensaiada dentro dela): desligado ou fora do horário não reivindica; sai um por rodada, o mais antigo primeiro; ficam de fora quem tem horário futuro, quem pediu para parar, quem veio há 10 dias, quem veio há 40, quem está no atendimento humano e quem conversou há pouco; um convite por visita; teto diário e disjuntor seguram; a gravação fecha a linha como enviada ou cancelada, e a retomada segue com o prefixo de sempre.
-- TESTE, ponta a ponta (27/11, migração 0020 aplicada no banco de TESTE): cópia temporária só do ramo do convite, a cada minuto e sem a restrição de horário, restrita a dois contatos semeados, com o envio trocado por um nó sem efeito e lendo a Graces de verdade. O contato sem cadastro terminou como `sem_cadastro`; o cliente de teste, com cadastro único, terminou como `tem_horario` (ele tem horários marcados de verdade). O n8n respondeu saudável em todas as conferências e a cópia foi apagada.
-- TESTE, resposta do agente a quem recebeu o convite há um dia (6 contatos simulados):
+- TESTE, ponta a ponta (27/11, migração 0020 aplicada no banco de TESTE): cópia temporária só do ramo do convite, a cada minuto e sem a restrição de horário, restrita a dois contatos semeados, com o envio trocado por um nó sem efeito e lendo a Graces de verdade. O contato sem cadastro terminou como `sem_cadastro`; o cliente de teste, com cadastro único, terminou como `tem_horario` (ele tem horários marcados de verdade). A prova foi repetida com a versão final, com o mesmo resultado. O n8n respondeu saudável em todas as conferências e a cópia foi apagada.
+- TESTE, resposta do agente a quem recebeu o convite há um dia (10 contatos simulados, em duas rodadas):
 
 | Mensagem do cliente | Resultado |
 |---|---|
 | "Quero sim", "Oi! Pode ver um horário pra mim sim", "Opa, bora marcar" | 3 de 3 seguiram o agendamento ("Qual serviço você quer agendar?") |
 | "Não quero mais receber esses lembretes", "Pare de me mandar mensagem por favor" | 2 de 2 marcaram a linha (`parou`) e confirmaram ("você não receberá mais esses lembretes") |
 | "Agora não, obrigado" | Agradeceu, sem marcar |
+| "pode parar de mandar", "me tira dessa lista" (versão final, depois da revisão) | 2 de 2 marcaram e confirmaram |
+| "Quero sim, não precisa mandar a localização que eu já sei onde é" | Seguiu o agendamento e não marcou a parada |
 
 O caminho em que o convite é de fato enviado não rodou de ponta a ponta no n8n: não há no TESTE um cliente real com a última visita há 25 a 30 dias e sem horário marcado. Esse trecho está coberto pela execução dos nós renderizados nos testes, pela validação do SQL no banco e por ser a mesma cauda de envio que a retomada já usa em produção.
 
