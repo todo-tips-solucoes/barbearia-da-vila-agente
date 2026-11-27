@@ -83,6 +83,9 @@ console.log('rajada.test.js ok');
   assert.equal(r.bvEquipe(ev({ fromMe: false }), 106, 'x'), null); // mensagem do cliente
   assert.equal(r.bvEquipe(ev({ acao: 'start' }), 106, 'x'), null);
   assert.equal(r.bvEquipe(ev({ isGroup: true }), 106, 'x'), null);
+  // eco de lista enviada pela API (lembrete de 24 h em lista, 27/11): o painel registra "MENU ENVIADO ..." e nao e fala da equipe
+  assert.equal(r.bvEquipe(ev({ mensagem: { id: 3, body: 'MENU ENVIADO\n\nEscolha uma das opções\n\nbvc:5:s - Confirmo\nbvc:5:n - Não vou poder\n' } }), 106, 'x'), null);
+  assert.equal(r.bvEquipe(ev({ mensagem: { id: 4, body: 'Menu enviado ontem, pode escolher' } }), 106, 'x').texto, 'Menu enviado ontem, pode escolher'); // fala de gente segue entrando
   // o texto de encaminhamento do proprio agente chega como eco ja na fila humana: nao e resposta da equipe
   assert.equal(r.bvEquipe(ev({ mensagem: { id: 1, body: 'Entendi! Vou passar você para a equipe, tá?' } }), 106, 'Vou passar você para a equipe'), null);
   // mensagem digitada no aparelho da conexao (captura real na 145, 2026-11-23): o aviso `start` com fromMe e descartado e o

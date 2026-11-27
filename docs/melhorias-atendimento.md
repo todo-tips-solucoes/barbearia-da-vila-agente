@@ -1044,3 +1044,61 @@ Quando é o **sistema** que indica o barbeiro (o cliente não escolheu), vale a 
 `tests/graces.test.js` (bloco "habitual"), `tests/agente.test.js`, `tests/test_verificacoes_repo.py` e `tests/test_workflows_agente.py`. Falta medir em TESTE com o agente real. Limites que só o agente real mostra: a ordem do histórico (mais recente primeiro) vem da documentação da Graces e do uso que o código já fazia, não foi medida (o cliente de teste não tem histórico); o `pageSize` de 10 linhas por visita é folga estimada. Com `visitas: 1`, só difere de antes se a última visita não trouxer barbeiro: agora vale a visita anterior que o traga.
 
 **Correção da referência da suíte (26/11).** A referência da avaliadora (`referencia_graces` em `scripts/suite-validacao.py`) trazia horários só de "corte adulto" e "infantil" e o último atendimento em vez do barbeiro de costume; o R11 reprovou três vezes no K4 com a resposta do agente verdadeira. Agora ela inclui os horários do serviço do último atendimento e o barbeiro de costume das últimas N visitas (`barbeiros_de_costume`, espelho de `bvgVisitas`/`bvgHabituais`).
+
+## Lembrete de 24 horas com lista para confirmar presença (27/11)
+
+Pedido do owner em 27/11: o agente não vinha entendendo a resposta do cliente na confirmação de comparecimento; identificar o porquê e corrigir dando opções para o cliente tocar.
+
+### O que estava acontecendo
+
+Desde 15/11 o lembrete de 24 horas era um texto agendado no módulo de Agendamentos do Chat Master, pedindo para digitar SIM ou NÃO. Só um punhado de respostas exatas era tratado em código ("Sim", "Confirmo", "Confirmado", "Pode confirmar"); o resto ia ao modelo, e o texto do lembrete não ficava no histórico da conversa.
+
+Leitura do Chat Master de PROD, 16 a 26/11, em duas amostras de chamados (na maior, 39 lembretes de 24 horas, 32 deles com resposta):
+
+| Resposta do cliente | O que aconteceu |
+|---|---|
+| "Sim" puro (22 de 32), "Confirmado", "Não" | Entendido: presença confirmada em segundos, ou lista remarcar/cancelar |
+| "Sim (e tem mão e pé também). Obg" | Não confirmou; virou conversa e acabou transferido |
+| "Oi, eu remarquei para sábado às 16h" | "Perfeito! Anotado: sábado, 28/11, às 16h", sem conferir a agenda |
+| "Amanhã não. Eu agendei para quarta-feira", "É só barba", "Com o Jaime é cabelo" | Listas sem relação ou transferência |
+| Dois horários a confirmar | "Toque no botão da mensagem", e o botão não existia mais |
+
+### Como ficou (decisões do owner em 27/11: botão de lista, uma mensagem só, saindo pelo n8n)
+
+- **O lembrete de 24 horas sai em lista**, com "Confirmo" e "Não vou poder". O agendador do Chat Master não leva lista, então esse lembrete deixa de ser agendado lá: na hora dele, o ramo de sincronização do `bv-mensagens` manda a lista (`bvMSincPlano`, ação `enviar_lista`, com `bvMLista`). Ele deixa de aparecer no módulo de Agendamentos do painel; o de 1 hora continua lá, em texto.
+- **Nada novo na recepção do toque:** os ids são os mesmos de antes (`bvc:<id>:s|n`), e `bvMReconhecer`, a recepção e o `bv-confirmacao` não mudaram. O toque confirma ou recusa na Graces sem o modelo; a recusa manda a lista remarcar/cancelar.
+- **A lista entra em `mensagens`** (`agendada-<id>`, tipo `lista`): o modelo passa a ver o lembrete, e a recepção sabe que a última saída foi a lista. O texto não tem "?" de propósito: saída com pergunta dispara a retomada e conta como lista repetida no laço.
+- **"Sim" digitado logo depois da lista** continua confirmando sem o modelo (`bvMTituloRota`).
+- **Quem contesta o lembrete ouve o que está na agenda:** com confirmação aberta, a linha de contexto (`bvMPromptConfirmacoes`) manda chamar `meus_agendamentos` antes de responder e nunca dizer que anotou, remarcou ou cancelou sem a ferramenta. "Sim" com outro assunto junto confirma primeiro e trata o resto depois.
+- O agrupamento "um lembrete por cliente e dia", o preparo do contato e do ticket e as etiquetas Confirmado/Cancelado seguem como eram.
+
+### Transição
+
+Lembrete de 24 horas que já estava agendado como texto sai como texto, com a redação antiga, e o "sim" digitado vale. Se ele for relido antes da hora (remarcação, segundo serviço no dia), o agendamento de texto é apagado e ele sai em lista.
+
+### Revisão independente do diff
+
+Um especialista de backend revisou em leitura. Corrigidos: o lembrete já agendado seria atualizado para o texto novo sem a lista (agora apaga e reenvia em lista); o eco da lista ("MENU ENVIADO…") seria gravado como fala da equipe com o contato na fila humana (`bvEquipe` ignora); contato `@lid` sem cadastro no Chat Master era cancelado antes da hora; quatro falhas no preparo do contato perdiam o lembrete (com duas, a linha dorme e a lista sai pelo número); falha entre o envio e a gravação reenviaria a lista (a reserva vencida vira `incerto`, sem reenvio); e o "?" do texto, pelos efeitos na retomada e no laço.
+
+### Testes
+
+- Unidade: `tests/mensagens.test.js` (plano e resultado do envio, transição, `@lid`, preparo que falhou, rota do "sim" digitado, linha de contexto), `tests/rajada.test.js` (eco da lista) e `tests/test_workflows_mensagens.py` (nós e configuração).
+- As consultas alteradas rodaram no banco do TESTE em transação desfeita.
+- TESTE, smoke `m10` (novo), `m2` e `m9`: a sincronização envia a lista e a grava no histórico; o toque em "Confirmo" e o "Sim" digitado confirmam na Graces (status 3) sem turno do agente; "Não vou poder" recusa (status 10); atraso além do limite não envia.
+- TESTE, comportamento do modelo com confirmação aberta (contatos simulados, agendamento real do cliente de teste no barbeiro de teste):
+
+| Mensagem do cliente | Vezes | Resultado |
+|---|---|---|
+| "Oi, eu remarquei para sábado às 16h" | 4 | 4 de 4 consultaram a agenda e disseram o que consta; nenhum "Anotado" |
+| "Amanhã não. Eu agendei para quarta-feira", "Já cancelei esse horário" | 2 | Consultou a agenda nas duas ("ainda consta ativo aqui. Quer que eu faça o cancelamento?") |
+| "É só barba" | 1 | Perguntou qual serviço de barba, sem citar o horário marcado |
+| "Sim (e tem mão e pé também). Obg" | 3 | Antes da última frase da instrução: 0 de 1 confirmou. Depois: 2 de 2 confirmaram e trataram o outro assunto |
+| "Sim, mas queria saber se dá pra fazer a barba junto", "Vou sim. Vocês aceitam cartão?", "Vou sim, pode deixar" | 3 | 3 de 3 confirmaram |
+| "Não vou conseguir ir, surgiu um imprevisto no trabalho" | 1 | Recusa registrada na Graces e "Você prefere remarcar ou cancelar mesmo?" |
+
+### O que falta e limites
+
+- **Envio real da lista** não foi provado no TESTE (contatos simulados só gravam). A lista usa o mesmo construtor e o mesmo endpoint das listas que o agente já manda em PROD.
+- **"É só barba"** ainda vira pergunta de serviço sem mencionar o horário marcado.
+- **Lembrete de 1 hora** continua em texto, sem opções.
+- Um toque que chegue nos segundos entre o envio e a gravação recebe "esse horário não está mais valendo".

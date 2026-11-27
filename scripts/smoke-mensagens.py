@@ -8,6 +8,7 @@ Uso: python3 -I scripts/smoke-mensagens.py [m1 m2 m3 m4 m6 ...] | --limpar      
   m3 selecao por titulo (fallback): "Não vou poder" -> status 10 + conversas.pedido.confirmacao_recusada
   m4 desatualizada e fora do teste: sem Graces
   m7 toque real (titulo + id): recusa pelo id cancela lembrete e pos; o titulo gemeo nunca vira turno do agente
+  m10 lembrete de 24 h com lista (27/11): a sincronizacao envia, o toque e o "sim" digitado confirmam, "Nao vou poder" recusa
   m6 reconciliacao: agendamento da Graces sem contato -> uma falha `sem_contato` por idAgenda. Limite: com teste.contatos_escrita vazio
      (exigido aqui) o Ler estado nao acha contato nenhum, entao so o caminho sem_contato e exercitado; criar/cancelar da reconciliacao
      ficam nos testes de unidade (bvMReconciliar) e no E2E da FASE 6 com o numero do owner.
@@ -260,6 +261,39 @@ def m9():
     esperar(f"SELECT (EXISTS (SELECT 1 FROM turnos WHERE contato_id={cid2}) AND NOT EXISTS (SELECT 1 FROM turnos WHERE contato_id={cid2} AND estado='em_andamento'))::int", 120)  # deixa o turno do agente terminar antes da limpeza
 
 
+def m10():
+    print("M10 lembrete de 24 h com lista (27/11): sai pelo n8n na hora, entra no historico e o toque ou o 'sim' digitado confirmam sem o agente")
+    def lembrete(n, idx=0):  # linha pendente e vencida ha 1 min, sem agendamento no Chat Master: a sincronizacao manda a lista (contato simulado: so grava)
+        cid = contato(n)
+        ag, ini = agenda_teste(idx)
+        i, _ = linha(cid, "lembrete_dia", ag=ag, cliente=sa.PAULO, inicio=ini, previsto="now() - interval '1 minute'")
+        return cid, i, ag
+    cid, i, ag = lembrete(513)
+    checar("a sincronizacao envia a lista e marca a linha", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND situacao='enviada' AND agendamento_canal_id IS NULL", 150) == "1", estado_linha(i))
+    lst = sa.sql(f"SELECT tipo || '|' || conteudo FROM mensagens WHERE contato_id={cid} AND mensagem_id_canal='agendada-{i}';")
+    checar("a lista entra no historico com o texto novo", lst.startswith("lista|") and "Toque em *Ver opções*" in lst and "responder SIM" not in lst, lst[:140])
+    sa.post(evento_lista(513, f"bvc:{i}:s"))
+    checar("toque em Confirmo: resposta gravada", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i} AND resposta='confirmada'", 40) == "1", estado_linha(i))
+    checar("Graces confirmou (status 3)", (st := status_graces_em(ag, 3)) == 3, str(st))
+    checar("o toque nao virou turno do agente", sa.sql(f"SELECT count(*) FROM turnos WHERE contato_id={cid};") == "0")
+    # "Sim" digitado logo depois da lista: confirma direto (a lista e a ultima saida)
+    cid2, i2, ag2 = lembrete(514, 1)
+    esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i2} AND situacao='enviada'", 150)
+    sa.post(sa.evento(514, "Sim"))
+    checar("'Sim' digitado depois da lista confirma", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i2} AND resposta='confirmada'", 40, 2) == "1", estado_linha(i2))
+    checar("sem turno do agente nem mensagem de entrada", sa.sql(f"SELECT (SELECT count(*) FROM mensagens WHERE contato_id={cid2} AND direcao='entrada') + (SELECT count(*) FROM turnos WHERE contato_id={cid2});") == "0")
+    # toque em "Nao vou poder": recusa em codigo (status 10) e a decisao remarcar/cancelar em lista
+    cid3, i3, ag3 = lembrete(515, 2)
+    esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i3} AND situacao='enviada'", 150)
+    sa.post(evento_lista(515, f"bvc:{i3}:n", M["titulo_nao"]))
+    checar("toque em Nao vou poder: recusa gravada", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i3} AND resposta='recusada'", 40) == "1", estado_linha(i3))
+    checar("Graces marcou nao confirmado (status 10)", (st := status_graces_em(ag3, 10)) == 10, str(st))
+    # atraso alem do limite nao envia
+    cid4 = contato(516)
+    i4, _ = linha(cid4, "lembrete_dia", previsto=f"now() - interval '{int(M['atraso_max_min']) + 5} minutes'")
+    checar("lembrete atrasado alem do limite e cancelado (ja_passou)", esperar(f"SELECT count(*) FROM mensagens_agendadas WHERE id={i4} AND situacao='cancelada' AND motivo='ja_passou'", 150) == "1", estado_linha(i4))
+
+
 def encerrar():
     for a in _agendas:
         sa._del(a)
@@ -271,7 +305,7 @@ def encerrar():
         sa.sql(f"DELETE FROM falhas_agente WHERE code IN ({codes}) AND contato_id IS NULL;")
 
 
-CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6, m7=m7, m8=m8, m9=m9)
+CENARIOS = dict(m1=m1, m2=m2, m3=m3, m4=m4, m6=m6, m7=m7, m8=m8, m9=m9, m10=m10)
 
 if __name__ == "__main__":
     sa._env(".env.smoke", ".env.n8n")
