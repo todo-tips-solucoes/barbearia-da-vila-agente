@@ -939,3 +939,92 @@ Caminho normal do agente, com o mesmo código: roteiros R1 (primeiro contato, ag
 - **Confirmação a uma proposta que a equipe não fechou:** o cliente que respondeu "Pode ser sim" a "Pode ser às 12h40?" fica sem aviso, e nada garante que o horário entrou na agenda. Decisão do owner: só encerrar.
 - **Falha do turno de retorno:** se o `entregar-rajada` falhar ou estourar o tempo, o cliente não recebe nada e o vigia não registra a falha.
 - **O que só a equipe resolve** (barbeiro que só ela agenda, atraso, pagamento): o agente diz em uma frase que por ali não consegue e oferece o que faz. O chamado já foi encerrado, então o pedido sai da fila da equipe, como já era.
+
+## Fila da vez: rodízio dos barbeiros indicados pelo agente (26/11)
+
+### O que estava acontecendo
+
+- `GET /servicos/profissionais` devolve sempre a mesma ordem, em todos os serviços: Kiel, Jayme, Black, Pedro Henrique, Rodrigo e o barbeiro de teste. Sem o Jayme (só da equipe) e sem o de teste, a ordem que o código usava era Kiel, Black, Pedro Henrique, Rodrigo.
+- Na busca de horários sem barbeiro escolhido, a lista mostra um barbeiro por horário e o horário ficava com o **primeiro** de `meta.barbeiros` que o tinha livre. Só o barbeiro de um agendamento colado desbancava.
+- Simulação com a agenda real (corte adulto, próximos 3 dias úteis): o Kiel ficaria com 54 dos 55 horários da lista de qualquer barbeiro; Black e Pedro Henrique com zero, tendo 13 e 7 horários livres em 30/11 e 18 e 15 em 01/12.
+- Conversas reais de PROD de 25 e 26/11 (129 chamados lidos): nas 10 ofertas de horário em que o cliente não tinha escolhido barbeiro, foram mostrados 35 horários do Kiel, 4 do Rodrigo, 2 do Black e 0 do Pedro Henrique (83% Kiel). Na lista de barbeiros, o Kiel foi o primeiro em 12 de 12.
+- A mesma ordem decidia a lista de barbeiros, `por_barbeiro` e `quem_tem_horario`, as sequências de dois serviços, o caso de barbeiros diferentes por serviço ("primeiro barbeiro da lista") e os cortes de 10 barbeiros e do teto de consultas.
+
+### Como ficou
+
+Quando é o **sistema** que indica o barbeiro (o cliente não escolheu), vale a fila da vez: vem primeiro quem está há mais tempo sem receber um agendamento por indicação do agente; quem recebe um vai para o fim da fila. Dentro de uma lista, os horários que mais de um barbeiro tem livres são repartidos em roda, seguindo a fila. É determinístico: a mesma entrada (barbeiros, grades, histórico) dá sempre a mesma saída; quem decide é o código, nunca o modelo.
+
+- **Marca `indicado`.** O item de oferta de horário (e cada item de uma sequência) leva `indicado: true` no `valor` quando o barbeiro foi posto pelo sistema: lista de qualquer barbeiro (inclui "ver outros barbeiros", o habitual sem horário e a remarcação com qualquer barbeiro) e sequências sem barbeiro escolhido. Barbeiro pedido, o da conversa, o habitual, o do agendamento (remarcação) e o horário colado não levam a marca. Ela passa a `propostas.dados` (`bvgFase1`) e não aparece ao cliente (a lista usa só o `rotulo`) nem ao modelo (o resultado da ferramenta traz só `id`, `hora` e `barbeiro`).
+- **Leitura.** O nó `Contexto` de `bv-graces` devolve `rodizio`: `{ idProfissional: instante da última proposta executada com item indicado }`, global (todos os contatos), das ações `agendar`, `agendar_conjunto`, `reagendar` e `trocar_servico`, numa janela de `graces.rodizio.janela_dias` dias. A janela e a chave vão por parâmetro do nó (`$7`, 0 = desligado), nunca no texto do SQL. Sem tabela, contador nem escrita nova: a posição é consequência do que já se grava quando o agendamento executa, e duas conversas ao mesmo tempo não disputam nada.
+- **Duas funções puras** em `workflows/shared/graces.js`: `bvgFila` (ordena a lista já filtrada: sem registro primeiro, depois do mais antigo ao mais novo, empate pela ordem recebida) e `bvgRepartir` (cada horário vai ao candidato mais à frente na fila local, que passa ao fim dela; o horário colado ganha sem gastar a vez de ninguém). Usadas em: `listar_barbeiros`; `horarios_livres` com qualquer barbeiro (inclusive `ag_prof`); `por_barbeiro` e `quem_tem_horario` (na ordem da fila); sequência de dois serviços com o mesmo barbeiro; barbeiros diferentes por serviço (`bvgDifProf`/`bvgDifGrade`: cada início fica com o primeiro da fila que cabe, **sem repartição em roda dentro da mesma lista**; a fila anda entre conversas, quando um agendamento executa). A composição "filtrar e depois ordenar" é uma função só, `bvgBarbeiros`. Os cortes (`slice(0, 10)` e o teto de consultas) valem depois de ordenar. Nenhuma consulta a mais à Graces.
+- **Índice:** a subconsulta usa `propostas_estado_idx (estado, atualizada_em)`, já existente; sem migração. No banco de TESTE (1 linha na tabela) o plano é varredura sequencial e leva 0,2 ms; com o volume de PROD o filtro `estado = 'executada'` e a janela entram pelo índice.
+
+### O que não muda
+
+- O Jayme (`graces.barbeiros_humanos`) e o barbeiro de teste são filtrados antes de qualquer ordenação: nunca entram na fila. Os filtros e as barreiras de escrita não foram tocados.
+- Barbeiro pedido, habitual, do agendamento na remarcação e horário colado: caminho e resultado iguais aos de antes.
+- Serviço que só um barbeiro faz: nada a repartir. Pacote e par cabelo e barba: o mesmo barbeiro nos dois horários.
+- O prompt do agente não mudou.
+
+### Como desligar
+
+`graces.rodizio.ligado: false` em `config/ambientes/<ambiente>.json` (e deploy da configuração; não muda código): volta a ordem da Graces e o primeiro vence. `janela_dias` (1 a 365, padrão 30) é validada por `scripts/verificar-repo.py`; no nó, valor inválido cai em 30 e `ligado` diferente de `true` vale desligado. A marca `indicado` continua sendo gravada com a chave desligada, então o histórico já existe quando ela liga.
+
+### Testes e limites
+
+- `tests/graces.test.js` (bloco "fila da vez"): fila com e sem histórico, empate e desligado; repartição (4 barbeiros livres dão K, B, P, R, K; quem não tem o horário é pulado; o colado ganha); a marca em qualquer barbeiro e a ausência dela em barbeiro pedido, da conversa, habitual e remarcação no mesmo barbeiro; chegada em `propostas.dados`; de ponta a ponta, cinco agendamentos indicados seguidos andam a fila; sequências; Jayme e barbeiro de teste fora. `tests/test_verificacoes_repo.py` e `tests/test_workflows_agente.py` cobrem a configuração e a consulta do `Contexto`.
+- A consulta do `Contexto` foi validada no banco de TESTE só com `SELECT` e `EXPLAIN`.
+- **Limites:** a fila é do agente, não da loja: agendamento feito pela equipe, por outro canal ou com barbeiro pedido não conta. Quem recebe vários agendamentos com o barbeiro pedido continua sem gastar a vez. Duas conversas que listam antes de qualquer uma confirmar veem a mesma fila (a vez só anda quando o agendamento executa). Falta medir em TESTE com o agente real e, depois do deploy em PROD, conferir a distribuição de `propostas.dados` com `indicado` por barbeiro.
+
+### Fila de ajustes (pedida pelo dono em 26/11/2026)
+
+- Barbeiro habitual pelos últimos 5 atendimentos: feito em 26/11 (seção abaixo); sai desta fila.
+
+## Barbeiro habitual pelos últimos atendimentos (26/11)
+
+### O pedido do dono
+
+"O agente deve indicar o barbeiro não somente pelo último corte, mas pelos últimos 5. Vence na indicação aquele que cortou mais. Por exemplo, se nos últimos 5 cortes quem cortou foi o Pedro Henrique e no último foi o Black, o agente deve indicar o Pedro."
+
+### Como ficou
+
+- **Visitas.** O histórico (`GET /agenda/historico`, uma linha por serviço) é agrupado em visitas: mesma comanda ou mesmo dia, a regra que já valia para a última visita (`bvgDaVisita` e `bvgVisitas` em `workflows/shared/graces.js`, agora uma só).
+- **Contagem e vencedor.** Entram as `N` visitas mais recentes com barbeiro conhecido (`graces.habitual.visitas`, 5). Cada visita conta uma vez por barbeiro que atendeu nela; vence quem tem mais visitas e, no empate, quem atendeu mais recentemente (`bvgHabituais`). O critério do que conta como atendimento está num ponto só, `bvgConta` (hoje qualquer serviço).
+- **O serviço** continua sendo o da última visita, com as mesmas condições de antes (visita de um serviço só, ativo, sem "2ª vez"). **O barbeiro** é o primeiro do ranking que faz esse serviço (`/servicos/profissionais`) e passa em `bvFiltrarBarbeiros`; se ninguém serve, `barbeiro: null` e o agente pergunta, como antes. O formato de `ctx.pedido.ultimo` não mudou.
+- **Equipe humana (cláusula pétrea).** A última visita com o Jayme continua levando ao atendimento humano; agora também vai se o Jayme for o mais frequente das últimas visitas. A regra só aumenta as transferências. O Jayme e o barbeiro de teste nunca são propostos.
+  - O barbeiro da equipe humana também é contado quando a linha do histórico vem só com o nome (sem `idProfissional`), do mesmo jeito que a regra da última visita o enxerga; para os demais, linha sem id é ignorada.
+  - Empate no topo: se o Jayme está entre os que têm o maior número de visitas, o cliente vai para a equipe, mesmo que outro empatado tenha atendido mais recentemente (na dúvida, transfere). Sem humano no empate, vale o mais recente.
+- **Requisição.** A mesma de antes, com `pageSize` = 10 por visita (50 com 5 visitas; máximo 200). Nenhuma requisição a mais. O habitual continua sem a marca `indicado` e sem andar a fila da vez.
+- **Textos.** O prompt passou a dizer "o barbeiro de costume dele (o que mais o atendeu nos últimos atendimentos)" e a orientação de `meta.sem` diz "X, o barbeiro de costume do cliente, não tem horário"; o serviço segue sendo "o do último atendimento".
+
+### Casos de borda
+
+| Caso | Resultado |
+|---|---|
+| 4 visitas com o Pedro e a mais recente com o Black | Pedro |
+| 2 a 2 (Black e Pedro) | quem atendeu mais recentemente |
+| menos de 5 visitas | a maioria do que houver; uma só = como antes |
+| dois serviços do mesmo barbeiro na visita | conta uma vez |
+| visita com dois barbeiros | conta para os dois |
+| vencedor não faz o serviço ou é o de teste | o seguinte do ranking |
+| ninguém do ranking serve | sem barbeiro (o agente pergunta) |
+| última visita com o Jayme | equipe, como antes |
+| Jayme mais frequente, última com outro | equipe |
+| Jayme só numa visita antiga | não transfere e nunca é proposto |
+| linhas sem barbeiro ou com serviço inválido | ignoradas |
+| `visitas: 1` | só a última visita decide, como antes |
+
+### Decisões que ficaram com o dono
+
+- Contar só cortes ou qualquer serviço (hoje, qualquer serviço; trocar em `bvgConta`).
+- Cliente do Jayme por "a última visita" ou por "o mais frequente" (hoje valem os dois).
+
+### Como voltar atrás
+
+`graces.habitual.visitas: 1` em `config/ambientes/<ambiente>.json` (e deploy da configuração; não muda código). Valores de 1 a 20 (validados por `scripts/verificar-repo.py`); no código, valor inválido vale 5.
+
+### Testes e limites
+
+`tests/graces.test.js` (bloco "habitual"), `tests/agente.test.js`, `tests/test_verificacoes_repo.py` e `tests/test_workflows_agente.py`. Falta medir em TESTE com o agente real. Limites que só o agente real mostra: a ordem do histórico (mais recente primeiro) vem da documentação da Graces e do uso que o código já fazia, não foi medida (o cliente de teste não tem histórico); o `pageSize` de 10 linhas por visita é folga estimada. Com `visitas: 1`, só difere de antes se a última visita não trouxer barbeiro: agora vale a visita anterior que o traga.
+
+**Correção da referência da suíte (26/11).** A referência da avaliadora (`referencia_graces` em `scripts/suite-validacao.py`) trazia horários só de "corte adulto" e "infantil" e o último atendimento em vez do barbeiro de costume; o R11 reprovou três vezes no K4 com a resposta do agente verdadeira. Agora ela inclui os horários do serviço do último atendimento e o barbeiro de costume das últimas N visitas (`barbeiros_de_costume`, espelho de `bvgVisitas`/`bvgHabituais`).

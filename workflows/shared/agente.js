@@ -254,9 +254,9 @@ function bvContextoCliente(c, neutralizar, agora) {
   }
   if (c.ultimo && c.ultimo.servico) {
     const com = c.ultimo.barbeiro ? ' com ' + n(c.ultimo.barbeiro) : '';
-    t += '\nÚltimo atendimento do cliente (dado): ' + n(c.ultimo.servico) + com + '. Num pedido de agendamento para ele mesmo em que ele não disse outro serviço, proponha, em afirmação, repetir ' + n(c.ultimo.servico) + com
+    t += '\nÚltimo atendimento do cliente (dado): ' + n(c.ultimo.servico) + (c.ultimo.barbeiro ? '; o barbeiro de costume dele (o que mais o atendeu nos últimos atendimentos) é ' + n(c.ultimo.barbeiro) : '') + '. Num pedido de agendamento para ele mesmo em que ele não disse outro serviço, proponha, em afirmação, repetir ' + n(c.ultimo.servico) + com
       + ' e faça uma única pergunta, o dia e o horário que ele prefere; não liste serviços' + (c.ultimo.barbeiro ? ' nem barbeiros' : '') + '. Se ele já disse o dia e o horário, busque direto.'
-      + ' Para buscar, chame horarios_livres só com a data e a hora (ou o periodo), sem id_opcao_servico' + (c.ultimo.barbeiro ? ' e sem id_opcao_barbeiro: ela usa o último atendimento' : ': ela usa o serviço do último atendimento; o barbeiro, pergunte (listar_barbeiros) ou use qualquer') + '.'
+      + ' Para buscar, chame horarios_livres só com a data e a hora (ou o periodo), sem id_opcao_servico' + (c.ultimo.barbeiro ? ' e sem id_opcao_barbeiro: ela usa o barbeiro de costume' : ': ela usa o serviço do último atendimento; o barbeiro, pergunte (listar_barbeiros) ou use qualquer') + '.'
       + ' Pediu qualquer barbeiro: horarios_livres com qualquer=true; pediu outro barbeiro: listar_barbeiros com id_opcao_servico ult. Pediu outro serviço: siga o fluxo normal.'
       + (/infantil|juvenil|crian[cç]a|kids/i.test(String(c.ultimo.servico)) ? ' Atenção: esse último serviço é de criança ou adolescente e o telefone pode ser de um responsável: se a mensagem não falar do filho ou da criança, não presuma; pergunte para quem é o atendimento e qual serviço, com listar_servicos.' : '');
   }
@@ -415,7 +415,7 @@ function bvDigitacaoMs(texto, cfg) {
 // Barbeiro antes dos horarios (owner, 2026-11-14: cliente novo recebeu os horarios do Kiel sem escolher) e barbeiros so da equipe.
 function bvRegraBarbeiros(cfg) {
   const hs = ((cfg.graces || {}).humanos || []).map((h) => h && h.nome).filter(Boolean);
-  return 'Barbeiro: antes de buscar horários de um serviço, se o cliente não disse o barbeiro nem que tanto faz e o contexto não trouxer o barbeiro do último atendimento, pergunte o barbeiro de preferência mandando a lista (listar_barbeiros); use qualquer=true só quando ele disser que tanto faz ou perguntar quem tem horário. '
+  return 'Barbeiro: antes de buscar horários de um serviço, se o cliente não disse o barbeiro nem que tanto faz e o contexto não trouxer o barbeiro de costume do cliente, pergunte o barbeiro de preferência mandando a lista (listar_barbeiros); use qualquer=true só quando ele disser que tanto faz ou perguntar quem tem horário. '
     + (hs.length ? `Barbeiros que só a equipe agenda (dado): ${hs.join(', ')}. Nunca os mostre e nunca busque nem agende horário com eles; se o cliente quiser cortar com um deles, chame transferir_atendimento, sem perguntar antes (a resposta é só o texto que ela devolve); sem cadastro, faça o cadastro antes; mas quem diz que já é cliente (da loja ou desse barbeiro) não é cadastrado: nesse caso chame transferir_atendimento com motivo ja_cliente, como manda o contexto. Vale também para remarcar um agendamento que já é com um deles: transfira em vez de buscar; cancelar segue o fluxo normal. ` : '');
 }
 

@@ -75,10 +75,12 @@ class BvGraces(unittest.TestCase):
             a = self.js.rindex(f"case '{caso}':")
             return self.js[a:a + 2500]  # o passo de listar_servicos cresceu com cabelo e barba (24/11)
         b = corpo("listar_barbeiros")
-        self.assertLess(b.index("bvFiltrarBarbeiros"), b.index("bvMontarOferta"))
+        self.assertLess(b.index("bvgBarbeiros"), b.index("bvMontarOferta"))  # bvgBarbeiros = bvFiltrarBarbeiros e depois a fila
+        d = self.js[self.js.index("const bvgBarbeiros ="):][:600]
+        self.assertIn("bvgFila(bvFiltrarBarbeiros(", d)  # o filtro e o argumento da fila: roda antes, sempre
         s = corpo("listar_servicos")
         self.assertLess(s.index("bvFiltrarServicos"), s.index("bvMontarOferta"))
-        self.assertIn(".trim()", b)  # apelido com espaco no final
+        self.assertIn(".trim()", d)  # apelido com espaco no final
         for nome in ("Planejar", "Passo"):
             self.assertIn("{{BV:INCLUDE:shared/agente.js}}", self.nos[nome]["parameters"]["jsCode"])
 
@@ -157,7 +159,7 @@ class BvGraces(unittest.TestCase):
 
     def test_contador_diario_vem_do_banco(self):  # ctx.dia vem do banco, nunca fica vazio (hoje: o teto de agendamentos)
         q = self.nos["Contexto"]["parameters"]["query"]
-        self.assertRegex(q, r"AS dia FROM")
+        self.assertRegex(q, r"AS dia, ")
         self.assertIn("'agendados'", q)
         self.assertIn("America/Sao_Paulo", q)
 
@@ -489,7 +491,7 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         q = self.graces["Contexto"]["parameters"]["query"]
         self.assertIn("r.retomada_em > propostas.criada_em AND r.retomada_em > now() - make_interval(mins => $6::int)", q)
         self.assertEqual(q.count("("), q.count(")"))
-        self.assertTrue(self.graces["Contexto"]["parameters"]["options"]["queryReplacement"].endswith("{{BV:retomada.resposta_max_min}}] }}"))
+        self.assertEqual(self.graces["Contexto"]["parameters"]["options"]["queryReplacement"].count("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}'"), 1)  # o 6o parametro; o 7o e a janela do rodizio
 
     def test_transferencia_tenta_de_novo(self):
         self.assertEqual([self.graces["Transferir ticket"].get(k) for k in ("retryOnFail", "maxTries")], [True, 2])
@@ -676,6 +678,31 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
         self.assertEqual(q.count("("), q.count(")"))
         self.assertIn("agendamentosMaxDia: {{BV:graces.agendamentos_max_dia}}", ler("workflows/shared/config.js"))
         self.assertEqual([c["graces"]["agendamentos_max_dia"] for c in self.cfgs.values()], [3, 3])  # owner, 17/11
+
+    def test_fila_da_vez(self):  # 26/11/2026: rodizio dos barbeiros indicados pelo agente, derivado de propostas (sem tabela nem escrita nova)
+        js = ler("workflows/shared/graces.js")
+        q = self.graces["Contexto"]["parameters"]["query"]
+        rep = self.graces["Contexto"]["parameters"]["options"]["queryReplacement"]
+        for trecho in ("AS rodizio", "e @> '{\"indicado\": true}'::jsonb", "p.estado = 'executada'", "p.acao IN ('agendar', 'agendar_conjunto', 'reagendar', 'trocar_servico')",
+                       "p.atualizada_em >= now() - make_interval(days => $7::int)", "$7::int > 0"):
+            self.assertIn(trecho, q)  # janela e chave de ligar por parametro ($7): nada concatenado no SQL
+        self.assertNotRegex(q, r"\$8")
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertTrue(rep.endswith("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}' === 'True' ? Math.min(365, Math.max(1, parseInt('{{BV:graces.rodizio.janela_dias}}', 10) || 30)) : 0] }}"))
+        self.assertIn("rodizio: { ligado: '{{BV:graces.rodizio.ligado}}' === 'True' }", ler("workflows/shared/config.js"))
+        self.assertEqual([c["graces"]["rodizio"] for c in self.cfgs.values()], [{"ligado": True, "janela_dias": 30}] * 2)
+        # barbeiro habitual (26/11/2026): a chave chega ao no pelo config.js e vale 5 nos dois ambientes
+        self.assertIn("habitual: { visitas: parseInt('{{BV:graces.habitual.visitas}}', 10) || 5 }", ler("workflows/shared/config.js"))
+        self.assertEqual([c["graces"]["habitual"] for c in self.cfgs.values()], [{"visitas": 5}] * 2)
+        # o Contexto tem 7 parametros, na ordem certa: o 7o e a janela (0 = desligado), calculada no no e nunca concatenada no SQL
+        self.assertEqual(sorted({int(n) for n in re.findall(r"\$(\d+)", q)}), list(range(1, 8)))
+        self.assertIn("{{BV:retomada.resposta_max_min}}, '{{BV:graces.rodizio.ligado}}'", rep)
+        self.assertNotIn("{{BV:", q)
+        self.assertNotIn("janela_dias", q)
+        # o codigo embutido ordena os barbeiros por uma funcao so (bvgBarbeiros: filtro e depois fila); ninguem reimplementa a ordem
+        self.assertEqual((js.count("function bvgFila("), js.count("function bvgRepartir("), js.count("const bvgBarbeiros =")), (1, 1, 1))
+        self.assertIn("{{BV:INCLUDE:shared/graces.js}}", self.graces["Planejar"]["parameters"]["jsCode"])
+        self.assertIn("{{BV:INCLUDE:shared/graces.js}}", self.graces["Passo"]["parameters"]["jsCode"])
 
     def test_turno_cabe_na_posse_do_contato(self):
         self.assertEqual(self.rajada["settings"]["executionTimeout"], "{{BV:NUM:execucao.turno_timeout_s}}")
