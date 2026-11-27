@@ -1426,7 +1426,7 @@ console.log('graces.test.js segunda analise ok');
   assert.match(naoLeu.efeitos.falha.motivo, /^graces\|/);
   // DELETE sem resposta: a verificacao le a agenda DO CLIENTE e, se o agendamento continua la, repete o mesmo DELETE (antes saia uma chamada vazia)
   const semResp = g.bvGPasso(fa2.st, [resp(500, {})], cfgT);
-  assert.deepEqual(semResp.reqs[0].qs, { idCliente: 'c1', proximos: true });
+  assert.deepEqual(semResp.reqs[0].qs, { idCliente: 'c1', proximos: true, pageSize: 200 }); // a mesma leitura da conferencia: com a pagina padrao (50) o que ficava fora dela contava como cancelado
   assert.deepEqual(g.bvGPasso(semResp.st, [ok([avulso])], cfgT).reqs, [{ m: 'DELETE', path: '/agenda/a8', qs: { data: '2026-12-02' } }]);
   assert.equal(g.bvGPasso(semResp.st, [ok([doPacote])], cfgT).final.efeitos.proposta_upd.estado, 'executada'); // sumiu da agenda: cancelado, verificado
   // id numerico na agenda e texto na proposta (ou o contrario) e o mesmo agendamento
@@ -2696,6 +2696,14 @@ console.log('graces.test.js segunda analise ok');
     assert.deepEqual([com.acao, com.dados.idAgenda, com.dados.horaInicio.slice(0, 16)], ['reagendar', idAg, inicio], id);
     assert.equal(semPacote(nessa(b, 'agendar')).final.efeitos.proposta_nova.acao, 'agendar', id); // e o `agendar` nao vira remarcacao do recusado
   }
+  // a marca sai tambem na busca de remarcacao com `qualquer` e com outro barbeiro informado (horarios de varios barbeiros, ou de outro)
+  const grades = (q) => (q.path === '/servicos/profissionais' ? ok([{ idProfissional: 'b1', apelido: 'Pedro Henrique' }, { idProfissional: 'b2', apelido: 'Kiel' }]) : q.path === '/agenda/horarios' ? ok({ horarios: [] }) : grade[0]);
+  for (const [extra, doCaminho] of [[{ qualquer: true }, (v) => v.indicado === true], [{ id_opcao_barbeiro: '2' }, (v) => v.idProfissional === 'b2']]) {
+    let x = busca({ ...comLista, barbeiros: [{ opcao_id: '2', idProfissional: 'b2', apelido: 'Kiel' }] }, { id_opcao_agendamento: '2', ...extra });
+    while (!x.final) x = g.bvGPasso(x.st, x.reqs.map(grades), c);
+    const vs = x.final.efeitos.opcoes.itens.map((o) => o.valor);
+    assert.deepEqual([vs.length, vs.every(doCaminho), vs.every((v) => v.rec.idAgenda === 'serie' && v.rec.inicio === '2026-12-05T11:20')], [2, true, true], JSON.stringify(extra));
+  }
   // busca do PROPRIO recusado pelo id da lista: a mesma marca do `rec`; so com o horario, e pelo `agendar`, sai a remarcacao dele
   const b1 = daLista('1');
   assert.deepEqual(b1.of.itens.map((x) => x.valor.rec), [marcaA, marcaA]);
@@ -2742,6 +2750,9 @@ console.log('graces.test.js segunda analise ok');
   const fs = (e) => e.efeitos.pedido.futuros.map((a) => `${a.idAgenda} ${a.horaInicio.slice(0, 16)}`);
   const resto = ['serie 2026-12-05T11:20', 'outro 2026-12-05T12:00'];
   assert.deepEqual(fs(e1), [...resto, 'serie 2026-11-30T20:00']);
+  // o id e comparado como texto (numero nos futuros, texto na proposta): a ocorrencia antiga sai e o horario novo herda a marca de pacote
+  const num = ate(fase2('reagendar', { ...dados, idAgenda: '7', horaInicio: '2026-12-05T12:00:00' }, ped({ futuros: [futuros[0], fut(7, '2026-12-05T12:00:00', 'b1', { pacote: true })] })), agenda);
+  assert.deepEqual([fs(num), num.efeitos.pedido.futuros[1].pacote], [['serie 2026-11-28T11:20', '7 2026-11-30T20:00'], true]);
   assert.equal('confirmacao_recusada' in ate(fase2('reagendar', { ...dados, horaInicio: '2026-12-05T11:20:00' }, ped()), agenda).efeitos.pedido, false); // outra ocorrencia da mesma serie
   assert.equal('confirmacao_recusada' in ate(fase2('reagendar', dados, ped({ confirmacao_recusada: { idAgenda: 'serie', em: rec.em } })), agenda).efeitos.pedido, false); // recusa antiga: como antes
   assert.equal(fechou(ate(fase2('reagendar', { ...dados, idAgenda: 'novo-id' }, outroId), agenda)), true); // a ocorrencia com outro id

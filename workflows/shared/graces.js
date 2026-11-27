@@ -410,7 +410,7 @@ function bvgFuturos(ped, acao, d, novoId) {
   const sem = (x) => fs.filter((a) => !bvgMesmaMarca(bvgMarcaRec(x), a));
   if (acao === 'agendar') return [...fs, novo(d, novoId)];
   if (acao === 'trocar_servico') return [...sem(d.antigo || {}), novo(d, novoId)];
-  if (acao === 'reagendar') return [...sem(d), { ...novo(d, d.idAgenda), ...(d.pacote || fs.some((a) => a.idAgenda === d.idAgenda && a.pacote) ? { pacote: true } : {}) }];
+  if (acao === 'reagendar') return [...sem(d), { ...novo(d, d.idAgenda), ...(d.pacote || fs.some((a) => String(a.idAgenda) === String(d.idAgenda) && a.pacote) ? { pacote: true } : {}) }];
   if (acao === 'cancelar') return sem(d);
   return fs;
 }
@@ -474,6 +474,9 @@ const BVG_PACOTE_FORA = 'não deu para conferir o pacote do cliente agora e nada
 const BVG_SEM_SECAO = 'o pacote do cliente não tem mais sessão livre para esse serviço: avise e pergunte se ele quer marcar pelo valor avulso; se quiser, chame agendar de novo com a mesma opção de horário para mandar o novo resumo; se preferir, ofereça a equipe';
 const bvgValor = (x) => (x.pacote ? ' (abatido do seu pacote)' : bvgReais(x.valor));
 const bvgServicosDe = (itens) => [...new Set(itens.map((x) => x.idServico))];
+// Agenda futura do cliente na fase 2: a mesma leitura (pagina maxima da API) para conferir antes de escrever e para verificar depois de
+// escrita sem resposta. Com a pagina padrao (50) na verificacao, o agendamento fora dela contava como cancelado, ou como nao criado.
+const bvgReqAgenda = (idCliente) => ({ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente, proximos: true, pageSize: 200 } });
 const bvgReqPacote = (idCliente, idServico) => ({ m: 'GET', path: '/agenda/pacotes', qs: idServico ? { idCliente, idServico } : { idCliente } }); // sem servico: todos os pacotes do cliente
 const bvgPacoteLido = (r) => !!r && r.status === 200 && Array.isArray(r.body);
 // Secoes que servem para o servico `sv` no dia `data` (AAAA-MM-DD). Defesa sobre o que a Graces devolve (revisoes de 23/11): so
@@ -981,13 +984,13 @@ function bvgFase2(i, ctx, cfg, chamar) {
   if (p.acao === 'cancelar' || p.acao === 'cancelar_conjunto') {
     const icc = d.idCliente || ctx.pedido.idCliente;
     if (!icc) return bvgParaEquipe(p, cfg, 'nao_resolvi'); // sem o cliente nao ha como conferir: nao apaga
-    return chamar([{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: icc, proximos: true, pageSize: 200 } }], { ...meta, etapa: 'confere_canc', idCliente: icc });
+    return chamar([bvgReqAgenda(icc)], { ...meta, etapa: 'confere_canc', idCliente: icc });
   }
   // reval + linha de base de agendamentos (Decision 8); idCliente so do pedido/proposta (FR-020)
   const ic = d.idCliente || ctx.pedido.idCliente;
   const qs = { idServico: d.idServico, idProfissional: prof, data: d.data };
   const reqs = [{ m: 'GET', path: '/agenda/horarios-livres', qs }];
-  if (ic) reqs.push({ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: ic, proximos: true, pageSize: 200 } });
+  if (ic) reqs.push(bvgReqAgenda(ic));
   reqs.push({ m: 'GET', path: '/agenda/horarios', qs }); // ocupacoes depois da linha de base, que continua em resps[1]
   if (d.pacote && ic && p.acao !== 'reagendar') reqs.push(bvgReqPacote(ic, d.idServico)); // por ultimo: os indices acima nao mudam. No reagendar, `pacote` so diz que o agendamento ja e de pacote: o PUT mantem a secao reservada e nao exige secao em aberto
   return chamar(reqs, { ...meta, etapa: 'reval', idCliente: ic });
@@ -1611,7 +1614,7 @@ function bvgPassoEscrita(st, resps, cfg) {
     if (!e.incerto) return termina('falhou', { ok: false, code: e.code, orientacao: e.orientacao }, { falha: f });
     const incerta = (fl) => termina('incerta', { ok: false, code: 'incerta', orientacao: 'a agenda não respondeu; não repita, use a contingência e confira com meus_agendamentos' }, { falha: { ...fl, motivo: 'graces|escrita_incerta' } });
     if (p.acao !== 'cancelar' && p.acao !== 'reagendar' && !meta.base) return incerta(f); // sem linha de base nao ha como comparar
-    return prox('verifica', [{ m: 'GET', path: '/agenda/agendamentos', qs: { idCliente: meta.idCliente || d.idCliente, proximos: true } }], { falhaEscrita: f });
+    return prox('verifica', [bvgReqAgenda(meta.idCliente || d.idCliente)], { falhaEscrita: f });
   }
   if (meta.etapa === 'verifica') {
     const f = meta.falhaEscrita;

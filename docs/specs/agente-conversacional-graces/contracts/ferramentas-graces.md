@@ -31,7 +31,7 @@ para o agente (ex.: "dia fechado, sugira outro dia"). Nunca devolve telefone de 
 | `meus_agendamentos` | — | `GET /agenda/agendamentos?idCliente=&proximos=true` (G `04`:33-49) | opções: `idAgenda`, serviço, barbeiro, início |
 | `agendar` | fase 1: `id_opcao_horario`; fase 2: `proposta_id` | fase 2: revalida `horarios-livres`, `POST /agenda` `{idCliente, idServico, idProfissional, data, horaInicio, idIntegracao}` (G `04`:56-81) | fase 1: `{proposta_id, resumo}`; fase 2: `{ok, idAgenda}` |
 | `reagendar` | fase 1: `id_opcao_agendamento`, `id_opcao_horario`; fase 2: `proposta_id` | fase 2: revalida, `PUT /agenda/{idAgenda}` `{horaInicioOriginal, horaInicioNovo, idProfissional}` (`AAAA-MM-DDTHH:mm:ss`, G `04`:86-105) | idem |
-| `cancelar` | fase 1: `id_opcao_agendamento`; fase 2: `proposta_id` | fase 2: `DELETE /agenda/{idAgenda}` (+`?data=` se `recorrente`, G `04`:110-121) | fase 1 inclui `sugerir_remarcar:true` |
+| `cancelar` | fase 1: `id_opcao_agendamento`; fase 2: `proposta_id` | fase 2: `DELETE /agenda/{idAgenda}` (sempre com `?data=` do dia da ocorrência, G `04`:110-121) | fase 1 inclui `sugerir_remarcar:true` |
 
 `trocar_servico` é `agendar` com `substitui_id_opcao_agendamento`: uma proposta, escrita = `POST`
 do novo e depois `DELETE` do antigo (US3-5).
