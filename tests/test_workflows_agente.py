@@ -133,6 +133,16 @@ class BvGraces(unittest.TestCase):
         # um construtor so; sem servico le todos os pacotes do cliente (cabelo e barba de quem tem pacote, 24/11)
         self.assertIn("({ m: 'GET', path: '/agenda/pacotes', qs: idServico ? { idCliente, idServico } : { idCliente } })", self.js)
 
+    def test_agendar_reivindica_a_proposta_de_remarcar(self):
+        # 27/11: `agendar` no horario de uma busca de remarcacao grava a proposta de reagendar; no sim, o modelo pode repetir a mesma
+        # ferramenta. Sem isto o Contexto nao reivindicava, saia proposta_expirada, a fase 1 convertia de novo e o "posso confirmar?"
+        # voltava. So essa combinacao muda: reagendar nao executa agendar, e cancelar continua so com as suas.
+        rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
+        mapa = '{"agendar": "agendar,trocar_servico,agendar_conjunto,reagendar", "reagendar": "reagendar", "cancelar": "cancelar,cancelar_conjunto"}'
+        self.assertIn(mapa + "[$json.in.operacao] || ''", rep)
+        self.assertIn("const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto' };", self.js)
+        self.assertIn("AND acao = ANY(string_to_array($5::text, ','))", self.nos["Contexto"]["parameters"]["query"])  # a reivindicacao continua pela acao da proposta
+
     def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
         rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
         i = self.js.index("const BVG_ACOES")
@@ -262,7 +272,7 @@ class EntregarRajadaAgente(unittest.TestCase):
         q = self.nos["Sessao"]["parameters"]["query"]
         self.assertIn("COALESCE((SELECT min(criado_em) FROM mensagens WHERE contato_id = $1::bigint AND turno_id = $4::uuid), now())", q)
         self.assertNotIn("THEN now()", q)
-        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff), String(!!$json.transferido), String(!!$json.parar_convite)] }}"))
+        self.assertTrue(self.nos["Sessao"]["parameters"]["options"]["queryReplacement"].endswith("$('Gatilho').first().json.turno_id, String(!!$json.limpar_handoff), String(!!$json.transferido), String(!!$json.parar_convite), String(!!$json.recusa_valida)] }}"))
         # convite de volta (27/11): o pedido de parar de receber e gravado aqui, na propria linha do convite (sem coluna nova: o agente nao depende da migracao)
         self.assertIn("oc AS (UPDATE mensagens_agendadas SET motivo = 'parou', atualizado_em = now() WHERE contato_id = $1::bigint AND tipo = 'convite_volta' AND situacao = 'enviada' AND $7::boolean RETURNING 1)", self.nos["Sessao"]["parameters"]["query"])
         # item 26: quando o agente volta a atender o contato, a transferencia aberta e encerrada (com o agente em silencio, nao)
@@ -270,6 +280,22 @@ class EntregarRajadaAgente(unittest.TestCase):
         self.assertIn("RETURNING 1) INSERT INTO conversas", q)
         # ticket fora da fila humana: a marca da transferencia sai, senao toda ferramenta recusava com handoff_ativo (17/11)
         self.assertIn("WHEN $5::boolean THEN conversas.pedido - 'handoff' ELSE conversas.pedido END", q)
+
+    def test_recusa_de_presenca_atravessa_a_sessao_nova(self):
+        # PROD/TESTE, 27/11: a recusa por toque ("Não vou poder") nao passa por turno do agente; a mensagem seguinte ("Remarcar") abria
+        # sessao nova e o no Sessao levava a recusa para pedido_anterior: as ferramentas nao sabiam mais qual era o agendamento.
+        # A validade e uma regra so (bvMRecusa): no Preparar, para o Sessao manter a recusa valida no pedido da sessao nova (a vencida vai
+        # embora com o pedido, como sempre); e nas ferramentas (bvgRecusado), com o relogio do Planejar e a mesma janela da configuracao.
+        q = self.nos["Sessao"]["parameters"]["query"]
+        self.assertIn("recusa_valida: !!bvMRecusa(ctx.pedido, Date.now(), {{BV:conversa.janela_recencia_min}}),", self.nos["Preparar"]["parameters"]["jsCode"])
+        # so na sessao nova; sem a chave na conversa nao grava `confirmacao_recusada: null` (jsonb_strip_nulls no objeto montado)
+        self.assertIn("pedido = CASE WHEN $2::boolean THEN (CASE WHEN NULLIF($3::text, '') IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('pedido_anterior', NULLIF($3::text, '')::jsonb) END) || (CASE WHEN $8::boolean THEN jsonb_strip_nulls(jsonb_build_object('confirmacao_recusada', conversas.pedido->'confirmacao_recusada')) ELSE '{}'::jsonb END) WHEN $5::boolean THEN conversas.pedido - 'handoff' ELSE conversas.pedido END, opcoes = CASE WHEN $2::boolean THEN '{}'::jsonb ELSE conversas.opcoes END", q)
+        self.assertEqual(q.count("$8"), 1)  # na mesma sessao o Sessao nao mexe na recusa (um toque em "Nao vou poder" entre a leitura e a gravacao se perderia)
+        self.assertEqual(q.count("("), q.count(")"))
+        self.assertEqual(q.count("CASE"), q.count(" END"))
+        self.assertIn("const p = bvGPlano(i, { ...$input.first().json, agora_ms: Date.now() }, cfg);", next(n for n in json.loads(ler("workflows/sub/bv-graces.json"))["nodes"] if n["name"] == "Planejar")["parameters"]["jsCode"])
+        self.assertIn("recusaJanelaMin: {{BV:conversa.janela_recencia_min}},", ler("workflows/shared/config.js"))
+        self.assertIn("agoraMs: Number(ctx0 && ctx0.agora_ms), recusaMin: cfg.recusaJanelaMin }", ler("workflows/shared/graces.js"))
 
     def test_identifica_o_cliente_antes_do_modelo(self):  # owner, 2026-11-14
         self.assertEqual(self._destinos("Limite?")[1], ["Identificar?"])
@@ -486,7 +512,8 @@ class RevisaoEtapa1(unittest.TestCase):  # revisao de 17/11/2026: defeitos que c
         self.assertEqual([v["operacao"], v["motivo"]], ["transferir_atendimento", "={{ $('Preparar').first().json.motivo_limite }}"])
         prep = self.nos["Preparar"]["parameters"]["jsCode"]
         self.assertIn("const estourou = Number(reg.turnos_hora) >= {{BV:agente.turnos_max_contato_hora}};", prep)
-        self.assertIn("retorno, parar_convite: pararConvite, limite: !retorno && (estourou || bvPediuPessoa(fala)), motivo_limite: !estourou && bvPediuPessoa(fala) ? 'pediu_pessoa' : 'nao_resolvi',", prep)
+        self.assertIn("limite: !retorno && (estourou || bvPediuPessoa(fala)), motivo_limite: !estourou && bvPediuPessoa(fala) ? 'pediu_pessoa' : 'nao_resolvi',", prep)
+        self.assertIn("retorno, parar_convite: pararConvite,", prep)
         # turno de retorno do atendimento humano (owner, 2026-11-25): a marca e do estado (pedido.retorno = este turno), nao do gatilho
         self.assertIn("const retorno = !!g.turno_id && (ctx.pedido || {}).retorno === g.turno_id;", prep)
         self.assertIn("+ (retorno ? bvContextoRetorno(itens, hist, Date.now()) : '')", prep)
@@ -613,6 +640,7 @@ class RevisaoEtapa3(unittest.TestCase):  # revisao de 17/11/2026: duplicacao, ba
         for amb in ("integracao", "producao"):
             c = self._config_js(amb, "return [{ json: bvGCfg('+55 11 90000-0000') }];")
             self.assertEqual([c["ambiente"], c["agendamentosMaxDia"], c["testeLiberado"]], [amb, 3, False])
+            self.assertEqual(c["recusaJanelaMin"], self.cfgs[amb]["conversa"]["janela_recencia_min"])  # a janela da recusa e a do Preparar
             self.assertEqual(c["handoff"]["setor_id"], self.cfgs[amb]["handoff"]["setor_id"])
             self.assertEqual(c["graces"]["max_estagios"], self.cfgs[amb]["graces"]["max_estagios"])
             self.assertTrue(c["humanos"])  # clausula petrea: os barbeiros so da equipe chegam a todos os nos

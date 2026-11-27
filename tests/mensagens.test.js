@@ -524,6 +524,23 @@ console.log('mensagens.test.js lembrete unico por grupo ok');
   // contexto do agente depois da recusa: a decisao ja foi em lista
   const ctx = m.bvMPromptConfirmacoes({ confirmacoes: [], pedido: { confirmacao_recusada: { idAgenda: 'ag-1', em: new Date().toISOString() } } }, Date.now(), 120, String);
   assert.match(ctx, /a decisão "remarcar ou cancelar\?" já foi enviada a ele em lista: não a repita/);
+  assert.match(ctx, /não vai poder comparecer ao agendamento ag-1 \(dado\)/); // recusa gravada antes de 27/11 (sem inicio): a linha de antes
+  // PROD, 27/11: a linha levava so o id da agenda (que nenhuma ferramenta aceita) e o modelo ia a meus_agendamentos perguntar qual.
+  // Com o inicio gravado pela recusa: o agendamento por extenso, o id `rec` e o que fazer em cada escolha; sem o id da agenda e sem o barbeiro
+  const rec = { idAgenda: '3fa85f64-5717-4562-b3fc-2c963f66afa6', inicio: '2026-11-28T11:20:00', servico: 'corte adulto', barbeiro: 'Jayme', em: new Date().toISOString() };
+  const nova = m.bvMPromptConfirmacoes({ confirmacoes: [], pedido: { confirmacao_recusada: rec } }, Date.now(), 120, String);
+  assert.match(nova, /não vai poder comparecer ao agendamento de corte adulto de sábado \(28\/11\) às 11:20 \(dado; nas ferramentas ele é o id_opcao_agendamento rec\)/);
+  assert.match(nova, /não a repita e não pergunte qual agendamento: é esse/);
+  assert.match(nova, /chame horarios_livres só com a data .*escolhido o horário, chame reagendar só com id_opcao_horario/);
+  assert.match(nova, /sem ela, chame cancelar com id_opcao_agendamento rec e peça só a confirmação/);
+  assert.ok(!nova.includes(rec.idAgenda) && !nova.includes('Jayme'));
+  assert.match(m.bvMPromptConfirmacoes({ confirmacoes: [], pedido: { confirmacao_recusada: { ...rec, servico: null } } }, Date.now(), 120, String), /agendamento de horário de sábado/);
+  // uma regra so para a validade da recusa (a linha acima e o no Sessao do entregar-rajada): 120 min a partir de `em`
+  const t0 = Date.parse('2026-11-27T14:22:00Z'), pd = { confirmacao_recusada: { ...rec, em: '2026-11-27T14:22:00Z' } };
+  assert.equal(m.bvMRecusa(pd, t0 + 119 * 60000, 120), pd.confirmacao_recusada);
+  assert.deepEqual([m.bvMRecusa(pd, t0 + 121 * 60000, 120), m.bvMRecusa(pd, t0 - 1000, 120), m.bvMRecusa({}, t0, 120), m.bvMRecusa(null, t0, 120), m.bvMRecusa({ confirmacao_recusada: null }, t0, 120), m.bvMRecusa({ confirmacao_recusada: { idAgenda: 'a' } }, t0, 120)], [null, null, null, null, null, null]);
+  assert.equal(m.bvMPromptConfirmacoes({ confirmacoes: [], pedido: pd }, t0 + 121 * 60000, 120, String), '');
+  assert.equal(typeof m.bvMOcorrencia, 'function'); // usada pelo bvgRecusado (graces.js) fora do n8n
   console.log('mensagens.test.js recusa em lista e lembrete desatualizado ok');
 }
 

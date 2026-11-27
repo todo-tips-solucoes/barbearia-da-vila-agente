@@ -464,6 +464,13 @@ console.log('agente.test.js retomada longa ok');
   // a pergunta de cancelar (remarcar ou cancelar mesmo) continua indo como lista
   const cancelar = { tipo: 'cancelar', itens: [{ id: 'c1', rotulo: 'Remarcar' }, { id: 'c2', rotulo: 'Cancelar mesmo' }] };
   assert.equal(a.bvCompor('Prefere remarcar?', cancelar, cfgC, true, true).some((m) => m.tipo === 'lista'), true);
+  // PROD, 27/11: meus_agendamentos e reagendar no mesmo turno; o resumo da remarcacao saia com os horarios marcados do cliente em lista
+  const marcados = { tipo: 'agendamento', itens: [{ id: '1', rotulo: '28/11 11:20 corte adulto' }, { id: '2', rotulo: '05/12 11:20 corte adulto' }] };
+  const remarca = 'Vou remarcar seu corte adulto de sábado, 28/11 às 11:20, para segunda-feira, 30/11 às 20:00, com o Pedro. Posso confirmar?';
+  assert.deepEqual(a.bvCompor(remarca, marcados, cfgC, true, true).map((m) => m.tipo), ['texto']);
+  assert.deepEqual(a.bvCompor(remarca + '\nOPCOES:\n1 | 28/11 11:20 corte adulto', marcados, cfgC, true, true).map((m) => m.tipo), ['texto']);
+  // sem proposta no turno, a pergunta "qual deles?" continua levando a lista dos agendamentos
+  assert.deepEqual(a.bvCompor('Qual deles você quer remarcar?', marcados, cfgC, true, false).map((m) => [m.tipo, (m.opcoes || []).length]), [['lista', 2]]);
   // negrito de Markdown vira negrito de WhatsApp
   assert.equal(a.bvCompor('O corte custa **R$ 80,00** com o **Pedro**. Quer agendar?', null, cfgC)[0].texto, 'O corte custa *R$ 80,00* com o *Pedro*. Quer agendar?');
 }
