@@ -136,19 +136,130 @@ class BvGraces(unittest.TestCase):
     def test_agendar_reivindica_a_proposta_de_remarcar(self):
         # 27/11: `agendar` no horario de uma busca de remarcacao grava a proposta de reagendar; no sim, o modelo pode repetir a mesma
         # ferramenta. Sem isto o Contexto nao reivindicava, saia proposta_expirada, a fase 1 convertia de novo e o "posso confirmar?"
-        # voltava. So essa combinacao muda: reagendar nao executa agendar, e cancelar continua so com as suas.
+        # voltava. Reagendar nao executa agendar. Desde 28/11 o cancelar reivindica tambem reagendar e trocar_servico, e o reagendar, trocar_servico.
+        # O mapa fica num lugar so (BVG_ACOES): o bvGNormalizar devolve `acoes` e o no reivindica por $json.in.acoes (revisao de 28/11)
         rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
-        mapa = '{"agendar": "agendar,trocar_servico,agendar_conjunto,reagendar", "reagendar": "reagendar", "cancelar": "cancelar,cancelar_conjunto"}'
-        self.assertIn(mapa + "[$json.in.operacao] || ''", rep)
-        self.assertIn("const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto' };", self.js)
+        self.assertIn("{{BV:proposta.validade_min}}, $json.in.acoes || '', {{BV:retomada.resposta_max_min}}", rep)
+        self.assertNotIn("trocar_servico", rep)
+        self.assertNotIn("$json.in.operacao", rep)
+        self.assertIn("if (v.proposta_id !== undefined) v.acoes = BVG_ACOES[v.operacao] || '';", self.js)
+        self.assertIn("const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar,trocar_servico', cancelar: 'cancelar,cancelar_conjunto,reagendar,trocar_servico' };", self.js)
         self.assertIn("AND acao = ANY(string_to_array($5::text, ','))", self.nos["Contexto"]["parameters"]["query"])  # a reivindicacao continua pela acao da proposta
 
+    def test_cancelar_com_agendar_pendente_vira_remarcacao(self):
+        # PROD, 25/11: com um agendar aguardando o sim, o cliente pediu para cancelar o outro agendamento; a proposta de agendar virou
+        # substituida, o cancelamento saiu e o horario novo nunca foi criado. O Contexto devolve a proposta pendente do contato (na
+        # validade, com a marca de ser deste turno) e a fase 1 do cancelar a converte em remarcacao. Nenhum no, parametro ou chamada nova.
+        q = self.nos["Contexto"]["parameters"]["query"]
+        # A consulta inteira, presa por comparacao (terceira revisao de 28/11: a clausula "entrada deste turno depois da pergunta" da
+        # reivindicacao podia sair sem teste nenhum falhar). Pedacos: `v`, a proposta pendente do contato que ainda vale (30 min, ou a
+        # retomada), lida pelo indice unico de pendentes e escrita uma vez; `k`, a reivindicacao, que confere na propria linha o
+        # estado, o contato, o turno, a acao e a entrada depois da pergunta (e isso que a deixa atomica entre duas chamadas) e a
+        # validade por `v`; `i`, a info da proposta pedida, com a acao e se ainda vale; e a selecao, em que `pendente` le direto de `v`.
+        consulta = (
+            "WITH v AS (SELECT id, acao, dados, turno_id FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND (criada_em > now() - make_interval(mins => $4::int) OR EXISTS (SELECT 1 FROM conversas r WHERE r.contato_id = $1::bigint AND r.retomada_em > propostas.criada_em AND r.retomada_em > now() - make_interval(mins => $6::int))))"
+            ", k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND id IN (SELECT id FROM v) AND EXISTS (SELECT 1 FROM mensagens e WHERE e.contato_id = $1::bigint AND e.direcao = 'entrada' AND e.turno_id::text = $3::text AND e.criado_em > (SELECT min(s.criado_em) FROM mensagens s WHERE s.contato_id = $1::bigint AND s.direcao = 'saida' AND s.criado_em >= propostas.criada_em)) RETURNING id::text AS id, acao, dados)"
+            ", i AS (SELECT estado, acao, id IN (SELECT id FROM v) AS valida, turno_id::text = $3::text AS mesmo_turno, NOT EXISTS (SELECT 1 FROM mensagens e WHERE e.contato_id = $1::bigint AND e.direcao = 'entrada' AND e.turno_id::text = $3::text AND e.criado_em > (SELECT min(s.criado_em) FROM mensagens s WHERE s.contato_id = $1::bigint AND s.direcao = 'saida' AND s.criado_em >= propostas.criada_em)) AS antes_da_pergunta FROM propostas WHERE id::text = $2::text AND contato_id = $1::bigint) "
+            "SELECT c.pedido, c.opcoes, (SELECT to_jsonb(k) FROM k) AS proposta, (SELECT to_jsonb(i) FROM i) AS info, (SELECT ticket_id FROM contatos WHERE id = x.cid) AS ticket_id, jsonb_build_object('agendados', (SELECT count(*)::int FROM propostas WHERE contato_id = x.cid AND acao IN ('agendar', 'agendar_conjunto') AND estado = 'executada' AND atualizada_em >= date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')) AS dia, "
+            '(SELECT COALESCE(jsonb_object_agg(r.prof, r.em), \'{}\'::jsonb) FROM (SELECT it.prof, to_char(max(p.atualizada_em) AT TIME ZONE \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"\') AS em FROM propostas p CROSS JOIN LATERAL (SELECT DISTINCT e ->> \'idProfissional\' AS prof FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.dados -> \'itens\') = \'array\' THEN p.dados -> \'itens\' ELSE jsonb_build_array(p.dados) END) e WHERE e @> \'{"indicado": true}\'::jsonb AND e ->> \'idProfissional\' IS NOT NULL) it WHERE $7::int > 0 AND p.estado = \'executada\' AND p.acao IN (\'agendar\', \'agendar_conjunto\', \'reagendar\', \'trocar_servico\') AND p.atualizada_em >= now() - make_interval(days => $7::int) GROUP BY it.prof) r) AS rodizio, '
+            "(SELECT jsonb_build_object('acao', v.acao, 'dados', v.dados, 'mesmo_turno', v.turno_id::text = $3::text) FROM v) AS pendente FROM (SELECT $1::bigint AS cid) x LEFT JOIN conversas c ON c.contato_id = x.cid"
+        )
+        self.assertEqual(q, consulta)
+        self.assertEqual((q.count("make_interval(mins => $4::int)"), q.count("make_interval(mins => $6::int)"), q.count("FROM propostas p ")), (1, 1, 1))  # so o rodizio rele propostas com alias
+        self.assertEqual(q.count(" AS pendente"), 1)
+        self.assertEqual(sorted({int(n) for n in re.findall(r"\$(\d+)", q)}), list(range(1, 8)))  # os mesmos 7 parametros: a validade e a do $4
+        self.assertEqual(q.count("("), q.count(")"))
+        # a subconsulta le no maximo uma linha: o indice unico parcial de pendentes por contato
+        self.assertIn("CREATE UNIQUE INDEX IF NOT EXISTS propostas_pendente_unica_idx ON propostas (contato_id) WHERE estado = 'pendente';", ler("db/migrations/0006_agente.sql"))
+        self.assertEqual(len(self.wf["nodes"]), 22)  # nenhum no novo
+        if not shutil.which("node"):
+            self.skipTest("node ausente")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("deploy_n8n_pendente", os.path.join(RAIZ, "scripts", "deploy-n8n.py"))
+        dep = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(dep)
+        cfg = json.loads(ler("config/ambientes/integracao.json"))
+        wf = {n["name"]: n for n in json.loads(dep.renderizar(self.texto, cfg, RAIZ))["nodes"]}
+        tel, teste = "+5511999998888", cfg["graces"]["barbeiro_teste_id"]
+
+        def rodar(no, input_, refs):
+            r = subprocess.run(["node", os.path.join(RAIZ, "tests", "harness_code_node.js")], capture_output=True, text=True,
+                               input=json.dumps({"js": wf[no]["parameters"]["jsCode"], "input": input_, "refs": dict(refs, Gatilho=[{"telefone": tel}])}))
+            self.assertEqual(r.returncode, 0, r.stderr[:500])
+            return json.loads(r.stdout)
+        ent = rodar("Normalizar", [{"operacao": "cancelar", "contato_id": "1", "telefone": tel, "turno_id": "22222222-2222-4222-8222-222222222222", "ambiente": "integracao",
+                                    "id_opcao_agendamento": "1", "texto_cliente": "O do dia 03/12 pode cancelar"}], {})[0]
+        self.assertTrue(ent["ok"])
+        pedido = {"idCliente": "c1", "agendamentos": [{"opcao_id": "1", "idAgenda": "ag03", "horaInicio": "2026-12-03T12:00:00", "idServico": "sv1", "servico": "corte adulto",
+                                                        "idProfissional": teste, "profissional": "ZZ TESTE INTEGRACAO - NAO AGENDAR", "recorrente": False}]}
+        pend = {"acao": "agendar", "dados": {"idCliente": "c1", "idServico": "sv1", "servico": "corte adulto", "idProfissional": "rod", "barbeiro": "Rodrigo", "data": "2026-11-28", "hora": "09:20", "valor": 90, "minutos": 40}}
+        # a linha do Contexto como o no a devolve: a coluna `pendente` chega ao plano
+        r = rodar("Planejar", [{"pedido": pedido, "opcoes": {}, "pendente": pend}], {"Normalizar": [ent]})
+        self.assertEqual((len(r), "req" in r[0]), (1, False))  # nenhuma chamada a Graces
+        f = r[0]["final"]
+        self.assertEqual(f["resultado"]["resumo"], "Remarcar corte adulto de 03/12 12:00 para sábado, 28/11 às 09:20 com Rodrigo")
+        self.assertEqual([f["efeitos"]["proposta_nova"]["acao"], f["efeitos"]["proposta_nova"]["dados"]["idAgenda"], "opcoes" in f["efeitos"]], ["reagendar", "ag03", False])
+        # Efeitos: a proposta nova substitui a pendente (o no Substituir pendente roda com `nova`) e e gravada como reagendar
+        e = rodar("Efeitos", [r[0]], {"Normalizar": [ent], "Contexto": [{"ticket_id": None}]})[0]
+        self.assertEqual([e["nova"], e["params"][4], json.loads(e["params"][5])["hora"]], [True, "reagendar", "09:20"])
+        # a proposta de agendar deste mesmo turno ("marca sábado 9h20 e cancela o do dia 03/12") converte igual
+        f = rodar("Planejar", [{"pedido": pedido, "opcoes": {}, "pendente": dict(pend, mesmo_turno=True)}], {"Normalizar": [ent]})[0]["final"]
+        self.assertEqual(f["efeitos"]["proposta_nova"]["acao"], "reagendar")
+        # sem a coluna (ou nula: sem pendente ou vencida), o cancelar de sempre, com a lista de decisao
+        for linha in ({"pedido": pedido, "opcoes": {}}, {"pedido": pedido, "opcoes": {}, "pendente": None}):
+            f = rodar("Planejar", [linha], {"Normalizar": [ent]})[0]["final"]
+            self.assertEqual([f["efeitos"]["proposta_nova"]["acao"], f["efeitos"]["opcoes"]["tipo"]], ["cancelar", "decisao_cancelamento"])
+        # o sim pela ferramenta cancelar: a entrada deriva sim_geral e o plano revalida o horario da remarcacao (nao le a agenda para apagar)
+        PID = "55555555-5555-4555-8555-555555555555"
+        dados = rodar("Planejar", [{"pedido": pedido, "opcoes": {}, "pendente": pend}], {"Normalizar": [ent]})[0]["final"]["efeitos"]["proposta_nova"]["dados"]
+
+        def sim(fala):
+            n = rodar("Normalizar", [{"operacao": "cancelar", "contato_id": "1", "telefone": tel, "turno_id": "33333333-3333-4333-8333-333333333333", "ambiente": "integracao", "proposta_id": PID, "texto_cliente": fala}], {})[0]
+            self.assertTrue(n["ok"], fala)
+            return rodar("Planejar", [{"pedido": pedido, "opcoes": {}, "proposta": {"id": PID, "acao": "reagendar", "dados": dados}}], {"Normalizar": [n]})
+        r = sim("sim")
+        self.assertEqual([x["req"]["path"] for x in r], ["/agenda/horarios-livres", "/agenda/agendamentos", "/agenda/horarios"])
+        self.assertEqual(r[0]["req"]["qs"], {"idServico": "sv1", "idProfissional": teste, "data": "2026-11-28"})  # TESTE: a escrita vai ao barbeiro de teste
+        # sem sim antes da oracao do cancelar a ferramenta nao reivindica a remarcacao (as acoes que chegam ao no nao a incluem): o
+        # plano recebe so a `info` da proposta, nada e alterado e sai a pergunta fechada; com a proposta vencida, manda refazer o resumo
+        def sem_sim(fala, valida=True):
+            n = rodar("Normalizar", [{"operacao": "cancelar", "contato_id": "1", "telefone": tel, "turno_id": "33333333-3333-4333-8333-333333333333", "ambiente": "integracao", "proposta_id": PID, "texto_cliente": fala}], {})[0]
+            self.assertEqual((n["ok"], n["in"]["acoes"], n["in"]["sim_no_cancelar"]), (True, "cancelar,cancelar_conjunto", True), fala)
+            return rodar("Planejar", [{"pedido": pedido, "opcoes": {}, "info": {"estado": "pendente", "acao": "reagendar", "valida": valida, "mesmo_turno": False, "antes_da_pergunta": False}}], {"Normalizar": [n]})
+        for fala in ("Cancelar mesmo", "pode cancelar mesmo", "só cancela por favor"):
+            r = sem_sim(fala)
+            self.assertEqual((len(r), "req" in r[0], r[0]["final"]["resultado"]["code"], sorted(r[0]["final"]["efeitos"])), (1, False, "cliente_nao_confirmou", ["falha"]), fala)
+            self.assertIn("pergunte, numa frase só, se ele confirma o resumo", r[0]["final"]["resultado"]["orientacao"])
+            e = rodar("Efeitos", [r[0]], {"Normalizar": [{"in": {"contato_id": "1", "turno_id": "33333333-3333-4333-8333-333333333333"}}], "Contexto": [{"ticket_id": None}]})[0]
+            self.assertEqual((e["nova"], e["params"][6], e["params"][7], e["params"][9]), (False, "", None, "graces|sim_so_no_cancelar"), fala)  # nenhuma proposta nova nem alterada
+        self.assertEqual(sem_sim("pode cancelar mesmo", valida=False)[0]["final"]["resultado"]["code"], "proposta_expirada")
+        # O 5o parametro do Contexto (as acoes que a ferramenta reivindica) sai do Normalizar renderizado e chega igual ao mapa que o no
+        # trazia escrito ate 28/11, nas tres operacoes; na fase 1 vai vazio. Sem sim antes da oracao do cancelar, a ferramenta deixa de
+        # reivindicar o que nao e cancelamento (a proposta segue pendente)
+        rep = wf["Contexto"]["parameters"]["options"]["queryReplacement"]
+        self.assertTrue(rep.startswith("={{ ") and rep.endswith(" }}") and "{{BV:" not in rep)
+
+        def params(entrada):
+            n = rodar("Normalizar", [dict({"contato_id": "1", "telefone": tel, "turno_id": "33333333-3333-4333-8333-333333333333", "ambiente": "integracao"}, **entrada)], {})[0]
+            self.assertTrue(n["ok"], entrada)
+            x = subprocess.run(["node", "-e", "const $json = JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(" + rep[4:-3] + "));", json.dumps(n)], capture_output=True, text=True)
+            self.assertEqual(x.returncode, 0, x.stderr[:500])
+            return json.loads(x.stdout)
+        antes = {"agendar": "agendar,trocar_servico,agendar_conjunto,reagendar", "reagendar": "reagendar,trocar_servico", "cancelar": "cancelar,cancelar_conjunto,reagendar,trocar_servico"}
+        for op, acoes in antes.items():
+            pr = params({"operacao": op, "proposta_id": PID, "texto_cliente": "sim"})
+            self.assertEqual((len(pr), pr[0], pr[1], pr[2], pr[3], pr[4]), (7, "1", PID, "33333333-3333-4333-8333-333333333333", cfg["proposta"]["validade_min"], acoes), op)
+            self.assertEqual(params({"operacao": op, "proposta_id": PID})[4], acoes, op)  # sem a fala do turno tambem
+        self.assertEqual(params({"operacao": "cancelar", "id_opcao_agendamento": "1"})[1:5:3], ["", ""])  # fase 1: sem proposta e sem acoes
+        self.assertEqual(params({"operacao": "agendar", "proposta_id": PID, "texto_cliente": "O do dia 03/12 pode cancelar"})[4], "")
+        self.assertEqual(params({"operacao": "reagendar", "proposta_id": PID, "texto_cliente": "pode cancelar o do dia 03"})[4], "")
+        self.assertEqual(params({"operacao": "cancelar", "proposta_id": PID, "texto_cliente": "pode cancelar"})[4], "cancelar,cancelar_conjunto")
+        self.assertEqual(params({"operacao": "agendar", "proposta_id": PID, "texto_cliente": "sim, e pode cancelar o de quinta"})[4], antes["agendar"])
+
     def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
-        rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
         i = self.js.index("const BVG_ACOES")
         for acao in ("agendar_conjunto", "cancelar_conjunto"):
-            self.assertIn(acao, rep)
-            self.assertIn(acao, self.js[i:i + 300])
+            self.assertIn(acao, self.js[i:i + 300])  # o no le o mapa pelo bvGNormalizar (acoes): test_cancelar_com_agendar_pendente_vira_remarcacao
 
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
         self.assertIn("cfg.ambiente === 'producao' ? !(cfg.escritaLiberada || cfg.testeLiberado) : !cfg.redirecionar", self.js)
