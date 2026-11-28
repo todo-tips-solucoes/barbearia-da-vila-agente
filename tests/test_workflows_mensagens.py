@@ -156,6 +156,20 @@ class CodeNodes(unittest.TestCase):
         self.assertEqual(sorted(x["tipo"] for x in r["criar"]), ["lembrete_dia", "lembrete_hora"])  # owner, 2026-11-15: lembretes no Chat Master
         self.assertEqual(r["criar"][0]["dados"], {"servico": "Corte", "barbeiro": "Ze", "fim": "2099-10-22T14:45:00"})
 
+    def test_reconciliar_sem_contato_so_para_quem_nao_vira_contato(self):  # 27/11: o no renderizado de PROD e de TESTE; a regra e do bvMReconciliar
+        ag = lambda i, ddi, cel: {"idAgenda": i, "horaInicio": "2099-10-22T14:00:00", "horaFim": "2099-10-22T14:45:00", "idStatusAgenda": 2, "ddiCelular": ddi, "celularCliente": cel,
+                                  "nomeServico": "Corte", "profissional": "Ze", "idProfissional": "p"}
+        agenda = [ag("A", "55", "(11) 97777-6666"), ag("B", "55", "11 97777-6666"), ag("C", "", "11955554444"), {**ag("D", "55", ""), "nomeCliente": "Rui"}, ag("E", "55", "1133334444"),
+                  {**ag("F", None, None), "idStatusAgenda": 7, "nomeServico": None},  # bloqueio "Prof. Ausente": sem cliente
+                  {**ag("G", "55", "11966665555"), "horaInicio": "2020-01-01T10:00:00", "horaFim": "2020-01-01T10:45:00", "idStatusAgenda": 6}]  # ja executado: nada a programar
+        rec = lambda cfg: rodar("workflows/bv-mensagens.json", "Reconciliar", [{"linhas": [], "contatos": []}], {"Achatar": [{"agenda": agenda}]}, cfg=cfg)[0]
+        r = rec(PCFG)
+        self.assertEqual(r["novos_contatos"], ["5511977776666", "551133334444"])  # um contato por telefone (A e B), so digitos, 12 ou 13
+        self.assertEqual(r["sem_contato"], ["C", "D"])  # sem DDI e sem celular: nao viram contato, ficam registrados
+        self.assertEqual(r["criar"], [])  # os lembretes nascem na rodada seguinte, com o contato criado
+        r = rec(CFG)  # TESTE: nunca cria contato (lista de escrita); registra quem tem cliente e lembrete a criar
+        self.assertEqual((r["novos_contatos"], r["sem_contato"]), ([], ["A", "B", "C", "D", "E"]))
+
 
 class Recepcao(unittest.TestCase):
     """4.2: a recepcao reconhece a selecao da lista (id primario, titulo como fallback) sem regredir o fluxo normal."""
@@ -481,8 +495,14 @@ class RevisaoOnda7(CodeNodes):
         rows = [self.row(), self.row(id="8", resposta="confirmada", recente=True)]  # o id do mesmo toque ja respondeu a 8
         e = rodar(self.CONF, "Escolher", rows, {"Normalizar": [ent]})[0]
         self.assertEqual((e["acao"], e["code"]), ("fim", "repetida"))
+        # 27/11 (PROD): a confirmacao digitada com 2 abertas vale para a mais recente, que o Selecionar traz primeiro
+        e = rodar(self.CONF, "Escolher", [self.row(id="8"), self.row()], {"Normalizar": [ent]})[0]
+        self.assertEqual((e["acao"], e["row"]["id"]), ("claim", "8"))
+        sel = json.load(open(os.path.join(RAIZ, self.CONF), encoding="utf-8"))
+        self.assertIn("ORDER BY COALESCE(m.enviada_em, m.previsto_para) DESC LIMIT 5", next(n for n in sel["nodes"] if n["name"] == "Selecionar")["parameters"]["query"])
+        ent = {**ent, "confirmado": False}  # a recusa sem id segue pedindo para escolher: nenhuma e recusada
         e = rodar(self.CONF, "Escolher", [self.row(), self.row(id="8")], {"Normalizar": [ent]})[0]
-        self.assertEqual(e["code"], "ambigua")  # 2 abertas sem id: nenhuma e confirmada
+        self.assertEqual(e["code"], "ambigua")
         d = rodar(self.CONF, "Desfecho", [{**e, "ent": ent}])[0]
         self.assertEqual((d["enviar"], d["texto"]), (True, CFG["textos"]["confirmacao_escolher"]))  # pede para escolher
 
@@ -569,7 +589,12 @@ class RevisaoOnda7(CodeNodes):
         g = lambda st: {"statusCode": 200, "body": [{"idAgenda": "A", "horaInicio": "2026-10-22T14:00:00", "idStatusAgenda": st}]}
         c = lambda i: rodar(self.CONF, "Conferencia", [i], {"Escolher": [{"row": self.row()}], "Normalizar": [ent]})[0]["code"]
         self.assertEqual(c(g(3)), "confirmada")
-        self.assertEqual(c(g(10)), "desatualizada")
+        self.assertEqual(c(g(10)), "confirmada")  # 27/11: recusou, remarcou e confirma o novo horario (a Graces mantem o 10 e responde 409)
+        self.assertEqual(c(g(2)), "desatualizada")
+        self.assertEqual(c({"statusCode": 200, "body": [{"idAgenda": "A", "horaInicio": "2026-10-22T15:00:00", "idStatusAgenda": 10}]}), "desatualizada")  # mudou de horario
+        ent["confirmado"] = False
+        self.assertEqual(c(g(3)), "desatualizada")  # a recusa segue valendo so com o 10
+        ent["confirmado"] = True
         self.assertEqual(c({"error": "timeout"}), "falhou")
         ok = {"ok": True, "contato_id": "1", "origem": "id", "confirmado": True, "mensagem_id": "7"}
         d = rodar(self.CONF, "Desfecho", [{"code": "desatualizada", "status": 200}], {"Resolver claim": [{"ent": ok, "row": self.row(), "req": {"idAgenda": "A"}}]})[0]

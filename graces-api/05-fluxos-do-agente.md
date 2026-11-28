@@ -80,6 +80,7 @@ GET /agenda/clientes?celular=5511999998888      # número do remetente no WhatsA
    DELETE /agenda/{idAgenda}                      # não recorrente
    DELETE /agenda/{idAgenda}?data=AAAA-MM-DD      # recorrente: só essa ocorrência
    ```
+   O agente manda `?data=` sempre: fora de série a API ignora a data (medido em 2026-11-27).
 4. Ofereça remarcar (volta ao fluxo 2).
 
 > "Não vou poder ir" respondendo a um lembrete: `POST /agenda/confirmacao {confirmado:false}` só marca *Não confirmado* (10) e **não libera o horário**. Para liberar, use o `DELETE`. Qual dos dois usar é decisão de negócio.
