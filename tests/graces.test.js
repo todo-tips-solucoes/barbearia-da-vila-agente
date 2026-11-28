@@ -337,16 +337,27 @@ assert.equal(r.efeitos.proposta_upd.estado, 'executada');
   const semResumo = { ...dadosAg }; delete semResumo.resumo;
   const pv = f2({ operacao: 'agendar' }, prop('agendar', semResumo));
   assert.equal(g.bvGPasso(g.bvGPasso(pv.st, [ok({ horarios: ['14:00'] })], cfg).st, [ok({ sucesso: true, idAgenda: 'n2' })], cfg).final.resultado.feito, undefined);
-  // duplicidade: mesmo dia ou mesmo servico de um agendamento futuro sai com aviso; outro dia e outro servico, nao
+  // duplicidade: mesmo dia ou mesmo servico de um agendamento futuro sai com aviso; desde 28/11 (owner), outro dia e outro servico tambem
   const comFut = (fut) => semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora, { futuros: [fut] }), cfg)).final.resultado;
   assert.match(comFut({ idAgenda: 'x', idServico: 'outro', horaInicio: `${dadosAg.data}T09:00:00`, servico: 'barba' }).ja_tem, /^barba em .* às 09:00$/);
   assert.match(comFut({ idAgenda: 'x', idServico: dadosAg.idServico, horaInicio: '2027-01-04T09:00:00', servico: 'corte adulto' }).ja_tem, /^corte adulto em segunda-feira, 04\/01 às 09:00$/);
   // mesmo dia vem antes de mesmo servico
   assert.match(semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora, { futuros: [{ idAgenda: 'x', idServico: dadosAg.idServico, horaInicio: '2027-01-04T09:00:00', servico: 'corte adulto' }, { idAgenda: 'y', idServico: 'outro', horaInicio: `${dadosAg.data}T09:00:00`, servico: 'barba' }] }), cfg)).final.resultado.ja_tem, /^barba /);
   assert.match(comFut({ idAgenda: 'x', idServico: 'outro', horaInicio: `${dadosAg.data}T09:00:00`, servico: 'barba' }).orientacao, /pergunte só se pode confirmar mais este/);
-  const livre = comFut({ idAgenda: 'x', idServico: 'outro', horaInicio: '2027-01-04T09:00:00', servico: 'barba' });
-  assert.equal(livre.ja_tem, undefined);
-  assert.equal(livre.aguardando_confirmacao, true);
+  // PROD, 25/11: corte infantil no sabado com o corte adulto da sexta de pe saiu sem aviso. Qualquer agendamento futuro avisa, e a
+  // orientacao diz o caminho da troca que o codigo sabe: outro servico = agendar com substituicao; mesmo servico = reagendar
+  const outroDia = comFut({ idAgenda: 'x', idServico: 'outro', horaInicio: '2027-01-04T09:00:00', servico: 'barba' });
+  assert.deepEqual([outroDia.ja_tem, outroDia.aguardando_confirmacao], ['barba em segunda-feira, 04/01 às 09:00', true]);
+  assert.match(outroDia.orientacao, /pergunte só se pode confirmar mais este \(o sim dele confirma.*para trocar aquele, ou para cancelar aquele, não chame cancelar: chame agendar com este id_opcao_horario e substitui_id_opcao_agendamento com o id dele \(o id vem de meus_agendamentos\)$/);
+  assert.match(comFut({ idAgenda: 'x', idServico: dadosAg.idServico, horaInicio: '2027-01-04T09:00:00', servico: 'corte adulto' }).orientacao, /não chame cancelar: chame reagendar com o id_opcao_agendamento dele e este id_opcao_horario \(o id vem de meus_agendamentos\)$/);
+  // sem nenhum no mesmo dia nem do mesmo servico vale o mais proximo do dia pedido (antes ou depois); mesmo servico segue vindo antes
+  const varios = (futuros) => semPacote(g.bvGPlano(entrada({ operacao: 'agendar', id_opcao_horario: '1' }), ctxE(opcoesHora, { futuros }), cfg)).final.resultado.ja_tem;
+  const noDia = (n, extra = {}) => { const d = new Date(`${dadosAg.data}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return { idAgenda: `f${n}`, idServico: 'outro', horaInicio: `${d.toISOString().slice(0, 10)}T09:00:00`, servico: `barba${n}`, ...extra }; };
+  assert.match(varios([noDia(30), noDia(-2), noDia(5)]), /^barba-2 /);
+  assert.match(varios([noDia(30), noDia(3), noDia(-5)]), /^barba3 /);
+  assert.match(varios([noDia(1), noDia(40, { idServico: dadosAg.idServico })]), /^barba40 /);
+  assert.equal(varios([{ idAgenda: 'sem-inicio', idServico: 'outro', servico: 'barba' }]), undefined); // futuro sem inicio nao gera aviso
+  assert.equal(varios([]), undefined);
   // cancelar: sai da lista de futuros e devolve o texto final
   const pc = conferido(f2({ operacao: 'cancelar' }, { pedido: { idCliente: 'c1', futuros: [{ idAgenda: dadosCanc.idAgenda, horaInicio: dadosCanc.horaInicio, servico: 'corte adulto' }, { idAgenda: 'fica', horaInicio: '2027-01-04T09:00:00', servico: 'barba' }] }, proposta: { id: PID, acao: 'cancelar', dados: dadosCanc } }));
   const rc = g.bvGPasso(pc.st, [ok({ sucesso: true })], cfg).final;
@@ -1266,7 +1277,8 @@ console.log('graces.test.js segunda analise ok');
   const f2 = g.bvGPlano(entrada({ operacao: 'cancelar', proposta_id: '33333333-3333-4333-8333-333333333333' }), { pedido: { idCliente: 'c1' }, proposta: { id: '33333333-3333-4333-8333-333333333333', acao: 'cancelar', dados } }, c);
   const fim = g.bvGPasso(conferido(f2, c).st, [ok({ sucesso: true })], c).final.resultado;
   assert.match(fim.feito, /^Cancelado: corte adulto em terça-feira, 20\/10 às 14:00 com Pedro$/);
-  assert.match(fim.orientacao, /depois, numa pergunta só, ofereça marcar outro horário$/);
+  // 25/11 (PROD): depois do cancelamento o agente ofereceu "confirmo o horário de sábado?" sem ter o que confirmar
+  assert.match(fim.orientacao, /depois, numa pergunta só, ofereça marcar outro horário\. Nenhum horário ficou reservado nem aguardando confirmação nesta conversa: não pergunte se confirma um horário visto antes e não diga que algum está confirmado; se ele quiser marcar, chame horarios_livres de novo e mande o resumo$/);
   console.log('graces.test.js resumo do cancelamento ok');
 }
 
@@ -2640,7 +2652,7 @@ console.log('graces.test.js segunda analise ok');
   assert.equal(plano({ operacao: 'reagendar', id_opcao_horario: idH, turno_id: T1 }, aposBusca, f.efeitos.opcoes).final.resultado.orientacao, undefined);
   // No sim, o modelo pode repetir `agendar` com o proposta_id: o mapa do no Contexto (espelhado em BVG_ACOES) deixa agendar reivindicar a
   // proposta de reagendar, e a fase 2 decide pela acao da proposta: revalida e manda o PUT. A conferencia do sim e a mesma nas duas.
-  assert.deepEqual(g.BVG_ACOES, { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto' });
+  assert.deepEqual(g.BVG_ACOES, { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar,trocar_servico', cancelar: 'cancelar,cancelar_conjunto,reagendar,trocar_servico' });
   const sim2 = g.bvGPlano(entrada({ operacao: 'agendar', proposta_id: PR, texto_cliente: 'sim' }), { pedido: ped(), proposta: { id: PR, acao: 'reagendar', dados: conv.efeitos.proposta_nova.dados }, agora_ms: AGORA }, c);
   const put = g.bvGPasso(sim2.st, [ok({ minutos: 40, horarios: ['20:00'] }), ok(futuros), ok({ horarios: [] })], c);
   assert.deepEqual(put.reqs, [{ m: 'PUT', path: '/agenda/serie', body: { horaInicioOriginal: '2026-11-28T11:20:00', horaInicioNovo: '2026-11-30T20:00:00', idProfissional: 'b1' } }]);
@@ -2973,4 +2985,195 @@ console.log('graces.test.js segunda analise ok');
       'posso cancelar depois se precisar?', 'dá pra cancelar depois?', 'o que acontece se eu cancelo?', 'se eu cancelo perco?', 'e se eu desmarco?']) assert.deepEqual(dois(t), [false, false], t);
   }
   console.log('graces.test.js cancelar so o que o cliente pediu ok');
+}
+
+{ // Cancelar outro agendamento com um agendamento aguardando o sim (PROD, 25/11): cliente com corte em 03/12 pediu 28/11 09:20, ouviu
+  // "voce ja tem um corte em 03/12, posso confirmar mais este?" e respondeu "o do dia 03/12 pode cancelar". O modelo chamou cancelar: a
+  // proposta de agendar virou substituida, o "Cancelar mesmo" apagou o de 03/12 e o de 28/11 nunca foi criado.
+  const JAY = 'b623cd84-6068-4a57-9ce6-2f7d9a37a11e', PP = '55555555-5555-4555-8555-555555555555';
+  const c = { ...cfg, ambiente: 'producao', escritaLiberada: true, redirecionar: false, humanos: [{ id: JAY, nome: 'Jayme' }], agendamentosMaxDia: 3, textos: { encaminhar_equipe: 'TEXTO EQUIPE' } };
+  const ent = (o, cf = c) => { const n = g.bvGNormalizar({ ...base, ambiente: cf.ambiente, ...o }, cf); assert.ok(n.ok, JSON.stringify(n)); return n.in; };
+  const ag03 = { opcao_id: '1', idAgenda: 'ag03', horaInicio: '2026-12-03T12:00:00', idServico: 'sv-adulto', servico: 'corte adulto', idProfissional: 'rod', profissional: 'Rodrigo', recorrente: false };
+  const dPend = { idCliente: 'c1', idServico: 'sv-adulto', servico: 'corte adulto', idProfissional: 'rod', barbeiro: 'Rodrigo', data: '2026-11-28', hora: '09:20', valor: 90, minutos: 40, resumo: 'corte adulto com Rodrigo em sábado, 28/11 às 09:20 (R$ 90,00)' };
+  const pend = (extra = {}, acao = 'agendar') => ({ acao, dados: { ...dPend, ...extra } });
+  const ped = (extra = {}) => ({ idCliente: 'c1', agendamentos: [ag03], futuros: [{ idAgenda: 'ag03', idServico: 'sv-adulto', horaInicio: '2026-12-03T12:00:00', servico: 'corte adulto', idProfissional: 'rod' }], ...extra });
+  const canc = (pendente, pedido = ped(), extra = {}, cf = c, ctx = {}) => g.bvGPlano(ent({ operacao: 'cancelar', id_opcao_agendamento: '1', ...extra }, cf), { opcoes: {}, pedido, pendente, ...ctx }, cf);
+  const lista = (r, acao = 'cancelar') => assert.deepEqual([r.final.efeitos.proposta_nova.acao, r.final.efeitos.opcoes.tipo, r.final.resultado.sugerir_remarcar], [acao, 'decisao_cancelamento', true]);
+
+  // 1. mesmo servico: sai a proposta de remarcar o agendamento para o horario que aguardava o sim, sem chamada a Graces e sem a lista
+  const conv = canc(pend());
+  assert.ok(!conv.reqs);
+  assert.equal(conv.final.resultado.resumo, 'Remarcar corte adulto de 03/12 12:00 para sábado, 28/11 às 09:20 com Rodrigo'); // as duas pontas
+  assert.deepEqual(conv.final.efeitos, { proposta_nova: { acao: 'reagendar', resumo: conv.final.resultado.resumo,
+    dados: { idAgenda: 'ag03', horaInicio: '2026-12-03T12:00:00', recorrente: false, idServico: 'sv-adulto', servico: 'corte adulto', idProfissional: 'rod', barbeiro: 'Rodrigo', data: '2026-11-28', hora: '09:20', minutos: 40, resumo: conv.final.resultado.resumo } } });
+  assert.match(conv.final.resultado.orientacao, /pediu para cancelar este outro: em vez do cancelamento, saiu a remarcação.*Nada foi cancelado nem marcado ainda.*Com o sim, chame reagendar só com o proposta_id\. Se ele disser que quer só cancelar.*chame cancelar de novo com o id_opcao_agendamento$/);
+  assert.equal(canc(pend({ indicado: true })).final.efeitos.proposta_nova.dados.indicado, true); // a fila da vez segue contando o barbeiro indicado
+  assert.equal(canc(pend(), ped(), {}, c, { dia: { agendados: 3 } }).final.efeitos.proposta_nova.acao, 'reagendar'); // remarcar nao conta no teto do dia
+  // o horario e sempre o da proposta pendente (estado): um id de horario vindo na chamada nao entra
+  const ofOutro = { tipo: 'horario', itens: [{ id: '7', rotulo: '15:00', valor: { data: '2026-12-10', hora: '15:00', idProfissional: 'kiel', apelido: 'Kiel', idServico: 'sv-adulto', servico: 'corte adulto', preco: 90, minutos: 40 } }] };
+  assert.deepEqual(g.bvGPlano(ent({ operacao: 'cancelar', id_opcao_agendamento: '1', id_opcao_horario: '7' }), { opcoes: ofOutro, pedido: ped(), pendente: pend() }, c).final.efeitos.proposta_nova.dados.hora, '09:20');
+  const ofSeq = { tipo: 'sequencia', itens: [{ id: '7', rotulo: '15:00 Kiel', valor: { data: '2026-12-10', itens: [{ idServico: 'sv-x', servico: 'barba', idProfissional: 'kiel', apelido: 'Kiel', hora: '15:00', minutos: 20, valor: 50 }] } }] };
+  const comSeq = g.bvGPlano(ent({ operacao: 'cancelar', id_opcao_agendamento: '1', id_opcao_horario: '7' }), { opcoes: ofSeq, pedido: ped(), pendente: pend({ idServico: 'sv-infantil', servico: 'Corte Infantil' }) }, c);
+  assert.deepEqual([!comSeq.reqs, comSeq.final.efeitos.proposta_nova.acao, comSeq.final.efeitos.proposta_nova.dados.hora], [true, 'trocar_servico', '09:20']); // nem uma sequencia ofertada
+  // sem a correcao (ctx.pendente ignorado) sai a lista "Remarcar / Cancelar mesmo": e o que segue valendo sem proposta pendente
+  lista(canc(undefined));
+  lista(canc(null));
+
+  // 2. o sim: a fase 2 decide pela acao da proposta, seja qual for a ferramenta que o modelo repetir (reagendar, agendar ou cancelar)
+  const propR = { id: PP, acao: 'reagendar', dados: conv.final.efeitos.proposta_nova.dados };
+  const fase2 = (operacao, fala, proposta = propR) => g.bvGPlano(ent({ operacao, proposta_id: PP, ...(fala === undefined ? {} : { texto_cliente: fala }) }), { pedido: ped(), proposta }, c);
+  const agendaC = [{ idAgenda: 'ag03', horaInicio: '2026-12-03T12:00:00', idServico: 'sv-adulto', idProfissional: 'rod' }];
+  const put = { m: 'PUT', path: '/agenda/ag03', body: { horaInicioOriginal: '2026-12-03T12:00:00', horaInicioNovo: '2026-11-28T09:20:00', idProfissional: 'rod' } };
+  for (const [op, fala] of [['reagendar', 'sim'], ['agendar', 'pode confirmar'], ['cancelar', 'sim'], ['cancelar', 'Pode'], ['cancelar', 'isso'], ['cancelar', '👍']]) {
+    const s = fase2(op, fala);
+    assert.deepEqual(g.bvGPasso(s.st, [ok({ minutos: 40, horarios: ['09:20'] }), ok(agendaC), ok({ horarios: [] })], c).reqs, [put], `${op}: ${fala}`);
+  }
+  assert.equal(g.BVG_ACOES.cancelar, 'cancelar,cancelar_conjunto,reagendar,trocar_servico'); // o mapa do Contexto (espelhado no no) deixa o cancelar reivindicar as duas
+  // cancelamento dito nao e sim a "posso remarcar?": nada e lido nem escrito, a proposta deixa de valer e a ocorrencia fica contada
+  for (const fala of ['Cancelar mesmo', 'cancela', 'pode cancelar', 'não, só cancela', 'confirmo o cancelamento', 'sim, pode cancelar', undefined]) {
+    const r = fase2('cancelar', fala);
+    assert.ok(!r.reqs, String(fala));
+    assert.deepEqual([r.final.resultado.code, r.final.efeitos.proposta_upd, r.final.efeitos.falha.motivo], ['cliente_nao_confirmou', { id: PP, estado: 'falhou', resultado: { ok: false, code: 'cliente_nao_confirmou' } }, 'graces|cancelar_sem_confirmar'], String(fala));
+    assert.match(r.final.resultado.orientacao, /nada foi feito na agenda.*chame cancelar com o id_opcao_agendamento, sem proposta_id/, String(fala));
+  }
+  // "pode remarcar" pelo cancelar para na entrada, antes de reivindicar (a proposta segue pendente): limite registrado
+  assert.equal(g.bvGNormalizar({ ...base, operacao: 'cancelar', proposta_id: PP, texto_cliente: 'pode remarcar' }, cfg).resultado.code, 'cliente_nao_confirmou');
+  // a regra de 27/11 nao afrouxa: a proposta de cancelar da lista segue exigindo o cancelamento dito, e o sim generico nao a executa
+  const propC = { id: PP, acao: 'cancelar', dados: { idAgenda: 'ag03', horaInicio: '2026-12-03T12:00:00', recorrente: false, servico: 'corte adulto', barbeiro: 'Rodrigo', resumo: 'Cancelar corte adulto em quinta-feira, 03/12 às 12:00 com Rodrigo' } };
+  for (const fala of ['sim', 'Pode', 'isso', '👍']) assert.equal(fase2('cancelar', fala, propC).final.resultado.code, 'cliente_nao_disse_cancelar', fala);
+  assert.deepEqual(fase2('cancelar', 'Cancelar mesmo', propC).reqs.map((q) => q.path), ['/agenda/agendamentos']);
+  // sim_geral e derivado da fala: nao entra de fora, e so existe na fase 2 do cancelar
+  assert.equal(g.bvGNormalizar({ ...base, operacao: 'cancelar', proposta_id: PP, sim_geral: true }, cfg).resultado.code, 'campo_desconhecido');
+  assert.deepEqual(['sim', 'Cancelar mesmo', 'confirmo o cancelamento'].map((t) => g.bvGNormalizar({ ...base, operacao: 'cancelar', proposta_id: PP, texto_cliente: t }, cfg).in.sim_geral), [true, undefined, undefined]);
+  assert.equal(g.bvGNormalizar({ ...base, operacao: 'reagendar', proposta_id: PP, texto_cliente: 'sim' }, cfg).in.sim_geral, undefined);
+
+  // 3. outro servico: sai a troca (o novo entra no lugar do antigo), com o resumo das duas pontas e sem ler o pacote de novo
+  const inf = { idServico: 'sv-infantil', servico: 'Corte Infantil', idProfissional: 'ph', barbeiro: 'Pedro Henrique', valor: 70 };
+  const troca = canc(pend(inf));
+  assert.ok(!troca.reqs);
+  assert.equal(troca.final.resultado.resumo, 'Trocar serviço: Corte Infantil com Pedro Henrique em sábado, 28/11 às 09:20 (R$ 70,00), no lugar de corte adulto de 03/12 às 12:00');
+  assert.deepEqual([troca.final.efeitos.proposta_nova.acao, troca.final.efeitos.proposta_nova.dados.antigo, troca.final.efeitos.opcoes, troca.final.efeitos.falha],
+    ['trocar_servico', { idAgenda: 'ag03', horaInicio: '2026-12-03T12:00:00', recorrente: false, servico: 'corte adulto' }, undefined, undefined]);
+  assert.match(troca.final.resultado.orientacao, /em vez do cancelamento, saiu a troca.*Com o sim, chame agendar só com o proposta_id/);
+  assert.equal(canc(pend(inf), ped(), {}, c, { dia: { agendados: 3 } }).final.efeitos.proposta_nova.acao, 'trocar_servico'); // trocar nao e agendamento novo
+  // a marca do pacote da proposta pendente segue (a fase 2 rele a secao); sem ela, valor avulso
+  const trocaP = canc(pend({ ...inf, pacote: true })).final;
+  assert.deepEqual([trocaP.efeitos.proposta_nova.dados.pacote, /\(abatido do seu pacote\), no lugar de/.test(trocaP.resultado.resumo), /sai do pacote/.test(trocaP.resultado.pacote)], [true, true, true]);
+  assert.equal(troca.final.efeitos.proposta_nova.dados.pacote, undefined);
+  // o sim a troca pelo cancelar: POST do novo e so depois o DELETE do antigo, na ocorrencia dele
+  const propT = { id: PP, acao: 'trocar_servico', dados: troca.final.efeitos.proposta_nova.dados };
+  const post = g.bvGPasso(fase2('cancelar', 'sim', propT).st, [ok({ minutos: 40, horarios: ['09:20'] }), ok(agendaC), ok({ horarios: [] })], c);
+  assert.deepEqual([post.reqs[0].m, post.reqs[0].body.idServico, post.reqs[0].body.idProfissional, post.reqs[0].body.horaInicio], ['POST', 'sv-infantil', 'ph', '09:20']);
+  assert.deepEqual(g.bvGPasso(post.st, [ok({ sucesso: true, idAgenda: 'n9' })], c).reqs, [{ m: 'DELETE', path: '/agenda/ag03', qs: { data: '2026-12-03' } }]);
+  assert.equal(fase2('cancelar', 'Cancelar mesmo', propT).final.resultado.code, 'cliente_nao_confirmou');
+  // a troca tambem pelo reagendar e pelo agendar: o contexto manda chamar "a ferramenta desta ação" e trocar_servico nao e ferramenta
+  assert.equal(g.BVG_ACOES.reagendar, 'reagendar,trocar_servico');
+  for (const op of ['reagendar', 'agendar']) assert.equal(g.bvGPasso(fase2(op, 'sim', propT).st, [ok({ minutos: 40, horarios: ['09:20'] }), ok(agendaC), ok({ horarios: [] })], c).reqs[0].m, 'POST', op);
+
+  // 4. NAO converte (segue o cancelar de sempre, com a lista): proposta que nao e de um agendamento so, varios agendamentos, outro
+  // cadastro do telefone, o mesmo inicio, busca neste turno, proposta sem os dados do horario, e pacote x avulso do mesmo servico
+  for (const acao of ['agendar_conjunto', 'reagendar', 'trocar_servico', 'cancelar', 'cancelar_conjunto', null]) lista(canc(pend({}, acao)));
+  const semConv = {
+    'outro cadastro': canc(pend({ idCliente: 'c2' })),
+    'sem cliente na proposta': canc(pend({ idCliente: undefined })),
+    'o mesmo inicio': canc(pend({ data: '2026-12-03', hora: '12:00' })),
+    'busca de horario neste turno': canc(pend(), ped({ busca: { turno: T2, n: 3 } })),
+    'sem data': canc(pend({ data: undefined })),
+    'hora invalida': canc(pend({ hora: '9h20' })),
+    'sem barbeiro': canc(pend({ idProfissional: undefined })),
+    'sem nome do barbeiro': canc(pend({ barbeiro: '' })),
+    'sem servico': canc(pend({ idServico: undefined })),
+    'dados ausentes': canc({ acao: 'agendar' }),
+    'pelo pacote, agendamento avulso do mesmo servico': canc(pend({ pacote: true })),
+  };
+  for (const [caso, r] of Object.entries(semConv)) { assert.equal(r.final.efeitos.proposta_nova.acao, 'cancelar', caso); assert.equal(r.final.efeitos.opcoes.tipo, 'decisao_cancelamento', caso); }
+  assert.equal(canc(pend(), ped({ busca: { turno: T1, n: 3 } })).final.efeitos.proposta_nova.acao, 'reagendar'); // busca de turno anterior nao impede
+  const ag10 = { ...ag03, opcao_id: '2', idAgenda: 'ag10', horaInicio: '2026-12-10T12:00:00' };
+  lista(canc(pend(), ped({ agendamentos: [ag03, ag10] }), { id_opcao_agendamento: undefined, id_opcoes_agendamentos: '1,2' }), 'cancelar_conjunto');
+  lista(canc(pend(), ped({ agendamentos: [ag03, ag10] }), { id_opcoes_agendamentos: '1,2' }), 'cancelar_conjunto'); // os dois campos juntos: varios
+  assert.equal(canc(pend(), ped(), { id_opcao_agendamento: '9' }).final.resultado.code, 'opcao_desconhecida'); // agendamento que nao resolve: como sempre
+  // agendamento do pacote: remarcar mantem a sessao (segue), e pelo pacote dos dois lados tambem
+  const pedPac = ped({ agendamentos: [{ ...ag03, pacote: true }] });
+  assert.deepEqual([canc(pend(), pedPac).final.efeitos.proposta_nova.acao, canc(pend(), pedPac).final.efeitos.proposta_nova.dados.pacote], ['reagendar', true]);
+  assert.equal(canc(pend({ pacote: true }), pedPac).final.efeitos.proposta_nova.acao, 'reagendar');
+
+  // 5. as barreiras de remarcar e de trocar valem para a chamada convertida
+  // clausula petrea: agendamento com o barbeiro so da equipe encaminha, sem proposta e sem o nome; o horario dele tambem (defesa)
+  for (const r of [canc(pend(), ped({ agendamentos: [{ ...ag03, idProfissional: JAY, profissional: 'Jayme' }] })), canc(pend(inf), ped({ agendamentos: [{ ...ag03, idProfissional: JAY, profissional: 'Jayme' }] })),
+    canc(pend({ idProfissional: JAY, barbeiro: 'Jayme' })), canc(pend({ ...inf, idProfissional: JAY, barbeiro: 'Jayme' }))]) {
+    assert.deepEqual([r.final.resultado.code, r.final.efeitos.proposta_nova, r.final.efeitos.pedido.handoff], ['encaminhar_equipe', undefined, true]);
+    assert.ok(!JSON.stringify(r.final.resultado).includes('Jayme'));
+  }
+  lista(canc(undefined, ped({ agendamentos: [{ ...ag03, idProfissional: JAY, profissional: 'Jayme' }] }))); // sem proposta pendente, cancelar o dele segue como era (decisao de 17/11)
+  // trocar o servico de agendamento do pacote fica com a equipe (a sessao nao volta)
+  assert.deepEqual([canc(pend(inf), pedPac).final.resultado.code, canc(pend(inf), pedPac).final.efeitos.proposta_nova], ['pacote_equipe', undefined]);
+  // TESTE: so se mexe em agendamento do barbeiro de teste; com ele, a conversao sai (o horario e de barbeiro real, a escrita vai ao de teste)
+  assert.equal(canc(pend(), ped(), {}, cfg).final.resultado.code, 'escrita_fora_do_teste');
+  const pedT = ped({ agendamentos: [{ ...ag03, idProfissional: TESTE, profissional: 'ZZ TESTE INTEGRACAO - NAO AGENDAR' }] });
+  assert.equal(canc(pend(), pedT, {}, cfg).final.resultado.resumo, 'Remarcar corte adulto de 03/12 12:00 para sábado, 28/11 às 09:20 com Rodrigo');
+  assert.equal(canc(pend(inf), pedT, {}, cfg).final.efeitos.proposta_nova.acao, 'trocar_servico');
+  assert.equal(canc(pend({ idProfissional: TESTE }), pedT, {}, cfg).final.resultado.code, 'opcao_desconhecida'); // o barbeiro de teste nunca e o horario proposto
+  // escrita desligada e cliente nao identificado: as recusas de sempre
+  assert.equal(canc(pend(), ped(), {}, { ...c, escritaLiberada: false }).final.resultado.code, 'escrita_desabilitada');
+  // serie recorrente: a proposta leva a ocorrencia (id e inicio) e a marca, como em toda remarcacao
+  assert.equal(canc(pend(), ped({ agendamentos: [{ ...ag03, recorrente: true }] })).final.efeitos.proposta_nova.dados.recorrente, true);
+  // agendamento recusado no lembrete, pelo `rec`: converte igual
+  const AGORA = Date.parse('2026-11-27T15:00:00Z');
+  const pedRec = { idCliente: 'c1', futuros: [{ idAgenda: 'ag03', idServico: 'sv-adulto', horaInicio: '2026-12-03T12:00:00', servico: 'corte adulto', idProfissional: 'rod' }],
+    confirmacao_recusada: { idAgenda: 'ag03', em: '2026-11-27T14:30:00.000Z', inicio: '2026-12-03T12:00:00', servico: 'corte adulto', barbeiro: 'Rodrigo', idProfissional: 'rod', idCliente: 'c1' } };
+  const rcv = g.bvGPlano(ent({ operacao: 'cancelar', id_opcao_agendamento: 'rec' }), { opcoes: {}, pedido: pedRec, pendente: pend(), agora_ms: AGORA }, { ...c, recusaJanelaMin: 120 }).final;
+  assert.deepEqual([rcv.efeitos.proposta_nova.acao, rcv.efeitos.proposta_nova.dados.idAgenda], ['reagendar', 'ag03']);
+
+  // 6. "pode cancelar" nao e sim a um resumo de agendar ou de remarcar (passava por "pode"; "ok, cancela esse" por "ok")
+  for (const t of ['pode cancelar', 'O do dia 03/12 pode cancelar', 'pode cancelar o de quinta', 'ok, cancela esse', 'sim, cancela o de quinta', 'sim, e pode cancelar o de quinta', 'pode desmarcar o outro', 'confirmo o cancelamento', 'cancela 👍']) {
+    for (const op of ['agendar', 'reagendar']) assert.equal(g.bvgConfirmou(t, op), false, `${op}: ${t}`);
+  }
+  for (const t of ['pode', 'sim', 'pode confirmar', 'pode marcar', 'isso', '👍', 'marca pra segunda então']) assert.equal(g.bvgConfirmou(t, 'agendar'), true, t);
+  // a recusa manda para o cancelar (que converte), em vez de perguntar de novo; sem cancelamento dito, a orientacao de sempre
+  const naoConf = (t, op = 'agendar') => g.bvGNormalizar({ ...base, operacao: op, proposta_id: PP, texto_cliente: t }, cfg).resultado;
+  for (const op of ['agendar', 'reagendar']) {
+    assert.equal(naoConf('O do dia 03/12 pode cancelar', op).code, 'cliente_nao_confirmou');
+    assert.match(naoConf('O do dia 03/12 pode cancelar', op).orientacao, /fala em cancelar e não confirma este resumo: nada foi feito na agenda\. Se ele quer cancelar um agendamento que já tem, chame cancelar com o id_opcao_agendamento dele/);
+  }
+  assert.match(naoConf('Obrigado').orientacao, /pergunte de novo se pode confirmar$/);
+  assert.match(naoConf('pode marcar. Tem taxa de cancelamento?').orientacao, /pergunte de novo se pode confirmar$/); // cita, mas nao pede cancelamento
+  assert.equal(g.bvGNormalizar({ ...base, operacao: 'cancelar', proposta_id: PP, texto_cliente: 'pode cancelar' }, cfg).ok, true); // o cancelar nao mudou
+
+  // 7. Aviso de duplicidade para qualquer agendamento futuro (owner, 28/11) e a conversao se encontram: corte infantil no sabado com o
+  // corte adulto da sexta de pe (PROD, 25/11). O resumo sai com o aviso; o cliente pede para cancelar o antigo e sai a troca, nao a lista
+  const sexta = { opcao_id: '1', idAgenda: 'agsex', horaInicio: '2026-11-27T18:40:00', idServico: 'sv-adulto', servico: 'corte adulto', idProfissional: 'ph', profissional: 'Pedro Henrique', recorrente: false };
+  const pedB = { idCliente: 'c2', futuros: [{ idAgenda: 'agsex', idServico: 'sv-adulto', horaInicio: '2026-11-27T18:40:00', servico: 'corte adulto', idProfissional: 'ph' }] };
+  const ofSab = { tipo: 'horario', itens: [{ id: '1', rotulo: '16:00', valor: { data: '2026-11-28', hora: '16:00', idProfissional: 'ph', apelido: 'Pedro Henrique', idServico: 'sv-infantil', servico: 'Corte Infantil', preco: 70, minutos: 40 } }] };
+  const aviso = semPacote(g.bvGPlano(ent({ operacao: 'agendar', id_opcao_horario: '1', turno_id: T1 }), { opcoes: ofSab, pedido: pedB }, c)).final;
+  assert.equal(aviso.resultado.ja_tem, 'corte adulto em sexta-feira, 27/11 às 18:40');
+  assert.match(aviso.resultado.orientacao, /não chame cancelar: chame agendar com este id_opcao_horario e substitui_id_opcao_agendamento/);
+  assert.equal(aviso.efeitos.proposta_nova.acao, 'agendar');
+  const depois = g.bvGPlano(ent({ operacao: 'cancelar', id_opcao_agendamento: '1' }), { opcoes: {}, pedido: { ...pedB, agendamentos: [sexta] }, pendente: { acao: 'agendar', dados: aviso.efeitos.proposta_nova.dados } }, c).final;
+  assert.deepEqual([depois.efeitos.proposta_nova.acao, depois.efeitos.opcoes, depois.resultado.resumo],
+    ['trocar_servico', undefined, 'Trocar serviço: Corte Infantil com Pedro Henrique em sábado, 28/11 às 16:00 (R$ 70,00), no lugar de corte adulto de 27/11 às 18:40']);
+  // e o caso A inteiro, pela proposta que a fase 1 do agendar gravou: aviso do mesmo servico em outro dia, depois a remarcacao
+  const ofA = { tipo: 'horario', itens: [{ id: '1', rotulo: '09:20', valor: { data: '2026-11-28', hora: '09:20', idProfissional: 'rod', apelido: 'Rodrigo', idServico: 'sv-adulto', servico: 'corte adulto', preco: 90, minutos: 40 } }] };
+  const avisoA = semPacote(g.bvGPlano(ent({ operacao: 'agendar', id_opcao_horario: '1', turno_id: T1 }), { opcoes: ofA, pedido: ped() }, c)).final;
+  assert.match(avisoA.resultado.ja_tem, /^corte adulto em quinta-feira, 03\/12 às 12:00$/);
+  assert.equal(canc({ acao: 'agendar', dados: avisoA.efeitos.proposta_nova.dados }).final.resultado.resumo, 'Remarcar corte adulto de 03/12 12:00 para sábado, 28/11 às 09:20 com Rodrigo');
+
+  // 8. Outro servico na hora exata do agendamento que ele ja tem (PROD, 25/11: "é para meu filho", "pode ser no mesmo horário"): a
+  // ferramenta dizia "um serviço a mais" e a lista saia sem a hora dele. Agora diz que trocar mantendo o horario so a equipe faz
+  const infSv = { idServico: 'sv-infantil', nome: 'Corte Infantil', preco: 70, minutos: 40 };
+  const pedE = { idCliente: 'c2', agendamentos: [sexta], servicos_vistos: [{ id: 's2', ...infSv }], futuros: [{ idAgenda: 'agsex', idServico: 'sv-adulto', horaInicio: '2026-11-27T18:40:00', servico: 'corte adulto', idProfissional: 'ph', fim: '19:20' }] };
+  const buscaE = (extra, grades, pedido = pedE) => { const pl = g.bvGPlano(ent({ operacao: 'horarios_livres', id_opcao_servico: 's2', data: '2026-11-27', ...extra }), { opcoes: {}, pedido }, c); return g.bvGPasso(pl.st, grades, c).final; };
+  const gr = (hs) => ok({ horarios: hs, minutos: 40, funcionamento: { horaFim: '21:00' } }), semOcup = ok({ horarios: [] });
+  const me = buscaE({ id_opcao_agendamento: '1', hora: '18:40' }, [gr(['12:40', '13:20', '19:20']), semOcup]);
+  assert.match(me.resultado.mesmo_horario, /^18:40 é o horário de corte adulto que o cliente já tem nesse dia, e a busca é de outro serviço \(Corte Infantil\)\. Trocar o serviço mantendo esse mesmo horário só a equipe faz: .*passe para a equipe ou outro horário \(os da lista vão junto\).*transferir_atendimento com motivo nao_resolvi.*substitui_id_opcao_agendamento/);
+  assert.deepEqual([me.resultado.ja_tem_no_dia, /^siga mesmo_horario antes de qualquer outra coisa/.test(me.resultado.orientacao), /serviço a mais:/.test(JSON.stringify(me.resultado)), me.efeitos.opcoes.tipo], [undefined, true, false, 'horario']);
+  assert.match(buscaE({ hora: '18:40' }, [gr(['12:40', '13:20']), semOcup], { ...pedE, barbeiro: { idProfissional: 'ph', apelido: 'Pedro Henrique' } }).resultado.mesmo_horario, /^18:40 é o horário/); // sem informar o agendamento tambem
+  // controle: outra hora do dia segue como servico a mais; e a hora dele livre com outro barbeiro (qualquer) segue ao resumo, como antes
+  const outraHora = buscaE({ id_opcao_agendamento: '1', hora: '13:20' }, [gr(['12:40', '13:20', '19:20']), semOcup]);
+  assert.deepEqual([outraHora.resultado.mesmo_horario, /um serviço a mais/.test(outraHora.resultado.ja_tem_no_dia)], [undefined, true]);
+  const semHora = buscaE({ id_opcao_agendamento: '1' }, [gr(['12:40', '19:20']), semOcup]);
+  assert.deepEqual([semHora.resultado.mesmo_horario, /um serviço a mais/.test(semHora.resultado.ja_tem_no_dia)], [undefined, true]);
+  const pedQ = { ...pedE, servico: { ...infSv, opcao_id: 's2' }, barbeiros: [{ opcao_id: '1', idProfissional: 'ph', apelido: 'Pedro Henrique' }, { opcao_id: '2', idProfissional: 'kiel', apelido: 'Kiel' }] };
+  const livreOutro = buscaE({ qualquer: true, hora: '18:40' }, [gr(['12:40']), gr(['18:40']), semOcup, semOcup], pedQ);
+  assert.deepEqual([livreOutro.resultado.mesmo_horario, !!livreOutro.resultado.horario_pedido_livre, /um serviço a mais/.test(livreOutro.resultado.ja_tem_no_dia)], [undefined, true, true]);
+  console.log('graces.test.js cancelar com agendar pendente ok');
 }

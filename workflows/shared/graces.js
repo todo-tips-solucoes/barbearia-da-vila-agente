@@ -26,7 +26,11 @@ const BVG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 const BVG_OPC = /^[A-Za-z0-9_-]{1,12}$/;
 // agendar aceita tambem `reagendar`: o agendar no horario de uma busca de remarcacao grava a proposta de remarcar (bvgFase1) e, no
 // sim, o modelo pode repetir a mesma ferramenta; a fase 2 decide tudo pela acao da proposta, que e o resumo que o cliente confirmou.
-const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar', cancelar: 'cancelar,cancelar_conjunto' };
+// cancelar aceita tambem `reagendar` e `trocar_servico` (28/11), pelo mesmo motivo: cancelar um agendamento com um agendar aguardando o
+// sim grava a proposta de remarcar ou de trocar (bvgHorarioPendente). O sim a elas e o sim generico (sim_geral, bvgFase2). E reagendar
+// aceita `trocar_servico`: a linha "Confirmação pendente" do contexto manda chamar "a ferramenta desta ação", e trocar_servico nao e
+// nome de ferramenta; com proposta_expirada o modelo refazia a fase 1 do cancelar e a lista de cancelamento saia em resposta a um sim.
+const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar,trocar_servico', cancelar: 'cancelar,cancelar_conjunto,reagendar,trocar_servico' };
 
 // Periodo pedido pelo cliente (suite R1: pediu tarde e recebeu o dia inteiro a partir das 08:00): [inicio, fim) em HH:MM.
 const BVG_PERIODOS = { manha: ['00:00', '12:00'], tarde: ['12:00', '18:00'], noite: ['18:00', '24:00'] };
@@ -88,7 +92,9 @@ function bvgConfirmou(texto, operacao, soDito) {
   const cru = String(texto || '').slice(0, 600).replace(/\[[^\]]*\]/g, ' '); // sem as marcas "[áudio transcrito]"; teto: a regex e quadratica em "[[[["
   const t = bvNormalizarDescricao(cru).toLowerCase();
   const sim = !bvNegou(t) && (BVG_SIM.test(t) || BVG_EMOJI_SIM.test(cru));
-  if (operacao !== 'cancelar') return sim;
+  // Fala que cita cancelar nao e sim a um resumo de agendar ou de remarcar (PROD, 25/11: "o do dia 03/12 pode cancelar" passava por
+  // "pode"; "ok, cancela esse" por "ok"). Quem resolve e o cancelar, que com um agendar aguardando o sim propoe a remarcacao (bvgFase1).
+  if (operacao !== 'cancelar') return sim && !/cancel|desmar[cq]/.test(t);
   // Cancelar: "cancela"/"desmarca" dito vale mesmo ao lado de "não quero remarcar" (a pergunta e "remarcar ou cancelar?", e ha quem
   // digite em vez de tocar); cancelamento negado ou desistencia nao vale.
   if (BVG_NAO_CANCELA.test(t)) return false;
@@ -130,10 +136,16 @@ function bvGNormalizar(raw, cfg) {
   // texto_cliente vem do fluxo (as mensagens do cliente no turno), nunca do modelo; so serve para a hora minima
   if (v.operacao === 'horarios_livres' && v.hora !== undefined && v.a_partir === undefined && bvgDepoisDas(v.texto_cliente, v.hora)) { v.a_partir = v.hora; delete v.hora; }
   if (v.proposta_id !== undefined && v.texto_cliente !== undefined && !bvgConfirmou(v.texto_cliente, v.operacao)) {
-    return { ok: false, resultado: bvgRecusa('cliente_nao_confirmou', 'a mensagem do cliente não confirma: nada foi feito na agenda. Responda ao que ele disse em uma frase e pergunte de novo se pode confirmar') };
+    // cancelamento dito diante de um resumo de agendar ou de remarcar: o caminho e o cancelar (fase 1), nao perguntar de novo
+    const canc = v.operacao !== 'cancelar' && bvgConfirmou(v.texto_cliente, 'cancelar', true);
+    return { ok: false, resultado: bvgRecusa('cliente_nao_confirmou', canc ? 'a mensagem do cliente fala em cancelar e não confirma este resumo: nada foi feito na agenda. Se ele quer cancelar um agendamento que já tem, chame cancelar com o id_opcao_agendamento dele (meus_agendamentos antes, se faltar o id) e siga o que a ferramenta devolver; se ele desistiu deste resumo, diga que nada foi marcado'
+      : 'a mensagem do cliente não confirma: nada foi feito na agenda. Responda ao que ele disse em uma frase e pergunte de novo se pode confirmar') };
   }
   // so_sim: a fala confirma so por um sim generico, sem dizer cancelar (derivado da fala, como cabelo_barba: nao entra de fora)
   if (v.operacao === 'cancelar' && v.proposta_id !== undefined && v.texto_cliente !== undefined && !bvgConfirmou(v.texto_cliente, 'cancelar', true)) v.so_sim = true;
+  // sim_geral: a fala e um sim a um resumo de remarcar ou de trocar (sem citar cancelar). So a fase 2 do cancelar a le, quando a
+  // proposta reivindicada nao e de cancelar (bvgFase2); derivado da fala, nao entra de fora
+  if (v.operacao === 'cancelar' && v.proposta_id !== undefined && v.texto_cliente !== undefined && bvgConfirmou(v.texto_cliente, 'reagendar')) v.sim_geral = true;
   if (bvgCabeloEBarba(v.texto_cliente)) v.cabelo_barba = true; // derivado da fala: nao esta em BVG_CAMPOS, nao entra de fora
   delete v.texto_cliente;
   // Suite R18 (2026-11-16): depois de ver horarios o modelo nao tem mais o id do servico e manda o NOME; recusar fazia o
@@ -415,11 +427,19 @@ function bvgFuturos(ped, acao, d, novoId) {
   return fs;
 }
 // Duplicidade (revisao de 17/11): novo agendamento no mesmo dia ou do mesmo servico de um que o cliente ja tem sai com aviso.
+// Qualquer agendamento futuro (owner, 28/11; em 18/11 a regra tinha ficado so no mesmo dia ou mesmo servico): PROD, 25/11, corte
+// infantil no sabado com o corte adulto da sexta de pe saiu sem aviso e os dois ficaram na agenda. Sem um no mesmo dia nem do mesmo
+// servico, vale o futuro mais proximo do dia pedido. A orientacao diz o caminho da troca que o codigo sabe (um horario so: mesmo
+// servico remarca, outro servico troca); se o modelo chamar cancelar mesmo assim, a fase 1 converte (bvgHorarioPendente).
 function bvgJaTem(ped, itens) {
-  const fs = Array.isArray(ped.futuros) ? ped.futuros : [];
-  const a = fs.find((f) => itens.some((x) => String(f.horaInicio).slice(0, 10) === x.data)) || fs.find((f) => f.idServico && itens.some((x) => f.idServico === x.idServico));
+  const fs = (Array.isArray(ped.futuros) ? ped.futuros : []).filter((f) => f && f.horaInicio);
+  const dist = (f) => Math.abs(Date.parse(String(f.horaInicio).slice(0, 10)) - Date.parse(itens[0].data));
+  const a = fs.find((f) => itens.some((x) => String(f.horaInicio).slice(0, 10) === x.data)) || fs.find((f) => f.idServico && itens.some((x) => f.idServico === x.idServico))
+    || fs.reduce((m, f) => (!m || dist(f) < dist(m) ? f : m), null);
+  if (!a) return {};
+  const troca = itens.length > 1 ? 'use meus_agendamentos e reagendar' : `não chame cancelar: chame ${itens[0].idServico === a.idServico ? 'reagendar com o id_opcao_agendamento dele e este id_opcao_horario' : 'agendar com este id_opcao_horario e substitui_id_opcao_agendamento com o id dele'} (o id vem de meus_agendamentos)`;
   // pergunta de sim ou nao (suite, 18/11): "e mais um ou e para trocar?" deixava o "pode confirmar" do cliente sem resposta possivel
-  return a ? { ja_tem: `${a.servico || 'agendamento'} em ${bvgDiaSem(a.horaInicio)} às ${String(a.horaInicio).slice(11, 16)}`, orientacao: 'o cliente já tem esse agendamento: mande o resumo normalmente, avise em uma frase que ele já tem esse horário e pergunte só se pode confirmar mais este (o sim dele confirma; não fale em confirmar os dois: o outro já está marcado); se ele disser que é para trocar aquele, use meus_agendamentos e reagendar' } : {};
+  return { ja_tem: `${a.servico || 'agendamento'} em ${bvgDiaSem(a.horaInicio)} às ${String(a.horaInicio).slice(11, 16)}`, orientacao: `o cliente já tem esse agendamento: mande o resumo normalmente, avise em uma frase que ele já tem esse horário e pergunte só se pode confirmar mais este (o sim dele confirma; não fale em confirmar os dois: o outro já está marcado); se ele disser que é para trocar aquele, ou para cancelar aquele, ${troca}` };
 }
 // Incluir servico (PROD, 23/11: pediu para incluir cabelo e saiu so com barba, com outro barbeiro): agendamentos de OUTRO servico que o
 // cliente ja tem no dia da busca. O mesmo servico no dia e remarcacao ou duplicidade (bvgJaTem), nao servico a mais.
@@ -463,7 +483,9 @@ function bvgRepartir(horas, cand, fila, fixo = () => null) {
 function bvgFeito(p) {
   const r = String((p.dados || {}).resumo || '').replace(/^(Trocar serviço: |Remarcar |Cancelar )/, '');
   const v = { agendar: 'Agendado', agendar_conjunto: 'Agendado', trocar_servico: 'Serviço trocado', reagendar: 'Remarcado', cancelar: 'Cancelado', cancelar_conjunto: 'Cancelado' }[p.acao];
-  const outro = /^cancelar/.test(p.acao) ? '; depois, numa pergunta só, ofereça marcar outro horário' : '';
+  // 25/11 (PROD): depois do cancelamento o modelo perguntou "confirmo o horário de sábado?" e respondeu "recebi sua confirmação" sem
+  // nada na agenda. A escrita limpa a oferta e nao sobra proposta pendente: marcar exige buscar de novo.
+  const outro = /^cancelar/.test(p.acao) ? '; depois, numa pergunta só, ofereça marcar outro horário. Nenhum horário ficou reservado nem aguardando confirmação nesta conversa: não pergunte se confirma um horário visto antes e não diga que algum está confirmado; se ele quiser marcar, chame horarios_livres de novo e mande o resumo' : '';
   return r && v ? { feito: `${v}: ${r}`, orientacao: `diga ao cliente que está feito, com o seu jeito caloroso de falar e exatamente estes dados (serviço, barbeiro, dia da semana, data e horário); não copie esta linha seca, e não mude nem recalcule nada${outro}` } : {};
 }
 const bvgReais = (v) => (v == null ? '' : ` (R$ ${Number(v).toFixed(2).replace('.', ',')})`);
@@ -581,7 +603,7 @@ function bvgSemRetransferir(r, pedido, turnoId) {
 }
 function bvGPlano(i, ctx0, cfg) { return bvgSemRetransferir(bvgPlanoUm(i, ctx0, cfg), ctx0 && ctx0.pedido, i && i.turno_id); }
 function bvgPlanoUm(i, ctx0, cfg) {
-  const ctx = { pedido: (ctx0 && ctx0.pedido) || {}, opcoes: (ctx0 && ctx0.opcoes) || {}, proposta: ctx0 && ctx0.proposta, info: ctx0 && ctx0.info, dia: (ctx0 && ctx0.dia) || {}, rodizio: bvgRodizio(ctx0, cfg),
+  const ctx = { pedido: (ctx0 && ctx0.pedido) || {}, opcoes: (ctx0 && ctx0.opcoes) || {}, proposta: ctx0 && ctx0.proposta, info: ctx0 && ctx0.info, pendente: ctx0 && ctx0.pendente, dia: (ctx0 && ctx0.dia) || {}, rodizio: bvgRodizio(ctx0, cfg),
     agoraMs: Number(ctx0 && ctx0.agora_ms), recusaMin: cfg.recusaJanelaMin }; // relogio e janela so para a validade da recusa de presenca (bvgRecusado)
   const st = { in: i, ctx, meta: { op: i.operacao } };
   const chamar = (reqs, meta = {}) => ({ reqs, st: { ...st, meta: { ...st.meta, ...meta } } });
@@ -795,11 +817,11 @@ function bvgPlanoUm(i, ctx0, cfg) {
 }
 
 // Clausula petrea: horario, sequencia ou agendamento existente com barbeiro so da equipe (defesa: ele nunca e ofertado).
-function bvgTocaHumano(i, ctx, cfg) {
+function bvgTocaHumano(i, ctx, cfg, hp) { // hp: o horario da proposta pendente (bvgHorarioPendente), que nao vem de id nenhum
   const h = (x) => !!bvBarbeiroHumano(x && { idProfissional: x.idProfissional, apelido: x.apelido || x.profissional || x.barbeiro }, cfg.humanos);
   const sq = i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'sequencia', ctx) : null;
   return [i.id_opcao_horario && bvgResolver(i.id_opcao_horario, 'horario', ctx), i.id_opcao_agendamento && bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx),
-    i.substitui_id_opcao_agendamento && bvgResolver(i.substitui_id_opcao_agendamento, 'agendamento', ctx), ...((sq && sq.itens) || [])].some(h);
+    i.substitui_id_opcao_agendamento && bvgResolver(i.substitui_id_opcao_agendamento, 'agendamento', ctx), hp, ...((sq && sq.itens) || [])].some(h);
 }
 
 // Proposta de agendar: antes do resumo, um estagio so de leitura dos pacotes do cliente (um GET por servico distinto).
@@ -835,6 +857,31 @@ function bvgPropor(prop, resps) {
     { ...(ruim ? { falha: bvGErro(ruim, 'pacotes').falha } : {}), proposta_nova: { acao, dados: d, resumo: d.resumo } });
 }
 
+// Cancelar outro agendamento com um agendar aguardando o sim (PROD, 25/11). O cliente tinha corte em 03/12, pediu 28/11 e recebeu o
+// resumo "voce ja tem um corte em 03/12, posso confirmar mais este?"; respondeu "o do dia 03/12 pode cancelar". O modelo chamou
+// cancelar: a proposta de agendar virou `substituida` (uma pendente por contato), o "Cancelar mesmo" apagou o de 03/12 e o de 28/11
+// nunca foi criado. Agora esse cancelar vira a remarcacao do agendamento para o horario que aguardava o sim (mesmo servico: um PUT) ou
+// a troca (outro servico: o novo entra e o antigo sai), num resumo que diz as duas pontas; nada e escrito sem o sim a ele.
+// ctx.pendente = { acao, dados } da proposta pendente do contato, de turno anterior e na validade (Contexto do bv-graces).
+// -> o horario dela, no formato do horario ofertado, ou null (segue o cancelar de sempre). Na duvida nao converte: outra acao
+// (sequencia, remarcar, trocar, cancelar), varios agendamentos, agendamento que nao resolve, proposta de outro cadastro do telefone,
+// o mesmo inicio (nao ha "de ... para ..."), busca de horario neste turno (o cliente esta vendo outra coisa) e proposta pelo pacote
+// para o mesmo servico de um agendamento avulso (remarcar manteria o avulso, e o resumo anterior dizia "abatido do pacote").
+function bvgHorarioPendente(i, ctx) {
+  const p = ctx.pendente, d = (p && p.dados) || {}, bu = ctx.pedido.busca;
+  if (i.operacao !== 'cancelar' || !i.id_opcao_agendamento || i.id_opcoes_agendamentos || !p || p.acao !== 'agendar' || (bu && bu.turno === i.turno_id)) return null;
+  const ag = bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx);
+  if (!ag || !ag.idAgenda || !ag.idServico || !ag.horaInicio || !d.idCliente || String(d.idCliente) !== String(ctx.pedido.idCliente)) return null;
+  if (!d.idServico || !d.servico || !d.idProfissional || !d.barbeiro || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.data)) || !/^\d{2}:\d{2}$/.test(String(d.hora))) return null;
+  const troca = d.idServico !== ag.idServico;
+  if (String(ag.horaInicio).slice(0, 16) === `${d.data}T${d.hora}` || (!troca && d.pacote && !bvgEhPacote(ctx, ag.idAgenda, ag))) return null;
+  return { troca, data: d.data, hora: d.hora, idProfissional: d.idProfissional, apelido: d.barbeiro, idServico: d.idServico, servico: d.servico, preco: d.valor, minutos: d.minutos,
+    ...(d.indicado ? { indicado: true } : {}), ...(d.pacote ? { pacote: true } : {}) };
+}
+// O modelo chamou cancelar e recebeu outra proposta: sem esta linha ele nao sabe o que saiu, com que ferramenta confirmar nem como
+// cancelar de verdade. `ferr` = a ferramenta da proposta (a fase 2 aceita tambem o cancelar: BVG_ACOES).
+const bvgOrientPendente = (ferr) => `o cliente tinha um agendamento aguardando o sim e pediu para cancelar este outro: em vez do cancelamento, saiu ${ferr === 'reagendar' ? 'a remarcação deste agendamento para o horário que aguardava o sim' : 'a troca, com o horário que aguardava o sim no lugar deste agendamento'} (ele não fica sem horário). Nada foi cancelado nem marcado ainda: mande o resumo como veio, que diz o que sai e o que entra, e pergunte se pode confirmar, sem lista. Com o sim, chame ${ferr} só com o proposta_id. Se ele disser que quer só cancelar, sem ficar com o horário novo, chame cancelar de novo com o id_opcao_agendamento`;
+
 // Fase 1: so cria a proposta pendente com o resumo; nada e escrito na Graces (FR-006).
 function bvgFase1(i, ctx, cfg, chamar) {
   // TESTE, 27/11 (1 de 7 rodadas): depois da busca de remarcacao do agendamento recusado, o modelo chamou `agendar` no horario escolhido
@@ -853,6 +900,15 @@ function bvgFase1(i, ctx, cfg, chamar) {
     if (rc && (!marca || bvgMesmaMarca(marca, rc))) i.id_opcao_agendamento = 'rec';
     else delete i.id_opcao_agendamento;
   }
+  // Cancelar com um agendar aguardando o sim (bvgHorarioPendente): a chamada segue como reagendar (mesmo servico) ou como agendar com
+  // substituicao (outro servico), com o horario da proposta pendente. Aqui, antes de toda barreira, como a conversao acima: barbeiro
+  // so da equipe encaminha, pacote, escrita_fora_do_teste e a ocorrencia valem como em qualquer remarcacao ou troca.
+  const hp = bvgHorarioPendente(i, ctx);
+  if (hp) {
+    i.operacao = hp.troca ? 'agendar' : 'reagendar';
+    if (hp.troca) { i.substitui_id_opcao_agendamento = i.id_opcao_agendamento; delete i.id_opcao_agendamento; }
+    delete i.id_opcao_horario; // o horario e o da proposta pendente (estado), nunca um id desta chamada
+  }
   const bloq = bvgEscritaPermitida(cfg);
   if (bloq) return bvgFim(bloq);
   if (!ctx.pedido.idCliente && ctx.pedido.cliente_sem_cadastro) return bvgFim(bvgRecusa('cadastre_primeiro', 'cliente sem cadastro: faça agora o cadastro rápido (nome completo, data de nascimento e como conheceu) com cadastrar_cliente e, com ele feito, chame esta ferramenta de novo com a mesma opção'));
@@ -861,7 +917,7 @@ function bvgFase1(i, ctx, cfg, chamar) {
   // Conta as escritas de agendar deste contato no dia (ctx.dia.agendados, do Contexto); trocar de servico nao e agendamento novo.
   if (i.operacao === 'agendar' && !i.substitui_id_opcao_agendamento && cfg.agendamentosMaxDia > 0 && (ctx.dia.agendados || 0) >= cfg.agendamentosMaxDia) return bvgEncaminhar('limite_agendamentos', 'agendar', cfg);
   const fora = bvgRecusa('escrita_fora_do_teste', 'só é possível mexer em agendamentos de teste neste ambiente');
-  if (i.operacao !== 'cancelar' && bvgTocaHumano(i, ctx, cfg)) return bvgEncaminhar('barbeiro_humano', i.operacao, cfg);
+  if (i.operacao !== 'cancelar' && bvgTocaHumano(i, ctx, cfg, hp)) return bvgEncaminhar('barbeiro_humano', i.operacao, cfg);
   const prod = cfg.ambiente === 'producao';
   const real = prod && !!cfg.escritaLiberada; // PROD liberada: agenda real de todos os barbeiros (menos o de teste e os so da equipe)
   const soTeste = prod && !real; // PROD em teste fechado: toda escrita so no barbeiro de teste
@@ -887,7 +943,7 @@ function bvgFase1(i, ctx, cfg, chamar) {
     return bvgDecisaoCanc({ ok: true, aguardando_confirmacao: true, sugerir_remarcar: true, resumo, ...(itens.some((x) => x.pacote) ? { pacote: BVG_ORIENT_PACOTE } : {}) }, { proposta_nova: { acao: 'cancelar_conjunto', dados: { itens, resumo }, resumo } }, cfg);
   }
   const ag = i.id_opcao_agendamento ? bvgResolver(i.id_opcao_agendamento, 'agendamento', ctx) : null;
-  const h = i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'horario', ctx) : null;
+  const h = hp || (i.id_opcao_horario ? bvgResolver(i.id_opcao_horario, 'horario', ctx) : null);
   const antigo = i.substitui_id_opcao_agendamento ? bvgResolver(i.substitui_id_opcao_agendamento, 'agendamento', ctx) : null;
   const ag0 = (antigo || ag);
   if (!real && ag0 && ag0.idProfissional !== cfg.testeId) return bvgFim(fora); // TESTE e PROD fechada: nunca altera agenda de barbeiro real
@@ -916,6 +972,8 @@ function bvgFase1(i, ctx, cfg, chamar) {
         { falha: { motivo: 'graces|troca_mesmo_servico', operacao: 'agendar', code: 'mesmo_servico', status: 0, trace: null } });
     }
     if (antigo) dados.antigo = { ...agAnt, servico: antigo.servico }; // o servico que sai vai ao resumo (bvgPropor)
+    // horario da proposta pendente: o pacote ja foi lido para ela (a marca segue como estava) e a fase 2 rele a secao; nenhuma chamada a Graces
+    if (hp) return bvgPropor({ acao: 'trocar_servico', dados: { ...dados, ...(hp.pacote ? { pacote: true } : {}) }, jaTem: { orientacao: bvgOrientPendente('agendar') }, svs: [] }, []);
     return bvgProporPacote(chamar, antigo ? 'trocar_servico' : 'agendar', dados, antigo ? {} : bvgJaTem(ctx.pedido, [h]));
   }
   if (!ag) return bvgFim(!i.id_opcao_agendamento || i.id_opcao_agendamento === 'rec' ? bvgSemAgendamento(i.operacao === 'reagendar' ? ' e este id_opcao_horario' : '') : bvgOpcaoInvalida());
@@ -925,7 +983,7 @@ function bvgFase1(i, ctx, cfg, chamar) {
     const dados = { ...agAnt, idServico: ag.idServico, servico: ag.servico, idProfissional: h.idProfissional, barbeiro: h.apelido, data: h.data, hora: h.hora, minutos: h.minutos, ...(h.indicado ? { indicado: true } : {}) };
     const resumo = `Remarcar ${ag.servico} de ${bvgDia(ag.horaInicio)} ${ag.horaInicio.slice(11, 16)} para ${bvgDiaSem(h.data)} às ${h.hora} com ${h.apelido}`;
     // convertido: o modelo chamou agendar; sem esta linha ele nao sabe que saiu remarcacao nem como pedir um agendamento a mais
-    const orientacao = convertido ? { orientacao: 'saiu como remarcação do agendamento cuja presença o cliente recusou, não como agendamento novo: mande o resumo e peça a confirmação; com o sim, chame reagendar (ou agendar) só com o proposta_id. Se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico' } : {};
+    const orientacao = hp ? { orientacao: bvgOrientPendente('reagendar') } : convertido ? { orientacao: 'saiu como remarcação do agendamento cuja presença o cliente recusou, não como agendamento novo: mande o resumo e peça a confirmação; com o sim, chame reagendar (ou agendar) só com o proposta_id. Se ele quer um agendamento a mais, e não remarcar, busque de novo com horarios_livres informando o id_opcao_servico' } : {};
     return bvgFim({ ok: true, aguardando_confirmacao: true, resumo, ...orientacao }, { proposta_nova: { acao: 'reagendar', dados: { ...dados, resumo }, resumo } });
   }
   // barbeiro de teste e barbeiro so da equipe nunca aparecem ao cliente: com o nome no resumo, a frase inteira da confirmacao era
@@ -961,6 +1019,14 @@ function bvgFase2(i, ctx, cfg, chamar) {
     return bvgFim(bvgRecusa('cliente_nao_disse_cancelar', 'o cliente não disse que quer cancelar (um sim, um dia ou um horário não respondem a "remarcar ou cancelar?"): nada foi apagado e esta confirmação deixou de valer. Se ele falou de dia ou horário, ou quer remarcar, siga a remarcação. Se ele quer cancelar, ou não dá para saber, chame cancelar de novo com o agendamento (id_opcao_agendamento, ou id_opcoes_agendamentos se eram vários), sem proposta_id, e peça só a confirmação do cancelamento, sem mandar a lista de novo: o sim a essa pergunta cancela'),
       { ...((ctx.opcoes || {}).tipo === 'decisao_cancelamento' ? { opcoes: {} } : {}), pedido: { decisao_vista: (Array.isArray(d.itens) ? d.itens : [d]).filter((x) => x && x.idAgenda && x.horaInicio).map(bvgMarcaRec) },
         proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'cliente_nao_disse_cancelar' } }, falha: { motivo: 'graces|cancelar_sem_dizer', operacao: 'cancelar', code: 'cliente_nao_disse_cancelar', status: 0, trace: null } });
+  }
+  // Proposta de remarcar ou de trocar reivindicada pelo cancelar (28/11: o modelo repete no sim a ferramenta que devolveu o resumo,
+  // bvgHorarioPendente; antes saia proposta_expirada e a fase 1 seguinte mandava a lista "Remarcar / Cancelar mesmo"). Decide a acao
+  // da proposta: o sim a ela e o sim generico, sem citar cancelar (sim_geral). "Cancela" e "Cancelar mesmo" nao sao sim a "posso
+  // remarcar?": nada e escrito e a proposta deixa de valer. A proposta de cancelar segue exigindo o cancelamento dito, acima.
+  if (i.operacao === 'cancelar' && !/^cancelar/.test(p.acao) && !i.sim_geral) {
+    return bvgFim(bvgRecusa('cliente_nao_confirmou', 'esta confirmação é de remarcar ou de trocar, não de cancelar, e a mensagem do cliente não é um sim a ela: nada foi feito na agenda e ela deixou de valer. Se ele quer só cancelar, chame cancelar com o id_opcao_agendamento, sem proposta_id, e siga a orientação; se quer outro horário, busque de novo'),
+      { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'cliente_nao_confirmou' } }, falha: { motivo: 'graces|cancelar_sem_confirmar', operacao: 'cancelar', code: 'cliente_nao_confirmou', status: 0, trace: null } });
   }
   if (!/^cancelar/.test(p.acao) && [d, ...(Array.isArray(d.itens) ? d.itens : [])].some((x) => bvBarbeiroHumano(x && { idProfissional: x.idProfissional, apelido: x.barbeiro }, cfg.humanos))) {
     return bvgFim(bvgRecusa('barbeiro_humano', 'esse barbeiro só é agendado pela equipe; chame transferir_atendimento'), { proposta_upd: { id: p.id, estado: 'falhou', resultado: { ok: false, code: 'barbeiro_humano' } } });
@@ -1303,7 +1369,14 @@ function bvgPassoUm(st, resps0, cfg) {
       if (perto.aproximada) res.orientacao = bvgAvisoPerto(meta.hora) + (res.orientacao ? '; ' + res.orientacao : '');
       // Servico a mais: o horario colado sai pronto daqui (o modelo erra conta de hora); ja_tem_no_dia e campo proprio porque a
       // orientacao e sobrescrita quando o horario pedido esta livre
-      if (ancs.length) {
+      // Outro servico na hora exata do agendamento que ele ja tem (PROD, 25/11: "é para meu filho", "pode ser no mesmo horário"; a
+      // lista do servico novo saiu duas vezes sem a hora dele, como "um serviço a mais"). A hora nao esta livre porque e a do proprio
+      // agendamento, e trocar o servico no lugar nao existe por aqui (o PUT nao troca servico; a troca grava o novo antes de apagar).
+      const mesmo = meta.hora && !horas.includes(meta.hora) ? ancs.find((f) => f.hora === meta.hora) : null;
+      if (mesmo) {
+        res.mesmo_horario = `${meta.hora} é o horário de ${mesmo.servico || 'um agendamento'} que o cliente já tem nesse dia, e a busca é de outro serviço (${s.nome}). Trocar o serviço mantendo esse mesmo horário só a equipe faz: diga isso em uma frase e pergunte se ele prefere que você passe para a equipe ou outro horário${horas.length ? ' (os da lista vão junto)' : ''}. Não diga que é um serviço a mais sem ele pedir os dois. Se escolher a equipe, chame transferir_atendimento com motivo nao_resolvi; se escolher um horário da lista, chame agendar com id_opcao_horario e, para pôr este serviço no lugar do que ele tem, também substitui_id_opcao_agendamento (o id vem de meus_agendamentos)`;
+        res.orientacao = 'siga mesmo_horario antes de qualquer outra coisa' + (res.orientacao ? '; ' + res.orientacao : '');
+      } else if (ancs.length) {
         const tem = ancs.map((f) => `${f.servico || 'agendamento'} às ${f.hora}`).join(' e ');
         const js = horas.filter(junto).map((hh) => {
           const f = bvgColado(ancs, hh, porHora.get(hh).minutos);

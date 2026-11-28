@@ -532,7 +532,7 @@ def executar(r, n, orc, parar, referencia=""):
                 try:
                     fut = sa.graces_get(f"/agenda/agendamentos?idCliente={sa.PAULO}&proximos=true")
                     ref += ("\nTodos os agendamentos futuros do cliente na Graces agora (o agente os conhece desde o inicio da conversa; a lista inclui o que esta conversa acabou de marcar). "
-                            "Citar um destes e correto, e tambem e correto, ao pedir a confirmacao de um horario novo, avisar que o cliente ja tem um destes no mesmo dia ou do mesmo servico e perguntar se pode confirmar mais um: "
+                            "Citar um destes e correto, e tambem e correto, ao pedir a confirmacao de um horario novo, avisar que o cliente ja tem um destes (qualquer agendamento futuro, desde 28/11) e perguntar se pode confirmar mais um: "
                             + "; ".join(f"{str(a.get('horaInicio', ''))[:16].replace('T', ' ')} {a.get('servico') or a.get('descricaoServico') or a.get('nomeServico') or ''}".strip() for a in fut) + ".")
                 except Exception:  # noqa: BLE001 - sem a lista, a referencia segue so com o semeado
                     pass

@@ -27,11 +27,11 @@ para o agente (ex.: "dia fechado, sugira outro dia"). Nunca devolve telefone de 
 | `escolher_cliente` | `id_opcao` | — | grava `pedido.idCliente` a partir de `conversas.opcoes` |
 | `listar_servicos` | `texto?` | `GET /agenda/servicos[?texto=]` (G `01`:16-22) | opções: serviço + `valorPadrao` (sem "2º vez", inativos ou sem barbeiro real) |
 | `listar_barbeiros` | `id_opcao_servico` | `GET /servicos/profissionais?idServico=` (G `01`:43-61) | opções: `apelido` com `trim()`, sem o de teste |
-| `horarios_livres` | `id_opcao_servico`, `id_opcao_barbeiro` ou `qualquer`, `data` (AAAA-MM-DD) | `GET /agenda/horarios-livres?idServico=&idProfissional=&data=` (G `03`:21-34), um por barbeiro real se `qualquer` | opções `HH:mm` (+ barbeiro), `minutos`; `[]` = lotado |
+| `horarios_livres` | `id_opcao_servico`, `id_opcao_barbeiro` ou `qualquer`, `data` (AAAA-MM-DD) | `GET /agenda/horarios-livres?idServico=&idProfissional=&data=` (G `03`:21-34), um por barbeiro real se `qualquer` | opções `HH:mm` (+ barbeiro), `minutos`; `[]` = lotado; `mesmo_horario` quando a hora pedida é a de um agendamento de outro serviço que o cliente já tem no dia e ela não está na lista (trocar o serviço mantendo o horário só a equipe faz; nesse caso não vem `ja_tem_no_dia`) |
 | `meus_agendamentos` | — | `GET /agenda/agendamentos?idCliente=&proximos=true` (G `04`:33-49) | opções: `idAgenda`, serviço, barbeiro, início |
-| `agendar` | fase 1: `id_opcao_horario`; fase 2: `proposta_id` | fase 2: revalida `horarios-livres`, `POST /agenda` `{idCliente, idServico, idProfissional, data, horaInicio, idIntegracao}` (G `04`:56-81) | fase 1: `{proposta_id, resumo}`; fase 2: `{ok, idAgenda}` |
+| `agendar` | fase 1: `id_opcao_horario`; fase 2: `proposta_id` | fase 2: revalida `horarios-livres`, `POST /agenda` `{idCliente, idServico, idProfissional, data, horaInicio, idIntegracao}` (G `04`:56-81) | fase 1: `{proposta_id, resumo}`, com `ja_tem` quando o cliente já tem qualquer agendamento futuro (o do mesmo dia, o do mesmo serviço ou o mais próximo do dia pedido); fase 2: `{ok, idAgenda}` |
 | `reagendar` | fase 1: `id_opcao_agendamento`, `id_opcao_horario`; fase 2: `proposta_id` | fase 2: revalida, `PUT /agenda/{idAgenda}` `{horaInicioOriginal, horaInicioNovo, idProfissional}` (`AAAA-MM-DDTHH:mm:ss`, G `04`:86-105) | idem |
-| `cancelar` | fase 1: `id_opcao_agendamento`; fase 2: `proposta_id` | fase 2: `DELETE /agenda/{idAgenda}` (sempre com `?data=` do dia da ocorrência, G `04`:110-121) | fase 1 inclui `sugerir_remarcar:true` |
+| `cancelar` | fase 1: `id_opcao_agendamento`; fase 2: `proposta_id` | fase 2: `DELETE /agenda/{idAgenda}` (sempre com `?data=` do dia da ocorrência, G `04`:110-121) | fase 1 inclui `sugerir_remarcar:true`; com um `agendar` do contato aguardando o sim (turno anterior, na validade), a fase 1 devolve a proposta de remarcar ou de trocar o serviço, sem `sugerir_remarcar` (regra 7) |
 
 `trocar_servico` é `agendar` com `substitui_id_opcao_agendamento`: uma proposta, escrita = `POST`
 do novo e depois `DELETE` do antigo (US3-5).
@@ -50,3 +50,12 @@ do novo e depois `DELETE` do antigo (US3-5).
    um id do modelo (FR-020). `GET /agenda/completa` não é usado (G `04`:186-203, `05`:106).
 6. Erros: decisão por `code` (G `00`:57-61, `05`:89-97); timeout/5xx na escrita → `incerta` e
    verificação por `meus_agendamentos` antes de qualquer nova tentativa (research Decision 9).
+7. `cancelar` (fase 1) de um agendamento, com uma proposta `agendar` pendente do contato para outro
+   horário, não propõe o cancelamento: devolve a proposta `reagendar` (mesmo serviço) ou
+   `trocar_servico` (outro serviço) com o horário da proposta pendente, lido do estado. Na fase 2 a
+   ferramenta que traz o `proposta_id` não decide a escrita: decide a ação da proposta. `agendar`
+   reivindica `agendar`, `trocar_servico`, `agendar_conjunto` e `reagendar`; `reagendar`, `reagendar` e
+   `trocar_servico`; `cancelar` reivindica `cancelar`, `cancelar_conjunto`, `reagendar` e `trocar_servico`.
+   Proposta de cancelar da lista só executa com o cancelamento dito; proposta de remarcar ou de trocar
+   trazida pelo `cancelar` só executa com um sim que não cita cancelar. Fala que cita cancelar não
+   confirma `agendar` nem `reagendar` (`cliente_nao_confirmou`).
