@@ -111,6 +111,8 @@ Formatos: o POST usa `data` + `horaInicio` (`HH:mm`) separados; o PUT usa data e
 
 Agendamento não recorrente: cancelamento simples. Recorrente: informe `?data=` para cancelar só aquela ocorrência (ela vira exceção na série).
 
+Medido em 2026-11-27 com o barbeiro de teste: em agendamento não recorrente, o `DELETE` com `?data=` responde 200 e cancela, inclusive com a data de outro dia (a API ignora a data fora de série). O agente manda `?data=` sempre, com o dia da ocorrência, e confere a ocorrência na agenda antes de apagar.
+
 | Parâmetro | Onde | Obrig. | Descrição |
 |---|---|---|---|
 | `idAgenda` | path | **sim** | Agendamento a cancelar. |
