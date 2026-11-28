@@ -151,17 +151,21 @@ class BvGraces(unittest.TestCase):
         # substituida, o cancelamento saiu e o horario novo nunca foi criado. O Contexto devolve a proposta pendente do contato (na
         # validade, com a marca de ser deste turno) e a fase 1 do cancelar a converte em remarcacao. Nenhum no, parametro ou chamada nova.
         q = self.nos["Contexto"]["parameters"]["query"]
-        self.assertIn("(SELECT jsonb_build_object('acao', p.acao, 'dados', p.dados, 'mesmo_turno', p.turno_id::text = $3::text) FROM propostas p WHERE p.id IN (SELECT id FROM v)) "
-                      "AS pendente FROM (SELECT $1::bigint AS cid) x", q)
-        # A validade da proposta fica num lugar so (segunda revisao de 28/11): `v` e a pendente do contato que ainda vale (30 min, ou a
-        # retomada). A reivindicacao, a `info` (que diz se venceu e de que acao e) e a `pendente` leem dela. A reivindicacao continua
-        # conferindo na propria linha o estado, o contato, o turno e a acao: e isso que a deixa atomica entre duas chamadas
-        valid = ("(criada_em > now() - make_interval(mins => $4::int) OR EXISTS (SELECT 1 FROM conversas r WHERE r.contato_id = $1::bigint AND r.retomada_em > propostas.criada_em "
-                 "AND r.retomada_em > now() - make_interval(mins => $6::int)))")
-        self.assertTrue(q.startswith("WITH v AS (SELECT id FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND " + valid + "), k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() "
-                                     "WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND id IN (SELECT id FROM v) AND EXISTS ("))
-        self.assertEqual((q.count("make_interval(mins => $4::int)"), q.count("make_interval(mins => $6::int)"), q.count("(SELECT id FROM v)")), (1, 1, 3))
-        self.assertIn("i AS (SELECT estado, acao, id IN (SELECT id FROM v) AS valida, turno_id::text = $3::text AS mesmo_turno, NOT EXISTS (", q)
+        # A consulta inteira, presa por comparacao (terceira revisao de 28/11: a clausula "entrada deste turno depois da pergunta" da
+        # reivindicacao podia sair sem teste nenhum falhar). Pedacos: `v`, a proposta pendente do contato que ainda vale (30 min, ou a
+        # retomada), lida pelo indice unico de pendentes e escrita uma vez; `k`, a reivindicacao, que confere na propria linha o
+        # estado, o contato, o turno, a acao e a entrada depois da pergunta (e isso que a deixa atomica entre duas chamadas) e a
+        # validade por `v`; `i`, a info da proposta pedida, com a acao e se ainda vale; e a selecao, em que `pendente` le direto de `v`.
+        consulta = (
+            "WITH v AS (SELECT id, acao, dados, turno_id FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND (criada_em > now() - make_interval(mins => $4::int) OR EXISTS (SELECT 1 FROM conversas r WHERE r.contato_id = $1::bigint AND r.retomada_em > propostas.criada_em AND r.retomada_em > now() - make_interval(mins => $6::int))))"
+            ", k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND id IN (SELECT id FROM v) AND EXISTS (SELECT 1 FROM mensagens e WHERE e.contato_id = $1::bigint AND e.direcao = 'entrada' AND e.turno_id::text = $3::text AND e.criado_em > (SELECT min(s.criado_em) FROM mensagens s WHERE s.contato_id = $1::bigint AND s.direcao = 'saida' AND s.criado_em >= propostas.criada_em)) RETURNING id::text AS id, acao, dados)"
+            ", i AS (SELECT estado, acao, id IN (SELECT id FROM v) AS valida, turno_id::text = $3::text AS mesmo_turno, NOT EXISTS (SELECT 1 FROM mensagens e WHERE e.contato_id = $1::bigint AND e.direcao = 'entrada' AND e.turno_id::text = $3::text AND e.criado_em > (SELECT min(s.criado_em) FROM mensagens s WHERE s.contato_id = $1::bigint AND s.direcao = 'saida' AND s.criado_em >= propostas.criada_em)) AS antes_da_pergunta FROM propostas WHERE id::text = $2::text AND contato_id = $1::bigint) "
+            "SELECT c.pedido, c.opcoes, (SELECT to_jsonb(k) FROM k) AS proposta, (SELECT to_jsonb(i) FROM i) AS info, (SELECT ticket_id FROM contatos WHERE id = x.cid) AS ticket_id, jsonb_build_object('agendados', (SELECT count(*)::int FROM propostas WHERE contato_id = x.cid AND acao IN ('agendar', 'agendar_conjunto') AND estado = 'executada' AND atualizada_em >= date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')) AS dia, "
+            '(SELECT COALESCE(jsonb_object_agg(r.prof, r.em), \'{}\'::jsonb) FROM (SELECT it.prof, to_char(max(p.atualizada_em) AT TIME ZONE \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"\') AS em FROM propostas p CROSS JOIN LATERAL (SELECT DISTINCT e ->> \'idProfissional\' AS prof FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.dados -> \'itens\') = \'array\' THEN p.dados -> \'itens\' ELSE jsonb_build_array(p.dados) END) e WHERE e @> \'{"indicado": true}\'::jsonb AND e ->> \'idProfissional\' IS NOT NULL) it WHERE $7::int > 0 AND p.estado = \'executada\' AND p.acao IN (\'agendar\', \'agendar_conjunto\', \'reagendar\', \'trocar_servico\') AND p.atualizada_em >= now() - make_interval(days => $7::int) GROUP BY it.prof) r) AS rodizio, '
+            "(SELECT jsonb_build_object('acao', v.acao, 'dados', v.dados, 'mesmo_turno', v.turno_id::text = $3::text) FROM v) AS pendente FROM (SELECT $1::bigint AS cid) x LEFT JOIN conversas c ON c.contato_id = x.cid"
+        )
+        self.assertEqual(q, consulta)
+        self.assertEqual((q.count("make_interval(mins => $4::int)"), q.count("make_interval(mins => $6::int)"), q.count("FROM propostas p ")), (1, 1, 1))  # so o rodizio rele propostas com alias
         self.assertEqual(q.count(" AS pendente"), 1)
         self.assertEqual(sorted({int(n) for n in re.findall(r"\$(\d+)", q)}), list(range(1, 8)))  # os mesmos 7 parametros: a validade e a do $4
         self.assertEqual(q.count("("), q.count(")"))
