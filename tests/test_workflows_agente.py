@@ -137,19 +137,22 @@ class BvGraces(unittest.TestCase):
         # 27/11: `agendar` no horario de uma busca de remarcacao grava a proposta de reagendar; no sim, o modelo pode repetir a mesma
         # ferramenta. Sem isto o Contexto nao reivindicava, saia proposta_expirada, a fase 1 convertia de novo e o "posso confirmar?"
         # voltava. Reagendar nao executa agendar. Desde 28/11 o cancelar reivindica tambem reagendar e trocar_servico, e o reagendar, trocar_servico.
+        # O mapa fica num lugar so (BVG_ACOES): o bvGNormalizar devolve `acoes` e o no reivindica por $json.in.acoes (revisao de 28/11)
         rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
-        mapa = '{"agendar": "agendar,trocar_servico,agendar_conjunto,reagendar", "reagendar": "reagendar,trocar_servico", "cancelar": "cancelar,cancelar_conjunto,reagendar,trocar_servico"}'
-        self.assertIn(mapa + "[$json.in.operacao] || ''", rep)
+        self.assertIn("{{BV:proposta.validade_min}}, $json.in.acoes || '', {{BV:retomada.resposta_max_min}}", rep)
+        self.assertNotIn("trocar_servico", rep)
+        self.assertNotIn("$json.in.operacao", rep)
+        self.assertIn("if (v.proposta_id !== undefined) v.acoes = BVG_ACOES[v.operacao] || '';", self.js)
         self.assertIn("const BVG_ACOES = { agendar: 'agendar,trocar_servico,agendar_conjunto,reagendar', reagendar: 'reagendar,trocar_servico', cancelar: 'cancelar,cancelar_conjunto,reagendar,trocar_servico' };", self.js)
         self.assertIn("AND acao = ANY(string_to_array($5::text, ','))", self.nos["Contexto"]["parameters"]["query"])  # a reivindicacao continua pela acao da proposta
 
     def test_cancelar_com_agendar_pendente_vira_remarcacao(self):
         # PROD, 25/11: com um agendar aguardando o sim, o cliente pediu para cancelar o outro agendamento; a proposta de agendar virou
-        # substituida, o cancelamento saiu e o horario novo nunca foi criado. O Contexto devolve a proposta pendente do contato (turno
-        # anterior, na validade) e a fase 1 do cancelar a converte em remarcacao. Nenhum no, parametro ou chamada nova.
+        # substituida, o cancelamento saiu e o horario novo nunca foi criado. O Contexto devolve a proposta pendente do contato (na
+        # validade, com a marca de ser deste turno) e a fase 1 do cancelar a converte em remarcacao. Nenhum no, parametro ou chamada nova.
         q = self.nos["Contexto"]["parameters"]["query"]
-        self.assertIn("(SELECT jsonb_build_object('acao', p.acao, 'dados', p.dados) FROM propostas p WHERE p.contato_id = x.cid AND p.estado = 'pendente' "
-                      "AND p.turno_id::text <> $3::text AND p.criada_em > now() - make_interval(mins => $4::int)) AS pendente FROM (SELECT $1::bigint AS cid) x", q)
+        self.assertIn("(SELECT jsonb_build_object('acao', p.acao, 'dados', p.dados, 'mesmo_turno', p.turno_id::text = $3::text) FROM propostas p WHERE p.contato_id = x.cid "
+                      "AND p.estado = 'pendente' AND p.criada_em > now() - make_interval(mins => $4::int)) AS pendente FROM (SELECT $1::bigint AS cid) x", q)
         self.assertEqual(q.count(" AS pendente"), 1)
         self.assertEqual(sorted({int(n) for n in re.findall(r"\$(\d+)", q)}), list(range(1, 8)))  # os mesmos 7 parametros: a validade e a do $4
         self.assertEqual(q.count("("), q.count(")"))
@@ -186,7 +189,10 @@ class BvGraces(unittest.TestCase):
         # Efeitos: a proposta nova substitui a pendente (o no Substituir pendente roda com `nova`) e e gravada como reagendar
         e = rodar("Efeitos", [r[0]], {"Normalizar": [ent], "Contexto": [{"ticket_id": None}]})[0]
         self.assertEqual([e["nova"], e["params"][4], json.loads(e["params"][5])["hora"]], [True, "reagendar", "09:20"])
-        # sem a coluna (ou nula: sem pendente, do mesmo turno ou vencida), o cancelar de sempre, com a lista de decisao
+        # a proposta de agendar deste mesmo turno ("marca sábado 9h20 e cancela o do dia 03/12") converte igual
+        f = rodar("Planejar", [{"pedido": pedido, "opcoes": {}, "pendente": dict(pend, mesmo_turno=True)}], {"Normalizar": [ent]})[0]["final"]
+        self.assertEqual(f["efeitos"]["proposta_nova"]["acao"], "reagendar")
+        # sem a coluna (ou nula: sem pendente ou vencida), o cancelar de sempre, com a lista de decisao
         for linha in ({"pedido": pedido, "opcoes": {}}, {"pedido": pedido, "opcoes": {}, "pendente": None}):
             f = rodar("Planejar", [linha], {"Normalizar": [ent]})[0]["final"]
             self.assertEqual([f["efeitos"]["proposta_nova"]["acao"], f["efeitos"]["opcoes"]["tipo"]], ["cancelar", "decisao_cancelamento"])
@@ -203,13 +209,32 @@ class BvGraces(unittest.TestCase):
         self.assertEqual(r[0]["req"]["qs"], {"idServico": "sv1", "idProfissional": teste, "data": "2026-11-28"})  # TESTE: a escrita vai ao barbeiro de teste
         r = sim("Cancelar mesmo")
         self.assertEqual((len(r), "req" in r[0], r[0]["final"]["resultado"]["code"], r[0]["final"]["efeitos"]["proposta_upd"]["estado"]), (1, False, "cliente_nao_confirmou", "falhou"))
+        # O 5o parametro do Contexto (as acoes que a ferramenta reivindica) sai do Normalizar renderizado e chega igual ao mapa que o no
+        # trazia escrito ate 28/11, nas tres operacoes; na fase 1 vai vazio. Com o sim so na oracao do cancelar, o agendar deixa de
+        # reivindicar o agendamento novo (a proposta segue pendente para o cancelar converter)
+        rep = wf["Contexto"]["parameters"]["options"]["queryReplacement"]
+        self.assertTrue(rep.startswith("={{ ") and rep.endswith(" }}") and "{{BV:" not in rep)
+
+        def params(entrada):
+            n = rodar("Normalizar", [dict({"contato_id": "1", "telefone": tel, "turno_id": "33333333-3333-4333-8333-333333333333", "ambiente": "integracao"}, **entrada)], {})[0]
+            self.assertTrue(n["ok"], entrada)
+            x = subprocess.run(["node", "-e", "const $json = JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify(" + rep[4:-3] + "));", json.dumps(n)], capture_output=True, text=True)
+            self.assertEqual(x.returncode, 0, x.stderr[:500])
+            return json.loads(x.stdout)
+        antes = {"agendar": "agendar,trocar_servico,agendar_conjunto,reagendar", "reagendar": "reagendar,trocar_servico", "cancelar": "cancelar,cancelar_conjunto,reagendar,trocar_servico"}
+        for op, acoes in antes.items():
+            pr = params({"operacao": op, "proposta_id": PID, "texto_cliente": "sim"})
+            self.assertEqual((len(pr), pr[0], pr[1], pr[2], pr[3], pr[4]), (7, "1", PID, "33333333-3333-4333-8333-333333333333", cfg["proposta"]["validade_min"], acoes), op)
+            self.assertEqual(params({"operacao": op, "proposta_id": PID})[4], acoes, op)  # sem a fala do turno tambem
+        self.assertEqual(params({"operacao": "cancelar", "id_opcao_agendamento": "1"})[1:5:3], ["", ""])  # fase 1: sem proposta e sem acoes
+        self.assertEqual(params({"operacao": "agendar", "proposta_id": PID, "texto_cliente": "O do dia 03/12 pode cancelar"})[4], "trocar_servico,reagendar")
+        self.assertEqual(params({"operacao": "reagendar", "proposta_id": PID, "texto_cliente": "pode cancelar o do dia 03"})[4], "reagendar,trocar_servico")
+        self.assertEqual(params({"operacao": "agendar", "proposta_id": PID, "texto_cliente": "sim, e pode cancelar o de quinta"})[4], antes["agendar"])
 
     def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
-        rep = self.nos["Contexto"]["parameters"]["options"]["queryReplacement"]
         i = self.js.index("const BVG_ACOES")
         for acao in ("agendar_conjunto", "cancelar_conjunto"):
-            self.assertIn(acao, rep)
-            self.assertIn(acao, self.js[i:i + 300])
+            self.assertIn(acao, self.js[i:i + 300])  # o no le o mapa pelo bvGNormalizar (acoes): test_cancelar_com_agendar_pendente_vira_remarcacao
 
     def test_escrita_so_no_barbeiro_de_teste(self):  # 4.2.4
         self.assertIn("cfg.ambiente === 'producao' ? !(cfg.escritaLiberada || cfg.testeLiberado) : !cfg.redirecionar", self.js)

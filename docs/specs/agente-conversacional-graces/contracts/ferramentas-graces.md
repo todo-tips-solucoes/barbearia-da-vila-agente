@@ -31,7 +31,7 @@ para o agente (ex.: "dia fechado, sugira outro dia"). Nunca devolve telefone de 
 | `meus_agendamentos` | — | `GET /agenda/agendamentos?idCliente=&proximos=true` (G `04`:33-49) | opções: `idAgenda`, serviço, barbeiro, início |
 | `agendar` | fase 1: `id_opcao_horario`; fase 2: `proposta_id` | fase 2: revalida `horarios-livres`, `POST /agenda` `{idCliente, idServico, idProfissional, data, horaInicio, idIntegracao}` (G `04`:56-81) | fase 1: `{proposta_id, resumo}`, com `ja_tem` quando o cliente já tem qualquer agendamento futuro (o do mesmo dia, o do mesmo serviço ou o mais próximo do dia pedido); fase 2: `{ok, idAgenda}` |
 | `reagendar` | fase 1: `id_opcao_agendamento`, `id_opcao_horario`; fase 2: `proposta_id` | fase 2: revalida, `PUT /agenda/{idAgenda}` `{horaInicioOriginal, horaInicioNovo, idProfissional}` (`AAAA-MM-DDTHH:mm:ss`, G `04`:86-105) | idem |
-| `cancelar` | fase 1: `id_opcao_agendamento`; fase 2: `proposta_id` | fase 2: `DELETE /agenda/{idAgenda}` (sempre com `?data=` do dia da ocorrência, G `04`:110-121) | fase 1 inclui `sugerir_remarcar:true`; com um `agendar` do contato aguardando o sim (turno anterior, na validade), a fase 1 devolve a proposta de remarcar ou de trocar o serviço, sem `sugerir_remarcar` (regra 7) |
+| `cancelar` | fase 1: `id_opcao_agendamento`; fase 2: `proposta_id` | fase 2: `DELETE /agenda/{idAgenda}` (sempre com `?data=` do dia da ocorrência, G `04`:110-121) | fase 1 inclui `sugerir_remarcar:true`; com um `agendar` do contato aguardando o sim (na validade), a fase 1 devolve a proposta de remarcar ou de trocar o serviço, sem `sugerir_remarcar` (regra 7) |
 
 `trocar_servico` é `agendar` com `substitui_id_opcao_agendamento`: uma proposta, escrita = `POST`
 do novo e depois `DELETE` do antigo (US3-5).
@@ -51,11 +51,17 @@ do novo e depois `DELETE` do antigo (US3-5).
 6. Erros: decisão por `code` (G `00`:57-61, `05`:89-97); timeout/5xx na escrita → `incerta` e
    verificação por `meus_agendamentos` antes de qualquer nova tentativa (research Decision 9).
 7. `cancelar` (fase 1) de um agendamento, com uma proposta `agendar` pendente do contato para outro
-   horário, não propõe o cancelamento: devolve a proposta `reagendar` (mesmo serviço) ou
-   `trocar_servico` (outro serviço) com o horário da proposta pendente, lido do estado. Na fase 2 a
-   ferramenta que traz o `proposta_id` não decide a escrita: decide a ação da proposta. `agendar`
-   reivindica `agendar`, `trocar_servico`, `agendar_conjunto` e `reagendar`; `reagendar`, `reagendar` e
-   `trocar_servico`; `cancelar` reivindica `cancelar`, `cancelar_conjunto`, `reagendar` e `trocar_servico`.
-   Proposta de cancelar da lista só executa com o cancelamento dito; proposta de remarcar ou de trocar
-   trazida pelo `cancelar` só executa com um sim que não cita cancelar. Fala que cita cancelar não
-   confirma `agendar` nem `reagendar` (`cliente_nao_confirmou`).
+   horário (de turno anterior ou do próprio turno), não propõe o cancelamento: devolve a proposta
+   `reagendar` (mesmo serviço) ou `trocar_servico` (outro serviço) com o horário da proposta
+   pendente, lido do estado. Uma segunda chamada no mesmo turno, para o mesmo agendamento, devolve o
+   mesmo resumo, sem proposta nova.
+8. Na fase 2 a ferramenta que traz o `proposta_id` não decide a escrita: decide a ação da proposta.
+   O mapa fica em `BVG_ACOES` (`shared/graces.js`): o `bvGNormalizar` devolve `acoes` e o nó
+   `Contexto` reivindica por `$json.in.acoes`. `agendar` reivindica `agendar`, `trocar_servico`,
+   `agendar_conjunto` e `reagendar`; `reagendar`, `reagendar` e `trocar_servico`; `cancelar`,
+   `cancelar`, `cancelar_conjunto`, `reagendar` e `trocar_servico`. Proposta de cancelar da lista só
+   executa com o cancelamento dito. Proposta de remarcar ou de trocar executa com o sim genérico,
+   que pode citar cancelar; trazida pelo `cancelar`, não executa só com o cancelamento dito, sem
+   sim. Proposta de agendamento novo (`agendar`, `agendar_conjunto`) não é reivindicada quando o sim
+   só existe na oração do cancelar ("pode cancelar", "ok, cancela esse"): a proposta segue pendente
+   e a ferramenta devolve `cliente_nao_confirmou` com o caminho do `cancelar`.
