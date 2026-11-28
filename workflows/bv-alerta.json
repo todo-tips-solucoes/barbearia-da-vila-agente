@@ -24,9 +24,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT count(*)::int AS falhas FROM falhas_agente WHERE motivo = 'agente_falhou' AND criado_em > now() - make_interval(mins => $1::int)",
+        "query": "SELECT count(*)::int AS falhas, (SELECT count(*)::int FROM mensagens_agendadas WHERE tipo = 'lembrete_dia' AND agendamento_canal_id IS NULL AND situacao IN ('pendente', 'falhou', 'cancelada') AND previsto_para > now() - make_interval(mins => $2::int) AND previsto_para <= now() - interval '5 minutes' AND (situacao = 'falhou' OR (situacao = 'pendente' AND COALESCE(proxima_tentativa_em, previsto_para) <= now() - interval '5 minutes') OR (situacao = 'cancelada' AND motivo = 'ja_passou' AND criado_em <= previsto_para))) AS lembretes FROM falhas_agente WHERE motivo = 'agente_falhou' AND criado_em > now() - make_interval(mins => $1::int)",
         "options": {
-          "queryReplacement": "={{ [{{BV:alerta.janela_min}}] }}"
+          "queryReplacement": "={{ [{{BV:alerta.janela_min}}, {{BV:alerta.repetir_min}}] }}"
         }
       },
       "id": "a1e7a000-0000-4000-8000-000000000002",
@@ -74,7 +74,7 @@
     },
     {
       "parameters": {
-        "jsCode": "{{BV:INCLUDE:shared/alerta.js}}\nconst cfg = { rotulo: '{{BV:rotulo}}', limiar: {{BV:alerta.falhas_agente_limiar}}, janela_min: {{BV:alerta.janela_min}}, repetir_min: {{BV:alerta.repetir_min}} };\nconst banco = $('Checar banco').first().json;\nconst falhas = banco.error ? null : banco.falhas;\n// a resposta do status traz dados de todas as conexoes da empresa: daqui so sai o estado da conexao da loja\nconst conexao = bvAlertaConexao($input.first().json, '{{BV:chatmaster.whatsapp_id}}');\nreturn bvAlertaFiltrar(bvAlertaDecidir(falhas, cfg, conexao), $getWorkflowStaticData('global'), Date.now(), cfg, conexao).map((a) => ({ json: a }));"
+        "jsCode": "{{BV:INCLUDE:shared/alerta.js}}\nconst cfg = { rotulo: '{{BV:rotulo}}', limiar: {{BV:alerta.falhas_agente_limiar}}, janela_min: {{BV:alerta.janela_min}}, repetir_min: {{BV:alerta.repetir_min}} };\nconst banco = $('Checar banco').first().json;\nconst falhas = banco.error ? null : banco.falhas;\n// banco.lembretes: listas do lembrete de 24 h que nao sairam na janela de repetir_min (a mesma da repeticao do alerta): falhou, perdida\n// por atraso, ou pendente e parada ha mais de 5 min (a que espera a proxima retentativa ainda vai sair e nao conta)\n// a resposta do status traz dados de todas as conexoes da empresa: daqui so sai o estado da conexao da loja\nconst conexao = bvAlertaConexao($input.first().json, '{{BV:chatmaster.whatsapp_id}}');\nreturn bvAlertaFiltrar(bvAlertaDecidir(falhas, cfg, conexao, banco.lembretes), $getWorkflowStaticData('global'), Date.now(), cfg, conexao).map((a) => ({ json: a }));"
       },
       "id": "a1e7a000-0000-4000-8000-000000000003",
       "name": "Decidir",

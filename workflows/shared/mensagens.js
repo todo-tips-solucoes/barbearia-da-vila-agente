@@ -183,14 +183,18 @@ function bvMReconhecer(ev, cfg) {
 // agenda: itens de /agenda/completa achatados [{idAgenda,idProfissional,horaInicio,horaFim,idStatusAgenda,ddiCelular,celularCliente,nomeServico,profissional}];
 // linhas: mensagens_agendadas [{id,graces_agendamento_id,tipo,situacao,previsto_para,inicio}]; contatos: [{id,telefone}].
 // Nao recria o que ja tem linha (enviada/falhou/cancelada) do mesmo idAgenda, tipo e previsto_para.
-// Devolve { cancelar:[{id,motivo}], criar:[{...item, contato_id, tipo, previsto_para}], sem_contato:[idAgenda], recorrente:[idAgenda] }.
+// Devolve { cancelar:[{id,motivo}], criar:[{...item, contato_id, tipo, previsto_para}], sem_contato:[idAgenda], novos_contatos:[telefone], recorrente:[idAgenda] }.
+// Sem contato (PROD, 27/11: em 7 dias, 70% das falhas sem_contato eram bloqueio de agenda ou agendamento sem nada a programar, e o
+// resto virava contato na mesma rodada): so conta a entrada que tem cliente e tem lembrete a criar. Com cfg.criar_contatos (PROD;
+// owner, 2026-11-15, opcao A: cliente do balcao que nunca falou no WhatsApp) o celular valido vai para novos_contatos (so digitos,
+// como o webhook manda) e o lembrete nasce na rodada seguinte; sem_contato fica para quem nao pode virar contato.
 // shortcut: idAgenda que aparece mais de uma vez na janela (serie recorrente) e pulado e registrado (`recorrente`): a chave unica e
 // (idAgenda, tipo) e duas ocorrencias derrubariam o upsert; recorrente com uma so ocorrencia na janela nao e detectavel (a /completa nao
 // traz `recorrente`). Upgrade: chave por (idAgenda, inicio) numa migracao.
 function bvMReconciliar(agenda, linhas, contatos, agora, cfg) {
   const t0 = new Date(agora).getTime();
   const limite = t0 + (cfg.reconciliacao_dias || 7) * 86400000;
-  const out = { cancelar: [], criar: [], sem_contato: [], recorrente: [] };
+  const out = { cancelar: [], criar: [], sem_contato: [], novos_contatos: [], recorrente: [] };
   const vivos = new Set();
   const cancelados = new Set();
   const iso = (v) => new Date(v).toISOString();
@@ -202,16 +206,20 @@ function bvMReconciliar(agenda, linhas, contatos, agora, cfg) {
     if (vezes[it.idAgenda] > 1) { if (!out.recorrente.includes(it.idAgenda)) out.recorrente.push(it.idAgenda); continue; }
     const tel = bvMDig(it.ddiCelular) + bvMDig(it.celularCliente);
     const c = tel.length > bvMDig(it.ddiCelular).length ? contatos.find((x) => bvMDig(x.telefone) === tel) : null;
-    if (!c) { out.sem_contato.push(it.idAgenda); continue; }
+    if (!c && !it.idCliente && !it.nomeCliente && !bvMDig(it.celularCliente)) continue; // bloqueio de agenda ("Prof. Ausente"): sem cliente
     const { programar } = bvMProgramar({ inicio: it.horaInicio, fim: it.horaFim }, agora, cfg);
+    let falta = false;
     for (const p of programar) {
       const meus = linhas.filter((l) => l.graces_agendamento_id === it.idAgenda && l.tipo === p.tipo);
       if (meus.some((l) => l.situacao !== 'pendente' && iso(l.previsto_para) === p.previsto_para)) continue;
       const pend = meus.find((l) => l.situacao === 'pendente');
       if (pend && iso(pend.previsto_para) === p.previsto_para) continue;
+      if (!c) { falta = true; continue; }
       if (pend && !cancelados.has(pend.id)) { cancelados.add(pend.id); out.cancelar.push({ id: pend.id, motivo: 'reagendada' }); }
       out.criar.push({ ...it, contato_id: c.id, tipo: p.tipo, previsto_para: p.previsto_para });
     }
+    if (falta && cfg.criar_contatos && /^\d{12,13}$/.test(tel)) { if (!out.novos_contatos.includes(tel)) out.novos_contatos.push(tel); }
+    else if (falta) out.sem_contato.push(it.idAgenda);
   }
   for (const l of linhas) { // pendente cujo agendamento sumiu da janela: orfa
     if (l.situacao === 'pendente' && !vivos.has(l.graces_agendamento_id) && !cancelados.has(l.id)
@@ -479,6 +487,9 @@ function bvMConfNormalizar(raw) {
 // motivo preenchido numa `enviada` = encerrada (agendamento cancelado/remarcado depois do envio): lista antiga, desatualizada.
 // recente = respondida ha pouco (o from_internal do MESMO toque ja chegou): o titulo nunca escolhe outra linha.
 // Devolve { acao: 'claim', row } ou { acao: 'fim', code, row? } (code: desatualizada|ambigua|fora_do_teste|repetida).
+// 2+ abertas sem id: a confirmacao vale para a mais recente, a primeira de rows (o Selecionar ordena pelo envio). PROD, 27/11: o
+// cliente digitou a confirmacao ao lembrete em texto que acabara de chegar e ouviu "toca no botao" (o texto nao tem botao); a presenca
+// ficou sem registro. A recusa segue pedindo para escolher: recusar o horario errado abre cancelamento.
 function bvMConfEscolher(rows, ent, cfg) {
   const ativas = (rows || []).filter((r) => r && r.situacao === 'enviada' && !r.resposta && !r.motivo && r.futuro);
   let row;
@@ -488,7 +499,7 @@ function bvMConfEscolher(rows, ent, cfg) {
   } else {
     const gemea = (rows || []).find((r) => r && r.resposta && r.recente);
     if (gemea) return { acao: 'fim', code: 'repetida', row: gemea };
-    if (ativas.length > 1) return { acao: 'fim', code: 'ambigua', row: ativas[0] }; // 2+ sem id: pede para escolher (row so da o telefone)
+    if (ativas.length > 1 && !ent.confirmado) return { acao: 'fim', code: 'ambigua', row: ativas[0] }; // row so da o telefone
     if (!ativas.length) return { acao: 'fim', code: 'desatualizada' };
     row = ativas[0];
   }
@@ -512,7 +523,8 @@ function bvMConfAvaliar(status, tent, confirmado) {
 }
 
 // Conferencia apos 409: resp = GET /agenda/agendamentos?idCliente ou /agenda/completa do dia; row = {graces_agendamento_id, inicio}.
-// Confirmar so vale com status 3; recusar so com 10. Divergente ou ausente = desatualizada; sem resposta valida = falhou.
+// Confirmar vale com status 3 (ou 10 no proprio agendamento do lembrete, abaixo); recusar so com 10. Divergente ou ausente =
+// desatualizada; sem resposta valida = falhou.
 function bvMConfConferir(resp, row, confirmado) {
   const s = Number(resp && resp.status) || 0;
   const lista = s >= 200 && s < 300 ? bvMAgendaDe(resp.body) : null;
@@ -520,9 +532,13 @@ function bvMConfConferir(resp, row, confirmado) {
   // A ocorrencia de uma serie semanal apareceu com outro idAgenda no dia (PROD, 17/11: o lembrete da vespera levava o id da serie e o
   // da hora, outro id no mesmo inicio); o cliente confirmou e ouviu que o horario nao valia. Na leitura do proprio cliente, vale o
   // agendamento dele no mesmo inicio. So para confirmar: a recusa segue com o id do lembrete.
-  const ag = bvMOcorrencia(lista, row.graces_agendamento_id, row.inicio)
-    || (confirmado && row.graces_cliente_id ? lista.find((x) => x && String(x.horaInicio).slice(0, 16) === String(row.inicio).slice(0, 16)) : undefined);
+  const mesmo = bvMOcorrencia(lista, row.graces_agendamento_id, row.inicio);
+  const ag = mesmo || (confirmado && row.graces_cliente_id ? lista.find((x) => x && String(x.horaInicio).slice(0, 16) === String(row.inicio).slice(0, 16)) : undefined);
   if (ag && ag.idStatusAgenda === (confirmado ? 3 : 10)) return { code: confirmado ? 'confirmada' : 'recusada', status: s };
+  // Quem recusou o lembrete, remarcou e confirma o lembrete do novo horario (medido na Graces em 27/11): o 10 da recusa acompanha a
+  // remarcacao e a API nao deixa mais confirmar (409 CONFLITO). O agendamento do lembrete segue de pe, no mesmo id e no mesmo inicio:
+  // a resposta do cliente vale (o painel da Graces continua "Nao Confirmado"). Outro inicio, outro id ou ausente: desatualizada.
+  if (confirmado && mesmo && mesmo.idStatusAgenda === 10) return { code: 'confirmada', status: s };
   // Lembrete desatualizado (17/11: o cliente confirmou presenca, ouviu so "esse horario nao esta mais valendo" e marcou outro):
   // com a leitura feita pelo cliente (idCliente), a resposta diz o que esta marcado agora. Sem o cliente a leitura e do dia inteiro
   // (de todos), entao `atual` fica nulo e vale o texto antigo.
