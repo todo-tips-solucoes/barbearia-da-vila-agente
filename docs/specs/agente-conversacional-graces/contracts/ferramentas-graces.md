@@ -60,8 +60,10 @@ do novo e depois `DELETE` do antigo (US3-5).
    `Contexto` reivindica por `$json.in.acoes`. `agendar` reivindica `agendar`, `trocar_servico`,
    `agendar_conjunto` e `reagendar`; `reagendar`, `reagendar` e `trocar_servico`; `cancelar`,
    `cancelar`, `cancelar_conjunto`, `reagendar` e `trocar_servico`. Proposta de cancelar da lista só
-   executa com o cancelamento dito. Proposta de remarcar ou de trocar executa com o sim genérico,
-   que pode citar cancelar; trazida pelo `cancelar`, não executa só com o cancelamento dito, sem
-   sim. Proposta de agendamento novo (`agendar`, `agendar_conjunto`) não é reivindicada quando o sim
-   só existe na oração do cancelar ("pode cancelar", "ok, cancela esse"): a proposta segue pendente
-   e a ferramenta devolve `cliente_nao_confirmou` com o caminho do `cancelar`.
+   executa com o cancelamento dito.
+9. Fala que cita cancelar sem um sim antes ("pode cancelar", "ok, cancela esse", "só cancela por
+   favor") só reivindica proposta de cancelar. A proposta de agendar, de sequência, de remarcar ou
+   de trocar segue pendente e a ferramenta devolve `cliente_nao_confirmou` com uma pergunta fechada
+   (confirmar o resumo, ou cancelar); vencida, `proposta_expirada`. A `info` da proposta, na consulta
+   do `Contexto`, traz a ação e se ela ainda vale; a validade (`proposta.validade_min`, ou a retomada)
+   está escrita uma vez e vale para a reivindicação, para a `info` e para a `pendente` da regra 7.

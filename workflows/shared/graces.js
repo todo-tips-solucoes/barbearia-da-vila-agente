@@ -106,15 +106,17 @@ function bvgConfirmou(texto, operacao, soDito) {
   // "sim, o agendamento de sábado" e "sim, o horário marcado" respondem a pergunta direta.
   return !soDito && sim && !/remarc|(?:^|[^a-z])(?:marc(?:a|ar|o)|marque|agend(?:a|ar|e|o))(?:$|[^a-z])/.test(t);
 }
-// Sim que so existe na oracao do cancelar (PROD, 25/11: "o do dia 03/12 pode cancelar" passava por "pode" e "ok, cancela esse" por
-// "ok", como sim a um agendamento NOVO). A oracao do cancelar e o verbo com ate duas palavras antes dele, ou com a palavra que o
-// antecede com virgula ("ok, cancela"). Com um sim fora dela a fala confirma, como sempre: "sim, e pode cancelar o de quinta",
-// "pode marcar, qualquer coisa eu cancelo", "sim, tem taxa de cancelamento?". So vale para proposta de agendar (bvGNormalizar):
-// num resumo de remarcar ou de trocar, tirar o agendamento antigo ja e o que o resumo diz.
-const BVG_ORACAO_CANC = new RegExp(`(?:(?:[a-z]+\\s+){0,2}|[a-z]+,\\s*)${BVG_RAD_CANC}[a-z]*`, 'g');
-function bvgSimSoNoCancelar(texto) {
-  const { t } = bvgFala(texto), fora = t.replace(BVG_ORACAO_CANC, ' ');
-  return fora !== t && bvgConfirmou(texto, 'agendar') && !BVG_SIM.test(fora); // com a oracao do cancelar na fala, o emoji sozinho nao e sim
+// Fala que cita cancelar sem um sim ANTES disso (PROD, 25/11: "o do dia 03/12 pode cancelar" passava por "pode" e "ok, cancela esse"
+// por "ok", como sim a um agendamento novo; e, diante do resumo "Remarcar de 03/12 para 28/11", "pode cancelar mesmo", "só cancela
+// por favor" e "quero só cancelar" executavam a remarcacao). A oracao do cancelar e o verbo com ate duas palavras antes dele, ou com
+// a palavra que o antecede com virgula ("ok, cancela"); vale a primeira da fala. O sim so conta se vier antes dela: "sim, e pode
+// cancelar o de quinta", "pode marcar, qualquer coisa eu cancelo", "sim, tem taxa de cancelamento?". Sem ele, nenhuma ferramenta
+// reivindica proposta que nao e de cancelar (bvGNormalizar): a proposta segue pendente e a fase 2 devolve a pergunta fechada.
+// E a ultima volta desta regra por frase (owner, 28/11): o que ela nao alcanca esta em docs/melhorias-atendimento.md, "Limites".
+const BVG_ORACAO_CANC = new RegExp(`(?:(?:[a-z]+\\s+){0,2}|[a-z]+,\\s*)${BVG_RAD_CANC}[a-z]*`);
+function bvgCancelarSemSimAntes(texto) {
+  const { t } = bvgFala(texto), k = t.search(BVG_ORACAO_CANC);
+  return k >= 0 && !BVG_SIM.test(t.slice(0, k));
 }
 
 function bvGNormalizar(raw, cfg) {
@@ -157,12 +159,12 @@ function bvGNormalizar(raw, cfg) {
   // sim_geral: a fala e um sim a um resumo de remarcar ou de trocar (a regra dessas propostas, a mesma do reagendar). So a fase 2 do
   // cancelar a le, quando a proposta reivindicada nao e de cancelar (bvgFase2); derivado da fala, nao entra de fora
   if (v.operacao === 'cancelar' && v.proposta_id !== undefined && v.texto_cliente !== undefined && bvgConfirmou(v.texto_cliente, 'reagendar')) v.sim_geral = true;
-  // sim_no_cancelar: o sim so existe na oracao do cancelar (bvgSimSoNoCancelar). O agendar deixa de reivindicar a proposta de
-  // agendamento novo (um ou em sequencia), que segue pendente para o cancelar converter (bvgHorarioPendente); a de remarcar e a de
-  // trocar seguem reivindicadas e executam. A recusa sai no bvgFase2. A ferramenta reagendar so traz remarcacao e troca: nao muda.
-  if (v.operacao === 'agendar' && v.proposta_id !== undefined && v.texto_cliente !== undefined && bvgSimSoNoCancelar(v.texto_cliente)) {
+  // sim_no_cancelar: a fala cita cancelar e o sim, se existe, nao vem antes (bvgCancelarSemSimAntes). A ferramenta so reivindica
+  // proposta de cancelar; a de agendar, de sequencia, de remarcar e de trocar seguem pendentes, e a recusa (pergunta fechada) sai no
+  // bvgFase2. A proposta de cancelar segue com a regra dela (o cancelamento dito, so_sim).
+  if (v.proposta_id !== undefined && bvgCancelarSemSimAntes(v.texto_cliente)) {
     v.sim_no_cancelar = true;
-    v.acoes = v.acoes.split(',').filter((a) => !/^agendar/.test(a)).join(',');
+    v.acoes = v.acoes.split(',').filter((a) => /^cancelar/.test(a)).join(',');
   }
   if (bvgCabeloEBarba(v.texto_cliente)) v.cabelo_barba = true; // derivado da fala: nao esta em BVG_CAMPOS, nao entra de fora
   delete v.texto_cliente;
@@ -1043,10 +1045,16 @@ function bvgFase2(i, ctx, cfg, chamar) {
     if (f.mesmo_turno) return bvgFim(bvgRecusa('confirmacao_no_mesmo_turno', 'peça a confirmação ao cliente e só execute depois que ele responder'));
     if (f.estado === 'pendente' && f.antes_da_pergunta) return bvgFim(bvgRecusa('confirmacao_antes_da_pergunta', 'a mensagem do cliente chegou antes de ele ver o pedido de confirmação: peça a confirmação de novo, em uma frase, e espere a resposta'));
     if (f.estado !== 'pendente') return bvgFim(bvgRecusa('proposta_nao_pendente', 'essa confirmação já foi usada; refaça o resumo'));
-    // sim_no_cancelar: a proposta de agendamento novo nao foi reivindicada e segue pendente (bvGNormalizar)
-    if (i.sim_no_cancelar) {
-      return bvgFim(bvgRecusa('cliente_nao_confirmou', 'o sim do cliente veio só no pedido de cancelar, e isso não confirma um agendamento novo: nada foi feito na agenda e este resumo segue aguardando. Se ele quer cancelar um agendamento que já tem, chame cancelar com o id_opcao_agendamento dele (meus_agendamentos antes, se faltar o id) e siga o que a ferramenta devolver; se ele desistiu deste resumo, diga que nada foi marcado'),
-        { falha: { motivo: 'graces|sim_so_no_cancelar', operacao: 'agendar', code: 'cliente_nao_confirmou', status: 0, trace: null } });
+    // sim_no_cancelar: a proposta que nao e de cancelar nao foi reivindicada e segue pendente (bvGNormalizar). So com ela ainda na
+    // validade (info.valida, a mesma regra da reivindicacao): vencida, sai proposta_expirada, que manda refazer o resumo. A resposta
+    // e uma pergunta fechada com as duas saidas, sem mandar chamar cancelar agora: a fase 1 do cancelar substituiria a proposta de
+    // sequencia (que nao converte) e a lista de cancelamento sairia em resposta a quem talvez tenha dito sim.
+    if (i.sim_no_cancelar && f.valida && f.acao && !/^cancelar/.test(f.acao)) {
+      const novo = /^agendar/.test(f.acao);
+      return bvgFim(bvgRecusa('cliente_nao_confirmou', `a mensagem do cliente fala em cancelar e não traz um sim a este resumo antes disso: nada foi feito na agenda e o resumo segue aguardando. Não escolha por ele: pergunte, numa frase só, ${novo
+        ? 'se ele confirma este agendamento novo (o que ele já tem continua marcado) ou se é para cancelar o que ele já tem'
+        : 'se ele confirma o resumo (o agendamento sai do horário atual e fica no novo) ou se prefere só cancelar, sem o horário novo'} (peça a resposta em uma palavra: sim ou cancelar). Com o sim ao resumo, chame esta ferramenta de novo com o proposta_id. Se for para cancelar, chame cancelar com o id_opcao_agendamento (meus_agendamentos antes, se faltar o id), sem proposta_id, e siga o que a ferramenta devolver; faça isso direto, sem perguntar, só se a mensagem já diz com todas as letras que é só para cancelar ("só cancela", "cancelar mesmo")`),
+        { falha: { motivo: 'graces|sim_so_no_cancelar', operacao: i.operacao, code: 'cliente_nao_confirmou', status: 0, trace: null } });
     }
     return bvgFim(bvgRecusa('proposta_expirada', 'a confirmação venceu; refaça o resumo e peça de novo'), {}); // expirada: a pendente fica para o proximo "substituida"
   }

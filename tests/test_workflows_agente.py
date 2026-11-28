@@ -151,8 +151,17 @@ class BvGraces(unittest.TestCase):
         # substituida, o cancelamento saiu e o horario novo nunca foi criado. O Contexto devolve a proposta pendente do contato (na
         # validade, com a marca de ser deste turno) e a fase 1 do cancelar a converte em remarcacao. Nenhum no, parametro ou chamada nova.
         q = self.nos["Contexto"]["parameters"]["query"]
-        self.assertIn("(SELECT jsonb_build_object('acao', p.acao, 'dados', p.dados, 'mesmo_turno', p.turno_id::text = $3::text) FROM propostas p WHERE p.contato_id = x.cid "
-                      "AND p.estado = 'pendente' AND p.criada_em > now() - make_interval(mins => $4::int)) AS pendente FROM (SELECT $1::bigint AS cid) x", q)
+        self.assertIn("(SELECT jsonb_build_object('acao', p.acao, 'dados', p.dados, 'mesmo_turno', p.turno_id::text = $3::text) FROM propostas p WHERE p.id IN (SELECT id FROM v)) "
+                      "AS pendente FROM (SELECT $1::bigint AS cid) x", q)
+        # A validade da proposta fica num lugar so (segunda revisao de 28/11): `v` e a pendente do contato que ainda vale (30 min, ou a
+        # retomada). A reivindicacao, a `info` (que diz se venceu e de que acao e) e a `pendente` leem dela. A reivindicacao continua
+        # conferindo na propria linha o estado, o contato, o turno e a acao: e isso que a deixa atomica entre duas chamadas
+        valid = ("(criada_em > now() - make_interval(mins => $4::int) OR EXISTS (SELECT 1 FROM conversas r WHERE r.contato_id = $1::bigint AND r.retomada_em > propostas.criada_em "
+                 "AND r.retomada_em > now() - make_interval(mins => $6::int)))")
+        self.assertTrue(q.startswith("WITH v AS (SELECT id FROM propostas WHERE contato_id = $1::bigint AND estado = 'pendente' AND " + valid + "), k AS (UPDATE propostas SET estado = 'executando', atualizada_em = now() "
+                                     "WHERE id::text = $2::text AND contato_id = $1::bigint AND estado = 'pendente' AND turno_id::text <> $3::text AND acao = ANY(string_to_array($5::text, ',')) AND id IN (SELECT id FROM v) AND EXISTS ("))
+        self.assertEqual((q.count("make_interval(mins => $4::int)"), q.count("make_interval(mins => $6::int)"), q.count("(SELECT id FROM v)")), (1, 1, 3))
+        self.assertIn("i AS (SELECT estado, acao, id IN (SELECT id FROM v) AS valida, turno_id::text = $3::text AS mesmo_turno, NOT EXISTS (", q)
         self.assertEqual(q.count(" AS pendente"), 1)
         self.assertEqual(sorted({int(n) for n in re.findall(r"\$(\d+)", q)}), list(range(1, 8)))  # os mesmos 7 parametros: a validade e a do $4
         self.assertEqual(q.count("("), q.count(")"))
@@ -207,11 +216,22 @@ class BvGraces(unittest.TestCase):
         r = sim("sim")
         self.assertEqual([x["req"]["path"] for x in r], ["/agenda/horarios-livres", "/agenda/agendamentos", "/agenda/horarios"])
         self.assertEqual(r[0]["req"]["qs"], {"idServico": "sv1", "idProfissional": teste, "data": "2026-11-28"})  # TESTE: a escrita vai ao barbeiro de teste
-        r = sim("Cancelar mesmo")
-        self.assertEqual((len(r), "req" in r[0], r[0]["final"]["resultado"]["code"], r[0]["final"]["efeitos"]["proposta_upd"]["estado"]), (1, False, "cliente_nao_confirmou", "falhou"))
+        # sem sim antes da oracao do cancelar a ferramenta nao reivindica a remarcacao (as acoes que chegam ao no nao a incluem): o
+        # plano recebe so a `info` da proposta, nada e alterado e sai a pergunta fechada; com a proposta vencida, manda refazer o resumo
+        def sem_sim(fala, valida=True):
+            n = rodar("Normalizar", [{"operacao": "cancelar", "contato_id": "1", "telefone": tel, "turno_id": "33333333-3333-4333-8333-333333333333", "ambiente": "integracao", "proposta_id": PID, "texto_cliente": fala}], {})[0]
+            self.assertEqual((n["ok"], n["in"]["acoes"], n["in"]["sim_no_cancelar"]), (True, "cancelar,cancelar_conjunto", True), fala)
+            return rodar("Planejar", [{"pedido": pedido, "opcoes": {}, "info": {"estado": "pendente", "acao": "reagendar", "valida": valida, "mesmo_turno": False, "antes_da_pergunta": False}}], {"Normalizar": [n]})
+        for fala in ("Cancelar mesmo", "pode cancelar mesmo", "só cancela por favor"):
+            r = sem_sim(fala)
+            self.assertEqual((len(r), "req" in r[0], r[0]["final"]["resultado"]["code"], sorted(r[0]["final"]["efeitos"])), (1, False, "cliente_nao_confirmou", ["falha"]), fala)
+            self.assertIn("pergunte, numa frase só, se ele confirma o resumo", r[0]["final"]["resultado"]["orientacao"])
+            e = rodar("Efeitos", [r[0]], {"Normalizar": [{"in": {"contato_id": "1", "turno_id": "33333333-3333-4333-8333-333333333333"}}], "Contexto": [{"ticket_id": None}]})[0]
+            self.assertEqual((e["nova"], e["params"][6], e["params"][7], e["params"][9]), (False, "", None, "graces|sim_so_no_cancelar"), fala)  # nenhuma proposta nova nem alterada
+        self.assertEqual(sem_sim("pode cancelar mesmo", valida=False)[0]["final"]["resultado"]["code"], "proposta_expirada")
         # O 5o parametro do Contexto (as acoes que a ferramenta reivindica) sai do Normalizar renderizado e chega igual ao mapa que o no
-        # trazia escrito ate 28/11, nas tres operacoes; na fase 1 vai vazio. Com o sim so na oracao do cancelar, o agendar deixa de
-        # reivindicar o agendamento novo (a proposta segue pendente para o cancelar converter)
+        # trazia escrito ate 28/11, nas tres operacoes; na fase 1 vai vazio. Sem sim antes da oracao do cancelar, a ferramenta deixa de
+        # reivindicar o que nao e cancelamento (a proposta segue pendente)
         rep = wf["Contexto"]["parameters"]["options"]["queryReplacement"]
         self.assertTrue(rep.startswith("={{ ") and rep.endswith(" }}") and "{{BV:" not in rep)
 
@@ -227,8 +247,9 @@ class BvGraces(unittest.TestCase):
             self.assertEqual((len(pr), pr[0], pr[1], pr[2], pr[3], pr[4]), (7, "1", PID, "33333333-3333-4333-8333-333333333333", cfg["proposta"]["validade_min"], acoes), op)
             self.assertEqual(params({"operacao": op, "proposta_id": PID})[4], acoes, op)  # sem a fala do turno tambem
         self.assertEqual(params({"operacao": "cancelar", "id_opcao_agendamento": "1"})[1:5:3], ["", ""])  # fase 1: sem proposta e sem acoes
-        self.assertEqual(params({"operacao": "agendar", "proposta_id": PID, "texto_cliente": "O do dia 03/12 pode cancelar"})[4], "trocar_servico,reagendar")
-        self.assertEqual(params({"operacao": "reagendar", "proposta_id": PID, "texto_cliente": "pode cancelar o do dia 03"})[4], "reagendar,trocar_servico")
+        self.assertEqual(params({"operacao": "agendar", "proposta_id": PID, "texto_cliente": "O do dia 03/12 pode cancelar"})[4], "")
+        self.assertEqual(params({"operacao": "reagendar", "proposta_id": PID, "texto_cliente": "pode cancelar o do dia 03"})[4], "")
+        self.assertEqual(params({"operacao": "cancelar", "proposta_id": PID, "texto_cliente": "pode cancelar"})[4], "cancelar,cancelar_conjunto")
         self.assertEqual(params({"operacao": "agendar", "proposta_id": PID, "texto_cliente": "sim, e pode cancelar o de quinta"})[4], antes["agendar"])
 
     def test_fase2_reivindica_propostas_de_conjunto(self):  # achado do roteiro r7/r9: conjunto nunca era reivindicado
